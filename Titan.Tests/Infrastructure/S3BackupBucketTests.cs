@@ -84,11 +84,20 @@ public sealed class S3BackupBucketTests : IDisposable
                     break;
                 case "GET" when ctx.Request.QueryString["list-type"] == "2":
                     string prefix = "/" + path.Trim('/') + "/" + ctx.Request.QueryString["prefix"];
-                    var keys = _store.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).Select(k => k[(path.Length)..]);
-                    string contents = string.Concat(keys.Select(k => $"<Contents><Key>{k}</Key><Size>1</Size></Contents>"));
+                    var keys = _store.Keys.Where(k => k.StartsWith(prefix, StringComparison.Ordinal)).OrderBy(k => k, StringComparer.Ordinal)
+                        .Select(k => k[(path.Length)..]).ToList();
+                    // Pages of two unless the caller asks for fewer or more, so a listing has to follow continuation tokens.
+                    int pageSize = int.TryParse(ctx.Request.QueryString["max-keys"], out int asked) && asked < 100 ? asked : 2;
+                    int start = int.TryParse(ctx.Request.QueryString["continuation-token"], out int from) ? from : 0;
+                    var page = keys.Skip(start).Take(pageSize).ToList();
+                    bool more = start + pageSize < keys.Count;
+                    string contents = string.Concat(page.Select(k =>
+                        $"<Contents><Key>{k}</Key><LastModified>2026-10-24T14:00:00.000Z</LastModified><Size>{_store[path + k].Length}</Size></Contents>"));
                     await Respond(ctx, 200,
                         "<?xml version=\"1.0\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
-                        + $"<Name>b</Name><KeyCount>{keys.Count()}</KeyCount><MaxKeys>100</MaxKeys><IsTruncated>false</IsTruncated>{contents}</ListBucketResult>");
+                        + $"<Name>b</Name><KeyCount>{page.Count}</KeyCount><MaxKeys>{pageSize}</MaxKeys><IsTruncated>{(more ? "true" : "false")}</IsTruncated>"
+                        + (more ? $"<NextContinuationToken>{start + pageSize}</NextContinuationToken>" : "")
+                        + $"{contents}</ListBucketResult>");
                     break;
                 case "GET":
                     ctx.Response.StatusCode = 200;
@@ -149,6 +158,25 @@ public sealed class S3BackupBucketTests : IDisposable
         Assert.Equal(content, back);
         Assert.Empty(await bucket.ListKeysAsync("_probe/abc", CancellationToken.None));
         Assert.All(_seen, call => Assert.StartsWith("/titan-backup-dev", call.PathAndQuery));
+    }
+
+    [Fact]
+    public async Task ListingObjects_FollowsPages_AndCarriesSizeAndTime()
+    {
+        using var bucket = Open();
+        for (int i = 0; i < 5; i++)
+        {
+            await bucket.PutAsync($"postgres/titan-db/wals/{i}.gz", new byte[i + 1], CancellationToken.None);
+        }
+        await bucket.PutAsync("elsewhere/x", new byte[1], CancellationToken.None);
+
+        var all = await bucket.ListObjectsAsync("postgres/titan-db/", null, CancellationToken.None);
+        var first = await bucket.ListObjectsAsync("postgres/titan-db/", 3, CancellationToken.None);
+
+        Assert.Equal(5, all.Count);
+        Assert.Equal(new long[] { 1, 2, 3, 4, 5 }, all.Select(o => o.Size).ToArray());
+        Assert.All(all, o => Assert.Equal(new DateTimeOffset(2026, 10, 24, 14, 0, 0, TimeSpan.Zero), o.LastModified));
+        Assert.Equal(3, first.Count);
     }
 
     [Fact]
