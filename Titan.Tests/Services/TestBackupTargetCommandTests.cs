@@ -30,7 +30,11 @@ public class TestBackupTargetCommandTests
     }
 
     private TestBackupTargetCommandHandler Handler(TimeSpan? timeout = null) =>
-        new(_repo.Object, _protector.Object, _factory) { Timeout = timeout ?? TimeSpan.FromSeconds(15) };
+        new(_repo.Object, _protector.Object, _factory)
+        {
+            Timeout = timeout ?? TimeSpan.FromSeconds(15),
+            CleanupTimeout = TimeSpan.FromMilliseconds(200),
+        };
 
     private Task<BackupTargetTestResult> RunAsync(TestBackupTargetCommandHandler? handler = null, CancellationToken ct = default) =>
         (handler ?? Handler()).HandleAsync(new TestBackupTargetCommand(), ct);
@@ -65,6 +69,7 @@ public class TestBackupTargetCommandTests
         _bucket.OnGet = (_, stored) => { contents.Add(stored); return stored; };
 
         await RunAsync();
+        _bucket.Reopen();
         await RunAsync();
 
         Assert.NotEqual(_bucket.PutKeys[0], _bucket.PutKeys[1]);
@@ -176,6 +181,35 @@ public class TestBackupTargetCommandTests
 
         Assert.False(result.Ok);
         Assert.Contains("did not answer", result.Error);
+    }
+
+    [Fact]
+    public async Task APutThatLandsButNeverAnswers_IsStillDeleted_BeforeTheBucketIsDisposed()
+    {
+        _bucket.OnPutWithToken = (key, ct) =>
+        {
+            _bucket.Objects[key] = new byte[] { 1 };
+            return Task.Delay(Timeout.InfiniteTimeSpan, ct);
+        };
+
+        var result = await RunAsync(Handler(TimeSpan.FromMilliseconds(50)));
+
+        Assert.False(result.Ok);
+        Assert.Empty(_bucket.Objects);
+        Assert.True(_bucket.Disposed);
+    }
+
+    [Fact]
+    public async Task ADeleteThatFailsOnce_IsRetried_SoNothingIsLeftBehind_ButTheResultIsStillOkFalse()
+    {
+        int deletes = 0;
+        _bucket.OnDelete = _ => ++deletes == 1 ? throw new BackupBucketException("delete failed (InternalError)") : Task.CompletedTask;
+
+        var result = await RunAsync();
+
+        Assert.False(result.Ok);
+        Assert.Equal("delete failed (InternalError)", result.Error);
+        Assert.Empty(_bucket.Objects);
     }
 
     [Fact]

@@ -16,6 +16,7 @@ public sealed class S3BackupBucketTests : IDisposable
     private readonly List<(string Method, string PathAndQuery, Dictionary<string, string> Headers, byte[] Body)> _seen = new();
     private readonly Dictionary<string, byte[]> _store = new();
     private Func<HttpListenerRequest, (int Status, string Body)?> _override = _ => null;
+    private TimeSpan _delay = TimeSpan.Zero;
 
     public S3BackupBucketTests()
     {
@@ -63,6 +64,10 @@ public sealed class S3BackupBucketTests : IDisposable
                 _seen.Add((ctx.Request.HttpMethod, target, headers, payload));
             }
 
+            if (_delay > TimeSpan.Zero)
+            {
+                await Task.Delay(_delay);
+            }
             var forced = _override(ctx.Request);
             if (forced is not null)
             {
@@ -126,8 +131,8 @@ public sealed class S3BackupBucketTests : IDisposable
         ctx.Response.Close();
     }
 
-    private S3BackupBucket Open(string? endpoint = null) =>
-        new(new BackupBucketConnection(endpoint ?? _endpoint, "auto", "titan-backup-dev", "key-id", Secret));
+    private S3BackupBucket Open(string? endpoint = null, TimeSpan? callTimeout = null) =>
+        new(new BackupBucketConnection(endpoint ?? _endpoint, "auto", "titan-backup-dev", "key-id", Secret), callTimeout);
 
     [Fact]
     public async Task WriteListReadDelete_GoThroughPathStyleUrls_AndTheObjectComesBackIntact()
@@ -188,6 +193,33 @@ public sealed class S3BackupBucketTests : IDisposable
             () => bucket.PutAsync("_probe/abc", new byte[] { 1 }, CancellationToken.None));
 
         Assert.Equal("could not reach the endpoint", error.Message);
+    }
+
+    [Fact]
+    public async Task ABucketThatAnswersTooSlowly_IsDidNotAnswer_NotCouldNotReach()
+    {
+        _delay = TimeSpan.FromSeconds(3);
+        using var bucket = Open(callTimeout: TimeSpan.FromMilliseconds(300));
+
+        var error = await Assert.ThrowsAsync<BackupBucketException>(
+            () => bucket.PutAsync("_probe/abc", new byte[] { 1 }, CancellationToken.None));
+
+        Assert.Equal("the bucket did not answer in time", error.Message);
+    }
+
+    [Theory]
+    [InlineData("Slow<Down>", "the bucket answered with an error (500)")]
+    [InlineData("", "the bucket answered with an error (500)")]
+    [InlineData("AVeryLongCodeThatAHostileEndpointCouldSendToFillTheAdminsScreenWithText0123456789", "the bucket answered with an error (500)")]
+    public async Task AnOddErrorCode_IsNotReflectedIntoTheMessage(string code, string expected)
+    {
+        _override = _ => (500, $"<?xml version=\"1.0\"?><Error><Code>{System.Net.WebUtility.HtmlEncode(code)}</Code><Message>x</Message></Error>");
+        using var bucket = Open();
+
+        var error = await Assert.ThrowsAsync<BackupBucketException>(
+            () => bucket.PutAsync("_probe/abc", new byte[] { 1 }, CancellationToken.None));
+
+        Assert.Equal(expected, error.Message);
     }
 
     [Fact]

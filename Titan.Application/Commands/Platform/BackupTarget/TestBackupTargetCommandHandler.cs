@@ -16,10 +16,9 @@ public class TestBackupTargetCommandHandler(
 {
     /// Outside the lock rule on postgres/ so the probe can delete what it writes.
     private const string ProbePrefix = "_probe/";
-    private static readonly TimeSpan CleanupTimeout = TimeSpan.FromSeconds(5);
-
-    /// The wait for the whole probe; a property so a test can shorten it.
+    /// The wait for the whole probe, and the extra wait for its cleanup; properties so a test can shorten them.
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
+    public TimeSpan CleanupTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
     public async Task<BackupTargetTestResult> HandleAsync(TestBackupTargetCommand command, CancellationToken ct = default)
     {
@@ -36,10 +35,11 @@ public class TestBackupTargetCommandHandler(
         var watch = Stopwatch.StartNew();
         using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
         wait.CancelAfter(Timeout);
+        Task probe = ProbeAsync(bucket, key, content, wait.Token);
         try
         {
             // WaitAsync too, so an adapter that ignores its token cannot hold the request past the timeout.
-            await ProbeAsync(bucket, key, content, wait.Token).WaitAsync(wait.Token);
+            await probe.WaitAsync(wait.Token);
             return new BackupTargetTestResult(true, watch.ElapsedMilliseconds, null);
         }
         catch (BackupBucketException e)
@@ -48,11 +48,28 @@ public class TestBackupTargetCommandHandler(
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            await LetCleanupFinishAsync(probe);
             return Failed($"the bucket did not answer within {Timeout.TotalSeconds:0} seconds", secret);
+        }
+        catch (OperationCanceledException)
+        {
+            await LetCleanupFinishAsync(probe);
+            throw;
         }
     }
 
-    private static async Task ProbeAsync(IBackupBucket bucket, string key, byte[] content, CancellationToken ct)
+    /// An abandoned probe is still deleting its object; the bucket must not be disposed under it.
+    private async Task LetCleanupFinishAsync(Task probe)
+    {
+        await Task.WhenAny(probe, Task.Delay(CleanupTimeout + TimeSpan.FromMilliseconds(100)));
+        if (probe.IsFaulted || probe.IsCanceled)
+        {
+            // Its failure was already reported as the timeout; observe it so it is not left unobserved.
+            _ = probe.Exception;
+        }
+    }
+
+    private async Task ProbeAsync(IBackupBucket bucket, string key, byte[] content, CancellationToken ct)
     {
         try
         {
@@ -67,23 +84,22 @@ public class TestBackupTargetCommandHandler(
             {
                 throw new BackupBucketException("the object read back does not match what was written (SHA-256 differs)");
             }
+            await bucket.DeleteAsync(key, ct);
+            IReadOnlyList<string> after = await bucket.ListKeysAsync(key, ct);
+            if (after.Contains(key))
+            {
+                throw new BackupBucketException("the object is still listed after its delete");
+            }
         }
         catch
         {
-            // Leave nothing behind, even when the write itself timed out and may have landed.
+            // Leave nothing behind, even when the write itself timed out and may have landed, or a delete failed once.
             await TryDeleteAsync(bucket, key);
             throw;
         }
-
-        await bucket.DeleteAsync(key, ct);
-        IReadOnlyList<string> after = await bucket.ListKeysAsync(key, ct);
-        if (after.Contains(key))
-        {
-            throw new BackupBucketException("the object is still listed after its delete");
-        }
     }
 
-    private static async Task TryDeleteAsync(IBackupBucket bucket, string key)
+    private async Task TryDeleteAsync(IBackupBucket bucket, string key)
     {
         using var cleanup = new CancellationTokenSource(CleanupTimeout);
         try
@@ -96,6 +112,7 @@ public class TestBackupTargetCommandHandler(
         }
         catch (OperationCanceledException)
         {
+            // Out of time for cleanup too; the object stays and the probe still reports why it failed.
         }
     }
 

@@ -11,12 +11,13 @@ namespace Titan.Infrastructure.Backup;
 // Messages are written here, never taken from the SDK, so they cannot carry the key or the secret.
 public sealed class S3BackupBucket : IBackupBucket
 {
-    private static readonly TimeSpan CallTimeout = TimeSpan.FromSeconds(10);
+    private const int MaxCodeLength = 40;
 
     private readonly AmazonS3Client _client;
     private readonly string _bucket;
 
-    public S3BackupBucket(BackupBucketConnection connection)
+    /// callTimeout: per S3 call, no retry; the probe's own deadline is longer, so this is the one that names a slow bucket.
+    public S3BackupBucket(BackupBucketConnection connection, TimeSpan? callTimeout = null)
     {
         var config = new AmazonS3Config
         {
@@ -26,7 +27,7 @@ public sealed class S3BackupBucket : IBackupBucket
             RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
             ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED,
             MaxErrorRetry = 0,
-            Timeout = CallTimeout,
+            Timeout = callTimeout ?? TimeSpan.FromSeconds(10),
         };
         _client = new AmazonS3Client(new BasicAWSCredentials(connection.AccessKeyId, connection.SecretAccessKey), config);
         _bucket = connection.Bucket;
@@ -84,7 +85,7 @@ public sealed class S3BackupBucket : IBackupBucket
             throw;
         }
         catch (Exception e) when (e is AmazonServiceException or AmazonClientException or HttpRequestException
-                                      or IOException or OperationCanceledException)
+                                      or IOException or TimeoutException or OperationCanceledException)
         {
             throw Describe(e);
         }
@@ -95,7 +96,8 @@ public sealed class S3BackupBucket : IBackupBucket
     {
         if (failure is AmazonServiceException service)
         {
-            string code = string.IsNullOrEmpty(service.ErrorCode) ? ((int)service.StatusCode).ToString() : service.ErrorCode;
+            // The code comes from an endpoint the admin chose: only a short plain token is shown, else the HTTP status.
+            string code = IsPlainCode(service.ErrorCode) ? service.ErrorCode : ((int)service.StatusCode).ToString();
             return code switch
             {
                 "AccessDenied" => new BackupBucketException($"access denied ({code})"),
@@ -105,6 +107,14 @@ public sealed class S3BackupBucket : IBackupBucket
                 _ => new BackupBucketException($"the bucket answered with an error ({code})"),
             };
         }
+        if (failure is OperationCanceledException or TimeoutException
+            || failure.InnerException is OperationCanceledException or TimeoutException)
+        {
+            return new BackupBucketException("the bucket did not answer in time");
+        }
         return new BackupBucketException("could not reach the endpoint");
     }
+
+    private static bool IsPlainCode(string? code) =>
+        !string.IsNullOrEmpty(code) && code.Length <= MaxCodeLength && code.All(char.IsAsciiLetterOrDigit);
 }
