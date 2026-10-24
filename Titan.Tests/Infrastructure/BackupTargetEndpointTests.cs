@@ -27,6 +27,18 @@ public class BackupTargetEndpointTests
     }
 
     [Fact]
+    public void Test_RequiresPlatformAdminRole_AndNoAnonymousAccess()
+    {
+        var handler = new TestBackupTargetCommandHandler(
+            Mock.Of<IBackupTargetRepository>(), Mock.Of<IBackupTargetSecretProtector>(), Mock.Of<IBackupBucketFactory>());
+        var ep = Factory.Create<TestBackupTargetEndpoint>(handler);
+
+        Assert.NotNull(ep.Definition.AllowedRoles);
+        Assert.Equal(new[] { "platform-admin" }, ep.Definition.AllowedRoles);
+        Assert.Null(ep.Definition.AnonymousVerbs);
+    }
+
+    [Fact]
     public void Get_RequiresPlatformAdminRole_AndNoAnonymousAccess()
     {
         var ep = Factory.Create<GetBackupTargetEndpoint>(new GetBackupTargetQueryHandler(Mock.Of<IBackupTargetRepository>()));

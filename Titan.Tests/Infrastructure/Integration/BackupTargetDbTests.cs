@@ -240,6 +240,7 @@ public class BackupTargetDbTests(PostgresFixture pg) : IAsyncLifetime
         await using TitanDbContext db = pg.NewDbContext();
         var stored = await db.BackupTargets.AsNoTracking().SingleAsync();
 
-        Assert.ThrowsAny<Exception>(() => Protector(keySeed: 7).Unprotect(stored.SecretCipher));
+        var error = Assert.Throws<ServiceUnavailableException>(() => Protector(keySeed: 7).Unprotect(stored.SecretCipher));
+        Assert.Equal("BACKUP_TARGET_SECRET_UNREADABLE", error.Code);
     }
 }

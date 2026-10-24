@@ -331,7 +331,9 @@ builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupTargetRepos
     Titan.Infrastructure.Repositories.BackupTargetRepository>();
 builder.Services.AddSingleton<IBackupTargetSecretProtector,
     Titan.Infrastructure.Backup.ClusterKeyBackupSecretProtector>();
+builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.SetBackupTargetCommandHandler>();
+builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.TestBackupTargetCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientCertificateCache>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
