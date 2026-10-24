@@ -327,6 +327,12 @@ builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IClusterRepository
     Titan.Infrastructure.Repositories.ClusterRepository>();
 builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IProviderClientIdentityRepository,
     Titan.Infrastructure.Repositories.ProviderClientIdentityRepository>();
+builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupTargetRepository,
+    Titan.Infrastructure.Repositories.BackupTargetRepository>();
+builder.Services.AddSingleton<IBackupTargetSecretProtector,
+    Titan.Infrastructure.Backup.ClusterKeyBackupSecretProtector>();
+builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.SetBackupTargetCommandHandler>();
+builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientCertificateCache>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
 builder.Services.AddScoped<IProviderClientIdentityStore>(sp =>
