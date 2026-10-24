@@ -59,6 +59,10 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<ProviderClientIdentity> ProviderClientIdentities => Set<ProviderClientIdentity>();
     public DbSet<Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget> BackupTargets =>
         Set<Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget>();
+    public DbSet<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord> Backups =>
+        Set<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord>();
+    public DbSet<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation> BackupObservations =>
+        Set<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation>();
     public DbSet<ProviderCommand> ProviderCommands => Set<ProviderCommand>();
     public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
     public DbSet<ActivityEvent> ActivityEvents => Set<ActivityEvent>();

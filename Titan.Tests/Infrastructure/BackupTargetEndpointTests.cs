@@ -39,6 +39,18 @@ public class BackupTargetEndpointTests
     }
 
     [Fact]
+    public void ListBackups_RequiresPlatformAdminRole_AndNoAnonymousAccess()
+    {
+        var handler = new Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler(
+            Mock.Of<IBackupRecordRepository>(), Mock.Of<IBackupObservationRepository>(), TimeProvider.System);
+        var ep = Factory.Create<ListBackupsEndpoint>(handler);
+
+        Assert.NotNull(ep.Definition.AllowedRoles);
+        Assert.Equal(new[] { "platform-admin" }, ep.Definition.AllowedRoles);
+        Assert.Null(ep.Definition.AnonymousVerbs);
+    }
+
+    [Fact]
     public void Get_RequiresPlatformAdminRole_AndNoAnonymousAccess()
     {
         var ep = Factory.Create<GetBackupTargetEndpoint>(new GetBackupTargetQueryHandler(Mock.Of<IBackupTargetRepository>()));

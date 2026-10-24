@@ -69,7 +69,6 @@ public class TestBackupTargetCommandTests
         _bucket.OnGet = (_, stored) => { contents.Add(stored); return stored; };
 
         await RunAsync();
-        _bucket.Reopen();
         await RunAsync();
 
         Assert.NotEqual(_bucket.PutKeys[0], _bucket.PutKeys[1]);
