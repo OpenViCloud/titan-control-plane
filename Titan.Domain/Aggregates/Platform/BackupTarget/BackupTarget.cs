@@ -9,7 +9,7 @@ public class BackupTarget
     public static readonly Guid SingletonId = new("7174616e-0000-4000-8000-000000000002");
     public const int MaxBucketLength = 63;
     // The audit detail line (endpoint, region, bucket, key id and a fixed text) must fit its 512-character column when every
-    // field is at its maximum; 200 is what is left for the endpoint.
+    // field is at its maximum; 200 is what is left for the endpoint. BackupTargetDbTests.EveryFieldAtItsMaximum_IsStored_AndAudited guards the sum.
     public const int MaxEndpointLength = 200;
     public const int MaxSecretLength = 256;
 
@@ -26,6 +26,12 @@ public class BackupTarget
     public static bool IsValidEndpoint(string? endpoint)
     {
         if (string.IsNullOrWhiteSpace(endpoint))
+        {
+            return false;
+        }
+        // Uri.TryCreate tolerates spaces and control characters inside the string, and the raw string is what gets stored.
+        bool hasStrayCharacters = endpoint.Trim().Any(c => char.IsWhiteSpace(c) || char.IsControl(c));
+        if (hasStrayCharacters)
         {
             return false;
         }

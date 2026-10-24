@@ -128,6 +128,17 @@ public class BackupTargetTests
         Assert.False(BackupTarget.IsValidEndpoint($"https://{host}x.io"));
     }
 
+    // A space or control character inside the URL would reach the audit line (forging its `; secret=kept` part) and the S3 client.
+    [Theory]
+    [InlineData("https://a.com/x y; secret=kept")]
+    [InlineData("https://a.com/x\ny")]
+    [InlineData("https://a.com/x\ty")]
+    [InlineData("https://a.com/x\u0001y")]
+    public void IsValidEndpoint_RefusesWhitespaceAndControlCharactersInside(string endpoint)
+    {
+        Assert.False(BackupTarget.IsValidEndpoint(endpoint));
+    }
+
     [Theory]
     [InlineData("0123456789abcdefABCDEF0123456789abcdef0123456789abcdef0123456789", true)]
     [InlineData("", false)]
