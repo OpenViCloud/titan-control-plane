@@ -19,7 +19,8 @@ public class BackupStatusRefreshService(
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(options.Value.IntervalMinutes));
+        // PeriodicTimer throws on a zero or negative period, which would stop the host over one configuration value.
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Max(1, options.Value.IntervalMinutes)));
 
         // Wait-first, like the other hosted services: nothing runs during startup or in a WebApplicationFactory test.
         while (await timer.WaitForNextTickAsync(stoppingToken))

@@ -5,6 +5,7 @@ namespace Titan.Domain.Aggregates.Platform.BackupRecord;
 public class BackupRecord
 {
     public const string PostgresKind = "postgres";
+    public const int MaxBackupKeyLength = 128;
 
     public Guid Id { get; private set; }
     public string Kind { get; private set; } = default!;

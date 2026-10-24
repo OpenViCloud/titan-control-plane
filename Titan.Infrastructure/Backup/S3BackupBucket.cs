@@ -87,7 +87,13 @@ public sealed class S3BackupBucket : IBackupBucket
                 {
                     found.Add(new BackupBucketObject(o.Key, o.Size ?? 0, new DateTimeOffset(o.LastModified ?? DateTime.UnixEpoch, TimeSpan.Zero)));
                 }
-                token = response.IsTruncated == true && limit is null ? response.NextContinuationToken : null;
+                bool wantsMore = response.IsTruncated == true && limit is null;
+                if (wantsMore && string.IsNullOrEmpty(response.NextContinuationToken))
+                {
+                    // Taking this as "the end" would make the refresh delete every row it cannot see.
+                    throw new BackupBucketException("the bucket's listing was cut short");
+                }
+                token = wantsMore ? response.NextContinuationToken : null;
             }
             while (token is not null);
         }, ct);

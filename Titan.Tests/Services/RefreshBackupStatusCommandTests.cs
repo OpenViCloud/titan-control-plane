@@ -85,6 +85,19 @@ public class RefreshBackupStatusCommandTests
     }
 
     [Fact]
+    public async Task AMarkerObjectOrAnOverlongFolderName_IsSkipped_NotAFailedRefresh()
+    {
+        FinishedBase("K1", "2026-10-24 14:06:33+00:00");
+        Put(Base, "", Now.AddHours(-5));
+        Put(Base + new string('x', 129) + "/data.tar", "", Now.AddHours(-5), 10);
+
+        await RunAsync();
+
+        Assert.Equal("K1", Assert.Single(_records.Rows).BackupKey);
+        Assert.Equal(BackupReadOutcome.Read, Observation.Outcome);
+    }
+
+    [Fact]
     public async Task ABaseWithoutItsInfoFile_IsIncomplete()
     {
         Put(Base + "20261025T100000/data.tar", "", Now.AddMinutes(-20), 500);

@@ -13,7 +13,7 @@ public class BackupRecordConfiguration : IEntityTypeConfiguration<BackupRecord>
         builder.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(r => r.Kind).HasColumnName("kind").HasMaxLength(32).IsRequired();
         builder.Property(r => r.ResourceName).HasColumnName("resource_name").HasMaxLength(128).IsRequired();
-        builder.Property(r => r.BackupKey).HasColumnName("backup_key").HasMaxLength(128).IsRequired();
+        builder.Property(r => r.BackupKey).HasColumnName("backup_key").HasMaxLength(BackupRecord.MaxBackupKeyLength).IsRequired();
         builder.Property(r => r.TakenAt).HasColumnName("taken_at").IsRequired();
         builder.Property(r => r.SizeBytes).HasColumnName("size_bytes").IsRequired();
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();
