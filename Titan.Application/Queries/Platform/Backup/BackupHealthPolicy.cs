@@ -6,7 +6,6 @@ namespace Titan.Application.Queries.Platform.Backup;
 
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket. Postgres is Stale by the age of its newest complete base backup only; the age of the
 // newest log is shown but never alarms, because an idle database writes no log and cannot be told from a broken archiver.
-// Both limits are proposals until Tôn Chủ sets them.
 public static class BackupHealthPolicy
 {
     /// A daily ScheduledBackup plus two hours of slack.

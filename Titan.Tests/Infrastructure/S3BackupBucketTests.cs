@@ -180,6 +180,21 @@ public sealed class S3BackupBucketTests : IDisposable
     }
 
     [Fact]
+    public async Task ATruncatedListingWithoutAContinuationToken_IsAFailure_NotAShortList()
+    {
+        _override = request => request.QueryString["list-type"] == "2"
+            ? (200, "<?xml version=\"1.0\"?><ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>b</Name>"
+                    + "<KeyCount>0</KeyCount><MaxKeys>2</MaxKeys><IsTruncated>true</IsTruncated></ListBucketResult>")
+            : null;
+        using var bucket = Open();
+
+        var error = await Assert.ThrowsAsync<BackupBucketException>(
+            () => bucket.ListObjectsAsync("postgres/titan-db/", null, CancellationToken.None));
+
+        Assert.Equal("the bucket's listing was cut short", error.Message);
+    }
+
+    [Fact]
     public async Task AnUpload_CarriesNoChecksumTrailer_ThatR2Refuses_AndNeverTheSecret()
     {
         using var bucket = Open();
