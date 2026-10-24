@@ -237,4 +237,7 @@ Khoá lệnh = chuỗi id workflow cũ ([provider-and-worker §provider-command-
 | `API_TOKEN_QUOTA_EXCEEDED` | 422 | Tenant đã có 20 token (kể cả token hết hạn) |
 | `INVALID_API_TOKEN` / `INVALID_API_TOKEN_NAME` | 400 | Domain từ chối bí mật, thời hạn hoặc tên. Qua `POST /v1/tenant/api-tokens` validator chặn trước ⇒ `400 VALIDATION_ERROR` |
 | `INVALID_SSH_KEY` / `INVALID_SSH_KEY_NAME` | 400 | Domain từ chối key hoặc tên. Qua `POST /v1/tenant/ssh-keys` validator chặn trước ⇒ `400 VALIDATION_ERROR`; hai mã này không tới HTTP |
+| `BACKUP_TARGET_NOT_FOUND` | 404 | `GET /v1/admin/backup-target` before an admin has set it ([backup §backup-target](https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target)) |
+| `BACKUP_TARGET_SECRET_REQUIRED` | 422 | The first `PUT /v1/admin/backup-target` carries no secret access key (later ones may leave it out and keep the stored one) |
+| `BACKUP_TARGET_CONFLICT` | 409 | Two admins saved the first target at the same moment; the second sends it again |
 

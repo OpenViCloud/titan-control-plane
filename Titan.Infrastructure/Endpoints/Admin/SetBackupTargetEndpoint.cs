@@ -29,12 +29,16 @@ public class SetBackupTargetValidator : Validator<SetBackupTargetCommand>
     public SetBackupTargetValidator()
     {
         RuleFor(x => x.Endpoint).Must(BackupTargetAggregate.IsValidEndpoint)
-            .WithMessage("endpoint must be an https URL");
+            .WithMessage("endpoint must be an https URL of at most 200 characters, without credentials, query or fragment");
         RuleFor(x => x.Region).Must(BackupTargetAggregate.IsValidRegion)
             .WithMessage("region must be 1 to 64 letters, digits or hyphens");
         RuleFor(x => x.Bucket).Must(BackupTargetAggregate.IsValidBucket)
             .WithMessage("bucket must be 1 to 63 characters of a-z, 0-9, '-' or '.'");
         RuleFor(x => x.AccessKeyId).Must(BackupTargetAggregate.IsValidAccessKeyId)
             .WithMessage("accessKeyId must be 1 to 128 characters without spaces");
+        // Absent or empty keeps the stored secret; anything given must be a usable one.
+        RuleFor(x => x.SecretAccessKey).Must(BackupTargetAggregate.IsValidSecretAccessKey)
+            .When(x => !string.IsNullOrEmpty(x.SecretAccessKey))
+            .WithMessage("secretAccessKey must be 1 to 256 characters without spaces");
     }
 }

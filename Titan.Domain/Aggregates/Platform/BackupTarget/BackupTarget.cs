@@ -8,6 +8,10 @@ public class BackupTarget
 {
     public static readonly Guid SingletonId = new("7174616e-0000-4000-8000-000000000002");
     public const int MaxBucketLength = 63;
+    // The audit detail line (endpoint, region, bucket, key id and a fixed text) must fit its 512-character column when every
+    // field is at its maximum; 200 is what is left for the endpoint.
+    public const int MaxEndpointLength = 200;
+    public const int MaxSecretLength = 256;
 
     public Guid Id { get; private set; }
     public string Endpoint { get; private set; } = default!;
@@ -31,7 +35,20 @@ public class BackupTarget
             return false;
         }
         // Credentials in the URL would end up in logs and the audit trail; the key pair has its own fields.
-        return uri.Scheme == Uri.UriSchemeHttps && uri.Host.Length > 0 && uri.UserInfo.Length == 0;
+        bool isShortEnough = endpoint.Trim().Length <= MaxEndpointLength;
+        bool isAnOrigin = uri.Query.Length == 0 && uri.Fragment.Length == 0;
+        return isShortEnough && isAnOrigin
+            && uri.Scheme == Uri.UriSchemeHttps && uri.Host.Length > 0 && uri.UserInfo.Length == 0;
+    }
+
+    /// A secret access key has no whitespace: a pasted trailing newline would be sealed and fail later at the first signature.
+    public static bool IsValidSecretAccessKey(string? secretAccessKey)
+    {
+        if (string.IsNullOrEmpty(secretAccessKey) || secretAccessKey.Length > MaxSecretLength)
+        {
+            return false;
+        }
+        return !secretAccessKey.Any(char.IsWhiteSpace);
     }
 
     public static bool IsValidRegion(string? region)

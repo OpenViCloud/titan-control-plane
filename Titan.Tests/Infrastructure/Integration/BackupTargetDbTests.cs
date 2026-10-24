@@ -6,6 +6,7 @@ using Titan.Application.Commands.Platform.BackupTarget;
 using Titan.Application.Commands.Platform.BackupTarget.Contracts;
 using Titan.Application.Queries.Platform.BackupTarget;
 using Titan.Application.Queries.Platform.BackupTarget.Contracts;
+using Titan.Domain.Aggregates.Platform.BackupTarget;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Backup;
 using Titan.Infrastructure.Incus;
@@ -179,6 +180,55 @@ public class BackupTargetDbTests(PostgresFixture pg) : IAsyncLifetime
         });
         Assert.Contains("secret=changed", rows[0].Detail);
         Assert.Contains("secret=kept", rows[1].Detail);
+    }
+
+    // The audit line is built from what the row holds, so the trail and the table never disagree about the endpoint.
+    [Fact]
+    public async Task TheAuditDetail_NamesTheEndpointAsStored_NotAsTyped()
+    {
+        var bucket = NewBucket();
+        await SetAsync(new SetBackupTargetCommand(Endpoint + "/", "auto", bucket, "key-id", SecretValue));
+
+        var row = Assert.Single(await AuditRowsAboutAsync(bucket));
+
+        Assert.Contains("endpoint=" + Endpoint + ";", row.Detail);
+    }
+
+    // Every field at its maximum: the audit line must still fit its column, so the PUT is never a 500 for length.
+    [Fact]
+    public async Task EveryFieldAtItsMaximum_IsStored_AndAudited()
+    {
+        string host = new('a', BackupTarget.MaxEndpointLength - "https://.io".Length);
+        string longBucket = "b" + new string('c', BackupTarget.MaxBucketLength - 1);
+        var command = new SetBackupTargetCommand($"https://{host}.io", new string('r', 64), longBucket, new string('k', 128),
+            new string('s', BackupTarget.MaxSecretLength));
+
+        await SetAsync(command);
+
+        Assert.Equal(longBucket, (await GetAsync()).Bucket);
+        Assert.Single(await AuditRowsAboutAsync(longBucket));
+    }
+
+    // Two admins saving the first target at once: the second is told to send it again, nothing partial is written.
+    [Fact]
+    public async Task TwoFirstSavesAtOnce_TheSecondIsToldToSendItAgain()
+    {
+        await using TitanDbContext first = pg.NewDbContext();
+        await using TitanDbContext second = pg.NewDbContext();
+        var firstRepo = new BackupTargetRepository(first);
+        var secondRepo = new BackupTargetRepository(second);
+        Assert.Null(await firstRepo.FindAsync());
+        Assert.Null(await secondRepo.FindAsync());
+        var cipher = Protector().Protect(SecretValue);
+        firstRepo.Add(BackupTarget.Create(Endpoint, "auto", NewBucket(), "key-id", cipher));
+        secondRepo.Add(BackupTarget.Create(Endpoint, "auto", NewBucket(), "key-id", cipher));
+
+        await firstRepo.SaveAsync();
+        var ex = await Assert.ThrowsAsync<ConcurrencyConflictException>(() => secondRepo.SaveAsync());
+
+        Assert.Equal("BACKUP_TARGET_CONFLICT", ex.Code);
+        await using TitanDbContext db = pg.NewDbContext();
+        Assert.Equal(1, await db.BackupTargets.CountAsync());
     }
 
     // The key that sealed the secret is Encryption__ClusterKey; a different one cannot open it, loudly.

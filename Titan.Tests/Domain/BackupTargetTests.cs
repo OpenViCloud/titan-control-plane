@@ -79,7 +79,7 @@ public class BackupTargetTests
     {
         var target = Target();
         var before = target.UpdatedAt;
-        Thread.Sleep(5);
+        Thread.Sleep(30);
 
         target.Replace(Endpoint, "auto", "titan-backup-dev", "key-id", null);
 
@@ -94,6 +94,8 @@ public class BackupTargetTests
     [InlineData("ftp://acct.r2.cloudflarestorage.com", false)]
     [InlineData("https://user:pass@acct.r2.cloudflarestorage.com", false)]
     [InlineData("https://", false)]
+    [InlineData("https://s3.example.com/?X-Amz-Signature=abc", false)]
+    [InlineData("https://s3.example.com/#frag", false)]
     [InlineData("not a url", false)]
     [InlineData("", false)]
     [InlineData(null, false)]
@@ -114,6 +116,35 @@ public class BackupTargetTests
     public void IsValidBucket_AcceptsLowerCaseDigitsHyphenAndDot(string? bucket, bool expected)
     {
         Assert.Equal(expected, BackupTarget.IsValidBucket(bucket));
+    }
+
+    // The audit line carries the endpoint with the other fields at their maximum, so its length is bounded by the audit column.
+    [Fact]
+    public void IsValidEndpoint_StopsAt200Characters()
+    {
+        string host = new('a', BackupTarget.MaxEndpointLength - "https://.io".Length);
+
+        Assert.True(BackupTarget.IsValidEndpoint($"https://{host}.io"));
+        Assert.False(BackupTarget.IsValidEndpoint($"https://{host}x.io"));
+    }
+
+    [Theory]
+    [InlineData("0123456789abcdefABCDEF0123456789abcdef0123456789abcdef0123456789", true)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData("abc\n", false)]
+    [InlineData("has space", false)]
+    [InlineData(null, false)]
+    public void IsValidSecretAccessKey_IsNonEmptyWithoutWhitespace(string? secret, bool expected)
+    {
+        Assert.Equal(expected, BackupTarget.IsValidSecretAccessKey(secret));
+    }
+
+    [Fact]
+    public void IsValidSecretAccessKey_StopsAt256Characters()
+    {
+        Assert.True(BackupTarget.IsValidSecretAccessKey(new string('s', 256)));
+        Assert.False(BackupTarget.IsValidSecretAccessKey(new string('s', 257)));
     }
 
     [Fact]
@@ -151,7 +182,7 @@ public class BackupTargetTests
         Assert.False(BackupTarget.IsValidAccessKeyId(new string('k', 129)));
     }
 
-    // A value the validator would refuse never reaches the table as a 500: the domain refuses it too.
+    // The domain refuses what the validator refuses, so a caller that skips the validator cannot store it either.
     [Fact]
     public void Create_WithAnInvalidField_IsRefused()
     {

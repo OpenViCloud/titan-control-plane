@@ -4,7 +4,7 @@ using Titan.Infrastructure.Endpoints.Admin;
 
 namespace Titan.Tests.Infrastructure;
 
-// The validator applies the aggregate's own rules, so a request it lets through is never refused later as a 500.
+// The validator applies the aggregate's own rules, so a request it lets through is one the aggregate accepts.
 // It cannot see the database, so "the first PUT needs a secret" is not here: the handler and the domain own it.
 public class SetBackupTargetValidatorTests
 {
@@ -50,6 +50,31 @@ public class SetBackupTargetValidatorTests
     public void AnEmptyAccessKeyId_IsRefused()
     {
         _validator.TestValidate(Command(accessKeyId: "")).ShouldHaveValidationErrorFor(c => c.AccessKeyId);
+    }
+
+    [Theory]
+    [InlineData("   ")]
+    [InlineData("abc\n")]
+    [InlineData("has space")]
+    public void ASecretWithWhitespace_IsRefused_OnTheSecretOnly(string secret)
+    {
+        var result = _validator.TestValidate(Command(secret: secret));
+
+        result.ShouldHaveValidationErrorFor(c => c.SecretAccessKey);
+        result.ShouldNotHaveValidationErrorFor(c => c.Bucket);
+    }
+
+    [Fact]
+    public void ASecretLongerThan256Characters_IsRefused()
+    {
+        _validator.TestValidate(Command(secret: new string('s', 257))).ShouldHaveValidationErrorFor(c => c.SecretAccessKey);
+    }
+
+    [Fact]
+    public void AnEndpointWithAQuery_IsRefused()
+    {
+        _validator.TestValidate(Command(endpoint: "https://s3.example.com/?X-Amz-Signature=abc"))
+            .ShouldHaveValidationErrorFor(c => c.Endpoint);
     }
 
     [Fact]

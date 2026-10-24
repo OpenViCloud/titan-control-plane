@@ -27,17 +27,24 @@ public class SetBackupTargetCommandHandler(
         byte[]? secretCipher = null;
         if (hasNewSecret)
         {
+            if (!BackupTargetAggregate.IsValidSecretAccessKey(secretAccessKey))
+            {
+                throw new ArgumentException("secretAccessKey must be 1 to 256 characters without spaces", nameof(command));
+            }
             secretCipher = protector.Protect(secretAccessKey!);
         }
 
         BackupTargetAggregate? existing = await repo.FindAsync(ct);
+        BackupTargetAggregate target;
         if (existing is null)
         {
-            repo.Add(BackupTargetAggregate.Create(endpoint, region, bucket, accessKeyId, secretCipher));
+            target = BackupTargetAggregate.Create(endpoint, region, bucket, accessKeyId, secretCipher);
+            repo.Add(target);
         }
         else
         {
             existing.Replace(endpoint, region, bucket, accessKeyId, secretCipher);
+            target = existing;
         }
 
         // Staged on the same DbContext as the target, so the trace and the change commit together. The detail says
@@ -45,7 +52,7 @@ public class SetBackupTargetCommandHandler(
         string secretNote = hasNewSecret ? "changed" : "kept";
         auditLog.Add(AdminAuditLog.CreatePlatform(
             SetAction, currentUser.KeycloakUserId, ResourceType, ResourceKey,
-            detail: $"endpoint={endpoint}; region={region}; bucket={bucket}; accessKeyId={accessKeyId}; secret={secretNote}"));
+            detail: $"endpoint={target.Endpoint}; region={target.Region}; bucket={target.Bucket}; accessKeyId={target.AccessKeyId}; secret={secretNote}"));
 
         await repo.SaveAsync(ct);
     }
