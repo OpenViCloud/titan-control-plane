@@ -88,7 +88,7 @@ public class RefreshBackupStatusCommandHandler(
             .Where(o => o.Key.StartsWith(BackupLayout.BasePrefix, StringComparison.Ordinal))
             .GroupBy(o => o.Key[BackupLayout.BasePrefix.Length..].Split('/')[0])
             // A marker object or a folder name nobody's backup tool wrote would otherwise fail the whole pass, every pass.
-            .Where(g => g.Key.Length > 0 && g.Key.Length <= BackupRecord.MaxBackupKeyLength)
+            .Where(g => BackupRecord.IsValidBackupKey(g.Key))
             .OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var folder in byFolder)
         {

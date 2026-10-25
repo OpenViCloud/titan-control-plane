@@ -96,6 +96,8 @@ public class StateTransitionOwnershipTests
         // status mutation to guard here; Confirm()/Fail() still refuse it (already terminal).
         ["Platform/ProviderCommand"] = "Done/Failed are not absorbing on purpose: a repeat of the key reopens a " +
             "finished row per its Rerun rule (docs/architecture/provider-and-worker.md#provider-command-key)",
+        ["Platform/BackupRecord"] = "a row of the cache the backup refresh keeps from the bucket, not a state machine: Complete or " +
+            "Incomplete only reports what barman wrote, and the next refresh rewrites it from the bucket",
         ["Billing/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
             + "mutated again — there is no observation path into this aggregate",
     };

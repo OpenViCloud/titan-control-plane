@@ -7,6 +7,10 @@ public class BackupRecord
     public const string PostgresKind = "postgres";
     public const int MaxBackupKeyLength = 128;
 
+    /// A barman backup folder name fits the column; an empty or overlong one is not a backup this cache can hold.
+    public static bool IsValidBackupKey(string? backupKey) =>
+        !string.IsNullOrWhiteSpace(backupKey) && backupKey.Length <= MaxBackupKeyLength;
+
     public Guid Id { get; private set; }
     public string Kind { get; private set; } = default!;
     public string ResourceName { get; private set; } = default!;
