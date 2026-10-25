@@ -14,7 +14,11 @@ namespace Titan.Tests.Services;
 // and a bucket that cannot be read changes nothing but the observation.
 public class RefreshBackupStatusCommandTests
 {
-    private const string Base = BackupLayout.BasePrefix;
+    // The layout barman writes, spelled out here rather than taken from the code under test.
+    private const string Base = "postgres/titan-db/base/";
+    private const string Wal = "postgres/titan-db/wals/";
+    private const string RestoredBase = "postgres/titan-db-restored/base/";
+    private const string RestoredWal = "postgres/titan-db-restored/wals/";
     private static readonly DateTimeOffset Now = new(2026, 10, 25, 12, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryBackupBucket _bucket = new();
@@ -65,9 +69,9 @@ public class RefreshBackupStatusCommandTests
     public async Task TheNewestLogObject_IsTheLastWal_AndLogsAreNotBackups()
     {
         FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00");
-        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A0.gz", "w", Now.AddHours(-3));
-        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A1.gz", "w", Now.AddMinutes(-4));
-        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A2.gz", "w", Now.AddHours(-1));
+        Put(Wal + "0000000100000000/000000010000000000000A0.gz", "w", Now.AddHours(-3));
+        Put(Wal + "0000000100000000/000000010000000000000A1.gz", "w", Now.AddMinutes(-4));
+        Put(Wal + "0000000100000000/000000010000000000000A2.gz", "w", Now.AddHours(-1));
         // A base backup written after the newest log must not be mistaken for a log.
         Put(Base + "20261025T115900/data.tar", "", Now.AddMinutes(-1), 10);
 
@@ -200,6 +204,88 @@ public class RefreshBackupStatusCommandTests
         Assert.Equal(2, after.Count);
     }
 
+    // After a restore the new cluster archives under another serverName (titan-ops docs/infra/oci/runbook.md#disaster-recovery);
+    // the old name gets nothing new. The pair below swaps which name wrote last, so a fixed prefix cannot pass both.
+    [Fact]
+    public async Task AfterARestore_TheServerThatWroteLast_IsRead_AndTheOldServersBasesAreGone()
+    {
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00", infoModified: Now.AddDays(-1));
+        Put(Wal + "0000000100000000/000000010000000000000A0.gz", "w", Now.AddHours(-5));
+        await RunAsync();
+        Put(RestoredWal + "0000000200000000/000000020000000000000A1.gz", "w", Now.AddMinutes(-3));
+        Put(RestoredBase + "20261025T113000/backup.info", "status=DONE\nend_time=2026-10-25 11:30:00+00:00\n", Now.AddMinutes(-30));
+
+        await RunAsync();
+
+        var row = Assert.Single(_records.Rows);
+        Assert.Equal("20261025T113000", row.BackupKey);
+        Assert.Equal(BackupLayout.PostgresResourceName, row.ResourceName);
+        Assert.Equal(Now.AddMinutes(-3), Observation.LastWalAt);
+    }
+
+    [Fact]
+    public async Task WhenTheOriginalNameWroteLast_ItIsTheOneRead()
+    {
+        Put(RestoredWal + "0000000200000000/000000020000000000000A1.gz", "w", Now.AddHours(-5));
+        Put(RestoredBase + "20261020T113000/backup.info", "status=DONE\nend_time=2026-10-20 11:30:00+00:00\n", Now.AddDays(-5));
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00");
+        Put(Wal + "0000000100000000/000000010000000000000A0.gz", "w", Now.AddMinutes(-3));
+
+        await RunAsync();
+
+        Assert.Equal("20261024T140631", Assert.Single(_records.Rows).BackupKey);
+        Assert.Equal(Now.AddMinutes(-3), Observation.LastWalAt);
+    }
+
+    [Fact]
+    public async Task ARestoredServerWithLogsButNoBaseYet_HasNoBackupRow_AndItsOwnLastWal()
+    {
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00", infoModified: Now.AddDays(-1));
+        Put(RestoredWal + "0000000200000000/000000020000000000000A1.gz", "w", Now.AddMinutes(-2));
+
+        await RunAsync();
+
+        Assert.Empty(_records.Rows);
+        Assert.Equal(BackupReadOutcome.Read, Observation.Outcome);
+        Assert.Equal(Now.AddMinutes(-2), Observation.LastWalAt);
+    }
+
+    [Fact]
+    public async Task TwoServersThatWroteAtTheSameMoment_TheLargerNameIsRead()
+    {
+        Put(Wal + "0000000100000000/A0.gz", "w", Now.AddMinutes(-3));
+        Put(RestoredWal + "0000000200000000/A1.gz", "w", Now.AddMinutes(-3));
+        Put(RestoredBase + "K2/backup.info", "status=DONE\nend_time=2026-10-25 11:30:00+00:00\n", Now.AddHours(-1));
+        FinishedBase("K1", "2026-10-24 14:06:33+00:00");
+
+        await RunAsync();
+
+        Assert.Equal("K2", Assert.Single(_records.Rows).BackupKey);
+    }
+
+    [Fact]
+    public async Task AnObjectDirectlyUnderPostgres_IsNotAServer()
+    {
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00");
+        Put("postgres/notes.txt", "x", Now.AddMinutes(-1));
+
+        await RunAsync();
+
+        Assert.Equal("20261024T140631", Assert.Single(_records.Rows).BackupKey);
+        Assert.Equal(BackupReadOutcome.Read, Observation.Outcome);
+    }
+
+    [Fact]
+    public async Task OnlyStrayObjectsUnderPostgres_IsNoBackupPrefix()
+    {
+        Put("postgres/notes.txt", "x", Now.AddMinutes(-1));
+
+        await RunAsync();
+
+        Assert.Equal(BackupReadOutcome.NoBackupPrefix, Observation.Outcome);
+        Assert.Empty(_records.Rows);
+    }
+
     [Fact]
     public async Task AnEmptyBucket_IsEmpty_NotUnreadable()
     {
@@ -224,7 +310,7 @@ public class RefreshBackupStatusCommandTests
     public async Task ADeniedBucket_IsUnreadable_KeepsTheRowsAndTheLastWal_AndNamesTheReason()
     {
         FinishedBase("K1", "2026-10-24 14:06:33+00:00");
-        Put(BackupLayout.WalPrefix + "0000000100000000/A0.gz", "w", Now.AddMinutes(-4));
+        Put(Wal + "0000000100000000/A0.gz", "w", Now.AddMinutes(-4));
         await RunAsync();
 
         _bucket.OnListObjects = _ => throw new BackupBucketException("access denied (AccessDenied)");

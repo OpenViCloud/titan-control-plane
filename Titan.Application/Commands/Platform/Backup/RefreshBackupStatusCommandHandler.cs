@@ -69,30 +69,43 @@ public class RefreshBackupStatusCommandHandler(
     private static async Task<BucketSnapshot> ReadAsync(
         IBackupBucket bucket, List<BackupRecord> known, DateTimeOffset now, CancellationToken ct)
     {
-        IReadOnlyList<BackupBucketObject> objects = await bucket.ListObjectsAsync(BackupLayout.PostgresPrefix, null, ct);
-        if (objects.Count == 0)
+        IReadOnlyList<BackupBucketObject> all = await bucket.ListObjectsAsync(BackupLayout.PostgresRoot, null, ct);
+        // The cluster that runs now is the serverName that wrote last: after a restore the old name gets nothing new.
+        // Ties go to the larger name, so the choice does not depend on the listing's order.
+        string? server = all
+            .Where(o => BackupLayout.ServerOf(o.Key) is not null)
+            .OrderByDescending(o => o.LastModified)
+            .ThenByDescending(o => BackupLayout.ServerOf(o.Key), StringComparer.Ordinal)
+            .Select(o => BackupLayout.ServerOf(o.Key))
+            .FirstOrDefault();
+        if (server is null)
         {
             IReadOnlyList<BackupBucketObject> anything = await bucket.ListObjectsAsync("", 1, ct);
             BackupReadOutcome outcome = anything.Count == 0 ? BackupReadOutcome.Empty : BackupReadOutcome.NoBackupPrefix;
             return new BucketSnapshot(outcome, null, Array.Empty<BaseFolder>());
         }
 
+        string serverPrefix = BackupLayout.PostgresRoot + server + "/";
+        string basePrefix = serverPrefix + BackupLayout.BaseFolder;
+        string walPrefix = serverPrefix + BackupLayout.WalFolder;
+        List<BackupBucketObject> objects = all.Where(o => o.Key.StartsWith(serverPrefix, StringComparison.Ordinal)).ToList();
+
         DateTimeOffset? lastWal = objects
-            .Where(o => o.Key.StartsWith(BackupLayout.WalPrefix, StringComparison.Ordinal))
+            .Where(o => o.Key.StartsWith(walPrefix, StringComparison.Ordinal))
             .Select(o => (DateTimeOffset?)o.LastModified)
             .Max();
 
         var folders = new List<BaseFolder>();
         var byFolder = objects
-            .Where(o => o.Key.StartsWith(BackupLayout.BasePrefix, StringComparison.Ordinal))
-            .GroupBy(o => o.Key[BackupLayout.BasePrefix.Length..].Split('/')[0])
+            .Where(o => o.Key.StartsWith(basePrefix, StringComparison.Ordinal))
+            .GroupBy(o => o.Key[basePrefix.Length..].Split('/')[0])
             // A marker object or a folder name nobody's backup tool wrote would otherwise fail the whole pass, every pass.
             .Where(g => BackupRecord.IsValidBackupKey(g.Key))
             .OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var folder in byFolder)
         {
             long size = folder.Sum(o => o.Size);
-            string infoKey = BackupLayout.BasePrefix + folder.Key + "/" + BackupLayout.BackupInfoFile;
+            string infoKey = basePrefix + folder.Key + "/" + BackupLayout.BackupInfoFile;
             BackupBucketObject? info = folder.FirstOrDefault(o => o.Key == infoKey);
             if (info is null)
             {

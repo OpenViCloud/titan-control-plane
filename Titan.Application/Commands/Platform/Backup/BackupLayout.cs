@@ -1,12 +1,21 @@
 namespace Titan.Application.Commands.Platform.Backup;
 
 // Where barman (Barman Cloud Plugin) puts Postgres backups in the bucket
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket); measured on the dev bucket: base/<id>/backup.info and data.tar, and wals/.
+// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket); measured on the dev bucket:
+// postgres/<serverName>/base/<id>/backup.info and data.tar, and postgres/<serverName>/wals/. The serverName changes with each restore,
+// so the code reads the one that wrote last; the page keeps one resource, titan-db, whatever name it archives under.
 public static class BackupLayout
 {
     public const string PostgresResourceName = "titan-db";
-    public const string PostgresPrefix = "postgres/titan-db/";
-    public const string BasePrefix = PostgresPrefix + "base/";
-    public const string WalPrefix = PostgresPrefix + "wals/";
+    public const string PostgresRoot = "postgres/";
+    public const string BaseFolder = "base/";
+    public const string WalFolder = "wals/";
     public const string BackupInfoFile = "backup.info";
+
+    /// The serverName an object of postgres/ belongs to, or null for an object right under postgres/.
+    public static string? ServerOf(string key)
+    {
+        int slash = key.IndexOf('/', PostgresRoot.Length);
+        return slash > PostgresRoot.Length ? key[PostgresRoot.Length..slash] : null;
+    }
 }
