@@ -2,17 +2,15 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.BackupTarget.Contracts;
-using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
-using BackupTargetAggregate = Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget;
+using Microsoft.Extensions.Options;
+using Titan.Application.Options;
 
 namespace Titan.Application.Commands.Platform.BackupTarget;
 
-/// Writes, lists, reads back and deletes one object of its own in the saved target
+/// Writes, lists, reads back and deletes one object of its own in the configured target
 /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target).
-/// A target that fails is a result (ok: false), never an exception; no target and an unreadable secret are Titan's own errors.
-public class TestBackupTargetCommandHandler(
-    IBackupTargetRepository repo, IBackupTargetSecretProtector protector, IBackupBucketFactory buckets)
+/// A target that fails is a result (ok: false), never an exception; no key pair and a configuration that cannot work are the environment's errors.
+public class TestBackupTargetCommandHandler(IOptions<BackupTargetOptions> options, IBackupBucketFactory buckets)
 {
     /// Outside the lock rule on postgres/ so the probe can delete what it writes.
     private const string ProbePrefix = "_probe/";
@@ -22,11 +20,9 @@ public class TestBackupTargetCommandHandler(
 
     public async Task<BackupTargetTestResult> HandleAsync(TestBackupTargetCommand command, CancellationToken ct = default)
     {
-        BackupTargetAggregate target = await repo.FindAsync(ct)
-            ?? throw new NotFoundException("BACKUP_TARGET_NOT_FOUND", "No backup target has been set.");
-        string secret = protector.Unprotect(target.SecretCipher);
-        using IBackupBucket bucket = buckets.Open(
-            new BackupBucketConnection(target.Endpoint, target.Region, target.Bucket, target.AccessKeyId, secret));
+        BackupBucketConnection connection = options.Value.ToConnection();
+        string secret = connection.SecretAccessKey;
+        using IBackupBucket bucket = buckets.Open(connection);
 
         // Random content, so two probes never compare equal by accident.
         string key = $"{ProbePrefix}{Guid.NewGuid():N}";

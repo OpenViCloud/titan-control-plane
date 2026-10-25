@@ -1,36 +1,29 @@
-using System.Security.Cryptography;
-using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.BackupTarget;
 using Titan.Application.Commands.Platform.BackupTarget.Contracts;
+using Titan.Application.Options;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
 using Titan.Tests.Fakes;
-using BackupTargetAggregate = Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget;
 
 namespace Titan.Tests.Services;
 
-// The probe writes, lists, reads back and deletes one object of its own in the saved target. A target that fails is a result
-// to render (ok: false), never an exception; what is Titan's own fault (no target, secret unreadable) keeps its error.
+// The probe writes, lists, reads back and deletes one object of its own in the configured target. A target that fails is a result
+// to render (ok: false), never an exception; what is the environment's own fault (no key pair, a configuration that cannot work) keeps its error.
 public class TestBackupTargetCommandTests
 {
-    private const string Secret = "S3CR3T-value-0123456789";
+    private const string Secret = ConfiguredBackupTarget.Secret;
 
     private readonly InMemoryBackupBucket _bucket = new();
     private readonly FixedBackupBucketFactory _factory;
-    private readonly Mock<IBackupTargetRepository> _repo = new();
-    private readonly Mock<IBackupTargetSecretProtector> _protector = new();
+    private readonly BackupTargetOptions _target = ConfiguredBackupTarget.Valid();
 
     public TestBackupTargetCommandTests()
     {
         _factory = new FixedBackupBucketFactory(_bucket);
-        _repo.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
-            BackupTargetAggregate.Create("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", new byte[] { 1, 2, 3 }));
-        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>())).Returns(Secret);
     }
 
     private TestBackupTargetCommandHandler Handler(TimeSpan? timeout = null) =>
-        new(_repo.Object, _protector.Object, _factory)
+        new(ConfiguredBackupTarget.Options(_target), _factory)
         {
             Timeout = timeout ?? TimeSpan.FromSeconds(15),
             CleanupTimeout = TimeSpan.FromMilliseconds(200),
@@ -53,7 +46,7 @@ public class TestBackupTargetCommandTests
     }
 
     [Fact]
-    public async Task TheProbe_OpensTheSavedTarget_WithTheOpenedSecret()
+    public async Task TheProbe_OpensTheConfiguredTarget_WithItsKeyPair()
     {
         await RunAsync();
 
@@ -77,9 +70,10 @@ public class TestBackupTargetCommandTests
     }
 
     [Fact]
-    public async Task NoTargetSaved_IsNotFound()
+    public async Task NoKeyPair_IsNotFound()
     {
-        _repo.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync((BackupTargetAggregate?)null);
+        _target.AccessKeyId = "";
+        _target.SecretAccessKey = "";
 
         var error = await Assert.ThrowsAsync<NotFoundException>(() => RunAsync());
 
@@ -88,15 +82,27 @@ public class TestBackupTargetCommandTests
     }
 
     [Fact]
-    public async Task ASecretThatCannotBeOpened_KeepsItsOwnError_NotAnOkFalse()
+    public async Task AConfigurationThatCannotWork_KeepsItsOwnError_NotAnOkFalse()
     {
-        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>()))
-            .Throws(new ServiceUnavailableException("BACKUP_TARGET_SECRET_UNREADABLE", "cannot be opened"));
+        _target.Bucket = "Bad_Bucket";
 
         var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => RunAsync());
 
-        Assert.Equal("BACKUP_TARGET_SECRET_UNREADABLE", error.Code);
+        Assert.Equal("BACKUP_TARGET_CONFIG_INVALID", error.Code);
+        Assert.Contains("BackupTarget__Bucket", error.Message);
+        Assert.DoesNotContain(Secret, error.Message);
         Assert.Empty(_factory.Opened);
+    }
+
+    [Fact]
+    public async Task OnlyHalfAKeyPair_IsAConfigurationThatCannotWork_NotMissing()
+    {
+        _target.SecretAccessKey = "";
+
+        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => RunAsync());
+
+        Assert.Equal("BACKUP_TARGET_CONFIG_INVALID", error.Code);
+        Assert.Contains("BackupTarget__SecretAccessKey", error.Message);
     }
 
     [Fact]

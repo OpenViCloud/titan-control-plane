@@ -57,8 +57,6 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<SnapshotOffering> SnapshotOfferings => Set<SnapshotOffering>();
     public DbSet<Titan.Domain.Aggregates.Platform.Cluster.Cluster> Clusters => Set<Titan.Domain.Aggregates.Platform.Cluster.Cluster>();
     public DbSet<ProviderClientIdentity> ProviderClientIdentities => Set<ProviderClientIdentity>();
-    public DbSet<Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget> BackupTargets =>
-        Set<Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget>();
     public DbSet<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord> Backups =>
         Set<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord>();
     public DbSet<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation> BackupObservations =>
