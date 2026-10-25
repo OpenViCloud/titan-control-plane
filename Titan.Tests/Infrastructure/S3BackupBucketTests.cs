@@ -5,7 +5,8 @@ using Titan.Infrastructure.Backup;
 
 namespace Titan.Tests.Infrastructure;
 
-// The adapter against a stand-in S3 on localhost: what it sends (path-style, no checksum trailer that R2 refuses) and how it
+// The adapter against a stand-in S3 on localhost: what it sends (path-style, no checksum trailer and no aws-chunked upload,
+// both of which R2 refuses) and how it
 // words a refusal. The real R2 is measured on the dev cluster; this pins the request shape against an SDK upgrade.
 public sealed class S3BackupBucketTests : IDisposable
 {
@@ -55,7 +56,9 @@ public sealed class S3BackupBucketTests : IDisposable
             await ctx.Request.InputStream.CopyToAsync(body);
             var headers = ctx.Request.Headers.AllKeys.ToDictionary(k => k!.ToLowerInvariant(), k => ctx.Request.Headers[k]!);
             string target = ctx.Request.Url!.PathAndQuery;
-            // Over plain http the SDK frames the payload as signed aws-chunked pieces; over https (R2) it sends it as is.
+            // The SDK's default framing of an upload over this http stand-in is signed aws-chunked pieces (over https, inferred from
+            // R2's refusal and Cloudflare's note, not seen on the wire); the adapter turns it off, but the
+            // stand-in still reads it, so a regression fails on the request-shape test rather than on every test that writes.
             byte[] payload = headers.GetValueOrDefault("content-encoding", "").Contains("aws-chunked")
                 ? DecodeChunks(body.ToArray())
                 : body.ToArray();
@@ -207,6 +210,24 @@ public sealed class S3BackupBucketTests : IDisposable
         Assert.Equal(new byte[] { 9, 9, 9 }, put.Body);
         Assert.StartsWith("AWS4-HMAC-SHA256", put.Headers["authorization"]);
         Assert.DoesNotContain(Secret, string.Join(";", put.Headers.Values));
+    }
+
+    // R2 answers NotImplemented to the Streaming SigV4 framing AWSSDK.S3 uses for uploads
+    // (https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/; measured on the dev bucket 2026-10-25: Test said
+    // "the bucket answered with an error (NotImplemented)"). The body goes in one piece, its SHA-256 signed in the header.
+    // This pins the request shape on the stand-in only; whether R2 takes it is measured on R2 itself.
+    [Fact]
+    public async Task AnUpload_IsOnePlainBody_NotStreamingSigV4_WhichR2Refuses()
+    {
+        using var bucket = Open();
+
+        await bucket.PutAsync("_probe/abc", new byte[] { 9, 9, 9 }, CancellationToken.None);
+
+        var put = _seen.Single(call => call.Method == "PUT");
+        Assert.DoesNotContain("aws-chunked", put.Headers.GetValueOrDefault("content-encoding", ""));
+        Assert.Equal(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(new byte[] { 9, 9, 9 })),
+            put.Headers.GetValueOrDefault("x-amz-content-sha256"));
+        Assert.Equal("3", put.Headers.GetValueOrDefault("content-length"));
     }
 
     [Theory]
