@@ -7,7 +7,8 @@ using Titan.Application.Abstractions;
 namespace Titan.Infrastructure.Backup;
 
 // One S3-compatible bucket (Cloudflare R2 in practice). Path-style addressing, and checksums only where the API requires
-// them: the SDK's default CRC32 trailer on every upload is what R2 and other S3-compatible stores have rejected.
+// them: the SDK's default CRC32 trailer on every upload is what R2 and other S3-compatible stores have rejected. An upload
+// is one plain body, not the SDK's aws-chunked framing (PutAsync).
 // Messages are written here, never taken from the SDK, so they cannot carry the key or the secret.
 public sealed class S3BackupBucket : IBackupBucket
 {
@@ -40,7 +41,11 @@ public sealed class S3BackupBucket : IBackupBucket
         await CallAsync(async () =>
         {
             using var body = new MemoryStream(content);
-            await _client.PutObjectAsync(new PutObjectRequest { BucketName = _bucket, Key = key, InputStream = body }, ct);
+            // R2 does not support the Streaming SigV4 framing of AWSSDK.S3 uploads (https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/):
+            // one body with its SHA-256 signed in the header avoids it. Why not Cloudflare's DisablePayloadSigning, and what R2 answered:
+            // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target
+            await _client.PutObjectAsync(
+                new PutObjectRequest { BucketName = _bucket, Key = key, InputStream = body, UseChunkEncoding = false }, ct);
         }, ct);
     }
 
