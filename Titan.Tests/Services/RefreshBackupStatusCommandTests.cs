@@ -5,10 +5,8 @@ using Titan.Application.Commands.Platform.Backup;
 using Titan.Application.Commands.Platform.Backup.Contracts;
 using Titan.Domain.Aggregates.Platform.BackupObservation;
 using Titan.Domain.Aggregates.Platform.BackupRecord;
-using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Application.Options;
 using Titan.Tests.Fakes;
-using BackupTargetAggregate = Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget;
 
 namespace Titan.Tests.Services;
 
@@ -16,27 +14,22 @@ namespace Titan.Tests.Services;
 // and a bucket that cannot be read changes nothing but the observation.
 public class RefreshBackupStatusCommandTests
 {
-    private const string Secret = "S3CR3T-value-0123456789";
     private const string Base = BackupLayout.BasePrefix;
     private static readonly DateTimeOffset Now = new(2026, 10, 25, 12, 0, 0, TimeSpan.Zero);
 
     private readonly InMemoryBackupBucket _bucket = new();
     private readonly FakeBackupRecordRepository _records = new();
     private readonly FakeBackupObservationRepository _observations = new();
-    private readonly Mock<IBackupTargetRepository> _targets = new();
-    private readonly Mock<IBackupTargetSecretProtector> _protector = new();
+    private readonly BackupTargetOptions _target = ConfiguredBackupTarget.Valid();
     private readonly FixedBackupBucketFactory _factory;
 
     public RefreshBackupStatusCommandTests()
     {
         _factory = new FixedBackupBucketFactory(_bucket);
-        _targets.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
-            BackupTargetAggregate.Create("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", new byte[] { 1 }));
-        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>())).Returns(Secret);
     }
 
     private Task RunAsync() => new RefreshBackupStatusCommandHandler(
-        _targets.Object, _protector.Object, _factory, _records, _observations, new FixedClock(Now))
+        ConfiguredBackupTarget.Options(_target), _factory, _records, _observations, new FixedClock(Now))
         .HandleAsync(new RefreshBackupStatusCommand());
 
     private void Put(string key, string content, DateTimeOffset modified, long? size = null)
@@ -244,21 +237,23 @@ public class RefreshBackupStatusCommandTests
     }
 
     [Fact]
-    public async Task ASecretThatCannotBeOpened_IsUnreadable_NotACrash()
+    public async Task AConfigurationThatCannotWork_IsUnreadable_NamingTheSetting_NotACrash()
     {
-        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>()))
-            .Throws(new ServiceUnavailableException("BACKUP_TARGET_SECRET_UNREADABLE", "The secret cannot be decrypted."));
+        _target.Endpoint = "http://acct.r2.cloudflarestorage.com";
 
         await RunAsync();
 
         Assert.Equal(BackupReadOutcome.Unreadable, Observation.Outcome);
+        Assert.Contains("BackupTarget__Endpoint", Observation.Error);
+        Assert.DoesNotContain(ConfiguredBackupTarget.Secret, Observation.Error);
         Assert.Empty(_factory.Opened);
     }
 
     [Fact]
-    public async Task NoTargetSaved_ReadsNothing_AndRecordsNothing()
+    public async Task NoKeyPair_ReadsNothing_AndRecordsNothing()
     {
-        _targets.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync((BackupTargetAggregate?)null);
+        _target.AccessKeyId = "";
+        _target.SecretAccessKey = "";
 
         await RunAsync();
 
@@ -267,14 +262,29 @@ public class RefreshBackupStatusCommandTests
         Assert.Empty(_records.Rows);
     }
 
+    [Theory]
+    [InlineData("", "only-a-secret")]
+    [InlineData("only-a-key-id", "")]
+    public async Task HalfAKeyPair_IsUnreadable_NamingTheSetting_NotSilence(string keyId, string secret)
+    {
+        _target.AccessKeyId = keyId;
+        _target.SecretAccessKey = secret;
+
+        await RunAsync();
+
+        Assert.Equal(BackupReadOutcome.Unreadable, Observation.Outcome);
+        Assert.Contains("BackupTarget__", Observation.Error);
+        Assert.Empty(_factory.Opened);
+    }
+
     [Fact]
-    public async Task TheBucketIsOpenedWithTheSavedTarget_AndClosedAgain()
+    public async Task TheBucketIsOpenedWithTheConfiguredTarget_AndClosedAgain()
     {
         await RunAsync();
 
         var opened = Assert.Single(_factory.Opened);
         Assert.Equal(
-            new BackupBucketConnection("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", Secret), opened);
+            new BackupBucketConnection("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", ConfiguredBackupTarget.Secret), opened);
         Assert.True(_bucket.Disposed);
     }
 }

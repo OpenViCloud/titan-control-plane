@@ -4,6 +4,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.BackupTarget;
 using Titan.Application.Queries.Platform.BackupTarget;
 using Titan.Domain.Repositories.Platform;
+using Titan.Tests.Fakes;
 using Titan.Infrastructure.Endpoints.Admin;
 
 namespace Titan.Tests.Infrastructure;
@@ -12,25 +13,10 @@ namespace Titan.Tests.Infrastructure;
 // Configure(); these tests pin it so dropping or widening it fails a test instead of opening the endpoint to every tenant.
 public class BackupTargetEndpointTests
 {
-    private static SetBackupTargetCommandHandler SetHandler() =>
-        new(Mock.Of<IBackupTargetRepository>(), Mock.Of<IBackupTargetSecretProtector>(),
-            Mock.Of<IAdminAuditLogRepository>(), Mock.Of<ICurrentUser>());
-
-    [Fact]
-    public void Put_RequiresPlatformAdminRole_AndNoAnonymousAccess()
-    {
-        var ep = Factory.Create<SetBackupTargetEndpoint>(SetHandler());
-
-        Assert.NotNull(ep.Definition.AllowedRoles);
-        Assert.Equal(new[] { "platform-admin" }, ep.Definition.AllowedRoles);
-        Assert.Null(ep.Definition.AnonymousVerbs);
-    }
-
     [Fact]
     public void Test_RequiresPlatformAdminRole_AndNoAnonymousAccess()
     {
-        var handler = new TestBackupTargetCommandHandler(
-            Mock.Of<IBackupTargetRepository>(), Mock.Of<IBackupTargetSecretProtector>(), Mock.Of<IBackupBucketFactory>());
+        var handler = new TestBackupTargetCommandHandler(ConfiguredBackupTarget.Options(), Mock.Of<IBackupBucketFactory>());
         var ep = Factory.Create<TestBackupTargetEndpoint>(handler);
 
         Assert.NotNull(ep.Definition.AllowedRoles);
@@ -53,7 +39,7 @@ public class BackupTargetEndpointTests
     [Fact]
     public void Get_RequiresPlatformAdminRole_AndNoAnonymousAccess()
     {
-        var ep = Factory.Create<GetBackupTargetEndpoint>(new GetBackupTargetQueryHandler(Mock.Of<IBackupTargetRepository>()));
+        var ep = Factory.Create<GetBackupTargetEndpoint>(new GetBackupTargetQueryHandler(ConfiguredBackupTarget.Options()));
 
         Assert.NotNull(ep.Definition.AllowedRoles);
         Assert.Equal(new[] { "platform-admin" }, ep.Definition.AllowedRoles);

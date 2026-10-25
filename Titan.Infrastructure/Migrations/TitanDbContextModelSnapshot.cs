@@ -1769,50 +1769,6 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("backups", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AccessKeyId")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("access_key_id");
-
-                    b.Property<string>("Bucket")
-                        .IsRequired()
-                        .HasMaxLength(63)
-                        .HasColumnType("character varying(63)")
-                        .HasColumnName("bucket");
-
-                    b.Property<string>("Endpoint")
-                        .IsRequired()
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)")
-                        .HasColumnName("endpoint");
-
-                    b.Property<string>("Region")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("region");
-
-                    b.Property<byte[]>("SecretCipher")
-                        .IsRequired()
-                        .HasColumnType("bytea")
-                        .HasColumnName("secret_cipher");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("backup_targets", "core");
-                });
-
             modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Cluster.Cluster", b =>
                 {
                     b.Property<Guid>("Id")

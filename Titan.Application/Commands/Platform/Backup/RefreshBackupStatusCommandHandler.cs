@@ -1,6 +1,8 @@
 using System.Text;
+using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.Backup.Contracts;
+using Titan.Application.Options;
 using Titan.Domain.Aggregates.Platform.BackupObservation;
 using Titan.Domain.Aggregates.Platform.BackupRecord;
 using Titan.Domain.Exceptions;
@@ -8,13 +10,12 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Platform.Backup;
 
-/// Reads the bucket of the saved backup target and rewrites the backup cache from it
+/// Reads the bucket of the configured backup target and rewrites the backup cache from it
 /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket). The bucket is the truth: rows it no longer shows are removed, so dropping the
 /// table and running this again gives back the same rows. A bucket that cannot be read is recorded as such and the rows stay.
 /// Writes nothing to a wallet or a ledger.
 public class RefreshBackupStatusCommandHandler(
-    IBackupTargetRepository targets,
-    IBackupTargetSecretProtector protector,
+    IOptions<BackupTargetOptions> targetOptions,
     IBackupBucketFactory buckets,
     IBackupRecordRepository records,
     IBackupObservationRepository observations,
@@ -26,8 +27,8 @@ public class RefreshBackupStatusCommandHandler(
 
     public async Task HandleAsync(RefreshBackupStatusCommand command, CancellationToken ct = default)
     {
-        var target = await targets.FindAsync(ct);
-        if (target is null)
+        // No key pair: an environment without a backup bucket, or one whose Secret is not there yet. Nothing to read, nothing to record.
+        if (!targetOptions.Value.HasKeyPair)
         {
             return;
         }
@@ -44,9 +45,7 @@ public class RefreshBackupStatusCommandHandler(
         BucketSnapshot snapshot;
         try
         {
-            string secret = protector.Unprotect(target.SecretCipher);
-            using IBackupBucket bucket = buckets.Open(
-                new BackupBucketConnection(target.Endpoint, target.Region, target.Bucket, target.AccessKeyId, secret));
+            using IBackupBucket bucket = buckets.Open(targetOptions.Value.ToConnection());
             snapshot = await ReadAsync(bucket, known, now, ct);
         }
         catch (BackupBucketException e)

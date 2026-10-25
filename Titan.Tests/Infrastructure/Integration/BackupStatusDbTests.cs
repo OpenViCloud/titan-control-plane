@@ -1,24 +1,21 @@
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Titan.Application.Commands.Platform.Backup;
 using Titan.Application.Commands.Platform.Backup.Contracts;
-using Titan.Application.Commands.Platform.BackupTarget;
-using Titan.Application.Commands.Platform.BackupTarget.Contracts;
+using Titan.Application.Options;
 using Titan.Application.Queries.Platform.Backup;
 using Titan.Application.Queries.Platform.Backup.Contracts;
 using Titan.Domain.Aggregates.Platform.BackupObservation;
 using Titan.Domain.Aggregates.Platform.BackupRecord;
 using Titan.Infrastructure.Backup;
-using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The backup cache on Postgres through the real handlers, repositories, S3 adapter and clock: rows written and read back,
-/// the unique index, a bucket that cannot be reached (a real connection refused: the saved target points at a port nobody
+/// the unique index, a bucket that cannot be reached (a real connection refused: the configured target points at a port nobody
 /// listens on) leaving the rows and the last log time in place, and no wallet or ledger row touched by any of it
 /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/user-stories.md#bak-03). A bucket that answers is
 /// not reproduced here: R2 cannot run in CI and no service is faked, so what a listing turns into rows is unit-tested
@@ -28,12 +25,6 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Collection(PostgresCollection.Name)]
 public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
 {
-    private static ClusterKeyBackupSecretProtector Protector() =>
-        new(new AesGcmClusterCredentialCipher(Options.Create(new ClusterEncryptionOptions
-        {
-            ClusterKey = Convert.ToBase64String(Enumerable.Range(0, 32).Select(i => (byte)i).ToArray()),
-        })));
-
     private static int PortNobodyListensOn()
     {
         var probe = new TcpListener(IPAddress.Loopback, 0);
@@ -55,15 +46,19 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         await using TitanDbContext db = pg.NewDbContext();
         await db.Backups.ExecuteDeleteAsync();
         await db.BackupObservations.ExecuteDeleteAsync();
-        await db.BackupTargets.ExecuteDeleteAsync();
-
-        await using TitanDbContext setDb = pg.NewDbContext();
-        await new SetBackupTargetCommandHandler(
-            new BackupTargetRepository(setDb), Protector(), new AdminAuditLogRepository(setDb), Callers.Admin("kc-backup-status"))
-            .HandleAsync(new SetBackupTargetCommand($"https://127.0.0.1:{PortNobodyListensOn()}", "auto", "titan-backup-dev", "key-id", "S3CR3T-value"));
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
+
+    // The environment's GitOps config, pointing at a port nobody listens on: the real adapter meets a refused connection.
+    private readonly BackupTargetOptions _target = new()
+    {
+        Endpoint = $"https://127.0.0.1:{PortNobodyListensOn()}",
+        Region = "auto",
+        Bucket = "titan-backup-dev",
+        AccessKeyId = "key-id",
+        SecretAccessKey = ConfiguredBackupTarget.Secret,
+    };
 
     private async Task SeedAsync(DateTimeOffset baseAt, DateTimeOffset lastWalAt)
     {
@@ -81,7 +76,7 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
     {
         await using TitanDbContext db = pg.NewDbContext();
         await new RefreshBackupStatusCommandHandler(
-            new BackupTargetRepository(db), Protector(), new S3BackupBucketFactory(),
+            ConfiguredBackupTarget.Options(_target), new S3BackupBucketFactory(),
             new BackupRecordRepository(db), new BackupObservationRepository(db), TimeProvider.System)
             .HandleAsync(new RefreshBackupStatusCommand());
     }

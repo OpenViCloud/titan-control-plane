@@ -1,16 +1,14 @@
+using Microsoft.Extensions.Options;
+using Titan.Application.Options;
 using Titan.Application.Queries.Platform.BackupTarget.Contracts;
-using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Queries.Platform.BackupTarget;
 
-public class GetBackupTargetQueryHandler(IBackupTargetRepository repo)
+public class GetBackupTargetQueryHandler(IOptions<BackupTargetOptions> options)
 {
-    public async Task<BackupTargetQueryResult> HandleAsync(GetBackupTargetQuery query, CancellationToken ct = default)
+    public Task<BackupTargetQueryResult> HandleAsync(GetBackupTargetQuery query, CancellationToken ct = default)
     {
-        var target = await repo.FindAsync(ct)
-            ?? throw new NotFoundException("BACKUP_TARGET_NOT_FOUND", "No backup target has been set.");
-
-        return new BackupTargetQueryResult(target.Endpoint, target.Region, target.Bucket, target.AccessKeyId, target.UpdatedAt);
+        var connection = options.Value.ToConnection();
+        return Task.FromResult(new BackupTargetQueryResult(connection.Endpoint, connection.Region, connection.Bucket, connection.AccessKeyId));
     }
 }

@@ -4,7 +4,7 @@ using Titan.Application.Queries.Platform.BackupTarget.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Admin;
 
-// Never returns the secret; 404 BACKUP_TARGET_NOT_FOUND until an admin sets the target.
+// Never returns the secret; 404 BACKUP_TARGET_NOT_FOUND while no key pair is configured, 503 BACKUP_TARGET_CONFIG_INVALID when the config cannot work.
 public class GetBackupTargetEndpoint(GetBackupTargetQueryHandler handler)
     : EndpointWithoutRequest<BackupTargetQueryResult>
 {
