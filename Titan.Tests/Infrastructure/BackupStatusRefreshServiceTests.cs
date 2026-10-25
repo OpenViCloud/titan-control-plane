@@ -13,6 +13,7 @@ public class BackupStatusRefreshServiceTests
     [InlineData(0)]
     [InlineData(-5)]
     [InlineData(5)]
+    [InlineData(int.MaxValue)]
     public async Task AnyInterval_StartsWithoutFaulting_AndStopsOnRequest(int minutes)
     {
         var service = new BackupStatusRefreshService(

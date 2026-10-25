@@ -13,7 +13,8 @@ public static class BackupInfoText
         string? raw = Value(text, "end_time");
         bool parsed = DateTimeOffset.TryParse(
             raw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces, out DateTimeOffset time);
-        return parsed ? time : null;
+        // UTC, because the database column takes no other offset.
+        return parsed ? time.ToUniversalTime() : null;
     }
 
     private static string? Value(string text, string key)

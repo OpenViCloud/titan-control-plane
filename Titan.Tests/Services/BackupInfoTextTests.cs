@@ -29,6 +29,16 @@ public class BackupInfoTextTests
         Assert.Equal(new DateTimeOffset(2026, 10, 24, 14, 6, 33, TimeSpan.Zero).AddTicks(6543210), time);
     }
 
+    // Npgsql refuses to write a DateTimeOffset with an offset to timestamptz: the instant must come back as UTC.
+    [Fact]
+    public void EndTime_WithAnotherOffset_ComesBackAsTheSameInstantInUtc()
+    {
+        var time = BackupInfoText.EndTime("end_time=2026-10-24 21:06:33+07:00\n");
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 24, 14, 6, 33, TimeSpan.Zero), time);
+        Assert.Equal(TimeSpan.Zero, time!.Value.Offset);
+    }
+
     [Fact]
     public void EndTime_WithoutAnOffset_IsReadAsUtc()
     {

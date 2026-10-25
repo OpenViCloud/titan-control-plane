@@ -17,10 +17,13 @@ public class BackupStatusRefreshService(
     IOptions<BackupStatusOptions> options,
     ILogger<BackupStatusRefreshService> logger) : BackgroundService
 {
+    private const int MaxIntervalMinutes = 15;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // PeriodicTimer throws on a zero or negative period, which would stop the host over one configuration value.
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Max(1, options.Value.IntervalMinutes)));
+        // PeriodicTimer throws on a zero, negative or huge period, which would stop the host over one configuration value; and the
+        // page calls a reading older than 30 minutes stale, so a longer interval would make it flap.
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(Math.Clamp(options.Value.IntervalMinutes, 1, MaxIntervalMinutes)));
 
         // Wait-first, like the other hosted services: nothing runs during startup or in a WebApplicationFactory test.
         while (await timer.WaitForNextTickAsync(stoppingToken))

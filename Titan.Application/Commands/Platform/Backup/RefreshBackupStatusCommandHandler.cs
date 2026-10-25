@@ -47,7 +47,7 @@ public class RefreshBackupStatusCommandHandler(
             string secret = protector.Unprotect(target.SecretCipher);
             using IBackupBucket bucket = buckets.Open(
                 new BackupBucketConnection(target.Endpoint, target.Region, target.Bucket, target.AccessKeyId, secret));
-            snapshot = await ReadAsync(bucket, known, ct);
+            snapshot = await ReadAsync(bucket, known, now, ct);
         }
         catch (BackupBucketException e)
         {
@@ -67,7 +67,8 @@ public class RefreshBackupStatusCommandHandler(
         await records.SaveAsync(ct);
     }
 
-    private static async Task<BucketSnapshot> ReadAsync(IBackupBucket bucket, List<BackupRecord> known, CancellationToken ct)
+    private static async Task<BucketSnapshot> ReadAsync(
+        IBackupBucket bucket, List<BackupRecord> known, DateTimeOffset now, CancellationToken ct)
     {
         IReadOnlyList<BackupBucketObject> objects = await bucket.ListObjectsAsync(BackupLayout.PostgresPrefix, null, ct);
         if (objects.Count == 0)
@@ -114,7 +115,10 @@ public class RefreshBackupStatusCommandHandler(
                 folders.Add(new BaseFolder(folder.Key, size, info.LastModified, BackupRecordStatus.Incomplete));
                 continue;
             }
-            folders.Add(new BaseFolder(folder.Key, size, BackupInfoText.EndTime(text) ?? info.LastModified, BackupRecordStatus.Complete));
+            // An end time in the future would make the backup look fresh until that moment passes: fall back to the file's own time.
+            DateTimeOffset? endTime = BackupInfoText.EndTime(text);
+            DateTimeOffset takenAt = endTime is not null && endTime.Value <= now ? endTime.Value : info.LastModified;
+            folders.Add(new BaseFolder(folder.Key, size, takenAt, BackupRecordStatus.Complete));
         }
         return new BucketSnapshot(BackupReadOutcome.Read, lastWal, folders);
     }

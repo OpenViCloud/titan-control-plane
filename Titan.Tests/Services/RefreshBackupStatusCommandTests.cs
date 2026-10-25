@@ -124,6 +124,17 @@ public class RefreshBackupStatusCommandTests
     }
 
     [Fact]
+    public async Task AnEndTimeInTheFuture_FallsBackToTheInfoFilesLastModified_SoItCannotLookFresh()
+    {
+        Put(Base + "K1/backup.info", "status=DONE\nend_time=2027-01-01 00:00:00+00:00\n", Now.AddMinutes(-20));
+        Put(Base + "K1/data.tar", "", Now.AddMinutes(-20), 500);
+
+        await RunAsync();
+
+        Assert.Equal(Now.AddMinutes(-20), Assert.Single(_records.Rows).TakenAt);
+    }
+
+    [Fact]
     public async Task ADoneBaseWithoutAnEndTime_FallsBackToItsInfoFilesLastModified()
     {
         Put(Base + "20261025T100000/backup.info", "status=DONE\n", Now.AddMinutes(-20));
