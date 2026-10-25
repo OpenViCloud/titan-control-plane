@@ -6,8 +6,8 @@ using Titan.Infrastructure.Backup;
 namespace Titan.Tests.Infrastructure;
 
 // The adapter against a stand-in S3 on localhost: what it sends (path-style, no checksum trailer and no aws-chunked upload,
-// both of which R2 refuses) and how it
-// words a refusal. The real R2 is measured on the dev cluster; this pins the request shape against an SDK upgrade.
+// both of which R2 refuses) and how it words a refusal. The real R2 is measured on the dev cluster; this pins the request
+// shape against an SDK upgrade.
 public sealed class S3BackupBucketTests : IDisposable
 {
     private const string Secret = "S3CR3T-value-0123456789";
@@ -212,10 +212,9 @@ public sealed class S3BackupBucketTests : IDisposable
         Assert.DoesNotContain(Secret, string.Join(";", put.Headers.Values));
     }
 
-    // R2 answers NotImplemented to the Streaming SigV4 framing AWSSDK.S3 uses for uploads
-    // (https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/; measured on the dev bucket 2026-10-25: Test said
-    // "the bucket answered with an error (NotImplemented)"). The body goes in one piece, its SHA-256 signed in the header.
-    // This pins the request shape on the stand-in only; whether R2 takes it is measured on R2 itself.
+    // On the dev bucket (2026-10-25) Test said "the bucket answered with an error (NotImplemented)", and Cloudflare says R2
+    // does not support the Streaming SigV4 framing of AWSSDK.S3 uploads (https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/).
+    // The body goes in one piece, its SHA-256 signed in the header. This pins the shape on the stand-in only.
     [Fact]
     public async Task AnUpload_IsOnePlainBody_NotStreamingSigV4_WhichR2Refuses()
     {
