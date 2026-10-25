@@ -1,0 +1,13 @@
+namespace Titan.Domain.Aggregates.Platform.BackupObservation;
+
+public enum BackupReadOutcome
+{
+    /// The bucket was read and the resource's prefix has objects.
+    Read,
+    /// The bucket was read and holds nothing at all.
+    Empty,
+    /// The bucket was read, holds other objects, and none under the resource's prefix: usually the wrong bucket.
+    NoBackupPrefix,
+    /// The last attempt to read the bucket failed; what was known before is kept.
+    Unreadable,
+}

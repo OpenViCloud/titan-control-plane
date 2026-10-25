@@ -69,6 +69,37 @@ public sealed class S3BackupBucket : IBackupBucket
         return keys;
     }
 
+    public async Task<IReadOnlyList<BackupBucketObject>> ListObjectsAsync(string prefix, int? limit, CancellationToken ct)
+    {
+        var found = new List<BackupBucketObject>();
+        await CallAsync(async () =>
+        {
+            string? token = null;
+            do
+            {
+                var request = new ListObjectsV2Request { BucketName = _bucket, Prefix = prefix, ContinuationToken = token };
+                if (limit is not null)
+                {
+                    request.MaxKeys = limit.Value;
+                }
+                ListObjectsV2Response response = await _client.ListObjectsV2Async(request, ct);
+                foreach (S3Object o in response.S3Objects ?? new List<S3Object>())
+                {
+                    found.Add(new BackupBucketObject(o.Key, o.Size ?? 0, new DateTimeOffset(o.LastModified ?? DateTime.UnixEpoch, TimeSpan.Zero)));
+                }
+                bool wantsMore = response.IsTruncated == true && limit is null;
+                if (wantsMore && string.IsNullOrEmpty(response.NextContinuationToken))
+                {
+                    // Taking this as "the end" would make the refresh delete every row it cannot see.
+                    throw new BackupBucketException("the bucket's listing was cut short");
+                }
+                token = wantsMore ? response.NextContinuationToken : null;
+            }
+            while (token is not null);
+        }, ct);
+        return found;
+    }
+
     public async Task DeleteAsync(string key, CancellationToken ct)
     {
         await CallAsync(() => _client.DeleteObjectAsync(_bucket, key, ct), ct);

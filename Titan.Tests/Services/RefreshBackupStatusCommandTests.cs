@@ -1,0 +1,280 @@
+using System.Text;
+using Moq;
+using Titan.Application.Abstractions;
+using Titan.Application.Commands.Platform.Backup;
+using Titan.Application.Commands.Platform.Backup.Contracts;
+using Titan.Domain.Aggregates.Platform.BackupObservation;
+using Titan.Domain.Aggregates.Platform.BackupRecord;
+using Titan.Domain.Exceptions;
+using Titan.Domain.Repositories.Platform;
+using Titan.Tests.Fakes;
+using BackupTargetAggregate = Titan.Domain.Aggregates.Platform.BackupTarget.BackupTarget;
+
+namespace Titan.Tests.Services;
+
+// The refresh turns what the bucket shows into the cache rows. The bucket is the truth: whatever it no longer shows is gone,
+// and a bucket that cannot be read changes nothing but the observation.
+public class RefreshBackupStatusCommandTests
+{
+    private const string Secret = "S3CR3T-value-0123456789";
+    private const string Base = BackupLayout.BasePrefix;
+    private static readonly DateTimeOffset Now = new(2026, 10, 25, 12, 0, 0, TimeSpan.Zero);
+
+    private readonly InMemoryBackupBucket _bucket = new();
+    private readonly FakeBackupRecordRepository _records = new();
+    private readonly FakeBackupObservationRepository _observations = new();
+    private readonly Mock<IBackupTargetRepository> _targets = new();
+    private readonly Mock<IBackupTargetSecretProtector> _protector = new();
+    private readonly FixedBackupBucketFactory _factory;
+
+    public RefreshBackupStatusCommandTests()
+    {
+        _factory = new FixedBackupBucketFactory(_bucket);
+        _targets.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            BackupTargetAggregate.Create("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", new byte[] { 1 }));
+        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>())).Returns(Secret);
+    }
+
+    private Task RunAsync() => new RefreshBackupStatusCommandHandler(
+        _targets.Object, _protector.Object, _factory, _records, _observations, new FixedClock(Now))
+        .HandleAsync(new RefreshBackupStatusCommand());
+
+    private void Put(string key, string content, DateTimeOffset modified, long? size = null)
+    {
+        _bucket.Objects[key] = size is null ? Encoding.UTF8.GetBytes(content) : new byte[size.Value];
+        _bucket.Modified[key] = modified;
+    }
+
+    private void FinishedBase(string id, string endTime, long dataSize = 1000, DateTimeOffset? infoModified = null)
+    {
+        Put(Base + id + "/backup.info", $"status=DONE\nend_time={endTime}\n", infoModified ?? Now.AddHours(-1));
+        Put(Base + id + "/data.tar", "", Now.AddHours(-1), dataSize);
+    }
+
+    private BackupObservation Observation => Assert.Single(_observations.Rows);
+
+    [Fact]
+    public async Task AFinishedBase_BecomesACompleteRow_WithBarmansEndTime_AndTheFolderSize()
+    {
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00", dataSize: 1000);
+
+        await RunAsync();
+
+        var row = Assert.Single(_records.Rows);
+        Assert.Equal("20261024T140631", row.BackupKey);
+        Assert.Equal(BackupRecordStatus.Complete, row.Status);
+        Assert.Equal(new DateTimeOffset(2026, 10, 24, 14, 6, 33, TimeSpan.Zero), row.TakenAt);
+        Assert.Equal(1000 + "status=DONE\nend_time=2026-10-24 14:06:33+00:00\n".Length, row.SizeBytes);
+        Assert.Equal(BackupReadOutcome.Read, Observation.Outcome);
+    }
+
+    [Fact]
+    public async Task TheNewestLogObject_IsTheLastWal_AndLogsAreNotBackups()
+    {
+        FinishedBase("20261024T140631", "2026-10-24 14:06:33+00:00");
+        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A0.gz", "w", Now.AddHours(-3));
+        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A1.gz", "w", Now.AddMinutes(-4));
+        Put(BackupLayout.WalPrefix + "0000000100000000/000000010000000000000A2.gz", "w", Now.AddHours(-1));
+        // A base backup written after the newest log must not be mistaken for a log.
+        Put(Base + "20261025T115900/data.tar", "", Now.AddMinutes(-1), 10);
+
+        await RunAsync();
+
+        Assert.Equal(Now.AddMinutes(-4), Observation.LastWalAt);
+        Assert.Equal(new[] { "20261024T140631", "20261025T115900" }, _records.Rows.Select(r => r.BackupKey).OrderBy(k => k).ToArray());
+    }
+
+    [Fact]
+    public async Task AMarkerObjectOrAnOverlongFolderName_IsSkipped_NotAFailedRefresh()
+    {
+        FinishedBase("K1", "2026-10-24 14:06:33+00:00");
+        Put(Base, "", Now.AddHours(-5));
+        Put(Base + new string('x', 129) + "/data.tar", "", Now.AddHours(-5), 10);
+
+        await RunAsync();
+
+        Assert.Equal("K1", Assert.Single(_records.Rows).BackupKey);
+        Assert.Equal(BackupReadOutcome.Read, Observation.Outcome);
+    }
+
+    [Fact]
+    public async Task ABaseWithoutItsInfoFile_IsIncomplete()
+    {
+        Put(Base + "20261025T100000/data.tar", "", Now.AddMinutes(-20), 500);
+
+        await RunAsync();
+
+        var row = Assert.Single(_records.Rows);
+        Assert.Equal(BackupRecordStatus.Incomplete, row.Status);
+        Assert.Equal(500, row.SizeBytes);
+    }
+
+    [Theory]
+    [InlineData("status=STARTED\n")]
+    [InlineData("status=FAILED\nend_time=2026-10-24 14:06:33+00:00\n")]
+    [InlineData("")]
+    public async Task AnInfoFileThatDoesNotSayDone_IsIncomplete(string info)
+    {
+        Put(Base + "20261025T100000/backup.info", info, Now.AddMinutes(-20));
+        Put(Base + "20261025T100000/data.tar", "", Now.AddMinutes(-20), 500);
+
+        await RunAsync();
+
+        Assert.Equal(BackupRecordStatus.Incomplete, Assert.Single(_records.Rows).Status);
+    }
+
+    [Fact]
+    public async Task AnEndTimeInTheFuture_FallsBackToTheInfoFilesLastModified_SoItCannotLookFresh()
+    {
+        Put(Base + "K1/backup.info", "status=DONE\nend_time=2027-01-01 00:00:00+00:00\n", Now.AddMinutes(-20));
+        Put(Base + "K1/data.tar", "", Now.AddMinutes(-20), 500);
+
+        await RunAsync();
+
+        Assert.Equal(Now.AddMinutes(-20), Assert.Single(_records.Rows).TakenAt);
+    }
+
+    [Fact]
+    public async Task ADoneBaseWithoutAnEndTime_FallsBackToItsInfoFilesLastModified()
+    {
+        Put(Base + "20261025T100000/backup.info", "status=DONE\n", Now.AddMinutes(-20));
+        Put(Base + "20261025T100000/data.tar", "", Now.AddMinutes(-20), 500);
+
+        await RunAsync();
+
+        Assert.Equal(Now.AddMinutes(-20), Assert.Single(_records.Rows).TakenAt);
+    }
+
+    [Fact]
+    public async Task ABaseThatWasUnfinished_BecomesCompleteWhenItFinishes_InTheSameRow()
+    {
+        Put(Base + "K1/backup.info", "status=STARTED\n", Now.AddMinutes(-20));
+        await RunAsync();
+        Guid id = Assert.Single(_records.Rows).Id;
+
+        Put(Base + "K1/backup.info", "status=DONE\nend_time=2026-10-25 11:50:00+00:00\n", Now.AddMinutes(-10));
+        await RunAsync();
+
+        var row = Assert.Single(_records.Rows);
+        Assert.Equal(id, row.Id);
+        Assert.Equal(BackupRecordStatus.Complete, row.Status);
+    }
+
+    [Fact]
+    public async Task ACompleteBase_IsNotReadAgain()
+    {
+        FinishedBase("K1", "2026-10-24 14:06:33+00:00");
+        await RunAsync();
+        int reads = 0;
+        _bucket.OnGet = (_, stored) => { reads++; return stored; };
+
+        await RunAsync();
+
+        Assert.Equal(0, reads);
+        Assert.Equal(BackupRecordStatus.Complete, Assert.Single(_records.Rows).Status);
+    }
+
+    [Fact]
+    public async Task ABaseTheBucketNoLongerShows_IsRemoved()
+    {
+        FinishedBase("K1", "2026-10-20 14:00:00+00:00");
+        FinishedBase("K2", "2026-10-24 14:00:00+00:00");
+        await RunAsync();
+        foreach (string key in _bucket.Objects.Keys.Where(k => k.StartsWith(Base + "K1/")).ToList())
+        {
+            _bucket.Objects.Remove(key);
+        }
+
+        await RunAsync();
+
+        Assert.Equal("K2", Assert.Single(_records.Rows).BackupKey);
+    }
+
+    [Fact]
+    public async Task WithAnEmptiedCache_TheSameRowsComeBack_FromTheBucketAlone()
+    {
+        FinishedBase("K1", "2026-10-20 14:00:00+00:00", dataSize: 700);
+        Put(Base + "K2/data.tar", "", Now.AddMinutes(-9), 300);
+        await RunAsync();
+        var before = _records.Rows.Select(r => (r.BackupKey, r.Status, r.TakenAt, r.SizeBytes)).OrderBy(r => r.BackupKey).ToList();
+
+        _records.Rows.Clear();
+        _observations.Rows.Clear();
+        await RunAsync();
+
+        var after = _records.Rows.Select(r => (r.BackupKey, r.Status, r.TakenAt, r.SizeBytes)).OrderBy(r => r.BackupKey).ToList();
+        Assert.Equal(before, after);
+        Assert.Equal(2, after.Count);
+    }
+
+    [Fact]
+    public async Task AnEmptyBucket_IsEmpty_NotUnreadable()
+    {
+        await RunAsync();
+
+        Assert.Equal(BackupReadOutcome.Empty, Observation.Outcome);
+        Assert.Null(Observation.LastWalAt);
+        Assert.Empty(_records.Rows);
+    }
+
+    [Fact]
+    public async Task ABucketWithOtherObjectsOnly_IsNoBackupPrefix_NotEmpty()
+    {
+        Put("somebody-elses/file.txt", "x", Now.AddDays(-1));
+
+        await RunAsync();
+
+        Assert.Equal(BackupReadOutcome.NoBackupPrefix, Observation.Outcome);
+    }
+
+    [Fact]
+    public async Task ADeniedBucket_IsUnreadable_KeepsTheRowsAndTheLastWal_AndNamesTheReason()
+    {
+        FinishedBase("K1", "2026-10-24 14:06:33+00:00");
+        Put(BackupLayout.WalPrefix + "0000000100000000/A0.gz", "w", Now.AddMinutes(-4));
+        await RunAsync();
+
+        _bucket.OnListObjects = _ => throw new BackupBucketException("access denied (AccessDenied)");
+        await RunAsync();
+
+        Assert.Single(_records.Rows);
+        Assert.Equal(BackupReadOutcome.Unreadable, Observation.Outcome);
+        Assert.Equal("access denied (AccessDenied)", Observation.Error);
+        Assert.Equal(Now.AddMinutes(-4), Observation.LastWalAt);
+    }
+
+    [Fact]
+    public async Task ASecretThatCannotBeOpened_IsUnreadable_NotACrash()
+    {
+        _protector.Setup(p => p.Unprotect(It.IsAny<byte[]>()))
+            .Throws(new ServiceUnavailableException("BACKUP_TARGET_SECRET_UNREADABLE", "The secret cannot be decrypted."));
+
+        await RunAsync();
+
+        Assert.Equal(BackupReadOutcome.Unreadable, Observation.Outcome);
+        Assert.Empty(_factory.Opened);
+    }
+
+    [Fact]
+    public async Task NoTargetSaved_ReadsNothing_AndRecordsNothing()
+    {
+        _targets.Setup(r => r.FindAsync(It.IsAny<CancellationToken>())).ReturnsAsync((BackupTargetAggregate?)null);
+
+        await RunAsync();
+
+        Assert.Empty(_factory.Opened);
+        Assert.Empty(_observations.Rows);
+        Assert.Empty(_records.Rows);
+    }
+
+    [Fact]
+    public async Task TheBucketIsOpenedWithTheSavedTarget_AndClosedAgain()
+    {
+        await RunAsync();
+
+        var opened = Assert.Single(_factory.Opened);
+        Assert.Equal(
+            new BackupBucketConnection("https://acct.r2.cloudflarestorage.com", "auto", "titan-backup-dev", "key-id", Secret), opened);
+        Assert.True(_bucket.Disposed);
+    }
+}

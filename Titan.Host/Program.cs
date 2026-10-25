@@ -334,6 +334,15 @@ builder.Services.AddSingleton<IBackupTargetSecretProtector,
 builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.SetBackupTargetCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.TestBackupTargetCommandHandler>();
+builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupRecordRepository,
+    Titan.Infrastructure.Repositories.BackupRecordRepository>();
+builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupObservationRepository,
+    Titan.Infrastructure.Repositories.BackupObservationRepository>();
+builder.Services.AddScoped<Titan.Application.Commands.Platform.Backup.RefreshBackupStatusCommandHandler>();
+builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler>();
+builder.Services.AddOptions<Titan.Application.Options.BackupStatusOptions>()
+    .BindConfiguration(Titan.Application.Options.BackupStatusOptions.SectionName);
+builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientCertificateCache>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
