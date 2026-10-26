@@ -1,3 +1,4 @@
+using Titan.Application.Commands.Admin.Backup;
 using System.Reflection;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.LoadBalancer;
@@ -94,6 +95,10 @@ public class IntentRepeatDeclarationTests
         // ── catalog ──
         [typeof(SyncTemplatesCommandHandler)] =
             new RepeatCheck(typeof(TemplateServiceTests), nameof(TemplateServiceTests.SyncAll_Repeated_KeepsTheSameRequest_AndResendsTheCommand)),
+
+        // ── backup ──
+        [typeof(ScheduleBackupsCommandHandler)] =
+            new RepeatCheck(typeof(ScheduleBackupsCommandTests), nameof(ScheduleBackupsCommandTests.RunTwiceTheSameDay_AddsNoRow)),
 
         // ── excluded ── none today. A handler that genuinely has no repeat to recognise is declared here,
         // with its reason.

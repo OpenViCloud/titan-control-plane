@@ -322,12 +322,16 @@ public class ModuleBoundaryTests
             "ListAdminVmsQueryHandler lists VMs ACROSS tenants for the admin portal, and "
             + "DeleteAdminVmCommandHandler deletes one (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write), reading snapshots for the in-progress "
             + "guard and the attached volumes it detaches. A separate path on purpose: the tenant Vm handlers require a tenant "
-            + "(RequireTenantId), so reusing them would mean growing a bypass flag on the tenant path.",
+            + "(RequireTenantId), so reusing them would mean growing a bypass flag on the tenant path. "
+            + "ScheduleBackupsCommandHandler and ListDiskBackupsQueryHandler read every tenant's VMs and volumes for the platform's "
+            + "backups (docs/features/backup/design.md#incus-backup): Platform cannot, Compute already reads Platform.",
         [("Admin", "Networking")] =
             "ListAdminNetworksQueryHandler lists networks across tenants for the admin portal (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).",
         [("Admin", "Platform")] =
             "DeleteAdminVmCommandHandler resolves the owning tenant's provider account and writes an "
-            + "admin audit entry for every cross-tenant delete (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write).",
+            + "admin audit entry for every cross-tenant delete (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write). "
+            + "ScheduleBackupsCommandHandler names each tenant's Incus project; ListDiskBackupsQueryHandler reads the backup cache "
+            + "and its health rule (docs/features/backup/design.md#incus-backup).",
     };
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#guard-sees-every-module — the anti-false-green check for the prefix table itself.

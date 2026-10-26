@@ -10,7 +10,8 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Platform.Backup;
 
-/// Reads the bucket of the configured backup target and rewrites the backup cache from it
+/// Reads the bucket of the configured backup target and rewrites the backup cache from it: Postgres under postgres/, VMs
+/// and volumes under incus/
 /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket). The bucket is the truth: rows it no longer shows are removed, so dropping the
 /// table and running this again gives back the same rows. A bucket that cannot be read is recorded as such and the rows stay.
 /// Writes nothing to a wallet or a ledger.
@@ -34,37 +35,122 @@ public class RefreshBackupStatusCommandHandler(
         }
 
         DateTimeOffset now = clock.GetUtcNow();
-        var observation = await observations.FindAsync(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, ct);
+        var postgres = await ObservationAsync(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, ct);
+        var incus = await ObservationAsync(BackupLayout.IncusObservationKind, BackupLayout.IncusObservationName, ct);
+
+        IBackupBucket bucket;
+        try
+        {
+            bucket = buckets.Open(targetOptions.Value.ToConnection());
+        }
+        catch (ServiceUnavailableException e)
+        {
+            postgres.RecordUnreadable(e.Message, now);
+            incus.RecordUnreadable(e.Message, now);
+            await records.SaveAsync(ct);
+            return;
+        }
+        using (bucket)
+        {
+            await RefreshPostgresAsync(bucket, postgres, now, ct);
+            await RefreshIncusAsync(bucket, incus, now, ct);
+        }
+        // One DbContext carries both repositories: this save writes the rows and the observations of both passes together.
+        await records.SaveAsync(ct);
+    }
+
+    private async Task<BackupObservation> ObservationAsync(string kind, string resourceName, CancellationToken ct)
+    {
+        var observation = await observations.FindAsync(kind, resourceName, ct);
         if (observation is null)
         {
-            observation = BackupObservation.Create(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName);
+            observation = BackupObservation.Create(kind, resourceName);
             observations.Add(observation);
         }
+        return observation;
+    }
+
+    private async Task RefreshPostgresAsync(IBackupBucket bucket, BackupObservation observation, DateTimeOffset now, CancellationToken ct)
+    {
         List<BackupRecord> known = await records.ListAsync(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, ct);
 
         BucketSnapshot snapshot;
         try
         {
-            using IBackupBucket bucket = buckets.Open(targetOptions.Value.ToConnection());
             snapshot = await ReadAsync(bucket, known, now, ct);
         }
         catch (BackupBucketException e)
         {
             observation.RecordUnreadable(e.Message, now);
-            await records.SaveAsync(ct);
             return;
         }
         catch (ServiceUnavailableException e)
         {
             observation.RecordUnreadable(e.Message, now);
-            await records.SaveAsync(ct);
             return;
         }
 
         Apply(snapshot, known, observation, now);
-        // One DbContext carries both repositories: this save writes the rows and the observation together.
-        await records.SaveAsync(ct);
     }
+
+    /// VM and volume backups under incus/ (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup): each object is a
+    /// row, and a resource's backups past the newest seven are deleted from the bucket first. Deleting here, where the
+    /// listing is read, keeps the worker from needing a delete of its own.
+    private async Task RefreshIncusAsync(IBackupBucket bucket, BackupObservation observation, DateTimeOffset now, CancellationToken ct)
+    {
+        List<BackupRecord> known = await records.ListOfKindsAsync(new[] { BackupRecord.VmKind, BackupRecord.VolumeKind }, ct);
+
+        var kept = new List<(IncusBackupKey Key, long Size)>();
+        try
+        {
+            IReadOnlyList<BackupBucketObject> all = await bucket.ListObjectsAsync(BackupLayout.IncusRoot, null, ct);
+            var byResource = all
+                .Select(o => (Object: o, Key: IncusBackupKey.Parse(o.Key)))
+                .Where(b => b.Key is not null)
+                .GroupBy(b => (b.Key!.Kind, b.Key.ResourceId));
+            foreach (var resource in byResource)
+            {
+                var newestFirst = resource.OrderByDescending(b => b.Key!.TakenAt).ToList();
+                foreach (var old in newestFirst.Skip(BackupLayout.IncusBackupsKept))
+                {
+                    await bucket.DeleteAsync(old.Object.Key, ct);
+                }
+                kept.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
+            }
+        }
+        catch (BackupBucketException e)
+        {
+            observation.RecordUnreadable(e.Message, now);
+            return;
+        }
+        catch (ServiceUnavailableException e)
+        {
+            observation.RecordUnreadable(e.Message, now);
+            return;
+        }
+
+        foreach (BackupRecord gone in known.Where(r => !kept.Any(k => IsRowOf(r, k.Key))))
+        {
+            records.Remove(gone);
+        }
+        foreach (var (key, size) in kept)
+        {
+            BackupRecord? existing = known.FirstOrDefault(r => IsRowOf(r, key));
+            if (existing is null)
+            {
+                records.Add(BackupRecord.CreateForTenant(
+                    key.Kind, key.ResourceId.ToString(), key.TenantId, key.BackupKey, key.TakenAt, size, now));
+            }
+            else
+            {
+                existing.Observe(key.TakenAt, size, BackupRecordStatus.Complete, now);
+            }
+        }
+        observation.RecordRead(BackupReadOutcome.Read, null, now);
+    }
+
+    private static bool IsRowOf(BackupRecord row, IncusBackupKey key) =>
+        row.Kind == key.Kind && row.ResourceName == key.ResourceId.ToString() && row.BackupKey == key.BackupKey;
 
     private static async Task<BucketSnapshot> ReadAsync(
         IBackupBucket bucket, List<BackupRecord> known, DateTimeOffset now, CancellationToken ct)

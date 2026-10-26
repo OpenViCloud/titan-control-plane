@@ -327,6 +327,109 @@ public class ProviderCommandQueueTests
             _repo.Rows.Select(r => r.Key).ToArray());
     }
 
+    // One backup a day per resource (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup):
+    // the UTC day is in the key, and the payload carries what the worker needs to name the object in the bucket.
+    [Fact]
+    public async Task VmBackup_KeyIsTheVmAndTheDay_PayloadCarriesTenantAndProject()
+    {
+        Guid vmId = Guid.NewGuid();
+        Guid tenantId = Guid.NewGuid();
+
+        await Queue().EnqueueVmBackupAsync(vmId, "vm-x", "t-0123", tenantId, "mock", new DateOnly(2026, 10, 26));
+
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Assert.Equal($"vm-backup-{vmId}-20261026", row.Key);
+        Assert.Equal(ProviderCommandKinds.VmBackup, row.Kind);
+        Assert.Equal("mock", row.ZoneId);
+        using JsonDocument payload = JsonDocument.Parse(row.Payload);
+        Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
+        Assert.Equal("vm-x", payload.RootElement.GetProperty("externalVmId").GetString());
+        Assert.Equal("t-0123", payload.RootElement.GetProperty("projectName").GetString());
+        Assert.Equal(tenantId.ToString(), payload.RootElement.GetProperty("tenantId").GetString());
+    }
+
+    [Fact]
+    public async Task VolumeBackup_KeyIsTheVolumeAndTheDay_PayloadCarriesTenantAndProject()
+    {
+        Guid volumeId = Guid.NewGuid();
+        Guid tenantId = Guid.NewGuid();
+
+        await Queue().EnqueueVolumeBackupAsync(volumeId, "vol-x", "t-0123", tenantId, "mock", new DateOnly(2026, 10, 26));
+
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Assert.Equal($"volume-backup-{volumeId}-20261026", row.Key);
+        Assert.Equal(ProviderCommandKinds.VolumeBackup, row.Kind);
+        using JsonDocument payload = JsonDocument.Parse(row.Payload);
+        Assert.Equal(volumeId.ToString(), payload.RootElement.GetProperty("volumeId").GetString());
+        Assert.Equal("vol-x", payload.RootElement.GetProperty("externalVolumeId").GetString());
+        Assert.Equal(tenantId.ToString(), payload.RootElement.GetProperty("tenantId").GetString());
+    }
+
+    // The schedule enqueues again every hour: a backup of the day that ran is not run again, one that failed is.
+    [Fact]
+    public async Task VmBackup_SameDayAfterItRan_IsNotRunAgain()
+    {
+        Guid vmId = Guid.NewGuid();
+        DateOnly day = new(2026, 10, 26);
+        ProviderCommandQueue queue = Queue();
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Guid lease = Guid.NewGuid();
+        row.Lease(lease, _clock.GetUtcNow());
+        row.Complete(lease, _clock.GetUtcNow());
+
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+
+        Assert.Equal(ProviderCommandStatus.Done, Assert.Single(_repo.Rows).Status);
+    }
+
+    [Fact]
+    public async Task VmBackup_SameDayAfterItFailed_RunsAgain()
+    {
+        Guid vmId = Guid.NewGuid();
+        DateOnly day = new(2026, 10, 26);
+        ProviderCommandQueue queue = Queue();
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Guid lease = Guid.NewGuid();
+        row.Lease(lease, _clock.GetUtcNow());
+        row.Fail(lease, "upload refused", retryable: false, _clock.GetUtcNow());
+
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+
+        Assert.Equal(ProviderCommandStatus.Pending, Assert.Single(_repo.Rows).Status);
+    }
+
+    [Fact]
+    public async Task VmBackup_KeyHasTheGregorianDay_UnderABuddhistCalendarCulture()
+    {
+        Guid vmId = Guid.NewGuid();
+        System.Globalization.CultureInfo before = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
+        try
+        {
+            await Queue().EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 26));
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = before;
+        }
+
+        Assert.Equal($"vm-backup-{vmId}-20261026", Assert.Single(_repo.Rows).Key);
+    }
+
+    [Fact]
+    public async Task VmBackup_NextDay_IsANewRow()
+    {
+        Guid vmId = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 26));
+        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 27));
+
+        Assert.Equal(2, _repo.Rows.Count);
+    }
+
     // Incus keeps volumes and snapshots inside the tenant's project: a storage or snapshot command that does not say
     // which project cannot be carried out (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#translate-titan-ids).
     public static TheoryData<string> StorageAndSnapshotKinds() => new()
@@ -335,6 +438,7 @@ public class ProviderCommandQueueTests
         ProviderCommandKinds.VolumeDelete, ProviderCommandKinds.VolumeSnapshotCreate,
         ProviderCommandKinds.VolumeSnapshotDelete, ProviderCommandKinds.VolumeSnapshotRestore,
         ProviderCommandKinds.VmSnapshotCreate, ProviderCommandKinds.VmSnapshotRevert, ProviderCommandKinds.VmSnapshotDelete,
+        ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup,
     };
 
     [Theory]
@@ -388,6 +492,10 @@ public class ProviderCommandQueueTests
                 return queue.EnqueueVmSnapshotRevertAsync(id, other, "vm-x/snap-x", project, zone);
             case ProviderCommandKinds.VmSnapshotDelete:
                 return queue.EnqueueVmSnapshotDeleteAsync(id, other, "vm-x/snap-x", project, zone);
+            case ProviderCommandKinds.VmBackup:
+                return queue.EnqueueVmBackupAsync(id, "vm-x", project, other, zone, new DateOnly(2026, 10, 26));
+            case ProviderCommandKinds.VolumeBackup:
+                return queue.EnqueueVolumeBackupAsync(id, "vol-x", project, other, zone, new DateOnly(2026, 10, 26));
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "not a storage or snapshot kind");
         }

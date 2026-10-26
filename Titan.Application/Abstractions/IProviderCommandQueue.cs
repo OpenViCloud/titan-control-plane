@@ -47,6 +47,10 @@ public interface IProviderCommandQueue
     Task EnqueueVolumeSnapshotDeleteAsync(Guid snapshotId, Guid volumeId, string externalSnapshotId, string projectName, string zoneId, CancellationToken ct = default);
     Task EnqueueVolumeSnapshotRestoreAsync(Guid snapshotId, Guid newVolumeId, string externalSnapshotId, string name, string projectName, string zoneId, CancellationToken ct = default);
 
+    // One a day per resource, the UTC day in the key (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+    Task EnqueueVmBackupAsync(Guid vmId, string externalVmId, string projectName, Guid tenantId, string zoneId, DateOnly day, CancellationToken ct = default);
+    Task EnqueueVolumeBackupAsync(Guid volumeId, string externalVolumeId, string projectName, Guid tenantId, string zoneId, DateOnly day, CancellationToken ct = default);
+
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
     // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model). The update is keyed on its intent.
     Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, string projectName, CancellationToken ct = default);

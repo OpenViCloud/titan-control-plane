@@ -48,7 +48,7 @@ public class RefreshBackupStatusCommandTests
         Put(Base + id + "/data.tar", "", Now.AddHours(-1), dataSize);
     }
 
-    private BackupObservation Observation => Assert.Single(_observations.Rows);
+    private BackupObservation Observation => Assert.Single(_observations.Rows, o => o.Kind == BackupRecord.PostgresKind);
 
     [Fact]
     public async Task AFinishedBase_BecomesACompleteRow_WithBarmansEndTime_AndTheFolderSize()

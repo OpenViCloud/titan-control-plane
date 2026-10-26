@@ -10,6 +10,9 @@ public class BackupRecordRepository(TitanDbContext db) : IBackupRecordRepository
     public Task<List<BackupRecord>> ListAsync(string kind, string resourceName, CancellationToken ct = default) =>
         db.Backups.Where(r => r.Kind == kind && r.ResourceName == resourceName).ToListAsync(ct);
 
+    public Task<List<BackupRecord>> ListOfKindsAsync(IReadOnlyCollection<string> kinds, CancellationToken ct = default) =>
+        db.Backups.Where(r => kinds.Contains(r.Kind)).ToListAsync(ct);
+
     public void Add(BackupRecord record) => db.Backups.Add(record);
 
     public void Remove(BackupRecord record) => db.Backups.Remove(record);

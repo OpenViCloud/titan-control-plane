@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.Compute.LoadBalancer;
@@ -149,6 +150,22 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync($"volume-snapshot-restore-{newVolumeId}", ProviderCommandKinds.VolumeSnapshotRestore, zoneId,
             new { snapshotId, newVolumeId, externalSnapshotId, name, projectName, zoneId },
             ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // AfterFailureOnly: the schedule asks every hour; the day's backup that ran stays done, one that failed runs again.
+    public Task EnqueueVmBackupAsync(Guid vmId, string externalVmId, string projectName, Guid tenantId, string zoneId,
+        DateOnly day, CancellationToken ct = default) =>
+        EnqueueAsync($"vm-backup-{vmId}-{BackupDay(day)}", ProviderCommandKinds.VmBackup, zoneId,
+            new { vmId, externalVmId, projectName, tenantId, zoneId },
+            ProviderCommandRerun.AfterFailureOnly, ct);
+
+    public Task EnqueueVolumeBackupAsync(Guid volumeId, string externalVolumeId, string projectName, Guid tenantId,
+        string zoneId, DateOnly day, CancellationToken ct = default) =>
+        EnqueueAsync($"volume-backup-{volumeId}-{BackupDay(day)}", ProviderCommandKinds.VolumeBackup, zoneId,
+            new { volumeId, externalVolumeId, projectName, tenantId, zoneId },
+            ProviderCommandRerun.AfterFailureOnly, ct);
+
+    // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
+    private static string BackupDay(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
     // The update is keyed on its intent and runs again only after a failure, like stop and start: an update that
     // already happened must not run twice, and a second update gets its own key.

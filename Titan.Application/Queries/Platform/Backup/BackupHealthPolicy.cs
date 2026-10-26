@@ -21,6 +21,10 @@ public static class BackupHealthPolicy
     public const string NoPostgresBackupInBucket = "NoPostgresBackupInBucket";
     public const string OnlyIncompleteBackups = "OnlyIncompleteBackups";
     public const string BaseTooOld = "BaseTooOld";
+    public const string BackupTooOld = "BackupTooOld";
+
+    /// A VM or volume is backed up once a day (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup), plus two hours of slack.
+    public static readonly TimeSpan DiskStaleAfter = TimeSpan.FromHours(26);
 
     public static (BackupHealth Health, string? Reason) ForPostgres(
         BackupObservation? observation, IReadOnlyList<BackupRecord> records, DateTimeOffset now)
@@ -58,6 +62,34 @@ public static class BackupHealthPolicy
         if (now - newest.TakenAt > PostgresBaseStaleAfter)
         {
             return (BackupHealth.Stale, BaseTooOld);
+        }
+        return (BackupHealth.Ok, null);
+    }
+
+    /// A VM's or volume's health from the one incus/ observation and the resource's newest backup. Nothing found for a
+    /// resource that Incus holds is Missing; a bucket that could not be read is Unknown, whatever the cache still holds.
+    public static (BackupHealth Health, string? Reason) ForDisk(
+        BackupObservation? observation, BackupRecord? newest, DateTimeOffset now)
+    {
+        if (observation is null)
+        {
+            return (BackupHealth.Unknown, NotReadYet);
+        }
+        if (observation.Outcome == BackupReadOutcome.Unreadable)
+        {
+            return (BackupHealth.Unknown, BucketUnreadable);
+        }
+        if (now - observation.LastReadAt > ReadingMaxAge)
+        {
+            return (BackupHealth.Unknown, StatusTooOld);
+        }
+        if (newest is null)
+        {
+            return (BackupHealth.Missing, NoBackup);
+        }
+        if (now - newest.TakenAt > DiskStaleAfter)
+        {
+            return (BackupHealth.Stale, BackupTooOld);
         }
         return (BackupHealth.Ok, null);
     }

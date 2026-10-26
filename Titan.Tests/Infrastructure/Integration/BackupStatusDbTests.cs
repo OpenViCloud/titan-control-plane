@@ -130,6 +130,28 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
+    // A VM's backup carries its tenant through the column the migration adds; Postgres's has none.
+    [Fact]
+    public async Task AVmBackupRow_KeepsItsTenant_AndAPostgresRowHasNone()
+    {
+        Guid tenantId = Guid.NewGuid();
+        Guid vmId = Guid.NewGuid();
+        await using (TitanDbContext db = pg.NewDbContext())
+        {
+            db.Backups.Add(BackupRecord.CreateForTenant(BackupRecord.VmKind, vmId.ToString(), tenantId, "20261026T020709Z",
+                Ago(TimeSpan.FromHours(1)), 667, DateTimeOffset.UtcNow));
+            db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromHours(1)), 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        await using TitanDbContext read = pg.NewDbContext();
+        List<BackupRecord> vmRows = await new BackupRecordRepository(read).ListOfKindsAsync(new[] { BackupRecord.VmKind });
+        BackupRecord vm = Assert.Single(vmRows);
+        Assert.Equal(tenantId, vm.TenantId);
+        Assert.Equal(vmId.ToString(), vm.ResourceName);
+        Assert.Null(Assert.Single(await read.Backups.Where(r => r.Kind == "postgres").ToListAsync()).TenantId);
+    }
+
     [Fact]
     public async Task ABucketThatCannotBeReached_KeepsTheRowsAndTheLastLog_AndThePageSaysUnknown()
     {
@@ -140,10 +162,13 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
 
         await using TitanDbContext db = pg.NewDbContext();
         Assert.Equal(3, await db.Backups.CountAsync());
-        var observation = await db.BackupObservations.AsNoTracking().SingleAsync();
+        var observation = await db.BackupObservations.AsNoTracking().SingleAsync(o => o.Kind == BackupRecord.PostgresKind);
         Assert.Equal(BackupReadOutcome.Unreadable, observation.Outcome);
         Assert.Equal("could not reach the endpoint", observation.Error);
         Assert.Equal(walAt, observation.LastWalAt);
+        // The VM and volume pass reads the same bucket and says the same.
+        var disks = await db.BackupObservations.AsNoTracking().SingleAsync(o => o.Kind == BackupLayout.IncusObservationKind);
+        Assert.Equal(BackupReadOutcome.Unreadable, disks.Outcome);
         var item = Assert.Single((await ListAsync()).Items);
         Assert.Equal((BackupHealth.Unknown, BackupHealthPolicy.BucketUnreadable), (item.Health, item.Reason));
     }
