@@ -11,6 +11,9 @@ public sealed class FakeBackupRecordRepository : IBackupRecordRepository
     public Task<List<BackupRecord>> ListAsync(string kind, string resourceName, CancellationToken ct = default) =>
         Task.FromResult(Rows.Where(r => r.Kind == kind && r.ResourceName == resourceName).ToList());
 
+    public Task<List<BackupRecord>> ListOfKindsAsync(IReadOnlyCollection<string> kinds, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(r => kinds.Contains(r.Kind)).ToList());
+
     public void Add(BackupRecord record) => Rows.Add(record);
 
     public void Remove(BackupRecord record) => Rows.Remove(record);

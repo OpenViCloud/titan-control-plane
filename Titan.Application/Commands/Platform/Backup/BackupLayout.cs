@@ -12,6 +12,16 @@ public static class BackupLayout
     public const string WalFolder = "wals/";
     public const string BackupInfoFile = "backup.info";
 
+    /// Where Incus uploads VM and volume backups (IncusBackupKey).
+    public const string IncusRoot = "incus/";
+
+    /// The one observation of the incus/ pass: whether the bucket could be read, for every VM and volume at once.
+    public const string IncusObservationKind = "incus";
+    public const string IncusObservationName = "disks";
+
+    /// Backups kept per VM or volume; older ones are deleted from the bucket.
+    public const int IncusBackupsKept = 7;
+
     /// The serverName an object of postgres/ belongs to, or null for an object right under postgres/.
     public static string? ServerOf(string key)
     {

@@ -1761,6 +1761,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("taken_at");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Kind", "ResourceName", "BackupKey")

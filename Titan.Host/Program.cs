@@ -337,9 +337,12 @@ builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupObservation
     Titan.Infrastructure.Repositories.BackupObservationRepository>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.Backup.RefreshBackupStatusCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler>();
+builder.Services.AddScoped<Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler>();
 builder.Services.AddOptions<Titan.Application.Options.BackupStatusOptions>()
     .BindConfiguration(Titan.Application.Options.BackupStatusOptions.SectionName);
 builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
+builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.ScheduleBackupsCommandHandler>();
+builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupScheduleService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientCertificateCache>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
