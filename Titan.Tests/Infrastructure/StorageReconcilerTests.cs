@@ -33,7 +33,7 @@ public class StorageReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = token;
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
             },
             new ListReconcilableStorageQueryHandler(new VolumeRepository(db), new VolumeSnapshotRepository(db), new VmRepository(db)),
             heartbeat, ConfigWithToken("secret"));

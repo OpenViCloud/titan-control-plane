@@ -35,7 +35,7 @@ public class FirewallAndVmSnapshotReconcilerTests
     private static void SendAs(Microsoft.AspNetCore.Http.HttpContext ctx, string token)
     {
         ctx.Request.Headers["X-Internal-Token"] = token;
-        ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+        ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
     }
 
     private static ListReconcilableFirewallRulesEndpoint FirewallEndpoint(TitanDbContext db, ReconcilerHeartbeat heartbeat, string token) =>

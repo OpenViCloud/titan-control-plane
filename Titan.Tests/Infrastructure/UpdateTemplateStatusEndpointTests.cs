@@ -19,7 +19,7 @@ public class UpdateTemplateStatusEndpointTests
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Internal:Token"] = token })
             .Build();
 
-    private static readonly UpdateTemplateStatusRequest ValidRequest = new(Report: "Created", ZoneId: "mock", ExternalId: "tpl-205");
+    private static readonly UpdateTemplateStatusRequest ValidRequest = new(Report: "Created", ClusterId: "mock", ExternalId: "tpl-205");
 
     private static readonly ZoneOptions Zones = new() { Zones = [new ZoneConfig { Id = "mock", Name = "Mock" }] };
 
@@ -64,7 +64,7 @@ public class UpdateTemplateStatusEndpointTests
             ctx => ctx.Request.Headers["X-Internal-Token"] = "secret",
             handler, ConfigWithToken("secret"));
 
-        await ep.HandleAsync(new UpdateTemplateStatusRequest(Report: "Created", ZoneId: null, ExternalId: "tpl-205"), CancellationToken.None);
+        await ep.HandleAsync(new UpdateTemplateStatusRequest(Report: "Created", ClusterId: null, ExternalId: "tpl-205"), CancellationToken.None);
 
         Assert.Equal(400, ep.HttpContext.Response.StatusCode);
         templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);

@@ -75,7 +75,7 @@ public class NetworkReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "secret";
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
             },
             new ListReconcilableNetworksQueryHandler(new NetworkRepository(db)), heartbeat, ConfigWithToken("secret"));
 
@@ -98,7 +98,7 @@ public class NetworkReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "wrong";
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
             },
             new ListReconcilableNetworksQueryHandler(new NetworkRepository(db)), heartbeat, ConfigWithToken("secret"));
 

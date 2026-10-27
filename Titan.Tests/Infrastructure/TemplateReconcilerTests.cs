@@ -40,7 +40,7 @@ public class TemplateReconcilerTests
                 ctx.Request.Headers["X-Internal-Token"] = token;
                 if (zoneId != null)
                 {
-                    ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={zoneId}");
+                    ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={zoneId}");
                 }
             },
             new ListReconcilableTemplatesQueryHandler(new VmTemplateRepository(db)),

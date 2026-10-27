@@ -19,7 +19,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure;
 
-// The worker moves from zoneId to clusterId; the control plane takes both first, so either worker runs against it
+// The worker names its cluster as clusterId; the zoneId shape it sent before is gone from every route and the lease
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
 public class ClusterIdContractTests
 {
@@ -60,7 +60,7 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task AReconcilerAskingByZoneId_StillWorks()
+    public async Task AReconcilerAskingByZoneId_Is400_AndRecordsNoPoll()
     {
         using var db = NewDb();
         var heartbeat = new ReconcilerHeartbeat();
@@ -68,11 +68,11 @@ public class ClusterIdContractTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Equal(200, ep.HttpContext.Response.StatusCode);
-        Assert.True(heartbeat.Snapshot().ContainsKey("templates/mock"));
+        Assert.Equal(400, ep.HttpContext.Response.StatusCode);
+        Assert.Empty(heartbeat.Snapshot());
     }
 
-    // Every reconcile route reads the cluster the same way; one that reads zoneId alone would answer a new worker 400.
+    // Every reconcile route reads the cluster the same way, from clusterId.
     [Fact]
     public void EveryInternalRoute_ReadsTheClusterThroughClusterQuery()
     {
@@ -90,7 +90,7 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task ATemplateReport_WithClusterIdAndNoZoneId_IsRecorded()
+    public async Task ATemplateReport_WithItsClusterId_IsRecorded()
     {
         var templates = new Mock<IVmTemplateRepository>();
         var zones = new ZoneOptions { Zones = [new ZoneConfig { Id = "mock", Name = "Mock" }] };
@@ -112,7 +112,7 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task ALease_CarriesTheClusterId_BesideTheZoneId()
+    public async Task ALease_CarriesTheClusterId()
     {
         var repo = new FakeProviderCommandRepository();
         var t0 = new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.Zero);
@@ -124,7 +124,6 @@ public class ClusterIdContractTests
         LeasedProviderCommandResult leased = await new GetLeasedProviderCommandQueryHandler(repo).HandleAsync(new GetLeasedProviderCommandQuery(leaseId));
 
         Assert.Equal("mock", leased.ClusterId);
-        Assert.Equal("mock", leased.ZoneId);
     }
 
     private static ListInternalClustersEndpoint ClustersEndpoint(string token) =>

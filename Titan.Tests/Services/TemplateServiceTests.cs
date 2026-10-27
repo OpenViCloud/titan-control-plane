@@ -65,7 +65,7 @@ public class TemplateServiceTests
 
         public Task UpdateStatusAsync(Guid templateId, UpdateTemplateStatusRequest req, CancellationToken ct = default)
             => updateStatus.HandleAsync(
-                new UpdateTemplateStatusCommand(templateId, req.ZoneId!, req.Report, req.Exists, req.ExternalId, req.Reason,
+                new UpdateTemplateStatusCommand(templateId, req.ClusterId!, req.Report, req.Exists, req.ExternalId, req.Reason,
                     req.Detail),
                 ct);
 
@@ -121,7 +121,7 @@ public class TemplateServiceTests
 
     private static UpdateTemplateStatusRequest Report(string report, bool? exists = null, string? extId = null,
         string? reason = null, string? detail = null, string zoneId = Mock) =>
-        new(report, zoneId, exists, extId, reason, detail);
+        new(report, exists, extId, reason, detail, zoneId);
 
     private static string Shape(VmTemplate t, string zoneId)
     {
