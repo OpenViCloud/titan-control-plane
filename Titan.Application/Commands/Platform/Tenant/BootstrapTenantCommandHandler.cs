@@ -1,4 +1,5 @@
 using Titan.Application.Commands.Platform.Tenant.Contracts;
+using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories.Platform;
 using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
 
@@ -23,6 +24,21 @@ public class BootstrapTenantCommandHandler(ITenantRepository repo)
 
         TenantAggregate tenant = TenantAggregate.CreatePending(command.Username, keycloakUserId, command.Email);
         repo.Add(tenant);
-        await repo.SaveAsync(ct);
+        try
+        {
+            await repo.SaveAsync(ct);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            // Tenant and owner commit together, so a lost insert either means the caller's own other first request
+            // won (it owns a tenant now) or the name is another user's
+            // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-name-taken).
+            bool ownRequestWon = await repo.ExistsByOwnerAsync(keycloakUserId, ct);
+            if (ownRequestWon)
+            {
+                return;
+            }
+            throw new ConflictException("TENANT_NAME_TAKEN", $"The tenant name '{command.Username}' belongs to another account.");
+        }
     }
 }

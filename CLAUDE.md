@@ -192,6 +192,7 @@ Khoá lệnh = chuỗi id workflow cũ ([provider-and-worker §provider-command-
 | `NETWORK_INVALID_STATE` | 422 | Xoá network khi create còn chờ; rename network đang/đã xoá |
 | `TENANT_SUSPENDED` | 403 | Write ops khi tenant bị suspend |
 | `TENANT_PENDING_APPROVAL` | 403 | Write ops khi tenant chờ admin duyệt (US-SL-02 self-service signup gate) |
+| `TENANT_NAME_TAKEN` | 409 | Mọi request của user đã đăng nhập mà chưa có tenant, khi tên tenant của họ (`preferred_username`, thiếu thì email) đã thuộc tenant khác; không tạo tenant ([tenancy-and-admin §tenant-name-taken](https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-name-taken)). Hai request đầu của **cùng** user chạy song song không gặp mã này |
 | `NOT_A_MEMBER` | 403 | User không thuộc tenant |
 | `VM_SNAPSHOT_QUOTA_EXCEEDED` | 422 | VM đã đạt `Tenant.Quota.MaxVmSnapshotsPerVm` snapshot đang dùng (mặc định 3; desired `Exists` ∧ (`Exists` ∨ create chờ) — kể cả đang revert; bấm xoá là thôi tính, DCS-Q1) |
 | `VM_SNAPSHOT_INVALID_STATE` | 422 | Snapshot không ở trạng thái hợp lệ cho operation |
