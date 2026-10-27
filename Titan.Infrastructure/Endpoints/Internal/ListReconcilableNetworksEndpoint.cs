@@ -32,7 +32,7 @@ public class ListReconcilableNetworksEndpoint(
             return;
         }
 
-        string? zoneId = Query<string>("zoneId", isRequired: false);
+        string? zoneId = ClusterQuery.From(HttpContext.Request);
         if (string.IsNullOrEmpty(zoneId))
         {
             await SendErrorsAsync(400, ct);
