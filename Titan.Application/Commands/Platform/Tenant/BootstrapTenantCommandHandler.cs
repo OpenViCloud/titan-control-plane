@@ -6,7 +6,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
 namespace Titan.Application.Commands.Platform.Tenant;
 
 /// Creates the caller's tenant on first sign-in. Idempotent: a caller who already owns a tenant is a no-op.
-/// Every signup starts PendingApproval; the middleware approves one of an account the realm declares in the same request, after
+/// Every signup starts PendingApproval; the middleware approves one whose account has the realm role auto-approve in the same request, after
 /// opening its wallet (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
 public class BootstrapTenantCommandHandler(ITenantRepository repo)
 {

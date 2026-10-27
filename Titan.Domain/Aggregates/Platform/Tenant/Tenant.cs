@@ -33,7 +33,7 @@ public class Tenant
     /// ceiling is a per-customer judgement, not a global switch.
     public const long DefaultDebtCeiling = 500_000;
 
-    // Every signup lands here; the middleware approves one of an account the realm declares in the same request,
+    // Every signup lands here; the middleware approves one whose account has the realm role auto-approve in the same request,
     // every other waits for an admin (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
     public static Tenant CreatePending(string name, string ownerKeycloakId, string email, int maxVms = 10, int maxNetworks = 1)
     {

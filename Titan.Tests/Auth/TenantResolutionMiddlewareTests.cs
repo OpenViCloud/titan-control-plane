@@ -137,7 +137,7 @@ public class TenantResolutionMiddlewareTests
         Assert.Equal(created.Id, ctx.Items["TenantId"]);
     }
 
-    // A self-signup waits for an admin, however its email was verified: only the realm's role approves on sign-in.
+    // A self-signup waits for an admin, even with a verified email: only the realm's role approves on sign-in.
     [Fact]
     public async Task FirstLogin_VerifiedEmailWithoutTheRole_StaysPending_WithoutAWallet()
     {

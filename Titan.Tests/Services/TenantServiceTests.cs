@@ -391,7 +391,7 @@ public class TenantServiceTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Every signup starts pending, whatever the domain: the middleware approves one of an account the realm declares
+    // Every signup starts pending, whatever the domain: the middleware approves one whose account has the realm role auto-approve
     // in the same request after opening its wallet, so there is one approval path, not two.
     [Theory]
     [InlineData("alice@gmail.com")]

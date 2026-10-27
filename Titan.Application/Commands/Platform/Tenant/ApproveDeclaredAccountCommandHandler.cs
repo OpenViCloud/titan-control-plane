@@ -4,7 +4,7 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Platform.Tenant;
 
-/// A PendingApproval tenant of an account the realm declares becomes Active, without any admin action. The middleware
+/// A PendingApproval tenant whose account has the realm role auto-approve becomes Active, without any admin action. The middleware
 /// opens the wallet before calling this (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
 /// No-op if the tenant is missing or no longer PendingApproval.
 public class ApproveDeclaredAccountCommandHandler(ITenantRepository repo)
