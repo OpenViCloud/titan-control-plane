@@ -221,7 +221,7 @@ Khoá lệnh = chuỗi id workflow cũ ([provider-and-worker §provider-command-
 | `VM_IS_LOAD_BALANCER_BACKEND` | 422 | Xoá VM mà một load balancer chưa `Deleted` còn gửi tới (desired hoặc Incus đang giữ) — gỡ backend trước |
 | `FIREWALL_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxFirewallRulesPerNetwork` (mặc định 20), **per network**; rule đã bấm xoá thôi tính (DCS-Q1) |
 | `IPV6_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxPublicIpv6` (mặc định 10): đếm **network** có `/64` public, như `MaxNetworks`; chỉ kiểm khi tạo network xin IPv6 ([network §ipv6-quota](https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#ipv6-quota)) |
-| `IPV6_NOT_AVAILABLE` | 422 | Tạo network xin IPv6 ở zone mà cluster thiếu `ovnUplinkNetwork` hoặc `ipv6Block`, zone không có cluster, hoặc hết `/64` trống (255 mỗi zone) — không hàng, không lệnh ([network §ipv6-public](https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#ipv6-public)) |
+| `IPV6_NOT_AVAILABLE` | 422 | Tạo network xin IPv6 ở zone mà cluster thiếu `ovnUplinkNetwork` hoặc `ipv6Block`, hoặc hết `/64` trống (255 mỗi zone) — không hàng, không lệnh ([network §ipv6-public](https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#ipv6-public)) |
 | `IPV6_ALLOCATION_CONFLICT` | 409 | Hai create network cùng zone chọn cùng `/64` trống cùng lúc; commit sau đụng index unique `(zone_id, public_ipv6_index)` — gửi lại là chọn `/64` khác |
 | `TOPUP_NOT_FOUND` | 404 | TopUp id không tồn tại |
 | `TOPUP_INVALID_STATE` | 422 | Confirm/Fail TopUp không từ trạng thái hợp lệ (chỉ từ Pending) |
