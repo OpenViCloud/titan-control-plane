@@ -140,7 +140,7 @@ public class IncusExecSessionTests
     }
 
     [Fact]
-    public async Task OpenSsh_InAClusterWithNoCluster_IsClusterNotFound()
+    public async Task OpenSsh_InAClusterNotConfigured_IsClusterNotFound()
     {
         var (connector, _, _) = await Connector();
 

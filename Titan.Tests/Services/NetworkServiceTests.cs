@@ -979,7 +979,7 @@ public class NetworkServiceTests
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_InAClusterWithNoCluster_IsRefused()
+    public async Task Create_WithPublicIpv6_InAClusterWithNoProviderSettings_IsRefused()
     {
         SetupFreshCreate();
 
