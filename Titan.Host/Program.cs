@@ -56,7 +56,6 @@ using CatTemplateQry = Titan.Application.Queries.Catalog.VmTemplate;
 using CatOfferingQry = Titan.Application.Queries.Catalog.VmOffering;
 using CatVolumeOfferingQry = Titan.Application.Queries.Catalog.VolumeOffering;
 using CatZoneQry = Titan.Application.Queries.Catalog.Zone;
-using CatClusterQry = Titan.Application.Queries.Catalog.Cluster;
 using CatOsImageQry = Titan.Application.Queries.Catalog.OsImage;
 using AdminVmCmd = Titan.Application.Commands.Admin.Vm;
 using AdminVmQry = Titan.Application.Queries.Admin.Vm;
@@ -288,7 +287,6 @@ builder.Services.AddScoped<CatTemplateQry.ListReconcilableTemplatesQueryHandler>
 builder.Services.AddScoped<CatOfferingQry.ListVmOfferingsQueryHandler>();
 builder.Services.AddScoped<CatVolumeOfferingQry.ListVolumeOfferingsQueryHandler>();
 builder.Services.AddScoped<CatZoneQry.ListZonesQueryHandler>();
-builder.Services.AddScoped<CatClusterQry.ListClustersQueryHandler>();
 builder.Services.AddScoped<CatOsImageQry.ListOsImagesQueryHandler>();
 builder.Services.AddScoped<TemplateSyncRunner>();
 // Cross-tenant, platform-admin only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).

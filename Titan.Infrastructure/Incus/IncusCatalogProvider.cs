@@ -6,31 +6,13 @@ using Titan.Domain.Exceptions;
 namespace Titan.Infrastructure.Incus;
 
 // Live reads of a zone's Incus cluster for the public catalog (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus).
-// Resolved per call, so an admin's edit of the cluster row takes effect on the next read.
-// Both routes are anonymous: a failure keeps its code but loses its detail (endpoint, fingerprints), which goes to the
+// The route is anonymous: a failure keeps its code but loses its detail (endpoint, fingerprints), which goes to the
 // log for the operator.
 public sealed class IncusCatalogProvider(
     IncusClientFactory factory, ZoneOptions zones, ILogger<IncusCatalogProvider> logger)
     : IComputeCatalogProvider
 {
     private const long BytesPerGib = 1024L * 1024 * 1024;
-
-    public Task<List<ClusterInfo>> ListClustersAsync(string zoneId, CancellationToken ct = default) =>
-        WithoutDetailAsync(zoneId, () => ReadClustersAsync(zoneId, ct));
-
-    private async Task<List<ClusterInfo>> ReadClustersAsync(string zoneId, CancellationToken ct)
-    {
-        using IncusClient client = await ConnectAsync(zoneId, ct);
-        IncusServerInfo server = await client.RequireTrustedAsync(ct);
-        bool isClustered = await client.IsClusteredAsync(ct);
-        if (!isClustered)
-        {
-            // A single server's /1.0/cluster carries server_name "" (lab); its name is the one /1.0 reports.
-            return [new ClusterInfo(server.ServerName, server.ServerName)];
-        }
-        List<string> members = await client.GetClusterMemberNamesAsync(ct);
-        return members.Select(name => new ClusterInfo(name, name)).ToList();
-    }
 
     // Zone-less, as the route is: the first configured zone, which is only right while there is one cluster.
     public Task<List<OsImageInfo>> ListOsImagesAsync(CancellationToken ct = default)
