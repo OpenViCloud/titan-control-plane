@@ -1,9 +1,7 @@
 using FastEndpoints;
 using Microsoft.Extensions.Configuration;
-using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Application.Options;
 using Titan.Infrastructure.Incus;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
@@ -11,7 +9,7 @@ namespace Titan.Infrastructure.Endpoints.Internal;
 // the server fingerprint to pin, Titan's client certificate WITH its private key, and the zone's provider settings. Behind X-Internal-Token only;
 // the body is never logged.
 public class GetClusterConnectionEndpoint(
-    IClusterRepository clusters, ProviderClientIdentityStore identity, IConfiguration config)
+    ZoneOptions zones, ProviderClientIdentityStore identity, IConfiguration config)
     : EndpointWithoutRequest<ClusterConnectionResponse>
 {
     public override void Configure()
@@ -31,15 +29,11 @@ public class GetClusterConnectionEndpoint(
         }
 
         string zoneId = Route<string>("zoneId") ?? "";
-        ClusterAggregate? cluster = await clusters.FindByZoneIdAsync(zoneId, ct);
-        if (cluster == null)
-        {
-            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Zone '{zoneId}' has no cluster.");
-        }
+        ZoneConfig cluster = zones.ClusterOf(zoneId);
         ProviderClientKeyPair keyPair = await identity.GetKeyPairAsync(ct);
         await SendAsync(
             new ClusterConnectionResponse(cluster.Endpoint, cluster.ServerFingerprint, keyPair.CertificatePem, keyPair.KeyPem,
-                cluster.ProviderSettings.OvnUplinkNetwork, cluster.ProviderSettings.StoragePool),
+                cluster.OvnUplinkNetwork, cluster.StoragePool),
             cancellation: ct);
     }
 }

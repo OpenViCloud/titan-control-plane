@@ -1,21 +1,23 @@
 using System.Diagnostics;
 using Titan.Application.Abstractions;
+using Titan.Application.Options;
 using Titan.Domain.Exceptions;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Infrastructure.Incus;
 
-// Probes what the admin typed, before it is saved: GET /1.0 must come back "trusted" from the pinned server.
+// Probes an endpoint and fingerprint: GET /1.0 must come back "trusted" from the pinned server.
 // A failure is a result, never an exception (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus).
 public sealed class IncusClusterConnectionTester(IncusClientFactory factory) : IClusterConnectionTester
 {
     public async Task<ClusterTestResult> TestAsync(string endpoint, string serverFingerprint, CancellationToken ct)
     {
-        ClusterAggregate candidate;
+        string normalizedEndpoint;
+        string normalizedFingerprint;
         try
         {
-            // The aggregate's own rules decide what a valid endpoint and fingerprint are; nothing is stored.
-            candidate = ClusterAggregate.Create("test", null, endpoint, serverFingerprint);
+            // The configuration's own rules decide what a valid endpoint and fingerprint are.
+            normalizedEndpoint = ZoneConfig.NormalizeEndpoint(endpoint);
+            normalizedFingerprint = ZoneConfig.NormalizeFingerprint(serverFingerprint);
         }
         catch (ArgumentException e)
         {
@@ -25,7 +27,7 @@ public sealed class IncusClusterConnectionTester(IncusClientFactory factory) : I
         var watch = Stopwatch.StartNew();
         try
         {
-            using IncusClient client = await factory.CreateAsync(candidate.Endpoint, candidate.ServerFingerprint, ct);
+            using IncusClient client = await factory.CreateAsync(normalizedEndpoint, normalizedFingerprint, ct);
             await client.RequireTrustedAsync(ct);
             return new ClusterTestResult(true, watch.ElapsedMilliseconds, null);
         }

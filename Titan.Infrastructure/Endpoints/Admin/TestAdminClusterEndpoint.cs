@@ -5,8 +5,7 @@ namespace Titan.Infrastructure.Endpoints.Admin;
 
 public record TestClusterRequest(string Endpoint, string ServerFingerprint);
 
-// 200 either way: a failed probe is a result to render, not an HTTP error. Stores no cluster (Titan's own identity is
-// generated on first use, as by any Incus call).
+// 200 either way: a failed probe is a result to render, not an HTTP error. Stores nothing.
 // Covered by IncusClusterConnectionTesterTests.
 public class TestAdminClusterEndpoint(IClusterConnectionTester tester)
     : Endpoint<TestClusterRequest, ClusterTestResult>

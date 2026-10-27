@@ -1,82 +1,38 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Platform.ProviderClientIdentity;
-using Titan.Domain.Repositories.Platform;
 using Titan.Infrastructure.Incus;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
 internal static class IncusTestKit
 {
-    public static AesGcmClusterCredentialCipher Cipher(int keySeed = 0) =>
-        new(Options.Create(new ClusterEncryptionOptions
-        {
-            ClusterKey = Convert.ToBase64String(Enumerable.Range(keySeed, 32).Select(i => (byte)i).ToArray()),
-        }));
+    public const string AnyFingerprint = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f";
 
-    // A fresh cache each time: a store built here behaves like a newly started control plane.
-    public static ProviderClientIdentityStore IdentityStore(StubIdentityRepository? repository = null) =>
-        new(repository ?? new StubIdentityRepository(), Cipher(), new ProviderClientCertificateCache());
+    // Shaped like the identity an operator puts in the Secret: ECDSA P-384, self-signed, client auth.
+    public static ProviderClientIdentityOptions NewIdentity()
+    {
+        using ECDsa key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var request = new CertificateRequest("CN=titan", key, HashAlgorithmName.SHA384);
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, critical: true));
+        request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension([new Oid("1.3.6.1.5.5.7.3.2")], critical: false));
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        using X509Certificate2 cert = request.CreateSelfSigned(now.AddMinutes(-5), now.AddYears(10));
+        return new ProviderClientIdentityOptions
+        {
+            CertificatePem = cert.ExportCertificatePem() + "\n",
+            KeyPem = key.ExportPkcs8PrivateKeyPem(),
+        };
+    }
+
+    // A fresh store each time: a store built here behaves like a newly started control plane.
+    public static ProviderClientIdentityStore IdentityStore(ProviderClientIdentityOptions? identity = null) =>
+        new(Options.Create(identity ?? NewIdentity()));
 
     public static ZoneOptions Zones(params string[] ids) =>
-        new() { Zones = ids.Select(id => new ZoneConfig { Id = id, Name = id }).ToList() };
-}
+        new() { Zones = ids.Select(id => Cluster(id, $"https://{id}.invalid:8443", AnyFingerprint)).ToList() };
 
-internal sealed class StubIdentityRepository : IProviderClientIdentityRepository
-{
-    public ProviderClientIdentity? Stored { get; set; }
-
-    /// Set to make TryAddAsync lose the race to this identity, the way a concurrent writer would.
-    public ProviderClientIdentity? WinnerOfARace { get; set; }
-
-    public int Adds { get; private set; }
-
-    public Task<ProviderClientIdentity?> FindAsync(CancellationToken ct) => Task.FromResult(Stored);
-
-    public Task<bool> TryAddAsync(ProviderClientIdentity identity, CancellationToken ct)
-    {
-        Adds++;
-        if (WinnerOfARace != null)
-        {
-            Stored = WinnerOfARace;
-            return Task.FromResult(false);
-        }
-        Stored = identity;
-        return Task.FromResult(true);
-    }
-}
-
-internal sealed class StubClusterRepository : IClusterRepository
-{
-    public List<ClusterAggregate> Rows { get; } = new();
-
-    public Task<ClusterAggregate?> FindByZoneIdAsync(string zoneId, CancellationToken ct) =>
-        Task.FromResult(Rows.FirstOrDefault(r => r.ZoneId == zoneId));
-
-    public Task<IReadOnlyList<ClusterAggregate>> GetAllAsync(CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<ClusterAggregate>>(Rows.ToList());
-
-    public Task<ClusterAggregate?> GetForUpdateAsync(string zoneId, CancellationToken ct) =>
-        Task.FromResult(Rows.FirstOrDefault(r => r.ZoneId == zoneId));
-
-    public Task AddAsync(ClusterAggregate cluster, CancellationToken ct)
-    {
-        Rows.Add(cluster);
-        return Task.CompletedTask;
-    }
-
-    public Task RemoveAsync(ClusterAggregate cluster, CancellationToken ct)
-    {
-        Rows.Remove(cluster);
-        return Task.CompletedTask;
-    }
-
-    public int Saves { get; private set; }
-
-    public Task SaveChangesAsync(CancellationToken ct)
-    {
-        Saves++;
-        return Task.CompletedTask;
-    }
+    public static ZoneConfig Cluster(string id, string endpoint, string serverFingerprint) =>
+        new() { Id = id, Name = id, Endpoint = endpoint, ServerFingerprint = serverFingerprint };
 }

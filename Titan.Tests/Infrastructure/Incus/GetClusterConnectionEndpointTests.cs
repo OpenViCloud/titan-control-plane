@@ -1,15 +1,16 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
+using Titan.Application.Options;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Incus;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection — the one route that hands Titan's private key out. It
-// composes the zone's cluster with the client identity, so it carries its own logic and gets its own test.
+// composes the zone's configured cluster with the client identity, so it carries its own logic and gets its own test.
 public class GetClusterConnectionEndpointTests
 {
     private const string Fingerprint = "ffcf78030000000000000000000000000000000000000000000000000000108f";
@@ -19,7 +20,7 @@ public class GetClusterConnectionEndpointTests
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Internal:Token"] = token })
             .Build();
 
-    private static GetClusterConnectionEndpoint EndpointFor(StubClusterRepository clusters, string sentToken) =>
+    private static GetClusterConnectionEndpoint EndpointFor(ZoneOptions clusters, string sentToken) =>
         Factory.Create<GetClusterConnectionEndpoint>(
             ctx =>
             {
@@ -30,13 +31,12 @@ public class GetClusterConnectionEndpointTests
             IncusTestKit.IdentityStore(),
             ConfigWithToken("expected"));
 
-    private static StubClusterRepository WithMockCluster()
+    private static ZoneOptions WithMockCluster()
     {
-        var clusters = new StubClusterRepository();
-        ClusterAggregate cluster = ClusterAggregate.Create("mock", "incus-lab", "https://incus-lab:8443", Fingerprint);
-        cluster.SetProviderSettings(Titan.Domain.Aggregates.Platform.Cluster.ClusterProviderSettings.Create("UPLINK", "default", null));
-        clusters.Rows.Add(cluster);
-        return clusters;
+        ZoneConfig cluster = IncusTestKit.Cluster("mock", "https://incus-lab:8443", Fingerprint);
+        cluster.OvnUplinkNetwork = "UPLINK";
+        cluster.StoragePool = "default";
+        return new ZoneOptions { Zones = [cluster] };
     }
 
     [Fact]
@@ -71,13 +71,32 @@ public class GetClusterConnectionEndpointTests
         Assert.False(keyLeft);
     }
 
-    // Encryption__ClusterKey changed after the key was stored: a named 503, not a 500 and not a garbled key.
+    // The worker gets the very key pair the Secret holds.
     [Fact]
-    public async Task AKeyThatNoLongerDecrypts_IsClusterIdentityUnreadable()
+    public async Task TheKeyPair_IsTheConfiguredIdentity()
     {
-        var identities = new StubIdentityRepository();
-        await IncusTestKit.IdentityStore(identities).GetCertificateAsync(CancellationToken.None);
-        var otherKeyStore = new ProviderClientIdentityStore(identities, IncusTestKit.Cipher(keySeed: 7), new ProviderClientCertificateCache());
+        var identity = IncusTestKit.NewIdentity();
+        GetClusterConnectionEndpoint endpoint = Factory.Create<GetClusterConnectionEndpoint>(
+            ctx =>
+            {
+                ctx.Request.Headers["X-Internal-Token"] = "expected";
+                ctx.Request.RouteValues["zoneId"] = "mock";
+            },
+            WithMockCluster(),
+            IncusTestKit.IdentityStore(identity),
+            ConfigWithToken("expected"));
+
+        await endpoint.HandleAsync(CancellationToken.None);
+
+        Assert.Equal(identity.CertificatePem, endpoint.Response.ClientCertificatePem);
+        Assert.Equal(identity.KeyPem, endpoint.Response.ClientKeyPem);
+    }
+
+    // No identity configured (startup allows it only while no cluster is): a named 503, not a 500 and not an empty key.
+    [Fact]
+    public async Task NoIdentityConfigured_IsClusterIdentityUnreadable()
+    {
+        var otherKeyStore = new ProviderClientIdentityStore(Options.Create(new ProviderClientIdentityOptions()));
         GetClusterConnectionEndpoint endpoint = Factory.Create<GetClusterConnectionEndpoint>(
             ctx =>
             {
@@ -96,7 +115,7 @@ public class GetClusterConnectionEndpointTests
     [Fact]
     public async Task AZoneWithoutACluster_IsClusterNotFound()
     {
-        GetClusterConnectionEndpoint endpoint = EndpointFor(new StubClusterRepository(), "expected");
+        GetClusterConnectionEndpoint endpoint = EndpointFor(new ZoneOptions(), "expected");
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(() => endpoint.HandleAsync(CancellationToken.None));
         Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);

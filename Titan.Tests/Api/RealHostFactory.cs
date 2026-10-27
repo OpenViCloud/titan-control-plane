@@ -12,8 +12,6 @@ namespace Titan.Tests.Api;
 // A test that builds one with `new` calls InitializeAsync first; xUnit does it for a class fixture.
 public class RealHostFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
-    public const string PlaceholderClusterKey = "dGl0YW4tcGxhY2Vob2xkZXItY2x1c3Rlci1rZXkhISE=";
-
     private readonly TestPostgres _database = new();
     private readonly Dictionary<string, string?> _configuration;
     private readonly Dictionary<string, string> _settings;
@@ -61,7 +59,6 @@ public class RealHostFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var configuration = new Dictionary<string, string?>
         {
             ["ConnectionStrings:Titan"] = _database.GetConnectionString(),
-            ["Encryption:ClusterKey"] = PlaceholderClusterKey,
             ["Keycloak:Authority"] = "https://keycloak.test/realms/titan",
             ["Keycloak:Audience"] = "titan-api",
         };

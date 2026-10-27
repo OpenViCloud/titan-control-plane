@@ -1,13 +1,10 @@
-using System.Text;
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Platform.ProviderClientIdentity;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// Postgres behaviour of rows the shared fixture cannot hold for one test alone: the single provider client identity
-/// and the seeded catalog price. Each test gets its own empty database, migrated to the latest schema.
+/// Postgres behaviour of rows the shared fixture cannot hold for one test alone: the seeded catalog price. Each test gets its own empty database, migrated to the latest schema.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class OwnDatabaseDbTests : IAsyncLifetime
@@ -28,37 +25,6 @@ public sealed class OwnDatabaseDbTests : IAsyncLifetime
 
     private TitanDbContext NewDbContext() =>
         new(new DbContextOptionsBuilder<TitanDbContext>().UseNpgsql(_container.GetConnectionString()).Options);
-
-    private static string Certificate(string marker) =>
-        $"-----BEGIN CERTIFICATE-----\n{marker}\n-----END CERTIFICATE-----\n";
-
-    // Two control planes starting at once must end with one identity (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity):
-    // a second one would make every cluster that trusts the first refuse Titan.
-    [Fact]
-    public async Task TwoWritersStoringTheIdentity_EndWithOneRow_AndTheLoserIsToldSo()
-    {
-        var first = ProviderClientIdentity.Create(Certificate("first"), Encoding.UTF8.GetBytes("k1"), new string('1', 64));
-        var second = ProviderClientIdentity.Create(Certificate("second"), Encoding.UTF8.GetBytes("k2"), new string('2', 64));
-
-        bool firstStored;
-        bool secondStored;
-        await using (var db = NewDbContext())
-        {
-            firstStored = await new ProviderClientIdentityRepository(db).TryAddAsync(first, CancellationToken.None);
-        }
-        await using (var db = NewDbContext())
-        {
-            secondStored = await new ProviderClientIdentityRepository(db).TryAddAsync(second, CancellationToken.None);
-        }
-
-        Assert.True(firstStored);
-        Assert.False(secondStored);
-        await using (var db = NewDbContext())
-        {
-            var only = await db.ProviderClientIdentities.AsNoTracking().SingleAsync();
-            Assert.Equal(new string('1', 64), only.Fingerprint);
-        }
-    }
 
     // The listed price is kept at the precision usage is billed at (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
     [Fact]

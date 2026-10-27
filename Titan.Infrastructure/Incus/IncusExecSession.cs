@@ -1,13 +1,13 @@
 using System.Net.WebSockets;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Application.Options;
 
 namespace Titan.Infrastructure.Incus;
 
 // The Incus half of an SSH session (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): `nc -N 127.0.0.1 22` run inside the
 // guest by its agent, and the operation's four websockets. -N passes the customer's end of the stream on to sshd; a
 // plain nc keeps running after a failed login until sshd's login grace time runs out.
-public sealed class IncusShellConnector(IClusterRepository clusters, IncusClientFactory factory)
+public sealed class IncusShellConnector(ZoneOptions zones, IncusClientFactory factory)
 {
     public static readonly IReadOnlyList<string> SshCommand = ["nc", "-N", "127.0.0.1", "22"];
 
@@ -17,11 +17,7 @@ public sealed class IncusShellConnector(IClusterRepository clusters, IncusClient
 
     public async Task<IncusExecSession> OpenSshAsync(string zoneId, string project, string instance, CancellationToken ct)
     {
-        var cluster = await clusters.FindByZoneIdAsync(zoneId, ct);
-        if (cluster == null)
-        {
-            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Zone '{zoneId}' has no cluster.");
-        }
+        var cluster = zones.ClusterOf(zoneId);
         IncusClient client = await factory.CreateAsync(cluster.Endpoint, cluster.ServerFingerprint, ct);
         using var opening = CancellationTokenSource.CreateLinkedTokenSource(ct);
         opening.CancelAfter(ConnectTimeout);

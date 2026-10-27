@@ -26,23 +26,25 @@ public class NetworkServiceTests
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
-    private readonly Mock<Titan.Domain.Repositories.Platform.IClusterRepository> _clusters = new();
     private readonly Titan.Tests.Fakes.FakeActivityRecorder _activity = new();
 
     // Facade over the network command and query handlers so the tests keep one call shape; it proves
     // nothing on its own — the handlers underneath are the real ones.
     private NetworkFacade CreateService() =>
-        new(_repo.Object, _firewallRepo.Object, _tenantRepo.Object, _clusters.Object, _currentUser.Object, _commands.Object, _activity);
+        new(_repo.Object, _firewallRepo.Object, _tenantRepo.Object, _zones, _currentUser.Object, _commands.Object, _activity);
 
-    private static readonly Titan.Application.Options.ZoneOptions Zones = new Titan.Application.Options.ZoneOptions { Zones = [new() { Id = "zone-1", Name = "Zone 1" }] };
+    private readonly Titan.Application.Options.ZoneOptions _zones = new()
+    {
+        Zones = [new() { Id = "zone-1", Name = "Zone 1", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) }],
+    };
 
     private sealed class NetworkFacade(
         INetworkRepository repo, IFirewallRuleRepository firewallRepo, ITenantRepository tenantRepo,
-        Titan.Domain.Repositories.Platform.IClusterRepository clusters,
+        Titan.Application.Options.ZoneOptions zones,
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateNetworkCommandResult> CreateAsync(CreateNetworkCommand req, CancellationToken ct = default)
-            => new CreateNetworkCommandHandler(repo, tenantRepo, clusters, currentUser, commands, activity, Zones).HandleAsync(req, ct);
+            => new CreateNetworkCommandHandler(repo, tenantRepo, currentUser, commands, activity, zones).HandleAsync(req, ct);
 
         public Task<List<NetworkQueryResult>> ListAsync(CancellationToken ct = default)
             => new ListNetworksQueryHandler(repo, currentUser).HandleAsync(new ListNetworksQuery(), ct);
@@ -906,9 +908,10 @@ public class NetworkServiceTests
 
     private void SetupZoneCluster(string? uplink, string? block)
     {
-        var cluster = Titan.Domain.Aggregates.Platform.Cluster.Cluster.Create("zone-1", null, "https://localhost:8443", new string('a', 64));
-        cluster.SetProviderSettings(Titan.Domain.Aggregates.Platform.Cluster.ClusterProviderSettings.Create(uplink, "default", block));
-        _clusters.Setup(c => c.FindByZoneIdAsync("zone-1", It.IsAny<CancellationToken>())).ReturnsAsync(cluster);
+        var cluster = _zones.Zones.Single(z => z.Id == "zone-1");
+        cluster.OvnUplinkNetwork = uplink;
+        cluster.StoragePool = "default";
+        cluster.Ipv6Block = block;
     }
 
     private void SetupFreshCreate()
@@ -1015,15 +1018,14 @@ public class NetworkServiceTests
         Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
     }
 
-    // Without IPv6 the zone's cluster is not even read: a zone with no public IPv6 still makes networks.
+    // Without IPv6 no /64 is looked for: a zone with no public IPv6 still makes networks.
     [Fact]
-    public async Task Create_WithoutPublicIpv6_DoesNotReadTheCluster()
+    public async Task Create_WithoutPublicIpv6_InAZoneWithNoIpv6_LooksForNo64()
     {
         SetupFreshCreate();
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default);
 
-        _clusters.VerifyNoOtherCalls();
         _repo.Verify(r => r.ListPublicIpv6IndexesInZoneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

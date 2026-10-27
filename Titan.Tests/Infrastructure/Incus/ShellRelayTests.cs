@@ -1,8 +1,8 @@
 using System.Net.WebSockets;
 using System.Text;
+using Titan.Application.Options;
 using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Sessions;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
@@ -28,11 +28,11 @@ public class ShellRelayTests
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var rows = new StubClusterRepository();
+        var configured = new ZoneOptions();
         FakeIncusExecServer incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
         incus.Behaviour = mode;
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, incus.Endpoint, incus.Fingerprint));
-        IncusExecSession session = await new IncusShellConnector(rows, new IncusClientFactory(store))
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
+        IncusExecSession session = await new IncusShellConnector(configured, new IncusClientFactory(store))
             .OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
         (WebSocket server, WebSocket customer) = InMemoryWebSocket.Pair();
         return new Rig(incus, session, server, customer);
