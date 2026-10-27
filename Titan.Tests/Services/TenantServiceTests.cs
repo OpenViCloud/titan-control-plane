@@ -412,6 +412,32 @@ public class TenantServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
+    // Two first requests of one user race: the loser's insert hits a unique index after the winner committed the
+    // tenant with its owner. The loser finds the caller owning a tenant and is done.
+    [Fact]
+    public async Task Bootstrap_LosingTheRaceToTheSameUser_IsDone()
+    {
+        _repo.SetupSequence(r => r.ExistsByOwnerAsync("user-1", default)).ReturnsAsync(false).ReturnsAsync(true);
+        _repo.Setup(r => r.SaveAsync(default)).ThrowsAsync(new ConcurrencyConflictException("TENANT_CREATE_CONFLICT", "lost"));
+
+        await CreateService().BootstrapAsync("user-1", "alice", "alice@example.com");
+
+        _repo.Verify(r => r.ExistsByOwnerAsync("user-1", default), Times.Exactly(2));
+    }
+
+    // The unique index refused the insert and the caller still owns nothing: the name belongs to another user.
+    [Fact]
+    public async Task Bootstrap_ANameAnotherUserHolds_IsTenantNameTaken()
+    {
+        _repo.Setup(r => r.ExistsByOwnerAsync("user-2", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.SaveAsync(default)).ThrowsAsync(new ConcurrencyConflictException("TENANT_CREATE_CONFLICT", "lost"));
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(
+            () => CreateService().BootstrapAsync("user-2", "alice", "other@example.com"));
+
+        Assert.Equal("TENANT_NAME_TAKEN", ex.Code);
+    }
+
     // ── ApproveVerifiedSignupAsync (self-heal, no admin) ────
 
     [Fact]
