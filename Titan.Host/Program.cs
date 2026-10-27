@@ -305,7 +305,7 @@ builder.Services.AddScoped<ProviderCommandCmd.ExtendProviderCommandLeaseCommandH
 builder.Services.AddScoped<ProviderCommandCmd.CompleteProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.FailProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandQry.GetLeasedProviderCommandQueryHandler>();
-// Validated on start so a configured cluster without a usable Secret stops startup rather than every Incus call
+// Validated on start so a broken Secret, or a configured cluster without one, stops startup rather than every Incus call
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
 builder.Services.AddOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>()
     .BindConfiguration(Titan.Infrastructure.Incus.ProviderClientIdentityOptions.SectionName)
