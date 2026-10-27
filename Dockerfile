@@ -8,14 +8,22 @@ COPY Titan.Infrastructure/Titan.Infrastructure.csproj Titan.Infrastructure/
 COPY Titan.Host/Titan.Host.csproj Titan.Host/
 COPY nuget.config ./
 
-RUN dotnet restore Titan.Host/Titan.Host.csproj -r linux-arm64
+# The runtime identifier of the image being built: buildx names the platform amd64, dotnet names it x64.
+ARG TARGETARCH
+RUN case "$TARGETARCH" in \
+      amd64) echo linux-x64 ;; \
+      arm64) echo linux-arm64 ;; \
+      *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac > /rid
+
+RUN dotnet restore Titan.Host/Titan.Host.csproj -r "$(cat /rid)"
 
 COPY . .
 
 RUN dotnet publish Titan.Host/Titan.Host.csproj \
     --configuration Release \
     --no-restore \
-    -r linux-arm64 \
+    -r "$(cat /rid)" \
     --output /publish
 
 RUN dotnet tool install --global dotnet-ef
@@ -25,7 +33,7 @@ RUN dotnet ef migrations bundle \
     --project Titan.Infrastructure \
     --startup-project Titan.Host \
     --self-contained \
-    -r linux-arm64 \
+    -r "$(cat /rid)" \
     -o /efbundle
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
