@@ -26,7 +26,9 @@ public class UpdateTemplateStatusEndpoint(UpdateTemplateStatusCommandHandler han
         // A report without its zone cannot say whose state it is — a worker older than per-zone templates sends
         // none; refusing it fails that run, and the next sync-all with both images live converges
         // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
-        if (string.IsNullOrEmpty(req.ZoneId))
+        // clusterId, or zoneId from a worker that predates it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
+        string? clusterId = string.IsNullOrEmpty(req.ClusterId) ? req.ZoneId : req.ClusterId;
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
@@ -34,7 +36,7 @@ public class UpdateTemplateStatusEndpoint(UpdateTemplateStatusCommandHandler han
 
         var templateId = Route<Guid>("templateId");
         await handler.HandleAsync(
-            new UpdateTemplateStatusCommand(templateId, req.ZoneId, req.Report, req.Exists, req.ExternalId, req.Reason,
+            new UpdateTemplateStatusCommand(templateId, clusterId, req.Report, req.Exists, req.ExternalId, req.Reason,
                 req.Detail),
             ct);
         await SendNoContentAsync(ct);
@@ -44,8 +46,9 @@ public class UpdateTemplateStatusEndpoint(UpdateTemplateStatusCommandHandler han
 // The worker's JSON body; UpdateTemplateStatusCommand additionally carries the route id.
 public record UpdateTemplateStatusRequest(
     string Report,
-    string? ZoneId = null,       // required; nullable so a body without it reaches the 400 above
+    string? ZoneId = null,       // this or ClusterId required; nullable so a body without either reaches the 400 above
     bool? Exists = null,
     string? ExternalId = null,
     string? Reason = null,
-    string? Detail = null);
+    string? Detail = null,
+    string? ClusterId = null);

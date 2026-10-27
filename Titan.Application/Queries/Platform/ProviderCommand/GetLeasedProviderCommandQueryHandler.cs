@@ -35,6 +35,7 @@ public class GetLeasedProviderCommandQueryHandler(IProviderCommandRepository rep
             leased.Key,
             leased.Kind,
             leased.ZoneId,
+            leased.ZoneId,
             payload.RootElement.Clone(),
             leased.Attempts,
             ProviderCommandAggregate.MaxAttempts,

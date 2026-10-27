@@ -12,6 +12,8 @@ public record LeasedProviderCommandResult(
     string Key,
     string Kind,
     string ZoneId,
+    // The same value as ZoneId, under the name the worker moves to (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
+    string ClusterId,
     JsonElement Payload,
     int Attempt,
     int MaxAttempts,
