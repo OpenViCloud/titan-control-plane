@@ -104,9 +104,9 @@ public class TenantResolutionMiddlewareTests
         VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "alice" && t.Email == "alice@example.com");
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a first login of an account the realm declares is
-    // created pending and approved in the same request, wallet first — the request already sees an Active tenant with
-    // a wallet.
+    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a first login of an account with the realm role
+    // auto-approve is created pending and approved in the same request, wallet first — the request already sees an
+    // Active tenant with a wallet.
     [Fact]
     public async Task FirstLogin_DeclaredAccount_EndsActive_WithAWallet_OpenedBeforeTheApproval()
     {
