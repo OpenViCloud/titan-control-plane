@@ -14,9 +14,11 @@ namespace Titan.Infrastructure.Auth;
 public class TenantResolutionMiddleware(
     ITenantRepository tenantRepository,
     BootstrapTenantCommandHandler bootstrapTenant,
-    ApproveVerifiedSignupCommandHandler approveVerifiedSignup,
+    ApproveDeclaredAccountCommandHandler approveDeclaredAccount,
     OpenWalletCommandHandler openWallet) : IMiddleware
 {
+    public const string AutoApproveRole = "auto-approve";
+
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
         var keycloakUserId = GetKeycloakUserId(context);
@@ -46,15 +48,16 @@ public class TenantResolutionMiddleware(
             return;
         }
 
-        // A PendingApproval signup whose email is verified, a new one included, is approved on the spot
+        // A PendingApproval tenant of an account the realm declares (role auto-approve), a new one included, is approved
+        // on the spot; every other signup waits for an admin
         // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation). Wallet before approval: if the process dies
         // between the two commits, the next request approves a tenant that already has a wallet; never an Active
         // tenant without one. Both steps are idempotent. Fires at most once, since approval leaves PendingApproval.
-        if (result.Value.Status == TenantStatus.PendingApproval && IsEmailVerified(context))
+        if (result.Value.Status == TenantStatus.PendingApproval && context.User.IsInRole(AutoApproveRole))
         {
             await openWallet.HandleAsync(new OpenWalletCommand(result.Value.TenantId), context.RequestAborted);
-            await approveVerifiedSignup.HandleAsync(
-                new ApproveVerifiedSignupCommand(result.Value.TenantId), context.RequestAborted);
+            await approveDeclaredAccount.HandleAsync(
+                new ApproveDeclaredAccountCommand(result.Value.TenantId), context.RequestAborted);
             result = await tenantRepository.FindTenantByMemberAsync(keycloakUserId, context.RequestAborted);
             if (!result.HasValue)
             {
@@ -93,10 +96,6 @@ public class TenantResolutionMiddleware(
 
         await next(context);
     }
-
-    // Keycloak emits email_verified as a string claim ("true"/"false"); a missing claim is unverified.
-    private static bool IsEmailVerified(HttpContext context) => string.Equals(
-        context.User.FindFirst("email_verified")?.Value, "true", StringComparison.OrdinalIgnoreCase);
 
     private string? GetKeycloakUserId(HttpContext context)
     {

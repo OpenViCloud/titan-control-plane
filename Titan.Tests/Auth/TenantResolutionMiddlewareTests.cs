@@ -26,7 +26,7 @@ public class TenantResolutionMiddlewareTests
     private TenantResolutionMiddleware CreateMiddleware() => new(
         _repo.Object,
         new BootstrapTenantCommandHandler(_repo.Object),
-        new ApproveVerifiedSignupCommandHandler(_repo.Object),
+        new ApproveDeclaredAccountCommandHandler(_repo.Object),
         new OpenWalletCommandHandler(_walletRepo.Object, new CreditOptions { Currency = "VND" }));
 
     private void VerifyNoWalletOpened() =>
@@ -104,10 +104,11 @@ public class TenantResolutionMiddlewareTests
         VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "alice" && t.Email == "alice@example.com");
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a verified first login is created pending and
-    // approved in the same request, wallet first — the request already sees an Active tenant with a wallet.
+    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a first login of an account the realm declares is
+    // created pending and approved in the same request, wallet first — the request already sees an Active tenant with
+    // a wallet.
     [Fact]
-    public async Task FirstLogin_VerifiedEmail_EndsActive_WithAWallet_OpenedBeforeTheApproval()
+    public async Task FirstLogin_DeclaredAccount_EndsActive_WithAWallet_OpenedBeforeTheApproval()
     {
         Tenant? created = null;
         _repo.Setup(r => r.Add(It.IsAny<Tenant>())).Callback<Tenant>(t => created = t);
@@ -123,7 +124,7 @@ public class TenantResolutionMiddlewareTests
              });
         var calls = RecordWalletAndTenantSaves();
 
-        var ctx = VerifiedContext("POST");
+        var ctx = DeclaredAccountContext("POST");
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
 
@@ -136,9 +137,9 @@ public class TenantResolutionMiddlewareTests
         Assert.Equal(created.Id, ctx.Items["TenantId"]);
     }
 
-    // A MISSING email_verified claim is treated as unverified: the safe default.
+    // A self-signup waits for an admin, however its email was verified: only the realm's role approves on sign-in.
     [Fact]
-    public async Task FirstLogin_NoEmailVerifiedClaim_StaysPending_WithoutAWallet()
+    public async Task FirstLogin_VerifiedEmailWithoutTheRole_StaysPending_WithoutAWallet()
     {
         _repo.SetupSequence(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
              .ReturnsAsync((ValueTuple<Guid, TenantStatus>?)null)
@@ -151,6 +152,7 @@ public class TenantResolutionMiddlewareTests
             new Claim("sub", "user-1"),
             new Claim("preferred_username", "bob"),
             new Claim("email", "bob@openvicloud.com"),
+            new Claim("email_verified", "true"),
         }, authenticationType: "test"));
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
@@ -323,7 +325,7 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Fact]
-    public async Task PendingApproval_VerifiedEmail_OpensTheWalletThenApproves_AndPassesThrough()
+    public async Task PendingApproval_DeclaredAccount_OpensTheWalletThenApproves_AndPassesThrough()
     {
         var pending = Tenant.CreatePending("bob", "user-1", "bob@openvicloud.com");
         _repo.SetupSequence(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
@@ -332,7 +334,7 @@ public class TenantResolutionMiddlewareTests
         _repo.Setup(r => r.FindByIdAsync(pending.Id, It.IsAny<CancellationToken>())).ReturnsAsync(pending);
         var calls = RecordWalletAndTenantSaves();
 
-        var ctx = VerifiedContext("POST"); // a write — proves the self-heal cleared the PendingApproval gate
+        var ctx = DeclaredAccountContext("POST"); // a write — proves the self-heal cleared the PendingApproval gate
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
 
@@ -356,14 +358,14 @@ public class TenantResolutionMiddlewareTests
         _walletRepo.Setup(w => w.GetByTenantForUpdateAsync(pending.Id, It.IsAny<CancellationToken>()))
                    .ReturnsAsync(Wallet.Open(pending.Id, "VND"));
 
-        await CreateMiddleware().InvokeAsync(VerifiedContext("GET"), _next.Object);
+        await CreateMiddleware().InvokeAsync(DeclaredAccountContext("GET"), _next.Object);
 
         Assert.Equal(TenantStatus.Active, pending.Status);
         VerifyNoWalletOpened();
     }
 
     [Fact]
-    public async Task PendingApproval_UnverifiedEmail_DoesNotSelfHeal_WriteStill403()
+    public async Task PendingApproval_WithoutTheRole_DoesNotSelfHeal_WriteStill403()
     {
         var tenantId = Guid.NewGuid();
         _repo.Setup(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
@@ -375,7 +377,7 @@ public class TenantResolutionMiddlewareTests
         {
             new Claim("sub", "user-1"),
             new Claim("email", "bob@openvicloud.com"),
-            // no email_verified claim → unverified
+            new Claim("email_verified", "true"),
         }, authenticationType: "test"));
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
@@ -423,7 +425,8 @@ public class TenantResolutionMiddlewareTests
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
-    private static DefaultHttpContext VerifiedContext(string method)
+    // The role reaches the principal as a flat role claim (KeycloakRealmRolesClaimsTransformation).
+    private static DefaultHttpContext DeclaredAccountContext(string method)
     {
         var ctx = new DefaultHttpContext { Response = { Body = new MemoryStream() } };
         ctx.Request.Method = method;
@@ -432,7 +435,7 @@ public class TenantResolutionMiddlewareTests
             new Claim("sub", "user-1"),
             new Claim("preferred_username", "bob"),
             new Claim("email", "bob@openvicloud.com"),
-            new Claim("email_verified", "true"),
+            new Claim(ClaimTypes.Role, TenantResolutionMiddleware.AutoApproveRole),
         }, authenticationType: "test"));
         return ctx;
     }
