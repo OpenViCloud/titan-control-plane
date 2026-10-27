@@ -45,7 +45,7 @@ public class NetworkTests
     {
         var network = MakeActiveNetwork();
         var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-zone"));
-        Assert.Equal("NETWORK_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class NetworkTests
     {
         var network = NetworkIn(Seed.Creating);
         var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-zone"));
-        Assert.Equal("NETWORK_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]

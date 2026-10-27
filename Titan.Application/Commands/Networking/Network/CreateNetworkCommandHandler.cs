@@ -33,7 +33,7 @@ public class CreateNetworkCommandHandler(
         if (req.Cidr is not null && await repo.HasCidrOverlapAsync(tenantId, req.Cidr, ct))
             throw new BusinessException("NETWORK_CIDR_OVERLAP", $"CIDR '{req.Cidr}' overlaps with an existing network.");
 
-        zones.Require(req.ZoneId); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice
+        zones.ClusterOf(req.ZoneId); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice
         NetworkPublicIpv6? publicIpv6 = null;
         int activePublicIpv6Count = 0;
         if (req.EnablePublicIpv6)

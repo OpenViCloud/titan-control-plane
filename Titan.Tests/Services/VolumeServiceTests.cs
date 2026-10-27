@@ -155,7 +155,7 @@ public class VolumeServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             CreateService().CreateAsync(new CreateVolumeCommand("vol-01", "offering-1", "nowhere", 50), default));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Volume>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }
@@ -264,7 +264,7 @@ public class VolumeServiceTests
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id), default));
 
-        Assert.Equal("VOLUME_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("VOLUME_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]

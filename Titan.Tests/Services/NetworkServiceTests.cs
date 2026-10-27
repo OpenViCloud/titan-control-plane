@@ -129,7 +129,7 @@ public class NetworkServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             CreateService().CreateAsync(new CreateNetworkCommand("my-net", "nowhere"), default));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }

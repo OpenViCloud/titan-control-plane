@@ -262,7 +262,7 @@ public class Network
     {
         bool vmIsInAnotherZone = vmZoneId != ZoneId;
         if (vmIsInAnotherZone)
-            throw new BusinessException("NETWORK_ZONE_MISMATCH",
+            throw new BusinessException("NETWORK_CLUSTER_MISMATCH",
                 $"Network is in zone '{ZoneId}', the VM was asked for zone '{vmZoneId}'.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_NOT_ACTIVE", "Network must be Created on Incus to deploy a VM.");

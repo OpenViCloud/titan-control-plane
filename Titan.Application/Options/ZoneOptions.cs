@@ -81,23 +81,12 @@ public class ZoneOptions
         return new ZoneOptions { Zones = clusters };
     }
 
-    // A zone the customer picks must be one Titan has: an unknown id would fall through the cluster resolver to
-    // the config section's cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice).
-    public void Require(string zoneId)
-    {
-        bool zoneExists = Zones.Any(z => z.Id == zoneId);
-        if (!zoneExists)
-        {
-            throw new NotFoundException("ZONE_NOT_FOUND", $"Zone '{zoneId}' not found.");
-        }
-    }
-
     public ZoneConfig ClusterOf(string zoneId)
     {
         ZoneConfig? cluster = Zones.FirstOrDefault(z => z.Id == zoneId);
         if (cluster == null)
         {
-            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Zone '{zoneId}' has no cluster.");
+            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Cluster '{zoneId}' is not configured.");
         }
         return cluster;
     }

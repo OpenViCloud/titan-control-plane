@@ -240,7 +240,7 @@ public class TemplateServiceTests
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => svc.ListAsync("vn-hcm-1"));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
     }
 
     [Fact]
@@ -387,7 +387,7 @@ public class TemplateServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             svc.UpdateStatusAsync(t.Id, Report("Created", extId: "9", zoneId: "vn-hcm-1")));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
         Assert.Null(t.ZoneOrNull("vn-hcm-1"));
         Assert.False(repo.Saved);
     }

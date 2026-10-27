@@ -55,7 +55,7 @@ public class CreateVmCommandHandler(
             req.DiskSizeGb ?? 0,
             req.UserData);
 
-        zones.Require(req.ZoneId);
+        zones.ClusterOf(req.ZoneId);
 
         if (await repo.ExistsByNameAsync(callerId, req.Name, ct))
             throw new ConflictException("VM_NAME_TAKEN", $"VM name '{req.Name}' is already taken.");

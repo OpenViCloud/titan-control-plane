@@ -56,7 +56,7 @@ public class TemplatesZoneQueryTests(RealHostFactory factory) : IClassFixture<Re
         HttpResponseMessage any = await client.GetAsync("/v1/templates");
 
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
-        Assert.Equal("ZONE_NOT_FOUND", (await unknown.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
+        Assert.Equal("CLUSTER_NOT_FOUND", (await unknown.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("code").GetString());
         Assert.Equal(HttpStatusCode.OK, any.StatusCode);
     }
 }

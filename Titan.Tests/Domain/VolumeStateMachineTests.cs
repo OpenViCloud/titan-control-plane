@@ -217,7 +217,7 @@ public class VolumeStateMachineTests
         var v = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "zone-b", "std", 20);
         v.MarkCreated("vol11");
         var ex = Assert.Throws<BusinessException>(() => v.Attach(VmForAttach(VmShape.Running)));
-        Assert.Equal("VOLUME_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("VOLUME_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]

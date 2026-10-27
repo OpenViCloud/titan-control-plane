@@ -40,7 +40,7 @@ public class UpdateTemplateStatusCommandHandler(
         }
 
         // The aggregate records an observation for any zone it is handed; whether the zone exists is checked here.
-        zones.Require(req.ZoneId);
+        zones.ClusterOf(req.ZoneId);
 
         var template = await repo.FindByIdAsync(req.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");

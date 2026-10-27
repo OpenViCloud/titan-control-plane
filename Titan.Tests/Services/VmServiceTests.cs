@@ -392,7 +392,7 @@ public class VmServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
             new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "nowhere", null), default));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }
@@ -411,7 +411,7 @@ public class VmServiceTests
         var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(
             new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-2", null), default));
 
-        Assert.Equal("NETWORK_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }

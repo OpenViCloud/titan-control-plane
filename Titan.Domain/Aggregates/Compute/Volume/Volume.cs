@@ -126,7 +126,7 @@ public class Volume
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
         var vmExternalId = vm.BeginVolumeAttach();
         if (ZoneId != vm.ZoneId)
-            throw new BusinessException("VOLUME_ZONE_MISMATCH", "Volume and VM must be in the same zone.");
+            throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same zone.");
 
         DesiredAttachedVmId = vm.Id;
         PendingIntentId = Guid.NewGuid();

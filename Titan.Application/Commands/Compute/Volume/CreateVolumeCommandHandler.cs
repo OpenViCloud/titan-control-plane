@@ -38,7 +38,7 @@ public class CreateVolumeCommandHandler(
 
         // Quota refuses inside the factory — see CreateVmCommandHandler.
         var volume = VolumeAggregate.Create(tenant, activeVolumeCount, req.Name, req.ZoneId, req.VolumeOfferingId, req.SizeGb);
-        zones.Require(volume.ZoneId); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice
+        zones.ClusterOf(volume.ZoneId); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice
         repo.Add(volume);
         activity.Stage("volume.create_requested", "volume", volume.Id, volume.Name); // atomic with the volume insert
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);

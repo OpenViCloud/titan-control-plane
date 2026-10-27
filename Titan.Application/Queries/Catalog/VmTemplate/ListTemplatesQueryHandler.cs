@@ -21,7 +21,7 @@ public class ListTemplatesQueryHandler(IVmTemplateRepository repo, ZoneOptions z
         }
         else
         {
-            zones.Require(zoneId);
+            zones.ClusterOf(zoneId);
             templates = await repo.ListSyncedInZoneAsync(zoneId, ct);
         }
         // Not listed ⇒ not offered, synced or not (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed).
