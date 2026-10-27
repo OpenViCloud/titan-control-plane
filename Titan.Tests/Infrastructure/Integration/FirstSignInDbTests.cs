@@ -14,8 +14,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 
 /// The first request of a signed-in user creates their tenant, and the unique indexes on the tenant's name and its
 /// owner are the only guard when two such requests overlap (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-name-taken).
-/// InMemory enforces no index, so only Postgres shows them. Each request runs the real middleware on its own context,
-/// as the host does per request.
+/// InMemory enforces no index, so only Postgres shows them. A request under test runs the real middleware on its own
+/// context, as the host does per request.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -53,8 +53,9 @@ public class FirstSignInDbTests(PostgresFixture pg)
         return await db.Tenants.CountAsync(t => t.Name == name);
     }
 
-    // The first request's insert is still open when the second request of the same user inserts too: the second
-    // waits on the index, then loses once the first commits. It must still pass, onto the tenant the first made.
+    // The first request is stood in for by its tenant insert, held open in a transaction while the second request of
+    // the same user runs: the second waits on the index, then loses once the first commits. It must still pass, onto
+    // the tenant the first made.
     [Fact]
     public async Task TheSameUsersSecondFirstRequest_LosingTheInsertRace_PassesOntoTheOneTenant()
     {
@@ -88,7 +89,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
         Assert.Equal(tenant.Id, secondRequest.Items["TenantId"]);
     }
 
-    // Another user already holds the name: every request of the newcomer is refused with its own code, and no
+    // Another user already holds the name: every request of the newcomer is refused with TENANT_NAME_TAKEN, and no
     // second tenant appears.
     [Fact]
     public async Task ANameAnotherUserHolds_RefusesEveryRequestOfTheNewcomer_WithTenantNameTaken()

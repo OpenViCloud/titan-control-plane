@@ -39,8 +39,9 @@ public class TenantRepository(TitanDbContext db) : ITenantRepository
         catch (DbUpdateException ex)
             when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // A new tenant lost to a committed row on tenants(name) or members(keycloak_user_id). Detach the losing
-            // inserts: the request's later saves share this context and would resubmit them.
+            // Only a first sign-in inserts here: its tenant lost to a committed row on tenants(name) or
+            // tenant_members(keycloak_user_id). Detach the losing inserts: the request's later saves share this context
+            // and would resubmit them.
             foreach (var entry in db.ChangeTracker.Entries()
                          .Where(e => e.State == EntityState.Added).ToList())
                 entry.State = EntityState.Detached;
