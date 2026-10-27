@@ -42,7 +42,7 @@ public class DeleteLoadBalancerCommandHandler(
         string vip = loadBalancer.RequestDelete();
         activity.Stage("load_balancer.delete_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
         await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer.Id, loadBalancer.ExternalNetworkId, vip,
-            TenantAggregate.ProjectNameFor(loadBalancer.TenantId), loadBalancer.ZoneId, ct);
+            TenantAggregate.ProjectNameFor(loadBalancer.TenantId), loadBalancer.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -54,7 +54,7 @@ public class SePayWebhookEndpoint(
         await SendOkAsync(new { success = true }, ct);
     }
 
-    // SePay sends transactionDate like "2026-08-27 14:02:37" (no zone). Treat as UTC; accept ISO too.
+    // SePay sends transactionDate like "2026-08-27 14:02:37" (no cluster). Treat as UTC; accept ISO too.
     private static bool TryParseTransactionDate(string? s, out DateTimeOffset value)
     {
         value = default;

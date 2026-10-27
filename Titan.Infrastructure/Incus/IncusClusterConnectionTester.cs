@@ -16,8 +16,8 @@ public sealed class IncusClusterConnectionTester(IncusClientFactory factory) : I
         try
         {
             // The configuration's own rules decide what a valid endpoint and fingerprint are.
-            normalizedEndpoint = ZoneConfig.NormalizeEndpoint(endpoint);
-            normalizedFingerprint = ZoneConfig.NormalizeFingerprint(serverFingerprint);
+            normalizedEndpoint = ClusterConfig.NormalizeEndpoint(endpoint);
+            normalizedFingerprint = ClusterConfig.NormalizeFingerprint(serverFingerprint);
         }
         catch (ArgumentException e)
         {

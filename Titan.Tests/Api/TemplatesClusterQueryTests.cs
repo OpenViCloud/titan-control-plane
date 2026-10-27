@@ -8,11 +8,11 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Api;
 
-/// `GET /v1/templates?zoneId=` is declared in the spec, so a client generated from it (CLI, Terraform provider) has
-/// the parameter, and the host still reads it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+/// `GET /v1/templates?clusterId=` is declared in the spec, so a client generated from it (CLI, Terraform provider) has
+/// the parameter, and the host still reads it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
 [Trait("Category", "FullHost")]
 [Collection("Http")]
-public class TemplatesZoneQueryTests(RealHostFactory factory) : IClassFixture<RealHostFactory>
+public class TemplatesClusterQueryTests(RealHostFactory factory) : IClassFixture<RealHostFactory>
 {
     private async Task<HttpClient> ClientOfANewTenantAsync()
     {
@@ -35,24 +35,24 @@ public class TemplatesZoneQueryTests(RealHostFactory factory) : IClassFixture<Re
     }
 
     [Fact]
-    public async Task TheSpec_DeclaresAnOptionalZoneIdQuery()
+    public async Task TheSpec_DeclaresAnOptionalClusterIdQuery()
     {
         string raw = await factory.CreateClient().GetStringAsync("/swagger/v1/swagger.json");
         JsonElement operation = JsonDocument.Parse(raw).RootElement
             .GetProperty("paths").GetProperty("/v1/templates").GetProperty("get");
 
-        JsonElement zoneId = Assert.Single(operation.GetProperty("parameters").EnumerateArray(),
-            p => p.GetProperty("name").GetString() == "zoneId");
-        Assert.Equal("query", zoneId.GetProperty("in").GetString());
-        Assert.False(zoneId.TryGetProperty("required", out JsonElement required) && required.GetBoolean());
+        JsonElement clusterId = Assert.Single(operation.GetProperty("parameters").EnumerateArray(),
+            p => p.GetProperty("name").GetString() == "clusterId");
+        Assert.Equal("query", clusterId.GetProperty("in").GetString());
+        Assert.False(clusterId.TryGetProperty("required", out JsonElement required) && required.GetBoolean());
     }
 
     [Fact]
-    public async Task AnUnknownZone_IsZoneNotFound_AndNoZone_IsOk()
+    public async Task AnUnknownCluster_IsClusterNotFound_AndNoCluster_IsOk()
     {
         HttpClient client = await ClientOfANewTenantAsync();
 
-        HttpResponseMessage unknown = await client.GetAsync("/v1/templates?zoneId=no-such-zone");
+        HttpResponseMessage unknown = await client.GetAsync("/v1/templates?clusterId=no-such-cluster");
         HttpResponseMessage any = await client.GetAsync("/v1/templates");
 
         Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);

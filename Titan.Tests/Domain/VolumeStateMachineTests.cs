@@ -26,7 +26,7 @@ public class VolumeStateMachineTests
 
     private static Volume VolumeIn(Seed seed)
     {
-        var v = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "zone-a", "std", 20);
+        var v = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "cluster-a", "std", 20);
         switch (seed)
         {
             case Seed.Creating: break; // Create() lands here
@@ -74,7 +74,7 @@ public class VolumeStateMachineTests
 
     private static Vm VmForAttach(VmShape shape)
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (shape == VmShape.Creating) return vm;
         vm.MarkRunning("vm42", "10.0.0.5");
         if (shape == VmShape.Ready) vm.MarkObserved(VmState.Ready, "10.0.0.5");
@@ -212,9 +212,9 @@ public class VolumeStateMachineTests
     }
 
     [Fact]
-    public void Attach_ToAVmInAnotherZone_Throws()
+    public void Attach_ToAVmInAnotherCluster_Throws()
     {
-        var v = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "zone-b", "std", 20);
+        var v = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "cluster-b", "std", 20);
         v.MarkCreated("vol11");
         var ex = Assert.Throws<BusinessException>(() => v.Attach(VmForAttach(VmShape.Running)));
         Assert.Equal("VOLUME_CLUSTER_MISMATCH", ex.Code);

@@ -45,7 +45,7 @@ public class VolumeServiceTests
     private VolumeFacade CreateService() => new(
         _repo.Object, _offerings, _snapshotRepo.Object, _vmRepo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object, _activity);
 
-    private static readonly Titan.Application.Options.ZoneOptions Zones = new Titan.Application.Options.ZoneOptions { Zones = [new() { Id = "zone-1", Name = "Zone 1" }] };
+    private static readonly Titan.Application.Options.ClusterOptions Clusters = new Titan.Application.Options.ClusterOptions { Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }] };
 
     private sealed class VolumeFacade(
         IVolumeRepository repo,
@@ -58,7 +58,7 @@ public class VolumeServiceTests
         IActivityRecorder activity)
     {
         public Task<CreateVolumeCommandResult> CreateAsync(CreateVolumeCommand req, CancellationToken ct = default)
-            => new VolumeCmd.CreateVolumeCommandHandler(repo, offeringRepo, tenantRepo, currentUser, commands, activity, Zones)
+            => new VolumeCmd.CreateVolumeCommandHandler(repo, offeringRepo, tenantRepo, currentUser, commands, activity, Clusters)
                 .HandleAsync(req, ct);
 
         public Task AttachAsync(Guid volumeId, AttachVolumeBody body, CancellationToken ct = default)
@@ -106,7 +106,7 @@ public class VolumeServiceTests
                                                 && v.Transition == VolumeTransition.Creating)), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeCreateAsync(
-            It.IsAny<Guid>(), "vol-01", "zone-1", 50,
+            It.IsAny<Guid>(), "vol-01", "cluster-1", 50,
             "t-" + _tenant!.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -119,7 +119,7 @@ public class VolumeServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().CreateAsync(new CreateVolumeCommand("vol-01", "no-such-offering", "zone-1", 50), default));
+            () => CreateService().CreateAsync(new CreateVolumeCommand("vol-01", "no-such-offering", "cluster-1", 50), default));
 
         Assert.Equal("VOLUME_OFFERING_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Volume>()), Times.Never);
@@ -138,15 +138,15 @@ public class VolumeServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().CreateAsync(new CreateVolumeCommand("vol-01", "Offering-1", "zone-1", 50), default));
+            () => CreateService().CreateAsync(new CreateVolumeCommand("vol-01", "Offering-1", "cluster-1", 50), default));
 
         Assert.Equal("VOLUME_OFFERING_NOT_FOUND", ex.Code);
     }
 
-    // A zone Titan does not have must not fall through to a default cluster
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice).
+    // A cluster Titan does not have must not fall through to a default cluster
+    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
-    public async Task Create_UnknownZone_ThrowsNotFound_AndEnqueuesNoCommand()
+    public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -191,7 +191,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, zoneId: volume.ZoneId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -200,7 +200,7 @@ public class VolumeServiceTests
         Assert.Equal(VolumeTransition.Attaching, volume.Transition);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         _commands.Verify(w => w.EnqueueVolumeAttachAsync(
-            volume.Id, "cs-vol-1", "cs-vm-1", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, "cs-vol-1", "cs-vm-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public class VolumeServiceTests
         // Volume.Attach(vm) takes the VM, so the VM lookup comes first and a missing VM wins with 404.
         // Seeding a real VM isolates the rule this test is named after instead of leaning on error
         // precedence.
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -253,11 +253,11 @@ public class VolumeServiceTests
     }
 
     [Fact]
-    public async Task Attach_ZoneMismatch_ThrowsBusinessException()
+    public async Task Attach_ClusterMismatch_ThrowsBusinessException()
     {
         SetupCurrentUser(TenantId);
-        var volume = MakeVolume(VolumeSeed.Available, zoneId: "zone-a");
-        var vm = MakeVm(VmState.Running, zoneId: "zone-b");
+        var volume = MakeVolume(VolumeSeed.Available, clusterId: "cluster-a");
+        var vm = MakeVm(VmState.Running, clusterId: "cluster-b");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -272,7 +272,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        var vm = MakeVm(VmState.Error, zoneId: volume.ZoneId);
+        var vm = MakeVm(VmState.Error, clusterId: volume.ClusterId);
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -295,7 +295,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeTransition.Detaching, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDetachAsync(
-            volume.Id, "cs-vol-2", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, "cs-vol-2", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -319,7 +319,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, zoneId: volume.ZoneId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -345,7 +345,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "cs-vol-3", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -457,7 +457,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, zoneId: volume.ZoneId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -517,7 +517,7 @@ public class VolumeServiceTests
     }
 
     private static CreateVolumeCommand MakeCreateRequest() =>
-        new("vol-01", "offering-1", "zone-1", 50);
+        new("vol-01", "offering-1", "cluster-1", 50);
 
     // ── Callbacks (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-reports) ─────────────
 
@@ -727,7 +727,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "cs-vol-3", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Only the delete command ends a delete: the reconciler not finding the volume is NotFound.
@@ -833,7 +833,7 @@ public class VolumeServiceTests
         await CreateService().DeleteAsync(volume.Id, default);
 
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "vol7", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, "vol7", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -874,7 +874,7 @@ public class VolumeServiceTests
         var volume = MakeVolume(VolumeSeed.Available);
         volume.MarkObserved(null, true);
         SetupVolume(volume);
-        var vm = MakeVm(VmState.Running, zoneId: volume.ZoneId);
+        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var attach = await Assert.ThrowsAsync<BusinessException>(() => CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id)));
@@ -927,14 +927,14 @@ public class VolumeServiceTests
 
     private static Volume MakeVolume(
         VolumeSeed status,
-        string? zoneId = null,
+        string? clusterId = null,
         string? externalVolumeId = null,
         Guid? tenantId = null,
         Vm? attachTo = null)
     {
-        var vol = Volume.CreateUnchecked(tenantId ?? TenantId, "vol-01", zoneId ?? "zone-1", "offering-1", 50);
+        var vol = Volume.CreateUnchecked(tenantId ?? TenantId, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
         var externalId = externalVolumeId ?? "cs-vol-default";
-        Vm target = attachTo ?? MakeVm(VmState.Running, zoneId: zoneId, tenantId: tenantId);
+        Vm target = attachTo ?? MakeVm(VmState.Running, clusterId: clusterId, tenantId: tenantId);
         switch (status)
         {
             case VolumeSeed.Creating:
@@ -972,7 +972,7 @@ public class VolumeServiceTests
 
     private static Vm MakeVm(
         VmState status,
-        string? zoneId = null,
+        string? clusterId = null,
         string? externalVmId = null,
         Guid? tenantId = null)
     {
@@ -982,7 +982,7 @@ public class VolumeServiceTests
             "test-vm",
             "offering-1",
             "tmpl-1",
-            zoneId ?? "zone-1",
+            clusterId ?? "cluster-1",
             0);
 
         switch (status)

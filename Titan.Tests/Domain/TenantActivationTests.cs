@@ -4,7 +4,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Tests.Domain;
 
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation. A tenant has no provider account any more: its
-// Incus project is created per zone when its first resource there is, so approving it makes it Active at once.
+// Incus project is created per cluster when its first resource there is, so approving it makes it Active at once.
 public class TenantActivationTests
 {
     private static Tenant Pending() => Tenant.CreatePending("acme", "owner-1", "admin@acme.com");

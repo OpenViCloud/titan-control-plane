@@ -15,8 +15,8 @@ public record ErrorStatus(int Status, string Code)
     public const string RequestInProgressCode = "REQUEST_IN_PROGRESS";
     public const string ProviderCommandKeyIndex = "IX_provider_commands_key";
 
-    /// Two network creates in one zone picked the same free /64 at the same instant; the second commit hits the
-    /// per-zone unique index (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Asking again picks another /64.
+    /// Two network creates in one cluster picked the same free /64 at the same instant; the second commit hits the
+    /// per-cluster unique index (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Asking again picks another /64.
     public const string Ipv6AllocationConflictCode = "IPV6_ALLOCATION_CONFLICT";
 
     /// Two load balancer creates on one network picked the same free VIP at the same instant

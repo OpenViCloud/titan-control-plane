@@ -10,7 +10,7 @@ using Titan.Infrastructure.Incus;
 namespace Titan.Tests.Infrastructure.Incus;
 
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection — the one route that hands Titan's private key out. It
-// composes the zone's configured cluster with the client identity, so it carries its own logic and gets its own test.
+// composes the cluster's configuration with the client identity, so it carries its own logic and gets its own test.
 public class GetClusterConnectionEndpointTests
 {
     private const string Fingerprint = "ffcf78030000000000000000000000000000000000000000000000000000108f";
@@ -20,27 +20,27 @@ public class GetClusterConnectionEndpointTests
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Internal:Token"] = token })
             .Build();
 
-    private static GetClusterConnectionEndpoint EndpointFor(ZoneOptions clusters, string sentToken) =>
+    private static GetClusterConnectionEndpoint EndpointFor(ClusterOptions clusters, string sentToken) =>
         Factory.Create<GetClusterConnectionEndpoint>(
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = sentToken;
-                ctx.Request.RouteValues["zoneId"] = "mock";
+                ctx.Request.RouteValues["clusterId"] = "mock";
             },
             clusters,
             IncusTestKit.IdentityStore(),
             ConfigWithToken("expected"));
 
-    private static ZoneOptions WithMockCluster()
+    private static ClusterOptions WithMockCluster()
     {
-        ZoneConfig cluster = IncusTestKit.Cluster("mock", "https://incus-lab:8443", Fingerprint);
+        ClusterConfig cluster = IncusTestKit.Cluster("mock", "https://incus-lab:8443", Fingerprint);
         cluster.OvnUplinkNetwork = "UPLINK";
         cluster.StoragePool = "default";
-        return new ZoneOptions { Zones = [cluster] };
+        return new ClusterOptions { Clusters = [cluster] };
     }
 
     [Fact]
-    public async Task TheWorker_GetsTheEndpoint_ThePinnedFingerprint_AKeyPairThatMatches_AndTheZonesSettings()
+    public async Task TheWorker_GetsTheEndpoint_ThePinnedFingerprint_AKeyPairThatMatches_AndTheClustersSettings()
     {
         GetClusterConnectionEndpoint endpoint = EndpointFor(WithMockCluster(), "expected");
 
@@ -80,7 +80,7 @@ public class GetClusterConnectionEndpointTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "expected";
-                ctx.Request.RouteValues["zoneId"] = "mock";
+                ctx.Request.RouteValues["clusterId"] = "mock";
             },
             WithMockCluster(),
             IncusTestKit.IdentityStore(identity),
@@ -101,7 +101,7 @@ public class GetClusterConnectionEndpointTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "expected";
-                ctx.Request.RouteValues["zoneId"] = "mock";
+                ctx.Request.RouteValues["clusterId"] = "mock";
             },
             WithMockCluster(),
             otherKeyStore,
@@ -113,9 +113,9 @@ public class GetClusterConnectionEndpointTests
     }
 
     [Fact]
-    public async Task AZoneWithoutACluster_IsClusterNotFound()
+    public async Task AClusterWithoutACluster_IsClusterNotFound()
     {
-        GetClusterConnectionEndpoint endpoint = EndpointFor(new ZoneOptions(), "expected");
+        GetClusterConnectionEndpoint endpoint = EndpointFor(new ClusterOptions(), "expected");
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(() => endpoint.HandleAsync(CancellationToken.None));
         Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);

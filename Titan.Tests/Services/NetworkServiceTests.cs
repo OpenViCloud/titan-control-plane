@@ -31,20 +31,20 @@ public class NetworkServiceTests
     // Facade over the network command and query handlers so the tests keep one call shape; it proves
     // nothing on its own — the handlers underneath are the real ones.
     private NetworkFacade CreateService() =>
-        new(_repo.Object, _firewallRepo.Object, _tenantRepo.Object, _zones, _currentUser.Object, _commands.Object, _activity);
+        new(_repo.Object, _firewallRepo.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
 
-    private readonly Titan.Application.Options.ZoneOptions _zones = new()
+    private readonly Titan.Application.Options.ClusterOptions _clusters = new()
     {
-        Zones = [new() { Id = "zone-1", Name = "Zone 1", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) }],
+        Clusters = [new() { Id = "cluster-1", Name = "Cluster 1", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) }],
     };
 
     private sealed class NetworkFacade(
         INetworkRepository repo, IFirewallRuleRepository firewallRepo, ITenantRepository tenantRepo,
-        Titan.Application.Options.ZoneOptions zones,
+        Titan.Application.Options.ClusterOptions clusters,
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateNetworkCommandResult> CreateAsync(CreateNetworkCommand req, CancellationToken ct = default)
-            => new CreateNetworkCommandHandler(repo, tenantRepo, currentUser, commands, activity, zones).HandleAsync(req, ct);
+            => new CreateNetworkCommandHandler(repo, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
 
         public Task<List<NetworkQueryResult>> ListAsync(CancellationToken ct = default)
             => new ListNetworksQueryHandler(repo, currentUser).HandleAsync(new ListNetworksQuery(), ct);
@@ -88,7 +88,7 @@ public class NetworkServiceTests
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
-        var result = await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default);
+        var result = await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
         Assert.NotNull(added);
         Assert.Equal(added!.Id, result.NetworkId);
@@ -99,7 +99,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.IsAny<Guid>(), "my-net", "zone-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -110,16 +110,16 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", null, FirewallPolicy.Deny, FirewallPolicy.Allow), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", null, FirewallPolicy.Deny, FirewallPolicy.Allow), default);
 
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.IsAny<Guid>(), "my-net", "zone-1", TenantProject, null, "Deny", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Deny", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // A zone Titan does not have must not fall through to a default cluster
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice).
+    // A cluster Titan does not have must not fall through to a default cluster
+    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
-    public async Task Create_UnknownZone_ThrowsNotFound_AndEnqueuesNoCommand()
+    public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -142,7 +142,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(1);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
 
         Assert.Equal("NETWORK_QUOTA_EXCEEDED", ex.Code);
     }
@@ -156,7 +156,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
 
         Assert.Equal("NETWORK_NAME_TAKEN", ex.Code);
     }
@@ -171,7 +171,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.HasCidrOverlapAsync(TenantId, "10.0.0.0/24", default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", "10.0.0.0/24"), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", "10.0.0.0/24"), default));
 
         Assert.Equal("NETWORK_CIDR_OVERLAP", ex.Code);
     }
@@ -184,7 +184,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
         _repo.Verify(r => r.HasCidrOverlapAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -196,7 +196,7 @@ public class NetworkServiceTests
         _currentUser.Setup(u => u.TenantId).Returns((Guid?)null);
 
         await Assert.ThrowsAsync<ForbiddenException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
     }
 
     // ── ListAsync ─────────────────────────────────────────────────────────
@@ -205,7 +205,7 @@ public class NetworkServiceTests
     public async Task List_ReturnsTenantNetworks()
     {
         SetupCurrentUser(TenantId);
-        var networks = new List<Network> { Network.CreateUnchecked(TenantId, "net-1", "zone-1") };
+        var networks = new List<Network> { Network.CreateUnchecked(TenantId, "net-1", "cluster-1") };
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(networks);
 
         var result = await CreateService().ListAsync(default);
@@ -242,7 +242,7 @@ public class NetworkServiceTests
     public async Task Get_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "zone-1"); // different tenantId
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenantId
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -267,7 +267,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // RULES-ON-NETWORK-DELETE: the rules stay as Incus holds them until the network's delete takes the ACL.
@@ -322,7 +322,7 @@ public class NetworkServiceTests
     public async Task Delete_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "zone-1"); // different tenantId
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenantId
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -347,7 +347,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -355,7 +355,7 @@ public class NetworkServiceTests
     {
         // The create gave up before Incus had the network — nothing on Incus, so delete locally and send nothing.
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         network.MarkRequestFailed("reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
@@ -440,7 +440,7 @@ public class NetworkServiceTests
         // WHY: cross-tenant isolation — a tenant must not rename (or even confirm existence of)
         // another tenant's network.
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "zone-1"); // different tenant
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenant
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -471,7 +471,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_CreatedThenObservedCreated_KeepsTheIdAndAddress_AndRecordsTheIncusWord()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-id", "10.0.0.0/24", "10.0.0.1"), default);
@@ -624,7 +624,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_CreateReportWithoutCidr_StillProvisions_AndRecordsCreated()
     {
-        var network = Network.CreateUnchecked(TenantId, "no-cidr", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "no-cidr", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-9", "", ""));
@@ -650,7 +650,7 @@ public class NetworkServiceTests
         await CreateService().DeleteAsync(network.Id, default);
 
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
+            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -661,7 +661,7 @@ public class NetworkServiceTests
     [InlineData("Error")]
     public async Task UpdateStatus_AReportTheWorkerNoLongerSends_ThrowsBadRequestException(string report)
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BadRequestException>(
@@ -699,7 +699,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
         var e = Assert.Single(_activity.Events);
         Assert.Equal("network.create_requested", e.Action);
@@ -725,7 +725,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_FirstCreated_RecordsNetworkCreated_ForTheNetworksTenant_Once()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net", "10.0.0.0/24", "10.0.0.1"));
 
@@ -777,7 +777,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_ErroredWhileACreateWaits_EndsTheCreate_AndRecordsNothing()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("13", "10.0.0.0/24", "10.0.0.1"));
 
@@ -791,7 +791,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_Created_StoresTheIdAndAddress_AndTheCreateKeepsWaiting()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-id", "10.0.0.0/24", "10.0.0.1"));
@@ -809,7 +809,7 @@ public class NetworkServiceTests
     public async Task Delete_AfterCreatedThenRequestFailed_GoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
@@ -817,7 +817,7 @@ public class NetworkServiceTests
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed."));
         await CreateService().DeleteAsync(network.Id, default);
 
-        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, network.CurrentExistence);
     }
 
@@ -844,7 +844,7 @@ public class NetworkServiceTests
     [Fact] // the create report was lost, the give-up report carries the id
     public async Task UpdateStatus_RequestFailedCarryingTheId_KeepsTheProviderId_AndTheReason()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1"));
@@ -860,7 +860,7 @@ public class NetworkServiceTests
     public async Task Delete_NeverProvisionedNetwork_RecordsRequestAndOutcomeTogether()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         network.MarkRequestFailed("reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
@@ -879,7 +879,7 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(1);
 
         await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
 
         Assert.Empty(_activity.Events);
     }
@@ -904,11 +904,11 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Public IPv6: one /64 of the zone per network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan) ──
+    // ── Public IPv6: one /64 of the cluster per network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan) ──
 
-    private void SetupZoneCluster(string? uplink, string? block)
+    private void SetupCluster(string? uplink, string? block)
     {
-        var cluster = _zones.Zones.Single(z => z.Id == "zone-1");
+        var cluster = _clusters.Clusters.Single(z => z.Id == "cluster-1");
         cluster.OvnUplinkNetwork = uplink;
         cluster.StoragePool = "default";
         cluster.Ipv6Block = block;
@@ -921,8 +921,8 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
-        _repo.Setup(r => r.ListPublicIpv6IndexesInZoneAsync("zone-1", default)).ReturnsAsync(new HashSet<int>());
-        _repo.Setup(r => r.ListPublicIpv6ReleasesInZoneAsync("zone-1", default))
+        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int>());
+        _repo.Setup(r => r.ListPublicIpv6ReleasesInClusterAsync("cluster-1", default))
             .ReturnsAsync(new Dictionary<int, DateTimeOffset?>());
     }
 
@@ -932,13 +932,13 @@ public class NetworkServiceTests
     public async Task Create_WithPublicIpv6_SkipsASlash64JustGivenBack_WhileOneWasNeverUsed()
     {
         SetupFreshCreate();
-        SetupZoneCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6ReleasesInZoneAsync("zone-1", default))
+        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
+        _repo.Setup(r => r.ListPublicIpv6ReleasesInClusterAsync("cluster-1", default))
             .ReturnsAsync(new Dictionary<int, DateTimeOffset?> { [1] = DateTimeOffset.UtcNow });
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default);
 
         Assert.NotNull(added);
         Assert.Equal(2, added!.PublicIpv6Index);
@@ -948,30 +948,30 @@ public class NetworkServiceTests
     public async Task Create_WithPublicIpv6_TakesTheLowestFreeSlash64_AndSendsItsRouter()
     {
         SetupFreshCreate();
-        SetupZoneCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6IndexesInZoneAsync("zone-1", default)).ReturnsAsync(new HashSet<int> { 1, 2 });
+        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
+        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int> { 1, 2 });
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default);
 
         Assert.NotNull(added);
         Assert.Equal(3, added!.PublicIpv6Index);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, "my-net", "zone-1", TenantProject, null, "Allow", "Allow",
+            added.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
             "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
     [InlineData("ovnup", null)]
     [InlineData(null, "2001:41d0:d00:d400::/56")]
-    public async Task Create_WithPublicIpv6_InAZoneWithoutUplinkOrBlock_IsRefused_AndNothingIsStaged(string? uplink, string? block)
+    public async Task Create_WithPublicIpv6_InAClusterWithoutUplinkOrBlock_IsRefused_AndNothingIsStaged(string? uplink, string? block)
     {
         SetupFreshCreate();
-        SetupZoneCluster(uplink, block);
+        SetupCluster(uplink, block);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
@@ -979,12 +979,12 @@ public class NetworkServiceTests
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_InAZoneWithNoCluster_IsRefused()
+    public async Task Create_WithPublicIpv6_InAClusterWithNoCluster_IsRefused()
     {
         SetupFreshCreate();
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
     }
@@ -993,11 +993,11 @@ public class NetworkServiceTests
     public async Task Create_WithPublicIpv6_WhenEverySlash64IsTaken_IsRefused()
     {
         SetupFreshCreate();
-        SetupZoneCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6IndexesInZoneAsync("zone-1", default)).ReturnsAsync(Enumerable.Range(1, 255).ToHashSet());
+        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
+        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(Enumerable.Range(1, 255).ToHashSet());
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
@@ -1008,25 +1008,25 @@ public class NetworkServiceTests
     public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused()
     {
         SetupFreshCreate();
-        SetupZoneCluster("ovnup", "2001:41d0:d00:d400::/56");
+        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(10);
-        _repo.Setup(r => r.ListPublicIpv6IndexesInZoneAsync("zone-1", default)).ReturnsAsync(new HashSet<int>());
+        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int>());
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1", EnablePublicIpv6: true), default));
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
     }
 
-    // Without IPv6 no /64 is looked for: a zone with no public IPv6 still makes networks.
+    // Without IPv6 no /64 is looked for: a cluster with no public IPv6 still makes networks.
     [Fact]
-    public async Task Create_WithoutPublicIpv6_InAZoneWithNoIpv6_LooksForNo64()
+    public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_LooksForNo64()
     {
         SetupFreshCreate();
 
-        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "zone-1"), default);
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
-        _repo.Verify(r => r.ListPublicIpv6IndexesInZoneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.Verify(r => r.ListPublicIpv6IndexesInClusterAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -1050,7 +1050,7 @@ public class NetworkServiceTests
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

@@ -4,17 +4,17 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// The catalog reads a zone's Incus cluster live (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). Bodies are
+// The catalog reads a cluster's Incus live (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). Bodies are
 // the lab recordings, which is where the trap comes from: an untrusted client gets 200 with an empty image list — a
 // catalog that looks healthy and is not.
 public class IncusCatalogProviderTests
 {
     // The clusters start empty: each test configures the ones it needs.
-    private static async Task<(IncusCatalogProvider Catalog, ZoneOptions Clusters, string TitanFingerprint)> Catalog()
+    private static async Task<(IncusCatalogProvider Catalog, ClusterOptions Clusters, string TitanFingerprint)> Catalog()
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var clusters = new ZoneOptions();
+        var clusters = new ClusterOptions();
         var catalog = new IncusCatalogProvider(new IncusClientFactory(store), clusters,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<IncusCatalogProvider>.Instance);
         return (catalog, clusters, titan.Fingerprint);
@@ -25,7 +25,7 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, _) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync();
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
         var images = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
@@ -37,7 +37,7 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, new string('a', 64)));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, new string('a', 64)));
 
         var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
@@ -56,12 +56,12 @@ public class IncusCatalogProviderTests
 
     // The lab holds one VM image and one container image of Ubuntu noble; Titan only sells VMs.
     [Fact]
-    public async Task OsImages_AreTheVirtualMachineImages_OfTheFirstZone()
+    public async Task OsImages_AreTheVirtualMachineImages_OfTheFirstCluster()
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
-        configured.Zones.Add(IncusTestKit.Cluster("singapore01", server.Endpoint, server.Fingerprint));
-        configured.Zones.Add(IncusTestKit.Cluster("mock", "https://unreachable.invalid:8443", IncusTestKit.AnyFingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("singapore01", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", "https://unreachable.invalid:8443", IncusTestKit.AnyFingerprint));
 
         var images = await catalog.ListOsImagesAsync();
 
@@ -77,7 +77,7 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync();
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
         var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
@@ -93,7 +93,7 @@ public class IncusCatalogProviderTests
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
         server.TrustedOverrides["/1.0/images?recursion=1"] = (200, """{"type":"sync","metadata":{"images":"yes"}}""");
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
         var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 

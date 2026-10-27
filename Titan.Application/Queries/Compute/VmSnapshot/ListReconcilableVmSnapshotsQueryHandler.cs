@@ -9,7 +9,7 @@ public class ListReconcilableVmSnapshotsQueryHandler(IVmSnapshotRepository snaps
 {
     public async Task<List<ReconcilableVmSnapshotQueryResult>> HandleAsync(ListReconcilableVmSnapshotsQuery query, CancellationToken ct = default)
     {
-        var rows = await snapshots.ListReconcilableAsync(query.ZoneId, ct);
+        var rows = await snapshots.ListReconcilableAsync(query.ClusterId, ct);
         return rows.Select(ReconcilableVmSnapshotQueryResult.From).ToList();
     }
 }

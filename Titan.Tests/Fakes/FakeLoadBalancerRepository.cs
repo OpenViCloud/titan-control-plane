@@ -35,8 +35,8 @@ public class FakeLoadBalancerRepository : ILoadBalancerRepository
     public Task<bool> IsBackendAsync(Guid vmId, CancellationToken ct = default) =>
         Task.FromResult(Rows.Any(lb => lb.CurrentExistence != CurrentExistence.Deleted && lb.Backends.Any(b => b.VmId == vmId)));
 
-    public Task<List<LoadBalancer>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
-        Task.FromResult(Rows.Where(lb => lb.ZoneId == zoneId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted).ToList());
+    public Task<List<LoadBalancer>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
+        Task.FromResult(Rows.Where(lb => lb.ClusterId == clusterId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted).ToList());
 
     public void Add(LoadBalancer loadBalancer) => Rows.Add(loadBalancer);
 

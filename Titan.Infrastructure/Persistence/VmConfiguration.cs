@@ -37,7 +37,7 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
             .HasConstraintName("FK_vms_vm_offerings_vm_offering_id")
             .OnDelete(DeleteBehavior.Restrict);
         builder.Property(v => v.TemplateId).HasColumnName("template_id").IsRequired();
-        builder.Property(v => v.ZoneId).HasColumnName("zone_id").IsRequired();
+        builder.Property(v => v.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(v => v.DiskSizeGb).HasColumnName("disk_size_gb");
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");

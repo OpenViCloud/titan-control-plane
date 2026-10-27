@@ -13,7 +13,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.Id).HasColumnName("id");
         builder.Property(n => n.TenantId).HasColumnName("tenant_id");
         builder.Property(n => n.Name).HasColumnName("name").IsRequired();
-        builder.Property(n => n.ZoneId).HasColumnName("zone_id").IsRequired();
+        builder.Property(n => n.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(n => n.Cidr).HasColumnName("cidr");
 
         builder.Property(n => n.ExternalId).HasColumnName("external_id");
@@ -51,13 +51,13 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             // holds it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-name-reuse). Same filter as ExistsByNameAsync.
             .HasFilter("current_existence <> 'Deleted'");
 
-        // One /64 per live network of a zone: two creates that picked the same number race here, not in Incus
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Same condition as ListPublicIpv6IndexesInZoneAsync.
-        builder.HasIndex(n => new { n.ZoneId, n.PublicIpv6Index })
+        // One /64 per live network of a cluster: two creates that picked the same number race here, not in Incus
+        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Same condition as ListPublicIpv6IndexesInClusterAsync.
+        builder.HasIndex(n => new { n.ClusterId, n.PublicIpv6Index })
             .IsUnique()
             .HasDatabaseName(PublicIpv6IndexName)
             .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
     }
 
-    public const string PublicIpv6IndexName = "ix_networks_zone_id_public_ipv6_index";
+    public const string PublicIpv6IndexName = "ix_networks_cluster_id_public_ipv6_index";
 }

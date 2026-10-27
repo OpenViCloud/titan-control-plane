@@ -55,7 +55,7 @@ public class VmEndpointBindingTests
         // different id each call and would fail the ownership check for a reason this test is not
         // about. Same choice VmServiceTests makes, for the same reason.
         var vm = VmAggregate.CreateUnchecked(
-            TenantId, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "zone-1", 20);
+            TenantId, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "cluster-1", 20);
         vm.MarkRunning("one-42", "10.0.0.5", null);
         return vm;
     }
@@ -109,10 +109,10 @@ public class VmEndpointBindingTests
             new Mock<Titan.Domain.Repositories.Catalog.IVmTemplateRepository>().Object,
             new Titan.Tests.Fakes.FakeSshKeyRepository(),
             new Titan.Tests.Fakes.FakeActivityRecorder(),
-            new Titan.Application.Options.ZoneOptions { Zones = [new() { Id = "zone-1", Name = "Zone 1" }] });
+            new Titan.Application.Options.ClusterOptions { Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }] });
         var ep = Factory.Create<CreateVmEndpoint>(handler);
         var req = new CreateVmCommand(
-            "new-vm", Guid.NewGuid(), "offering-1", Guid.NewGuid().ToString(), "zone-1", 40, null);
+            "new-vm", Guid.NewGuid(), "offering-1", Guid.NewGuid().ToString(), "cluster-1", 40, null);
 
         // The create path refuses before it reaches the provider (no network is registered on the
         // stub), and that is fine: what this test measures is that the endpoint handed the body to
@@ -181,7 +181,7 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "zone-1", default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
         commands.Verify(w => w.EnqueueVmStartAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
@@ -202,7 +202,7 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "zone-1", default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
         commands.Verify(w => w.EnqueueVmStopAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);

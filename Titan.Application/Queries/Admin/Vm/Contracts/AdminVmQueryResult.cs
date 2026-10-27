@@ -19,7 +19,7 @@ public record AdminVmQueryResult(
     Guid NetworkId,
     string VmOfferingId,
     string TemplateId,
-    string ZoneId,
+    string ClusterId,
     DateTimeOffset CreatedAt,
     string? RequestFailureReason,
     // Admin-only raw diagnostic — the tenant VM result deliberately omits this.
@@ -29,7 +29,7 @@ public record AdminVmQueryResult(
     public static AdminVmQueryResult From(VmAggregate v) =>
         new(v.Id, v.TenantId, v.Name, StateName(v.CurrentState), v.DesiredState.ToString(),
             v.CurrentExistence.ToString(), v.DesiredExistence.ToString(), TransitionName(v.Transition),
-            v.IpAddress, v.NetworkId, v.VmOfferingId, v.TemplateId, v.ZoneId, v.CreatedAt,
+            v.IpAddress, v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.CreatedAt,
             v.RequestFailureReason, v.RequestFailureDetail, v.RequestFailedAt);
 
     private static string? StateName(VmState? state)

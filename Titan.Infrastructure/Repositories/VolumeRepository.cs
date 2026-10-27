@@ -39,9 +39,9 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task<List<Volume>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    public async Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Volumes
-            .Where(v => v.ZoneId == zoneId && v.ExternalId != null && v.CurrentExistence != CurrentExistence.Deleted)
+            .Where(v => v.ClusterId == clusterId && v.ExternalId != null && v.CurrentExistence != CurrentExistence.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 

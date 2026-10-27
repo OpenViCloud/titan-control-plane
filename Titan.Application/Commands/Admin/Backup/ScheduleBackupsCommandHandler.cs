@@ -28,7 +28,7 @@ public class ScheduleBackupsCommandHandler(
                 continue;
             }
             await commands.EnqueueVmBackupAsync(vm.Id, externalId, TenantAggregate.ProjectNameFor(vm.TenantId),
-                vm.TenantId, vm.ZoneId, today, ct);
+                vm.TenantId, vm.ClusterId, today, ct);
         }
 
         foreach (var volume in await volumes.ListBillableAsync(ct))
@@ -39,7 +39,7 @@ public class ScheduleBackupsCommandHandler(
                 continue;
             }
             await commands.EnqueueVolumeBackupAsync(volume.Id, externalId, TenantAggregate.ProjectNameFor(volume.TenantId),
-                volume.TenantId, volume.ZoneId, today, ct);
+                volume.TenantId, volume.ClusterId, today, ct);
         }
 
         // One DbContext carries every repository: this saves the commands of both loops.

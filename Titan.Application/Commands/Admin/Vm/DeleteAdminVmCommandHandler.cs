@@ -49,7 +49,7 @@ public class DeleteAdminVmCommandHandler(
         {
             VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Delete);
             await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
-                vm.ZoneId, ct);
+                vm.ClusterId, ct);
             await vms.SaveAsync(ct);
             return;
         }
@@ -95,7 +95,7 @@ public class DeleteAdminVmCommandHandler(
         // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
         await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
-            vm.ZoneId, ct);
+            vm.ClusterId, ct);
         await vms.SaveAsync(ct);
     }
 }

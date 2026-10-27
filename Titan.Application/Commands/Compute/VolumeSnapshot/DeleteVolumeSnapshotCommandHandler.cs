@@ -50,7 +50,7 @@ public class DeleteVolumeSnapshotCommandHandler(
 
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeSnapshotDeleteAsync(snapshot.Id, volumeId, externalSnapshotId, projectName,
-            volume.ZoneId, ct);
+            volume.ClusterId, ct);
         await snapshotRepo.SaveAsync(snapshot, ct);
     }
 }

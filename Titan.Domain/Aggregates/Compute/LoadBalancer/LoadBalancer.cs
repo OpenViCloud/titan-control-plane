@@ -20,7 +20,7 @@ public class LoadBalancer
     /// reconciler need them, and neither changes.
     public string ExternalNetworkId { get; private set; } = default!;
     public string NetworkSubnet { get; private set; } = default!;
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public int VipIndex { get; private set; }
     public string Vip { get; private set; } = default!;
@@ -84,7 +84,7 @@ public class LoadBalancer
     /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary).
     public static LoadBalancer Create(
         Tenant tenant, int activeLoadBalancerCount, string name, Guid networkId, string externalNetworkId,
-        string networkSubnet, string zoneId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
+        string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
         IReadOnlyList<Vm.Vm> backends)
     {
         tenant.EnsureCanCreateLoadBalancer(activeLoadBalancerCount);
@@ -95,7 +95,7 @@ public class LoadBalancer
             NetworkId = networkId,
             ExternalNetworkId = externalNetworkId,
             NetworkSubnet = networkSubnet,
-            ZoneId = zoneId,
+            ClusterId = clusterId,
             Name = name,
             VipIndex = vip.Index,
             Vip = vip.Address,

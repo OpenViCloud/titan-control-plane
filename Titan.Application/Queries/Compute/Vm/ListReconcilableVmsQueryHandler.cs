@@ -9,7 +9,7 @@ public class ListReconcilableVmsQueryHandler(IVmRepository vms)
 {
     public async Task<List<ReconcilableVmQueryResult>> HandleAsync(ListReconcilableVmsQuery query, CancellationToken ct = default)
     {
-        var rows = await vms.ListReconcilableAsync(query.ZoneId, ct);
+        var rows = await vms.ListReconcilableAsync(query.ClusterId, ct);
         return rows.Select(ReconcilableVmQueryResult.From).ToList();
     }
 }

@@ -4,7 +4,7 @@ namespace Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 // reports this is (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-reports): an observation, the sync's alias, or its give-up.
 public record UpdateTemplateStatusCommand(
     Guid TemplateId,
-    string ZoneId,               // the zone whose cluster was synced or observed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone)
+    string ClusterId,               // the cluster that was synced or observed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster)
     string Report,
     bool? Exists = null,         // required when Report == "Observed"
     string? ExternalId = null,   // the image alias; required when Report == "Created"

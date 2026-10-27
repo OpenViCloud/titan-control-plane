@@ -15,7 +15,7 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         builder.Property(lb => lb.NetworkId).HasColumnName("network_id");
         builder.Property(lb => lb.ExternalNetworkId).HasColumnName("external_network_id").IsRequired();
         builder.Property(lb => lb.NetworkSubnet).HasColumnName("network_subnet").IsRequired();
-        builder.Property(lb => lb.ZoneId).HasColumnName("zone_id").IsRequired();
+        builder.Property(lb => lb.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(lb => lb.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
         builder.Property(lb => lb.VipIndex).HasColumnName("vip_index");
         builder.Property(lb => lb.Vip).HasColumnName("vip").IsRequired();

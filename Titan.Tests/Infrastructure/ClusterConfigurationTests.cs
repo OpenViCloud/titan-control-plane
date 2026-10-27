@@ -9,7 +9,7 @@ public class ClusterConfigurationTests
 {
     private const string Fingerprint = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f";
 
-    private static ZoneConfig Valid(string id = "singapore01") => new()
+    private static ClusterConfig Valid(string id = "singapore01") => new()
     {
         Id = id,
         Name = "Singapore 01",
@@ -20,9 +20,9 @@ public class ClusterConfigurationTests
     [Fact]
     public void AValidCluster_IsKept_WithItsEndpointAndFingerprint()
     {
-        var options = ZoneOptions.FromConfiguration([Valid()]);
+        var options = ClusterOptions.FromConfiguration([Valid()]);
 
-        var cluster = Assert.Single(options.Zones);
+        var cluster = Assert.Single(options.Clusters);
         Assert.Equal("singapore01", cluster.Id);
         Assert.Equal("Singapore 01", cluster.Name);
         Assert.Equal("https://localhost:8443", cluster.Endpoint);
@@ -32,9 +32,9 @@ public class ClusterConfigurationTests
     [Fact]
     public void NoClusterConfigured_IsAnEmptyList()
     {
-        var options = ZoneOptions.FromConfiguration(null);
+        var options = ClusterOptions.FromConfiguration(null);
 
-        Assert.Empty(options.Zones);
+        Assert.Empty(options.Clusters);
     }
 
     // What `incus remote add` and openssl print is accepted; what the handshake compares is kept.
@@ -44,9 +44,9 @@ public class ClusterConfigurationTests
         var cluster = Valid();
         cluster.ServerFingerprint = string.Join(":", Enumerable.Range(0, 32).Select(i => Fingerprint.Substring(i * 2, 2).ToUpperInvariant()));
 
-        var options = ZoneOptions.FromConfiguration([cluster]);
+        var options = ClusterOptions.FromConfiguration([cluster]);
 
-        Assert.Equal(Fingerprint, options.Zones[0].ServerFingerprint);
+        Assert.Equal(Fingerprint, options.Clusters[0].ServerFingerprint);
     }
 
     [Fact]
@@ -55,9 +55,9 @@ public class ClusterConfigurationTests
         var cluster = Valid();
         cluster.Endpoint = "https://localhost:8443/";
 
-        var options = ZoneOptions.FromConfiguration([cluster]);
+        var options = ClusterOptions.FromConfiguration([cluster]);
 
-        Assert.Equal("https://localhost:8443", options.Zones[0].Endpoint);
+        Assert.Equal("https://localhost:8443", options.Clusters[0].Endpoint);
     }
 
     [Fact]
@@ -66,9 +66,9 @@ public class ClusterConfigurationTests
         var cluster = Valid();
         cluster.Name = " ";
 
-        var options = ZoneOptions.FromConfiguration([cluster]);
+        var options = ClusterOptions.FromConfiguration([cluster]);
 
-        Assert.Equal("singapore01", options.Zones[0].Name);
+        Assert.Equal("singapore01", options.Clusters[0].Name);
     }
 
     [Fact]
@@ -79,11 +79,11 @@ public class ClusterConfigurationTests
         cluster.StoragePool = "";
         cluster.Ipv6Block = "";
 
-        var options = ZoneOptions.FromConfiguration([cluster]);
+        var options = ClusterOptions.FromConfiguration([cluster]);
 
-        Assert.Null(options.Zones[0].OvnUplinkNetwork);
-        Assert.Null(options.Zones[0].StoragePool);
-        Assert.Null(options.Zones[0].Ipv6Block);
+        Assert.Null(options.Clusters[0].OvnUplinkNetwork);
+        Assert.Null(options.Clusters[0].StoragePool);
+        Assert.Null(options.Clusters[0].Ipv6Block);
     }
 
     [Fact]
@@ -92,12 +92,12 @@ public class ClusterConfigurationTests
         var cluster = Valid();
         cluster.Ipv6Block = "2001:41D0:0D00:D400::/56";
 
-        var options = ZoneOptions.FromConfiguration([cluster]);
+        var options = ClusterOptions.FromConfiguration([cluster]);
 
-        Assert.Equal("2001:41d0:d00:d400::/56", options.Zones[0].Ipv6Block);
+        Assert.Equal("2001:41d0:d00:d400::/56", options.Clusters[0].Ipv6Block);
     }
 
-    public static TheoryData<string, Action<ZoneConfig>> Refused => new()
+    public static TheoryData<string, Action<ClusterConfig>> Refused => new()
     {
         { "Endpoint", c => c.Endpoint = "http://localhost:8443" },
         { "Endpoint", c => c.Endpoint = "" },
@@ -113,12 +113,12 @@ public class ClusterConfigurationTests
 
     [Theory]
     [MemberData(nameof(Refused))]
-    public void AValueTheClusterCannotBeReachedWith_StopsStartup_NamingTheField(string field, Action<ZoneConfig> spoil)
+    public void AValueTheClusterCannotBeReachedWith_StopsStartup_NamingTheField(string field, Action<ClusterConfig> spoil)
     {
         var cluster = Valid();
         spoil(cluster);
 
-        var ex = Assert.Throws<InvalidOperationException>(() => ZoneOptions.FromConfiguration([Valid("local-mac"), cluster]));
+        var ex = Assert.Throws<InvalidOperationException>(() => ClusterOptions.FromConfiguration([Valid("local-mac"), cluster]));
 
         Assert.Contains($"Clusters:1:{field}", ex.Message);
     }
@@ -126,7 +126,7 @@ public class ClusterConfigurationTests
     [Fact]
     public void TheSameIdTwice_StopsStartup()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => ZoneOptions.FromConfiguration([Valid(), Valid()]));
+        var ex = Assert.Throws<InvalidOperationException>(() => ClusterOptions.FromConfiguration([Valid(), Valid()]));
 
         Assert.Contains("singapore01", ex.Message);
     }
@@ -134,7 +134,7 @@ public class ClusterConfigurationTests
     [Fact]
     public void ClusterOf_AConfiguredCluster_IsThatCluster()
     {
-        var options = ZoneOptions.FromConfiguration([Valid("local-mac"), Valid()]);
+        var options = ClusterOptions.FromConfiguration([Valid("local-mac"), Valid()]);
 
         Assert.Equal("singapore01", options.ClusterOf("singapore01").Id);
     }
@@ -142,7 +142,7 @@ public class ClusterConfigurationTests
     [Fact]
     public void ClusterOf_AnUnknownId_IsClusterNotFound()
     {
-        var options = ZoneOptions.FromConfiguration([Valid()]);
+        var options = ClusterOptions.FromConfiguration([Valid()]);
 
         var ex = Assert.Throws<NotFoundException>(() => options.ClusterOf("mars01"));
 

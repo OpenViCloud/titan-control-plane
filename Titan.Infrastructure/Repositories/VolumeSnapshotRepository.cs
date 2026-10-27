@@ -33,12 +33,12 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // A snapshot has no zone of its own; it lives where its volume lives.
-    public async Task<List<VolumeSnapshot>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    // A snapshot has no cluster of its own; it lives where its volume lives.
+    public async Task<List<VolumeSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VolumeSnapshots
             .Where(s => s.ExternalId != null
                      && s.CurrentExistence != CurrentExistence.Deleted
-                     && db.Volumes.Any(v => v.Id == s.VolumeId && v.ZoneId == zoneId))
+                     && db.Volumes.Any(v => v.Id == s.VolumeId && v.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);
 

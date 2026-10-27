@@ -311,7 +311,7 @@ public class ModuleBoundaryTests
             "The VM, volume, VM snapshot, volume snapshot, SSH key and load balancer create handlers need the tenant: "
             + "every resource cap lives on it (docs/architecture/tenancy-and-admin.md#tenant-quota), and the create handlers and VM delete read its ProjectName (docs/architecture/tenancy-and-admin.md#project-name).",
         [("Networking", "Platform")] =
-            "CreateNetworkCommandHandler needs the tenant for quota and its ProjectName, and the zone's cluster for the "
+            "CreateNetworkCommandHandler needs the tenant for quota and its ProjectName, and the cluster for the "
             + "uplink and IPv6 block a public /64 comes from (docs/infra/incus/design.md#ipv6-address-plan); "
             + "CreateFirewallRuleCommandHandler needs it for the per-network rule cap (docs/architecture/tenancy-and-admin.md#tenant-quota).",
 

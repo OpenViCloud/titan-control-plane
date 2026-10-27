@@ -11,7 +11,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The control-plane half of the template reconciler: GET /internal/reconcile/templates returns what the worker can
-// observe in one zone (a provider id Titan holds) with the state Titan last recorded; every call is that zone's
+// observe in one cluster (a provider id Titan holds) with the state Titan last recorded; every call is that cluster's
 // heartbeat.
 //
 // Silent about: Postgres (InMemory runs the same LINQ, not the SQL EF generates from it).
@@ -33,29 +33,29 @@ public class TemplateReconcilerTests
         return new(new DbContextOptionsBuilder<TitanDbContext>().UseInMemoryDatabase(databaseName).Options);
     }
 
-    private static ListReconcilableTemplatesEndpoint TemplateEndpoint(TitanDbContext db, ReconcilerHeartbeat heartbeat, string token, string? zoneId) =>
+    private static ListReconcilableTemplatesEndpoint TemplateEndpoint(TitanDbContext db, ReconcilerHeartbeat heartbeat, string token, string? clusterId) =>
         Factory.Create<ListReconcilableTemplatesEndpoint>(
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = token;
-                if (zoneId != null)
+                if (clusterId != null)
                 {
-                    ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={zoneId}");
+                    ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={clusterId}");
                 }
             },
             new ListReconcilableTemplatesQueryHandler(new VmTemplateRepository(db)),
             heartbeat, ConfigWithToken("secret"));
 
-    private static VmTemplate SyncedIn(string name, string zoneId, string externalTemplateId)
+    private static VmTemplate SyncedIn(string name, string clusterId, string externalTemplateId)
     {
         var t = VmTemplate.Create(name, null, "img", 10, "m");
-        t.RequestSyncIn(zoneId);
-        t.MarkCreatedIn(zoneId, externalTemplateId);
+        t.RequestSyncIn(clusterId);
+        t.MarkCreatedIn(clusterId, externalTemplateId);
         return t;
     }
 
-    [Fact] // one zone's reconciler: the templates with a provider id IN THAT ZONE, with that zone's existence and id
-    public async Task TemplateEndpoint_ReturnsOnlyTemplatesWithAProviderIdInTheZone_AndRecordsItsHeartbeat()
+    [Fact] // one cluster's reconciler: the templates with a provider id IN THAT CLUSTER, with that cluster's existence and id
+    public async Task TemplateEndpoint_ReturnsOnlyTemplatesWithAProviderIdInTheCluster_AndRecordsItsHeartbeat()
     {
         using var db = NewDb();
         var synced = SyncedIn("synced", "mock", "205");
@@ -66,11 +66,11 @@ public class TemplateReconcilerTests
         var failedFirstSync = VmTemplate.Create("never", null, "img", 10, "m");
         failedFirstSync.RequestSyncIn("mock");
         failedFirstSync.MarkRequestFailedIn("mock", "image not found", null);
-        var otherZoneOnly = SyncedIn("singapore-only", "singapore01", "4");
-        db.VmTemplates.AddRange(synced, lost, failedFirstSync, otherZoneOnly, VmTemplate.Create("pending", null, "img", 10, "m"));
+        var otherClusterOnly = SyncedIn("singapore-only", "singapore01", "4");
+        db.VmTemplates.AddRange(synced, lost, failedFirstSync, otherClusterOnly, VmTemplate.Create("pending", null, "img", 10, "m"));
         await db.SaveChangesAsync();
         var heartbeat = new ReconcilerHeartbeat();
-        var ep = TemplateEndpoint(db, heartbeat, "secret", zoneId: "mock");
+        var ep = TemplateEndpoint(db, heartbeat, "secret", clusterId: "mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
@@ -79,12 +79,12 @@ public class TemplateReconcilerTests
         Assert.NotNull(heartbeat.Snapshot()["templates/mock"].LastPollAt);
     }
 
-    [Fact] // a reconciler that does not say its zone is asking for nothing anyone can answer
-    public async Task TemplateEndpoint_WithoutAZone_Answers400_AndRecordsNoHeartbeat()
+    [Fact] // a reconciler that does not say its cluster is asking for nothing anyone can answer
+    public async Task TemplateEndpoint_WithoutACluster_Answers400_AndRecordsNoHeartbeat()
     {
         using var db = NewDb();
         var heartbeat = new ReconcilerHeartbeat();
-        var ep = TemplateEndpoint(db, heartbeat, "secret", zoneId: null);
+        var ep = TemplateEndpoint(db, heartbeat, "secret", clusterId: null);
 
         await ep.HandleAsync(CancellationToken.None);
 
@@ -102,31 +102,31 @@ public class TemplateReconcilerTests
         db.VmTemplates.AddRange(synced, lost, SyncedIn("elsewhere", "singapore01", "3"), VmTemplate.Create("pending", null, "img", 10, "m"));
         await db.SaveChangesAsync();
 
-        var names = (await new VmTemplateRepository(db).ListSyncedInZoneAsync("mock")).Select(t => t.Name).ToList();
+        var names = (await new VmTemplateRepository(db).ListSyncedInClusterAsync("mock")).Select(t => t.Name).ToList();
 
         Assert.Equal(new[] { "synced" }, names);
     }
 
-    [Fact] // a zone asked into a template already saved is a NEW row, not an update of one that does not exist
-    public async Task TemplateRepository_AZoneAddedToASavedTemplate_IsInserted()
+    [Fact] // a cluster asked into a template already saved is a NEW row, not an update of one that does not exist
+    public async Task TemplateRepository_AClusterAddedToASavedTemplate_IsInserted()
     {
-        using (var db = NewDb("zone-added"))
+        using (var db = NewDb("cluster-added"))
         {
             db.VmTemplates.Add(SyncedIn("t", "mock", "205"));
             await db.SaveChangesAsync();
         }
-        using (var db = NewDb("zone-added"))
+        using (var db = NewDb("cluster-added"))
         {
             var repo = new VmTemplateRepository(db);
             var tracked = (await repo.FindByIdAsync((await db.VmTemplates.SingleAsync()).Id))!;
             tracked.RequestSyncIn("singapore01");
             await repo.SaveAsync();
         }
-        using (var db = NewDb("zone-added"))
+        using (var db = NewDb("cluster-added"))
         {
             var reread = (await new VmTemplateRepository(db).ListAllAsync()).Single();
             Assert.Equal(new[] { "mock:Exists", "singapore01:NotCreated" },
-                reread.Zones.OrderBy(z => z.ZoneId).Select(z => $"{z.ZoneId}:{z.CurrentExistence}"));
+                reread.Clusters.OrderBy(z => z.ClusterId).Select(z => $"{z.ClusterId}:{z.CurrentExistence}"));
         }
     }
 }

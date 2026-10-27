@@ -19,7 +19,7 @@ public class NetworkTests
     public void BeginVmDeployment_WhenCreated_YieldsTheProviderId_AndMutatesNothing()
     {
         var network = MakeActiveNetwork();
-        Assert.Equal("cs-net-id", network.BeginVmDeployment("zone-1"));
+        Assert.Equal("cs-net-id", network.BeginVmDeployment("cluster-1"));
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
     }
@@ -36,23 +36,23 @@ public class NetworkTests
     public void BeginVmDeployment_WhenNotUsable_Throws(Seed seed)
     {
         var network = NetworkIn(seed);
-        Assert.Equal("NETWORK_NOT_ACTIVE", Assert.Throws<BusinessException>(() => network.BeginVmDeployment("zone-1")).Code);
+        Assert.Equal("NETWORK_NOT_ACTIVE", Assert.Throws<BusinessException>(() => network.BeginVmDeployment("cluster-1")).Code);
     }
 
-    // A VM lands on its network's cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice).
+    // A VM lands on its network's cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
-    public void BeginVmDeployment_ForAVmOfAnotherZone_IsRefused()
+    public void BeginVmDeployment_ForAVmOfAnotherCluster_IsRefused()
     {
         var network = MakeActiveNetwork();
-        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-zone"));
+        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-cluster"));
         Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]
-    public void BeginVmDeployment_AnotherZone_IsAnsweredBeforeTheState()
+    public void BeginVmDeployment_AnotherCluster_IsAnsweredBeforeTheState()
     {
         var network = NetworkIn(Seed.Creating);
-        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-zone"));
+        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-cluster"));
         Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
@@ -82,7 +82,7 @@ public class NetworkTests
 
     private static Network NetworkIn(Seed seed)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         switch (seed)
         {
             case Seed.Creating: break;
@@ -103,7 +103,7 @@ public class NetworkTests
     [Fact]
     public void Create_HasNoIncusStatus_IsNotCreated_AndWaitsForItsCreate()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
 
         Assert.Null(network.CurrentState);
         Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
@@ -114,7 +114,7 @@ public class NetworkTests
     [Fact]
     public void MarkCreated_RecordsTheIdAndAddress_AndThatIncusHasIt_ButLeavesTheStatusToTheReconciler()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
 
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
@@ -129,7 +129,7 @@ public class NetworkTests
     [Fact]
     public void Created_FulfilsTheCreateOnce()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         bool first = network.MarkObserved(NetworkStatus.Created);
@@ -167,7 +167,7 @@ public class NetworkTests
     [InlineData(NetworkStatus.Unknown, false)]
     public void AFailedIncusStatus_EndsAWaitingCreate_OthersKeepItWaiting(NetworkStatus status, bool ends)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         bool fulfilled = network.MarkObserved(status);
@@ -230,7 +230,7 @@ public class NetworkTests
     [Fact]
     public void NotFound_EndsAWaitingCreate()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         network.MarkNotFound();
@@ -255,7 +255,7 @@ public class NetworkTests
     [Fact]
     public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItNotCreated()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
 
         network.MarkRequestFailed("Network creation failed.", "raw incus error");
 
@@ -348,7 +348,7 @@ public class NetworkTests
     [Fact]
     public void RequestDelete_WhileTheCreateWaits_Throws()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
 
         var ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
 
@@ -462,7 +462,7 @@ public class NetworkTests
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

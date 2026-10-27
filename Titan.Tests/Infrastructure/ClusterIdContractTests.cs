@@ -19,7 +19,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure;
 
-// The worker names its cluster as clusterId; the zoneId shape it sent before is gone from every route and the lease
+// The worker names its cluster as clusterId on every route and the lease
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
 public class ClusterIdContractTests
 {
@@ -60,11 +60,11 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task AReconcilerAskingByZoneId_Is400_AndRecordsNoPoll()
+    public async Task AReconcilerAskingWithoutAClusterId_Is400_AndRecordsNoPoll()
     {
         using var db = NewDb();
         var heartbeat = new ReconcilerHeartbeat();
-        var ep = TemplateEndpoint(db, heartbeat, "?zoneId=mock");
+        var ep = TemplateEndpoint(db, heartbeat, "?name=mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
@@ -77,15 +77,15 @@ public class ClusterIdContractTests
     public void EveryInternalRoute_ReadsTheClusterThroughClusterQuery()
     {
         string folder = Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "Endpoints", "Internal");
-        var readersOfZoneIdAlone = Directory.GetFiles(folder, "*.cs")
-            .Where(f => File.ReadAllText(f).Contains("Query<string>(\"zoneId\""))
+        var readersBypassingClusterQuery = Directory.GetFiles(folder, "*.cs")
+            .Where(f => File.ReadAllText(f).Contains("Query<string>(\"clusterId\""))
             .Select(Path.GetFileName)
             .ToList();
         var readersOfClusterQuery = Directory.GetFiles(folder, "ListReconcilable*Endpoint.cs")
             .Where(f => File.ReadAllText(f).Contains("ClusterQuery.From("))
             .ToList();
 
-        Assert.Empty(readersOfZoneIdAlone);
+        Assert.Empty(readersBypassingClusterQuery);
         Assert.Equal(7, readersOfClusterQuery.Count);
     }
 
@@ -93,8 +93,8 @@ public class ClusterIdContractTests
     public async Task ATemplateReport_WithItsClusterId_IsRecorded()
     {
         var templates = new Mock<IVmTemplateRepository>();
-        var zones = new ZoneOptions { Zones = [new ZoneConfig { Id = "mock", Name = "Mock" }] };
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, zones, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
+        var clusters = new ClusterOptions { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
+        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
         var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
             ctx =>
             {
@@ -129,12 +129,12 @@ public class ClusterIdContractTests
     private static ListInternalClustersEndpoint ClustersEndpoint(string token) =>
         Factory.Create<ListInternalClustersEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = token,
-            new ZoneOptions
+            new ClusterOptions
             {
-                Zones =
+                Clusters =
                 [
-                    new ZoneConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) },
-                    new ZoneConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = new string('b', 64) },
+                    new ClusterConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) },
+                    new ClusterConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = new string('b', 64) },
                 ],
             },
             ConfigWithToken("secret"));

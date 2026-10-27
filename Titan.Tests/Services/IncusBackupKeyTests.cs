@@ -3,7 +3,7 @@ using Titan.Domain.Aggregates.Platform.BackupRecord;
 
 namespace Titan.Tests.Services;
 
-// The worker names each object incus/<zone>/<tenant>/<vms|volumes>/<id>/<UTC time>.tar.gz
+// The worker names each object incus/<cluster>/<tenant>/<vms|volumes>/<id>/<UTC time>.tar.gz
 // (OpenViCloud/titan-incus-worker:resource/backup/target.go ObjectKey); the key alone says what the backup is.
 public class IncusBackupKeyTests
 {

@@ -31,7 +31,7 @@ public class VmStateMachineTests
     }
 
     private static Vm NewVm() => Vm.CreateUnchecked(
-        Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
 
     private static Vm VmIn(Seed seed)
     {

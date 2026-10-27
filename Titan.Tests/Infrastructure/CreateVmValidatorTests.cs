@@ -9,7 +9,7 @@ public class CreateVmValidatorTests
     private readonly CreateVmValidator _validator = new();
 
     private static CreateVmCommand Request(List<Guid>? sshKeyIds) =>
-        new("web-01", Guid.NewGuid(), "m", Guid.NewGuid().ToString(), "zone-1", null, SshKeyIds: sshKeyIds);
+        new("web-01", Guid.NewGuid(), "m", Guid.NewGuid().ToString(), "cluster-1", null, SshKeyIds: sshKeyIds);
 
     private static List<Guid> Ids(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
 

@@ -14,7 +14,7 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.Id).HasColumnName("id");
         builder.Property(v => v.TenantId).HasColumnName("tenant_id");
         builder.Property(v => v.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
-        builder.Property(v => v.ZoneId).HasColumnName("zone_id").IsRequired();
+        builder.Property(v => v.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(v => v.VolumeOfferingId).HasColumnName("volume_offering_id").IsRequired();
         // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
         builder.HasOne<VolumeOffering>()

@@ -44,7 +44,7 @@ public class CreateFirewallRuleCommandHandler(
         await commands.EnqueueFirewallRuleCreateAsync(
             rule.Id, networkId, req.Direction, req.Protocol,
             req.StartPort, req.EndPort, req.Cidr,
-            externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ZoneId, ct);
+            externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await repo.SaveAsync(ct);
 
         return new CreateFirewallRuleCommandResult(rule.Id);

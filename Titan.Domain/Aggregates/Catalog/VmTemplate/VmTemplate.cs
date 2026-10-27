@@ -29,10 +29,10 @@ public class VmTemplate
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
 
-    /// One sync state per zone the template was asked into or observed in
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
-    private readonly List<VmTemplateZone> _zones = [];
-    public IReadOnlyCollection<VmTemplateZone> Zones => _zones;
+    /// One sync state per cluster the template was asked into or observed in
+    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+    private readonly List<VmTemplateCluster> _clusters = [];
+    public IReadOnlyCollection<VmTemplateCluster> Clusters => _clusters;
 
     private VmTemplate() { }
 
@@ -58,104 +58,104 @@ public class VmTemplate
         };
     }
 
-    public VmTemplateZone? ZoneOrNull(string zoneId)
+    public VmTemplateCluster? ClusterOrNull(string clusterId)
     {
-        foreach (VmTemplateZone zone in _zones)
+        foreach (VmTemplateCluster cluster in _clusters)
         {
-            if (zone.ZoneId == zoneId)
+            if (cluster.ClusterId == clusterId)
             {
-                return zone;
+                return cluster;
             }
         }
         return null;
     }
 
-    /// What customers in that zone may pick: the template whose alias that zone's cluster was last seen to hold.
-    public bool IsSyncedIn(string zoneId)
+    /// What customers in that cluster may pick: the template whose alias that cluster was last seen to hold.
+    public bool IsSyncedIn(string clusterId)
     {
-        VmTemplateZone? zone = ZoneOrNull(zoneId);
-        if (zone == null)
+        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        if (cluster == null)
         {
             return false;
         }
-        return zone.CurrentExistence == CurrentExistence.Exists;
+        return cluster.CurrentExistence == CurrentExistence.Exists;
     }
 
-    /// The image alias a VM in that zone is created from, handed out only past the check
+    /// The image alias a VM in that cluster is created from, handed out only past the check
     /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
-    public string ProviderIdIn(string zoneId)
+    public string ProviderIdIn(string clusterId)
     {
-        VmTemplateZone? zone = ZoneOrNull(zoneId);
+        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
         string? externalTemplateId = null;
-        if (zone != null)
+        if (cluster != null)
         {
-            externalTemplateId = zone.ExternalTemplateId;
+            externalTemplateId = cluster.ExternalTemplateId;
         }
         if (string.IsNullOrEmpty(externalTemplateId))
         {
             throw new BusinessException("TEMPLATE_NOT_SYNCED",
-                $"Template '{Name}' has not been synced to zone '{zoneId}' yet.");
+                $"Template '{Name}' has not been synced to cluster '{clusterId}' yet.");
         }
         // An alias that went missing keeps its provider id, so the check above lets it through.
-        bool aliasIsThere = zone!.CurrentExistence == CurrentExistence.Exists;
+        bool aliasIsThere = cluster!.CurrentExistence == CurrentExistence.Exists;
         if (!aliasIsThere)
         {
             throw new BusinessException("TEMPLATE_UNAVAILABLE",
-                $"Template '{Name}' is not available in zone '{zoneId}' right now.");
+                $"Template '{Name}' is not available in cluster '{clusterId}' right now.");
         }
         return externalTemplateId;
     }
 
-    /// Refused when that zone has the alias or a sync waiting: the handler recognises the repeat first and
+    /// Refused when that cluster has the alias or a sync waiting: the handler recognises the repeat first and
     /// re-sends the command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public void RequestSyncIn(string zoneId)
+    public void RequestSyncIn(string clusterId)
     {
-        RowFor(zoneId).RequestSync();
+        RowFor(clusterId).RequestSync();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// Observations converge (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): a report for a
-    /// zone with no row yet records what was observed there instead of refusing it. Which zones exist is the
+    /// cluster with no row yet records what was observed there instead of refusing it. Which clusters exist is the
     /// handler's check, not the aggregate's. Returns whether it ended a waiting sync.
-    public bool MarkCreatedIn(string zoneId, string externalTemplateId)
+    public bool MarkCreatedIn(string clusterId, string externalTemplateId)
     {
-        bool fulfilled = RowFor(zoneId).MarkCreated(externalTemplateId);
+        bool fulfilled = RowFor(clusterId).MarkCreated(externalTemplateId);
         UpdatedAt = DateTimeOffset.UtcNow;
         return fulfilled;
     }
 
-    public void MarkObservedIn(string zoneId)
+    public void MarkObservedIn(string clusterId)
     {
-        RowFor(zoneId).MarkObserved();
+        RowFor(clusterId).MarkObserved();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    public void MarkNotFoundIn(string zoneId)
+    public void MarkNotFoundIn(string clusterId)
     {
-        RowFor(zoneId).MarkNotFound();
+        RowFor(clusterId).MarkNotFound();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// Returns whether a waiting sync took the failure; a stale give-up records nothing.
-    public bool MarkRequestFailedIn(string zoneId, string? reason, string? detail)
+    public bool MarkRequestFailedIn(string clusterId, string? reason, string? detail)
     {
-        bool recorded = RowFor(zoneId).MarkRequestFailed(reason, detail);
+        bool recorded = RowFor(clusterId).MarkRequestFailed(reason, detail);
         UpdatedAt = DateTimeOffset.UtcNow;
         return recorded;
     }
 
-    private VmTemplateZone RowFor(string zoneId)
+    private VmTemplateCluster RowFor(string clusterId)
     {
-        if (string.IsNullOrWhiteSpace(zoneId))
-            throw new ArgumentException("zoneId must not be empty", nameof(zoneId));
+        if (string.IsNullOrWhiteSpace(clusterId))
+            throw new ArgumentException("clusterId must not be empty", nameof(clusterId));
 
-        VmTemplateZone? existing = ZoneOrNull(zoneId);
+        VmTemplateCluster? existing = ClusterOrNull(clusterId);
         if (existing != null)
         {
             return existing;
         }
-        var added = VmTemplateZone.NotYetSynced(Id, zoneId);
-        _zones.Add(added);
+        var added = VmTemplateCluster.NotYetSynced(Id, clusterId);
+        _clusters.Add(added);
         return added;
     }
 }

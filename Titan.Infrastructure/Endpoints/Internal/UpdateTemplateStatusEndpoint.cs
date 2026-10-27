@@ -23,9 +23,9 @@ public class UpdateTemplateStatusEndpoint(UpdateTemplateStatusCommandHandler han
             return;
         }
 
-        // A report without its zone cannot say whose state it is — a worker older than per-zone templates sends
+        // A report without its cluster cannot say whose state it is — a worker older than per-cluster templates sends
         // none; refusing it fails that run, and the next sync-all with both images live converges
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
         if (string.IsNullOrEmpty(req.ClusterId))
         {
             await SendErrorsAsync(400, ct);

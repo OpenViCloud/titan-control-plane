@@ -16,7 +16,7 @@ public class CreateNetworkValidator : Validator<CreateNetworkCommand>
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(100)
             .Matches(NameRegex).WithMessage("'Name' may only contain letters, digits, hyphens, and underscores, and must start with a letter or digit.");
-        RuleFor(x => x.ZoneId).NotEmpty();
+        RuleFor(x => x.ClusterId).NotEmpty();
         When(x => x.Cidr is not null, () =>
             RuleFor(x => x.Cidr!).Matches(CidrRegex).WithMessage("'Cidr' must be a valid CIDR notation (e.g. 10.0.1.0/24)."));
         // The uplink of a network with public IPv6 routes only these (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan).

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Keyed "{kind}/{zoneId}" (e.g. "networks/vn-hcm-1"). A reconciler that died raises no error, its resources
+/// Keyed "{kind}/{clusterId}" (e.g. "networks/vn-hcm-1"). A reconciler that died raises no error, its resources
 /// just stop changing; this turns that silence into a /healthz/reconcilers signal. A list request proves the
 /// loop reaches the control plane, not that the status reports that follow succeed.
 /// </summary>
@@ -39,9 +39,9 @@ public sealed class ReconcilerHeartbeat
         return new Dictionary<string, ReconcilerPollState>(_states);
     }
 
-    public static string KeyFor(string kind, string zoneId)
+    public static string KeyFor(string kind, string clusterId)
     {
-        return $"{kind}/{zoneId}";
+        return $"{kind}/{clusterId}";
     }
 }
 

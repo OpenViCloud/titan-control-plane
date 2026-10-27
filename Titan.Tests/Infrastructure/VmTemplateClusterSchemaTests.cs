@@ -5,10 +5,10 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// "One sync state per template per zone" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone) is the primary key of
-// vm_template_zones, not application code. The InMemory provider does not enforce keys the way Postgres does, so this
+// "One sync state per template per cluster" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster) is the primary key of
+// vm_template_clusters, not application code. The InMemory provider does not enforce keys the way Postgres does, so this
 // pins the model metadata the migration builds the table from.
-public class VmTemplateZoneSchemaTests
+public class VmTemplateClusterSchemaTests
 {
     private static IModel Model()
     {
@@ -20,32 +20,32 @@ public class VmTemplateZoneSchemaTests
     }
 
     [Fact]
-    public void MappedToVmTemplateZonesTable()
+    public void MappedToVmTemplateClustersTable()
     {
-        Assert.Equal("vm_template_zones", Model().FindEntityType(typeof(VmTemplateZone))!.GetTableName());
+        Assert.Equal("vm_template_clusters", Model().FindEntityType(typeof(VmTemplateCluster))!.GetTableName());
     }
 
-    [Fact] // a single-column key would let one template hold two states for a zone, or one state for two templates
-    public void PrimaryKey_IsTheTemplateAndTheZone()
+    [Fact] // a single-column key would let one template hold two states for a cluster, or one state for two templates
+    public void PrimaryKey_IsTheTemplateAndTheCluster()
     {
-        var key = Model().FindEntityType(typeof(VmTemplateZone))!.FindPrimaryKey()!;
+        var key = Model().FindEntityType(typeof(VmTemplateCluster))!.FindPrimaryKey()!;
 
         Assert.Equal(
-            [nameof(VmTemplateZone.TemplateId), nameof(VmTemplateZone.ZoneId)],
+            [nameof(VmTemplateCluster.TemplateId), nameof(VmTemplateCluster.ClusterId)],
             key.Properties.Select(p => p.Name));
     }
 
-    [Fact] // the zone rows belong to their template: deleting a template takes its sync states with it
+    [Fact] // the cluster rows belong to their template: deleting a template takes its sync states with it
     public void BelongsToItsTemplate_DeletedWithIt()
     {
-        var foreignKey = Model().FindEntityType(typeof(VmTemplateZone))!.GetForeignKeys().Single();
+        var foreignKey = Model().FindEntityType(typeof(VmTemplateCluster))!.GetForeignKeys().Single();
 
         Assert.Equal(typeof(VmTemplate), foreignKey.PrincipalEntityType.ClrType);
-        Assert.Equal([nameof(VmTemplateZone.TemplateId)], foreignKey.Properties.Select(p => p.Name));
+        Assert.Equal([nameof(VmTemplateCluster.TemplateId)], foreignKey.Properties.Select(p => p.Name));
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
-    [Theory] // the state moved into the zone rows: a column left on vm_templates would be a second, stale answer
+    [Theory] // the state moved into the cluster rows: a column left on vm_templates would be a second, stale answer
     [InlineData("current_state")]
     [InlineData("desired_state")]
     [InlineData("pending_intent_id")]

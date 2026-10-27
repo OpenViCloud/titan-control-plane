@@ -12,7 +12,7 @@ namespace Titan.Application.Queries.Networking.Network.Contracts;
 public record NetworkQueryResult(
     Guid Id,
     string Name,
-    string ZoneId,
+    string ClusterId,
     string? Cidr,
     string? Gateway,
     string? ExternalId,
@@ -29,7 +29,7 @@ public record NetworkQueryResult(
     string? PublicIpv6Subnet)
 {
     public static NetworkQueryResult From(NetworkAggregate n) =>
-        new(n.Id, n.Name, n.ZoneId, n.Cidr, n.Gateway, n.ExternalId, n.CurrentState,
+        new(n.Id, n.Name, n.ClusterId, n.Cidr, n.Gateway, n.ExternalId, n.CurrentState,
             n.CurrentExistence, n.DesiredExistence, n.Transition,
             n.RequestFailureReason, n.RequestFailedAt,
             n.DefaultIngressPolicy.ToString(), n.DefaultEgressPolicy.ToString(), n.CreatedAt, n.PublicIpv6Subnet);

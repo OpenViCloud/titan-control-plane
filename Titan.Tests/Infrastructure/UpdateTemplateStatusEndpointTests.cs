@@ -21,13 +21,13 @@ public class UpdateTemplateStatusEndpointTests
 
     private static readonly UpdateTemplateStatusRequest ValidRequest = new(Report: "Created", ClusterId: "mock", ExternalId: "tpl-205");
 
-    private static readonly ZoneOptions Zones = new() { Zones = [new ZoneConfig { Id = "mock", Name = "Mock" }] };
+    private static readonly ClusterOptions Clusters = new() { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
 
     [Fact]
     public async Task HandleAsync_MissingTokenHeader_Returns401_AndNeverTouchesTheTemplate()
     {
         var templates = new Mock<IVmTemplateRepository>();
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Zones, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
+        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
         var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
             _ => { /* no X-Internal-Token header */ },
             handler, ConfigWithToken("secret"));
@@ -42,7 +42,7 @@ public class UpdateTemplateStatusEndpointTests
     public async Task HandleAsync_WrongTokenHeader_Returns401_AndNeverTouchesTheTemplate()
     {
         var templates = new Mock<IVmTemplateRepository>();
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Zones, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
+        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
         var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = "wrong",
             handler, ConfigWithToken("secret"));
@@ -53,13 +53,13 @@ public class UpdateTemplateStatusEndpointTests
         templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // A worker older than per-zone templates reports no zone: whose alias it is cannot be told, so nothing is
-    // recorded (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+    // A worker older than per-cluster templates reports no cluster: whose alias it is cannot be told, so nothing is
+    // recorded (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
     [Fact]
-    public async Task HandleAsync_WithoutAZone_Returns400_AndNeverTouchesTheTemplate()
+    public async Task HandleAsync_WithoutACluster_Returns400_AndNeverTouchesTheTemplate()
     {
         var templates = new Mock<IVmTemplateRepository>();
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Zones, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
+        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, Clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
         var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = "secret",
             handler, ConfigWithToken("secret"));

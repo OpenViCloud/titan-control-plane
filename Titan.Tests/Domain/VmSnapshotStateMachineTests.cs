@@ -18,7 +18,7 @@ public class VmSnapshotStateMachineTests
 
     private static Vm VmIn(VmState status)
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (status == VmState.Running) vm.MarkRunning("vm42", "10.0.0.5");
         else if (status == VmState.Stopped) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkStopped(); }
         else if (status == VmState.Error) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkObserved(VmState.Error, null); }

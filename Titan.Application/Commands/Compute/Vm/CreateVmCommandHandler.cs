@@ -23,7 +23,7 @@ public class CreateVmCommandHandler(
     IVmTemplateRepository templateRepo,
     ISshKeyRepository sshKeyRepo,
     IActivityRecorder activity,
-    ZoneOptions zones)
+    ClusterOptions clusters)
 {
     public async Task<CreateVmCommandResult> HandleAsync(CreateVmCommand command, CancellationToken ct = default)
     {
@@ -51,11 +51,11 @@ public class CreateVmCommandHandler(
             req.Name,
             req.VmOfferingId,
             req.TemplateId,
-            req.ZoneId,
+            req.ClusterId,
             req.DiskSizeGb ?? 0,
             req.UserData);
 
-        zones.ClusterOf(req.ZoneId);
+        clusters.ClusterOf(req.ClusterId);
 
         if (await repo.ExistsByNameAsync(callerId, req.Name, ct))
             throw new ConflictException("VM_NAME_TAKEN", $"VM name '{req.Name}' is already taken.");
@@ -66,7 +66,7 @@ public class CreateVmCommandHandler(
 
         // The network answers whether it can host a VM and hands over the provider id in one call: no
         // `network.ExternalId!` at the enqueue below.
-        var externalNetworkId = network.BeginVmDeployment(req.ZoneId);
+        var externalNetworkId = network.BeginVmDeployment(req.ClusterId);
 
         // Resolve the sizing tier here (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
         // the control plane passes the concrete CPU/vCPU/memory it sets on the instance.
@@ -75,8 +75,8 @@ public class CreateVmCommandHandler(
                 $"VM offering '{req.VmOfferingId}' not found.");
 
         // Same translation for the template: customers address it by Titan GUID (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-desired-state), but
-        // the provider knows it by its own id. The template hands out the provider template id of the VM's zone — each cluster has its own
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone) — and refuses a zone it is not synced in.
+        // the provider knows it by its own id. The template hands out the provider template id of the VM's cluster — each cluster has its own
+        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster) — and refuses a cluster it is not synced in.
         // A template customers are not offered does not exist for them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed).
         VmTemplateAggregate? template = null;
         if (Guid.TryParse(req.TemplateId, out var templateId))
@@ -87,7 +87,7 @@ public class CreateVmCommandHandler(
         {
             throw new NotFoundException("TEMPLATE_NOT_FOUND", $"Template '{req.TemplateId}' not found.");
         }
-        string externalTemplateId = template.ProviderIdIn(req.ZoneId);
+        string externalTemplateId = template.ProviderIdIn(req.ClusterId);
 
         string? vendorData = await VendorDataForKeysAsync(callerId, req.SshKeyIds, ct);
 
@@ -104,7 +104,7 @@ public class CreateVmCommandHandler(
             offering.VcpuCount,
             offering.MemoryMb,
             externalTemplateId,
-            vm.ZoneId,
+            vm.ClusterId,
             externalNetworkId,
             tenant.ProjectName,
             vm.DiskSizeGb,

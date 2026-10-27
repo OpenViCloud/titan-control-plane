@@ -49,7 +49,7 @@ public sealed class InitialMigrationTests : IAsyncLifetime
             Assert.Equal(4, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.vm_offerings"));
             Assert.Equal(1, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.volume_offerings"));
             Assert.Equal(1, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.snapshot_offerings"));
-            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.vm_template_zones"));
+            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.vm_template_clusters"));
         }
     }
 }

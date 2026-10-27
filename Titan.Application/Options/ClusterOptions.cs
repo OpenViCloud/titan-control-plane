@@ -5,7 +5,7 @@ namespace Titan.Application.Options;
 // A cluster: where a customer places resources, and the Incus cluster Titan reaches there. All of it is config
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config); Titan authenticates with its own client identity, so
 // nothing here is secret.
-public class ZoneConfig
+public class ClusterConfig
 {
     public string Id { get; set; } = "";
     public string Name { get; set; } = "";
@@ -56,17 +56,17 @@ public class ZoneConfig
     }
 }
 
-public class ZoneOptions
+public class ClusterOptions
 {
     public const string SectionName = "Clusters";
 
-    public List<ZoneConfig> Zones { get; set; } = [];
+    public List<ClusterConfig> Clusters { get; set; } = [];
 
     /// Checks and normalizes what the configuration holds; a value no cluster can be reached with throws, so the
     /// control plane does not start.
-    public static ZoneOptions FromConfiguration(IEnumerable<ZoneConfig>? configured)
+    public static ClusterOptions FromConfiguration(IEnumerable<ClusterConfig>? configured)
     {
-        var clusters = new List<ZoneConfig>();
+        var clusters = new List<ClusterConfig>();
         int index = 0;
         foreach (var cluster in configured ?? [])
         {
@@ -78,35 +78,35 @@ public class ZoneOptions
         {
             throw new InvalidOperationException($"{SectionName}: cluster '{repeated.Key}' is configured twice.");
         }
-        return new ZoneOptions { Zones = clusters };
+        return new ClusterOptions { Clusters = clusters };
     }
 
-    public ZoneConfig ClusterOf(string zoneId)
+    public ClusterConfig ClusterOf(string clusterId)
     {
-        ZoneConfig? cluster = Zones.FirstOrDefault(z => z.Id == zoneId);
+        ClusterConfig? cluster = Clusters.FirstOrDefault(z => z.Id == clusterId);
         if (cluster == null)
         {
-            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Cluster '{zoneId}' is not configured.");
+            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Cluster '{clusterId}' is not configured.");
         }
         return cluster;
     }
 
-    private static ZoneConfig Checked(ZoneConfig cluster, string path)
+    private static ClusterConfig Checked(ClusterConfig cluster, string path)
     {
         if (string.IsNullOrWhiteSpace(cluster.Id))
         {
             throw new InvalidOperationException($"{path}:Id must not be blank.");
         }
         string id = cluster.Id.Trim();
-        return new ZoneConfig
+        return new ClusterConfig
         {
             Id = id,
             Name = string.IsNullOrWhiteSpace(cluster.Name) ? id : cluster.Name.Trim(),
-            Endpoint = Field(path, nameof(ZoneConfig.Endpoint), () => ZoneConfig.NormalizeEndpoint(cluster.Endpoint)),
-            ServerFingerprint = Field(path, nameof(ZoneConfig.ServerFingerprint),
-                () => ZoneConfig.NormalizeFingerprint(cluster.ServerFingerprint)),
-            OvnUplinkNetwork = ProviderName(path, nameof(ZoneConfig.OvnUplinkNetwork), cluster.OvnUplinkNetwork),
-            StoragePool = ProviderName(path, nameof(ZoneConfig.StoragePool), cluster.StoragePool),
+            Endpoint = Field(path, nameof(ClusterConfig.Endpoint), () => ClusterConfig.NormalizeEndpoint(cluster.Endpoint)),
+            ServerFingerprint = Field(path, nameof(ClusterConfig.ServerFingerprint),
+                () => ClusterConfig.NormalizeFingerprint(cluster.ServerFingerprint)),
+            OvnUplinkNetwork = ProviderName(path, nameof(ClusterConfig.OvnUplinkNetwork), cluster.OvnUplinkNetwork),
+            StoragePool = ProviderName(path, nameof(ClusterConfig.StoragePool), cluster.StoragePool),
             Ipv6Block = Ipv6Block(path, cluster.Ipv6Block),
         };
     }
@@ -131,9 +131,9 @@ public class ZoneOptions
             return null;
         }
         string name = value.Trim();
-        if (name.Length > ZoneConfig.MaxProviderNameLength)
+        if (name.Length > ClusterConfig.MaxProviderNameLength)
         {
-            throw new InvalidOperationException($"{path}:{field} must be at most {ZoneConfig.MaxProviderNameLength} characters.");
+            throw new InvalidOperationException($"{path}:{field} must be at most {ClusterConfig.MaxProviderNameLength} characters.");
         }
         return name;
     }
@@ -145,10 +145,10 @@ public class ZoneOptions
             return null;
         }
         string block = value.Trim();
-        if (!ZoneConfig.IsIpv6Block(block))
+        if (!ClusterConfig.IsIpv6Block(block))
         {
             throw new InvalidOperationException(
-                $"{path}:{nameof(ZoneConfig.Ipv6Block)} must be an IPv6 /56, written as its first address.");
+                $"{path}:{nameof(ClusterConfig.Ipv6Block)} must be an IPv6 /56, written as its first address.");
         }
         return System.Net.IPNetwork.Parse(block).ToString();
     }

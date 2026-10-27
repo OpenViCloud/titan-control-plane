@@ -55,7 +55,7 @@ using CatOfferingCmd = Titan.Application.Commands.Catalog.VmOffering;
 using CatTemplateQry = Titan.Application.Queries.Catalog.VmTemplate;
 using CatOfferingQry = Titan.Application.Queries.Catalog.VmOffering;
 using CatVolumeOfferingQry = Titan.Application.Queries.Catalog.VolumeOffering;
-using CatZoneQry = Titan.Application.Queries.Catalog.Zone;
+using CatClusterQry = Titan.Application.Queries.Catalog.Cluster;
 using CatOsImageQry = Titan.Application.Queries.Catalog.OsImage;
 using AdminVmCmd = Titan.Application.Commands.Admin.Vm;
 using AdminVmQry = Titan.Application.Queries.Admin.Vm;
@@ -206,9 +206,9 @@ builder.Services.AddScoped<PlatLegalQry.GetConsentStatusQueryHandler>();
 builder.Services.AddScoped<PlatActivityQry.ListActivityEventsQueryHandler>();
 builder.Services.AddScoped<PlatAuditQry.ListAdminAuditLogQueryHandler>();
 // A cluster no handshake could reach throws here, so the host does not start (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
-var zoneOptions = ZoneOptions.FromConfiguration(
-    builder.Configuration.GetSection(ZoneOptions.SectionName).Get<List<ZoneConfig>>());
-builder.Services.AddSingleton(zoneOptions);
+var clusterOptions = ClusterOptions.FromConfiguration(
+    builder.Configuration.GetSection(ClusterOptions.SectionName).Get<List<ClusterConfig>>());
+builder.Services.AddSingleton(clusterOptions);
 
 var creditOptions = builder.Configuration.GetSection(CreditOptions.SectionName).Get<CreditOptions>() ?? new CreditOptions();
 builder.Services.AddSingleton(creditOptions);
@@ -286,7 +286,7 @@ builder.Services.AddScoped<CatTemplateQry.ListAdminTemplatesQueryHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListReconcilableTemplatesQueryHandler>();
 builder.Services.AddScoped<CatOfferingQry.ListVmOfferingsQueryHandler>();
 builder.Services.AddScoped<CatVolumeOfferingQry.ListVolumeOfferingsQueryHandler>();
-builder.Services.AddScoped<CatZoneQry.ListZonesQueryHandler>();
+builder.Services.AddScoped<CatClusterQry.ListClustersQueryHandler>();
 builder.Services.AddScoped<CatOsImageQry.ListOsImagesQueryHandler>();
 builder.Services.AddScoped<TemplateSyncRunner>();
 // Cross-tenant, platform-admin only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).
@@ -309,7 +309,7 @@ builder.Services.AddOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOpt
     .BindConfiguration(Titan.Infrastructure.Incus.ProviderClientIdentityOptions.SectionName)
     .ValidateOnStart();
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>>(
-    new Titan.Infrastructure.Incus.ProviderClientIdentityValidation(clustersConfigured: zoneOptions.Zones.Count > 0));
+    new Titan.Infrastructure.Incus.ProviderClientIdentityValidation(clustersConfigured: clusterOptions.Clusters.Count > 0));
 builder.Services.AddOptions<Titan.Application.Options.BackupTargetOptions>()
     .BindConfiguration(Titan.Application.Options.BackupTargetOptions.SectionName);
 builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();

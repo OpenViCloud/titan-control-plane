@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// The VM reconciler reads one zone's pool and compares it with this list. Same shape as
+// The VM reconciler reads one cluster's pool and compares it with this list. Same shape as
 // ListReconcilableNetworksEndpoint, including the heartbeat.
 public class ListReconcilableVmsEndpoint(
     ListReconcilableVmsQueryHandler handler,
@@ -29,15 +29,15 @@ public class ListReconcilableVmsEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        List<ReconcilableVmQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmsQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmKind, zoneId), DateTimeOffset.UtcNow);
+        List<ReconcilableVmQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmsQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(rows, cancellation: ct);
     }
 }

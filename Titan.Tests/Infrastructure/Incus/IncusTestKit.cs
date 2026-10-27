@@ -30,9 +30,9 @@ internal static class IncusTestKit
     public static ProviderClientIdentityStore IdentityStore(ProviderClientIdentityOptions? identity = null) =>
         new(Options.Create(identity ?? NewIdentity()));
 
-    public static ZoneOptions Zones(params string[] ids) =>
-        new() { Zones = ids.Select(id => Cluster(id, $"https://{id}.invalid:8443", AnyFingerprint)).ToList() };
+    public static ClusterOptions Clusters(params string[] ids) =>
+        new() { Clusters = ids.Select(id => Cluster(id, $"https://{id}.invalid:8443", AnyFingerprint)).ToList() };
 
-    public static ZoneConfig Cluster(string id, string endpoint, string serverFingerprint) =>
+    public static ClusterConfig Cluster(string id, string endpoint, string serverFingerprint) =>
         new() { Id = id, Name = id, Endpoint = endpoint, ServerFingerprint = serverFingerprint };
 }

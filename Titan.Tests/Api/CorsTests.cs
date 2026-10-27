@@ -25,7 +25,7 @@ public class CorsTests
         await factory.InitializeAsync();
 
         var client = factory.CreateClient();
-        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/zones");
+        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/clusters");
         request.Headers.Add("Origin", allowedOrigin);
         request.Headers.Add("Access-Control-Request-Method", "GET");
 
@@ -45,7 +45,7 @@ public class CorsTests
         await factory.InitializeAsync();
 
         var client = factory.CreateClient();
-        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/zones");
+        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/clusters");
         request.Headers.Add("Origin", "https://evil.example.com");
         request.Headers.Add("Access-Control-Request-Method", "GET");
 
@@ -62,7 +62,7 @@ public class CorsTests
         await factory.InitializeAsync();
 
         var client = factory.CreateClient();
-        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/zones");
+        var request = new HttpRequestMessage(HttpMethod.Options, "/v1/clusters");
         request.Headers.Add("Origin", "https://portal.example.com");
         request.Headers.Add("Access-Control-Request-Method", "GET");
 

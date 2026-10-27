@@ -12,11 +12,11 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The control-plane half of the storage reconciler: GET /internal/reconcile/volumes returns the volumes and
-// volume snapshots of a zone, with the existence and attachment Titan last recorded, and every call is the
+// volume snapshots of a cluster, with the existence and attachment Titan last recorded, and every call is the
 // reconciler's heartbeat. The repository predicates are in VolumeRepositoryStateTests.
 public class StorageReconcilerTests
 {
-    private const string Zone = "vn-hcm-1";
+    private const string Cluster = "vn-hcm-1";
 
     private static IConfiguration ConfigWithToken(string token) =>
         new ConfigurationBuilder()
@@ -33,7 +33,7 @@ public class StorageReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = token;
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Cluster}");
             },
             new ListReconcilableStorageQueryHandler(new VolumeRepository(db), new VolumeSnapshotRepository(db), new VmRepository(db)),
             heartbeat, ConfigWithToken("secret"));
@@ -42,7 +42,7 @@ public class StorageReconcilerTests
     public async Task Endpoint_WithToken_ReturnsVolumesAndSnapshots_WithWhatWasLastSeen_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var volume = Volume.CreateUnchecked(Guid.NewGuid(), "data", Zone, "vo-std", 20);
+        var volume = Volume.CreateUnchecked(Guid.NewGuid(), "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(null, true);
         var snapshot = VolumeSnapshot.CreateUnchecked(volume.Id, volume.TenantId, "snap");
@@ -66,7 +66,7 @@ public class StorageReconcilerTests
         Assert.Equal(volume.Id, s.VolumeId);
         Assert.Equal("img-8", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"volumes/{Zone}"].LastPollAt);
+        Assert.NotNull(heartbeat.Snapshot()[$"volumes/{Cluster}"].LastPollAt);
     }
 
     // The worker compares the instance names it reads in used_by, so the list names the attached VM by its instance.
@@ -74,9 +74,9 @@ public class StorageReconcilerTests
     public async Task Endpoint_NamesTheAttachedVm_ByItsIncusInstance()
     {
         using var db = NewDb();
-        var vm = Titan.Domain.Aggregates.Compute.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Zone, 20);
+        var vm = Titan.Domain.Aggregates.Compute.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkCreated("vm0123456789abcdefghijklmnop");
-        var volume = Volume.CreateUnchecked(vm.TenantId, "data", Zone, "vo-std", 20);
+        var volume = Volume.CreateUnchecked(vm.TenantId, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(vm.Id, false);
         db.Vms.Add(vm);

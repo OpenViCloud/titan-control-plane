@@ -9,11 +9,11 @@ public interface INetworkRepository
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     /// Networks of the tenant with a public /64, counted like CountActiveByTenantAsync (MaxPublicIpv6).
     Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
-    /// The /64 numbers live networks of the zone hold, any tenant: same rule as the unique index on them.
-    Task<HashSet<int>> ListPublicIpv6IndexesInZoneAsync(string zoneId, CancellationToken ct = default);
-    /// Each /64 number a Deleted network of the zone held, any tenant, with the latest time it was given back (null:
+    /// The /64 numbers live networks of the cluster hold, any tenant: same rule as the unique index on them.
+    Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default);
+    /// Each /64 number a Deleted network of the cluster held, any tenant, with the latest time it was given back (null:
     /// deleted before that was recorded).
-    Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInZoneAsync(string zoneId, CancellationToken ct = default);
+    Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId, CancellationToken ct = default);
     Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default);
     Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default);
     /// A load balancer of the network is not yet Deleted: it lives on the network on Incus.
@@ -24,7 +24,7 @@ public interface INetworkRepository
     Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);
     /// Reached the provider (ExternalId set) and not yet confirmed gone, whatever Incus last said: an Errored network
     /// can come back Created, and a refused delete can still end with the network gone.
-    Task<List<Network>> ListReconcilableAsync(string zoneId, CancellationToken ct = default);
+    Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
     void Add(Network network);
     Task SaveAsync(CancellationToken ct = default);
 }

@@ -38,7 +38,7 @@ public class DetachVolumeCommandHandler(
 
         activity.Stage("volume.detach_requested", "volume", volume.Id, volume.Name); // atomic with Detach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDetachAsync(volume.Id, externalVolumeId, projectName, volume.ZoneId, ct);
+        await commands.EnqueueVolumeDetachAsync(volume.Id, externalVolumeId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

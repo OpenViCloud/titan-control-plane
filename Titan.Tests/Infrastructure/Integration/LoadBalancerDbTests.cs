@@ -22,14 +22,14 @@ public class LoadBalancerDbTests(PostgresFixture pg)
 
     private static Vm VmOnIncus(Tenant tenant, Guid networkId)
     {
-        var vm = Vm.CreateUnchecked(tenant.Id, networkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(tenant.Id, networkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
         vm.MarkObserved(VmState.Running, "10.0.0.5", null);
         return vm;
     }
 
     private static LoadBalancer NewLoadBalancer(Tenant tenant, Guid networkId, int vipIndex, params Vm[] backends) =>
-        LoadBalancer.Create(tenant, 0, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-ext", Subnet, "zone-1",
+        LoadBalancer.Create(tenant, 0, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-ext", Subnet, "cluster-1",
             LoadBalancerVip.For(Subnet, vipIndex), [Http], backends);
 
     private async Task SaveAsync(LoadBalancer lb)

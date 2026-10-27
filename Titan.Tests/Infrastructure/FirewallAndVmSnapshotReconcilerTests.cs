@@ -15,12 +15,12 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The control-plane half of the firewall and VM snapshot reconcilers:
-// GET /internal/reconcile/firewall-rules and /internal/reconcile/vm-snapshots return the rows of a zone with the state
+// GET /internal/reconcile/firewall-rules and /internal/reconcile/vm-snapshots return the rows of a cluster with the state
 // Titan last recorded, what was asked, and the parent id the callback route needs; every call is the reconciler's
 // heartbeat. The repository predicates are in VmSnapshotFirewallRepositoryStateTests.
 public class FirewallAndVmSnapshotReconcilerTests
 {
-    private const string Zone = "vn-hcm-1";
+    private const string Cluster = "vn-hcm-1";
 
     private static IConfiguration ConfigWithToken(string token) =>
         new ConfigurationBuilder()
@@ -35,7 +35,7 @@ public class FirewallAndVmSnapshotReconcilerTests
     private static void SendAs(Microsoft.AspNetCore.Http.HttpContext ctx, string token)
     {
         ctx.Request.Headers["X-Internal-Token"] = token;
-        ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Zone}");
+        ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Cluster}");
     }
 
     private static ListReconcilableFirewallRulesEndpoint FirewallEndpoint(TitanDbContext db, ReconcilerHeartbeat heartbeat, string token) =>
@@ -54,7 +54,7 @@ public class FirewallAndVmSnapshotReconcilerTests
     public async Task FirewallEndpoint_WithToken_ReturnsRulesWithTheirNetwork_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net", Zone);
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net", Cluster);
         var rule = FirewallRule.CreateUnchecked(network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         rule.MarkActive("sg-7");
         rule.RequestDelete();
@@ -72,14 +72,14 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal("sg-7", r.ExternalId);
         Assert.Equal("enabled", r.CurrentState);
         Assert.Equal("Exists", r.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"firewall-rules/{Zone}"].LastPollAt);
+        Assert.NotNull(heartbeat.Snapshot()[$"firewall-rules/{Cluster}"].LastPollAt);
     }
 
     [Fact]
     public async Task VmSnapshotEndpoint_WithToken_ReturnsSnapshotsWithTheirVm_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Zone, 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
         var snapshot = VmSnapshot.CreateUnchecked(vm.Id, vm.TenantId, "snap");
         snapshot.MarkCreated("42:3");
@@ -97,7 +97,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal(vm.Id, s.VmId);
         Assert.Equal("42:3", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"vm-snapshots/{Zone}"].LastPollAt);
+        Assert.NotNull(heartbeat.Snapshot()[$"vm-snapshots/{Cluster}"].LastPollAt);
     }
 
     [Fact]

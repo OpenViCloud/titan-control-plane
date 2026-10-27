@@ -9,14 +9,14 @@ using Titan.Domain.Repositories.Catalog;
 
 namespace Titan.Tests.Services;
 
-// Counts per (template, zone) over the two configured zones (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+// Counts per (template, cluster) over the two configured clusters (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
 public class TemplateSyncRunnerTests
 {
     private const string Mock = "mock", Singapore = "singapore01";
 
-    private static readonly ZoneOptions Zones = new()
+    private static readonly ClusterOptions Clusters = new()
     {
-        Zones = [new ZoneConfig { Id = Mock, Name = "Mock" }, new ZoneConfig { Id = Singapore, Name = "Singapore 01" }],
+        Clusters = [new ClusterConfig { Id = Mock, Name = "Mock" }, new ClusterConfig { Id = Singapore, Name = "Singapore 01" }],
     };
 
     private readonly Mock<IVmTemplateRepository> _repo = new();
@@ -35,9 +35,9 @@ public class TemplateSyncRunnerTests
     }
 
     private TemplateSyncRunner Runner() =>
-        new(new SyncTemplatesCommandHandler(_syncRepo.Object, Zones, _commands.Object,
+        new(new SyncTemplatesCommandHandler(_syncRepo.Object, Clusters, _commands.Object,
                 NullLogger<SyncTemplatesCommandHandler>.Instance),
-            _repo.Object, Zones, NullLogger<TemplateSyncRunner>.Instance);
+            _repo.Object, Clusters, NullLogger<TemplateSyncRunner>.Instance);
 
     // A runner that skipped the enqueue and only polled would otherwise stay green.
     [Fact]
@@ -49,9 +49,9 @@ public class TemplateSyncRunnerTests
 
         await Runner().RunAsync(1, TimeSpan.Zero, CountingDelay(() => { }));
 
-        foreach (string zoneId in new[] { Mock, Singapore })
+        foreach (string clusterId in new[] { Mock, Singapore })
         {
-            _commands.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, zoneId, "a", null, "img", null, 10,
+            _commands.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, "a", null, "img", null, 10,
                 It.IsAny<CancellationToken>()), Times.Once);
         }
     }
@@ -66,7 +66,7 @@ public class TemplateSyncRunnerTests
         var res = await Runner().RunAsync(5, TimeSpan.Zero, CountingDelay(() => delays++));
 
         Assert.Equal(TemplateSyncOutcome.AllSynced, res.Outcome);
-        Assert.Equal((4, 4), (res.Total, res.Synced)); // 2 templates × 2 zones
+        Assert.Equal((4, 4), (res.Total, res.Synced)); // 2 templates × 2 clusters
         Assert.Equal(0, delays); // already done — never sleeps
     }
 
@@ -97,8 +97,8 @@ public class TemplateSyncRunnerTests
         Assert.Equal(2, delays); // polls 3 times, waits between the first two
     }
 
-    [Fact] // a configured zone the template has no row in has not been synced there: it is not "done"
-    public async Task AZoneWithNoRowYet_CountsPending_NotSynced()
+    [Fact] // a configured cluster the template has no row in has not been synced there: it is not "done"
+    public async Task AClusterWithNoRowYet_CountsPending_NotSynced()
     {
         _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "none")]);
 
@@ -124,8 +124,8 @@ public class TemplateSyncRunnerTests
         Assert.Equal(0, delays);
     }
 
-    [Fact] // a zone asked again after a give-up is waiting, not failed: the reason stays until the worker answers
-    public async Task AZoneRetryingAfterAGiveUp_CountsPending_NotFailed()
+    [Fact] // a cluster asked again after a give-up is waiting, not failed: the reason stays until the worker answers
+    public async Task AClusterRetryingAfterAGiveUp_CountsPending_NotFailed()
     {
         _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "Retrying")]);
 
@@ -135,8 +135,8 @@ public class TemplateSyncRunnerTests
         Assert.Equal(TemplateSyncOutcome.TimedOut, res.Outcome);
     }
 
-    [Fact] // D-5: the verdict covers the whole catalog — one failed zone fails the run though the other synced
-    public async Task OneZoneFailed_IsHasFailures_EvenWhenTheOtherZoneSynced()
+    [Fact] // D-5: the verdict covers the whole catalog — one failed cluster fails the run though the other synced
+    public async Task OneClusterFailed_IsHasFailures_EvenWhenTheOtherClusterSynced()
     {
         _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "Failed")]);
 
@@ -146,20 +146,20 @@ public class TemplateSyncRunnerTests
         Assert.Equal((2, 1, 1), (res.Total, res.Synced, res.Failed));
     }
 
-    // A run with no zone configured syncs nothing and has nothing left pending: counted as done it would report a
-    // catalog no customer can use as AllSynced. The deploy Job once ran without the zone env exactly like that.
+    // A run with no cluster configured syncs nothing and has nothing left pending: counted as done it would report a
+    // catalog no customer can use as AllSynced. The deploy Job once ran without the cluster env exactly like that.
     [Fact]
-    public async Task NoZoneConfigured_IsNoZones_NotAllSynced()
+    public async Task NoClusterConfigured_IsNoClusters_NotAllSynced()
     {
         _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "none", "none")]);
         var runner = new TemplateSyncRunner(
-            new SyncTemplatesCommandHandler(_syncRepo.Object, new ZoneOptions(), _commands.Object,
+            new SyncTemplatesCommandHandler(_syncRepo.Object, new ClusterOptions(), _commands.Object,
                 NullLogger<SyncTemplatesCommandHandler>.Instance),
-            _repo.Object, new ZoneOptions(), NullLogger<TemplateSyncRunner>.Instance);
+            _repo.Object, new ClusterOptions(), NullLogger<TemplateSyncRunner>.Instance);
 
         var res = await runner.RunAsync(5, TimeSpan.Zero, CountingDelay(() => { }));
 
-        Assert.Equal(TemplateSyncOutcome.NoZones, res.Outcome);
+        Assert.Equal(TemplateSyncOutcome.NoClusters, res.Outcome);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -177,25 +177,25 @@ public class TemplateSyncRunnerTests
         return t;
     }
 
-    private static void Put(VmTemplate t, string zoneId, string state)
+    private static void Put(VmTemplate t, string clusterId, string state)
     {
         if (state == "none")
         {
             return;
         }
-        t.RequestSyncIn(zoneId);
+        t.RequestSyncIn(clusterId);
         if (state == "Exists")
         {
-            t.MarkCreatedIn(zoneId, $"ext-{t.Name}-{zoneId}");
+            t.MarkCreatedIn(clusterId, $"ext-{t.Name}-{clusterId}");
         }
         if (state == "Failed")
         {
-            t.MarkRequestFailedIn(zoneId, "provider unreachable", null);
+            t.MarkRequestFailedIn(clusterId, "provider unreachable", null);
         }
         if (state == "Retrying")
         {
-            t.MarkRequestFailedIn(zoneId, "provider unreachable", null);
-            t.RequestSyncIn(zoneId);
+            t.MarkRequestFailedIn(clusterId, "provider unreachable", null);
+            t.RequestSyncIn(clusterId);
         }
     }
 }

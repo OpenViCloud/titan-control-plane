@@ -14,8 +14,8 @@ public class ListReconcilableStorageQueryHandler(
 {
     public async Task<ReconcilableStorageQueryResult> HandleAsync(ListReconcilableStorageQuery query, CancellationToken ct = default)
     {
-        List<VolumeAggregate> volumeRows = await volumes.ListReconcilableAsync(query.ZoneId, ct);
-        var snapshotRows = await snapshots.ListReconcilableAsync(query.ZoneId, ct);
+        List<VolumeAggregate> volumeRows = await volumes.ListReconcilableAsync(query.ClusterId, ct);
+        var snapshotRows = await snapshots.ListReconcilableAsync(query.ClusterId, ct);
 
         List<Guid> attachedVmIds = volumeRows
             .Where(v => v.CurrentAttachedVmId != null)

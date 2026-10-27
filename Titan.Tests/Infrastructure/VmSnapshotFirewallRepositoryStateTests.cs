@@ -23,9 +23,9 @@ public class VmSnapshotFirewallRepositoryStateTests
             .UseInMemoryDatabase($"vmsnap-fw-state-{Guid.NewGuid()}")
             .Options);
 
-    private static Vm RunningVm(string zone = "vn-hcm-1")
+    private static Vm RunningVm(string cluster = "vn-hcm-1")
     {
-        var vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", zone, 20);
+        var vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
         return vm;
     }
@@ -129,8 +129,8 @@ public class VmSnapshotFirewallRepositoryStateTests
         Assert.Equal(blocks, inProgress);
     }
 
-    [Fact] // a snapshot has no zone; it lives where its VM lives. Only what has a provider id and is not gone.
-    public async Task SnapshotReconcilable_FollowsItsVmsZone_AndIsWhatReachedTheProvider()
+    [Fact] // a snapshot has no cluster; it lives where its VM lives. Only what has a provider id and is not gone.
+    public async Task SnapshotReconcilable_FollowsItsVmsCluster_AndIsWhatReachedTheProvider()
     {
         using var db = NewDb();
         var there = RunningVm("vn-han-1");
@@ -206,8 +206,8 @@ public class VmSnapshotFirewallRepositoryStateTests
         Assert.Equal(new[] { "10.0.0.1/32", "10.0.0.2/32", "10.0.0.3/32", "10.0.0.5/32" }, cidrs);
     }
 
-    [Fact] // a rule has no zone; it lives where its network lives. Only what has a provider id and is not gone.
-    public async Task RuleReconcilable_FollowsItsNetworksZone_AndIsWhatReachedTheProvider()
+    [Fact] // a rule has no cluster; it lives where its network lives. Only what has a provider id and is not gone.
+    public async Task RuleReconcilable_FollowsItsNetworksCluster_AndIsWhatReachedTheProvider()
     {
         using var db = NewDb();
         var here = Network.CreateUnchecked(Tenant, "here", "vn-hcm-1");

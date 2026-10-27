@@ -9,7 +9,7 @@ public class Network
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
     public string? ExternalId { get; private set; }
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
@@ -28,7 +28,7 @@ public class Network
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
     // The network's public /64 and the router address OVH routes it to; null = no public IPv6
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). The index is unique per zone among live networks.
+    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). The index is unique per cluster among live networks.
     public int? PublicIpv6Index { get; private set; }
     public string? PublicIpv6Subnet { get; private set; }
     public string? PublicIpv6RouterAddress { get; private set; }
@@ -61,7 +61,7 @@ public class Network
 
     /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
     public static Network Create(
-        Tenant tenant, int activeNetworkCount, int activePublicIpv6Count, string name, string zoneId,
+        Tenant tenant, int activeNetworkCount, int activePublicIpv6Count, string name, string clusterId,
         NetworkPublicIpv6? publicIpv6,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
@@ -71,7 +71,7 @@ public class Network
         {
             tenant.EnsureCanEnablePublicIpv6(activePublicIpv6Count);
         }
-        var network = CreateUnchecked(tenant.Id, name, zoneId, defaultIngressPolicy, defaultEgressPolicy);
+        var network = CreateUnchecked(tenant.Id, name, clusterId, defaultIngressPolicy, defaultEgressPolicy);
         if (publicIpv6 != null)
         {
             network.PublicIpv6Index = publicIpv6.Index;
@@ -83,7 +83,7 @@ public class Network
 
     /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
     internal static Network CreateUnchecked(
-        Guid tenantId, string name, string zoneId,
+        Guid tenantId, string name, string clusterId,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
@@ -92,7 +92,7 @@ public class Network
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = name,
-            ZoneId = zoneId,
+            ClusterId = clusterId,
             CurrentState = null,
             CurrentExistence = CurrentExistence.NotCreated,
             DesiredExistence = DesiredExistence.Exists,
@@ -201,7 +201,7 @@ public class Network
         RequestFailedAt = DateTimeOffset.UtcNow;
         PendingIntentId = null;
         // Incus never had the network, so nothing holds the /64 there; keeping it here would take one of the
-        // zone's 255 until the tenant deletes the row.
+        // cluster's 255 until the tenant deletes the row.
         bool incusNeverHadIt = ExternalId is null;
         if (incusNeverHadIt)
         {
@@ -256,14 +256,14 @@ public class Network
         RequestFailedAt = DateTimeOffset.UtcNow;
     }
 
-    /// A VM is instantiated on its network's cluster, so it must ask for the network's own zone
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice). Checked before the state: another zone is never right.
-    public string BeginVmDeployment(string vmZoneId)
+    /// A VM is instantiated on its network's cluster, so it must ask for the network's own cluster
+    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice). Checked before the state: another cluster is never right.
+    public string BeginVmDeployment(string vmClusterId)
     {
-        bool vmIsInAnotherZone = vmZoneId != ZoneId;
-        if (vmIsInAnotherZone)
+        bool vmIsInAnotherCluster = vmClusterId != ClusterId;
+        if (vmIsInAnotherCluster)
             throw new BusinessException("NETWORK_CLUSTER_MISMATCH",
-                $"Network is in zone '{ZoneId}', the VM was asked for zone '{vmZoneId}'.");
+                $"Network is in cluster '{ClusterId}', the VM was asked for cluster '{vmClusterId}'.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_NOT_ACTIVE", "Network must be Created on Incus to deploy a VM.");
         return RequireExternalId();

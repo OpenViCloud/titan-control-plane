@@ -46,7 +46,7 @@ public class ComputeOwnershipTests
         new(_volumeSnapshotRepo.Object, _volumeRepo.Object, _currentUser.Object);
 
     private static Volume ForeignVolume() =>
-        Volume.CreateUnchecked(OtherTenant, "vol-of-someone-else", "zone-1", "offering-1", 50);
+        Volume.CreateUnchecked(OtherTenant, "vol-of-someone-else", "cluster-1", "offering-1", 50);
 
     // ── The leak itself ───────────────────────────────────────────────────
     //

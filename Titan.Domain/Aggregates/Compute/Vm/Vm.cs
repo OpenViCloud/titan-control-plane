@@ -34,7 +34,7 @@ public class Vm
     public DateTimeOffset? RequestFailedAt { get; private set; }
     public string VmOfferingId { get; private set; } = default!;
     public string TemplateId { get; private set; } = default!;
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
     public int DiskSizeGb { get; private set; }
     public string? UserData { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -102,13 +102,13 @@ public class Vm
         string name,
         string vmOfferingId,
         string templateId,
-        string zoneId,
+        string clusterId,
         int diskSizeGb,
         string? userData = null)
     {
         tenant.EnsureCanCreateVm(activeVmCount);
 
-        return CreateUnchecked(tenant.Id, networkId, name, vmOfferingId, templateId, zoneId,
+        return CreateUnchecked(tenant.Id, networkId, name, vmOfferingId, templateId, clusterId,
             diskSizeGb, userData);
     }
 
@@ -120,7 +120,7 @@ public class Vm
         string name,
         string vmOfferingId,
         string templateId,
-        string zoneId,
+        string clusterId,
         int diskSizeGb,
         string? userData = null)
     {
@@ -136,7 +136,7 @@ public class Vm
             DesiredExistence = DesiredExistence.Exists,
             VmOfferingId = vmOfferingId,
             TemplateId = templateId,
-            ZoneId = zoneId,
+            ClusterId = clusterId,
             DiskSizeGb = diskSizeGb,
             UserData = userData,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -287,8 +287,8 @@ public class Vm
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
 
-    /// The VM half of Volume.Attach. It runs BEFORE the zone check there, so a VM in the wrong state
-    /// answers VM_INVALID_STATUS even when the zones also differ. An allowlist: a new VmState is refused.
+    /// The VM half of Volume.Attach. It runs BEFORE the cluster check there, so a VM in the wrong state
+    /// answers VM_INVALID_STATUS even when the clusters also differ. An allowlist: a new VmState is refused.
     public string BeginVolumeAttach()
     {
         if (!IncusCanAttachOrSnapshot())
