@@ -334,6 +334,6 @@ public sealed class IncusClient : IDisposable
             $"The cluster at {_endpoint} does not trust Titan: add Titan's client certificate " +
             $"(fingerprint {_clientFingerprint}) to its trust store.");
 
-    // The client certificate is shared (ProviderClientCertificateCache): only the HTTP client is ours to dispose.
+    // The client certificate is shared (ProviderClientIdentityStore): only the HTTP client is ours to dispose.
     public void Dispose() => _http.Dispose();
 }

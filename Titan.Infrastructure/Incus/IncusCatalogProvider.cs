@@ -2,7 +2,6 @@ using Microsoft.Extensions.Logging;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Infrastructure.Incus;
 
@@ -11,7 +10,7 @@ namespace Titan.Infrastructure.Incus;
 // Both routes are anonymous: a failure keeps its code but loses its detail (endpoint, fingerprints), which goes to the
 // log for the operator.
 public sealed class IncusCatalogProvider(
-    IClusterRepository clusters, IncusClientFactory factory, ZoneOptions zones, ILogger<IncusCatalogProvider> logger)
+    IncusClientFactory factory, ZoneOptions zones, ILogger<IncusCatalogProvider> logger)
     : IComputeCatalogProvider
 {
     private const long BytesPerGib = 1024L * 1024 * 1024;
@@ -73,11 +72,7 @@ public sealed class IncusCatalogProvider(
 
     private async Task<IncusClient> ConnectAsync(string zoneId, CancellationToken ct)
     {
-        var cluster = await clusters.FindByZoneIdAsync(zoneId, ct);
-        if (cluster == null)
-        {
-            throw new NotFoundException("CLUSTER_NOT_FOUND", $"Zone '{zoneId}' has no cluster.");
-        }
+        var cluster = zones.ClusterOf(zoneId);
         return await factory.CreateAsync(cluster.Endpoint, cluster.ServerFingerprint, ct);
     }
 }

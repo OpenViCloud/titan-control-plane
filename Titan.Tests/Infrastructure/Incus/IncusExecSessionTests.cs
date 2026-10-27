@@ -1,8 +1,8 @@
 using System.Net.WebSockets;
 using System.Text;
+using Titan.Application.Options;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Incus;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
@@ -11,12 +11,12 @@ namespace Titan.Tests.Infrastructure.Incus;
 // operation. Each Incus refusal becomes the code the customer can act on.
 public class IncusExecSessionTests
 {
-    private static async Task<(IncusShellConnector Connector, StubClusterRepository Rows, string TitanFingerprint)> Connector()
+    private static async Task<(IncusShellConnector Connector, ZoneOptions Configured, string TitanFingerprint)> Connector()
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var rows = new StubClusterRepository();
-        return (new IncusShellConnector(rows, new IncusClientFactory(store)), rows, titan.Fingerprint);
+        var configured = new ZoneOptions();
+        return (new IncusShellConnector(configured, new IncusClientFactory(store)), configured, titan.Fingerprint);
     }
 
     private static async Task<string> ReadTextAsync(WebSocket socket, int length)
@@ -35,9 +35,9 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_ExecsNcInTheInstance_AndConnectsTheFourChannels()
     {
-        var (connector, rows, titan) = await Connector();
+        var (connector, configured, titan) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync(titan);
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
 
         await using IncusExecSession session = await connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
 
@@ -52,10 +52,10 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_WhenIncusSaysTheInstanceIsNotRunning_IsVmInvalidStatus()
     {
-        var (connector, rows, titan) = await Connector();
+        var (connector, configured, titan) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync(titan);
         server.Behaviour = FakeIncusExecServer.Mode.InstanceNotRunning;
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
@@ -67,10 +67,10 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_WhenTheClusterHasNoExecRoute_IsAClusterError()
     {
-        var (connector, rows, titan) = await Connector();
+        var (connector, configured, titan) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync(titan);
         server.Behaviour = FakeIncusExecServer.Mode.NoExecRoute;
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
@@ -81,10 +81,10 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_WhenTheAgentIsNotRunning_IsVmAgentNotReady()
     {
-        var (connector, rows, titan) = await Connector();
+        var (connector, configured, titan) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync(titan);
         server.Behaviour = FakeIncusExecServer.Mode.AgentNotRunning;
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
@@ -95,9 +95,9 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_WhenTheClusterDoesNotTrustTitan_IsClusterUntrusted()
     {
-        var (connector, rows, _) = await Connector();
+        var (connector, configured, _) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync();
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
@@ -109,9 +109,9 @@ public class IncusExecSessionTests
     [Fact]
     public async Task OpenSsh_WhenTheServerIsNotThePinnedOne_IsFingerprintMismatch()
     {
-        var (connector, rows, titan) = await Connector();
+        var (connector, configured, titan) = await Connector();
         await using var server = await FakeIncusExecServer.StartAsync(titan);
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, new string('0', 64)));
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, new string('0', 64)));
 
         var refused = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
@@ -127,11 +127,11 @@ public class IncusExecSessionTests
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var rows = new StubClusterRepository();
+        var configured = new ZoneOptions();
         await using var server = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
         server.Behaviour = FakeIncusExecServer.Mode.StallsUpgrade;
-        rows.Rows.Add(ClusterAggregate.Create("local-mac", null, server.Endpoint, server.Fingerprint));
-        var connector = new IncusShellConnector(rows, new IncusClientFactory(store)) { ConnectTimeout = TimeSpan.FromSeconds(1) };
+        configured.Zones.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
+        var connector = new IncusShellConnector(configured, new IncusClientFactory(store)) { ConnectTimeout = TimeSpan.FromSeconds(1) };
 
         var refused = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
             connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None)).WaitAsync(TimeSpan.FromSeconds(20));

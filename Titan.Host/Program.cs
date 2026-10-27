@@ -206,10 +206,9 @@ builder.Services.AddScoped<PlatLegalQry.GetLegalDocumentQueryHandler>();
 builder.Services.AddScoped<PlatLegalQry.GetConsentStatusQueryHandler>();
 builder.Services.AddScoped<PlatActivityQry.ListActivityEventsQueryHandler>();
 builder.Services.AddScoped<PlatAuditQry.ListAdminAuditLogQueryHandler>();
-var zoneOptions = new ZoneOptions
-{
-    Zones = builder.Configuration.GetSection("Zones").Get<List<ZoneConfig>>() ?? []
-};
+// A cluster no handshake could reach throws here, so the host does not start (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
+var zoneOptions = ZoneOptions.FromConfiguration(
+    builder.Configuration.GetSection(ZoneOptions.SectionName).Get<List<ZoneConfig>>());
 builder.Services.AddSingleton(zoneOptions);
 
 var creditOptions = builder.Configuration.GetSection(CreditOptions.SectionName).Get<CreditOptions>() ?? new CreditOptions();
@@ -306,27 +305,13 @@ builder.Services.AddScoped<ProviderCommandCmd.ExtendProviderCommandLeaseCommandH
 builder.Services.AddScoped<ProviderCommandCmd.CompleteProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.FailProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandQry.GetLeasedProviderCommandQueryHandler>();
-// Validated on start (base64, 32 bytes) so a bad Encryption__ClusterKey stops startup rather than surfacing at the
-// first use of Titan's client key (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
-builder.Services.AddOptions<Titan.Infrastructure.Incus.ClusterEncryptionOptions>()
-    .BindConfiguration(Titan.Infrastructure.Incus.ClusterEncryptionOptions.SectionName)
-    .ValidateDataAnnotations()
-    .Validate(o =>
-    {
-        if (string.IsNullOrEmpty(o.ClusterKey)) return false;
-        try { return Convert.FromBase64String(o.ClusterKey).Length == 32; }
-        catch (FormatException) { return false; }
-    }, "Encryption:ClusterKey must be a base64-encoded 32-byte (256-bit) key")
-    .Validate(o => Titan.Infrastructure.Incus.ClusterEncryptionOptions.IsAllowedKey(
-            o.ClusterKey, builder.Environment.IsDevelopment()),
-        "Encryption:ClusterKey is the development placeholder committed in appsettings.json; outside Development set a real key")
+// Validated on start so a broken Secret, or a configured cluster without one, stops startup rather than every Incus call
+// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
+builder.Services.AddOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>()
+    .BindConfiguration(Titan.Infrastructure.Incus.ProviderClientIdentityOptions.SectionName)
     .ValidateOnStart();
-builder.Services.AddSingleton<Titan.Infrastructure.Incus.IClusterCredentialCipher,
-    Titan.Infrastructure.Incus.AesGcmClusterCredentialCipher>();
-builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IClusterRepository,
-    Titan.Infrastructure.Repositories.ClusterRepository>();
-builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IProviderClientIdentityRepository,
-    Titan.Infrastructure.Repositories.ProviderClientIdentityRepository>();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>>(
+    new Titan.Infrastructure.Incus.ProviderClientIdentityValidation(clustersConfigured: zoneOptions.Zones.Count > 0));
 builder.Services.AddOptions<Titan.Application.Options.BackupTargetOptions>()
     .BindConfiguration(Titan.Application.Options.BackupTargetOptions.SectionName);
 builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();
@@ -344,9 +329,8 @@ builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupStatusRefre
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.ScheduleBackupsCommandHandler>();
 builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupScheduleService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
-builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientCertificateCache>();
-builder.Services.AddScoped<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
-builder.Services.AddScoped<IProviderClientIdentityStore>(sp =>
+builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
+builder.Services.AddSingleton<IProviderClientIdentityStore>(sp =>
     sp.GetRequiredService<Titan.Infrastructure.Incus.ProviderClientIdentityStore>());
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusClientFactory>();
 builder.Services.AddScoped<IComputeCatalogProvider, Titan.Infrastructure.Incus.IncusCatalogProvider>();

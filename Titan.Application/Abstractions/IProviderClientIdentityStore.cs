@@ -6,6 +6,6 @@ public record ProviderClientCertificate(string CertificatePem, string Fingerprin
 
 public interface IProviderClientIdentityStore
 {
-    /// The same certificate on every call: generated once, then read back.
+    /// The certificate of the configured identity.
     Task<ProviderClientCertificate> GetCertificateAsync(CancellationToken ct);
 }

@@ -1,43 +1,27 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.Extensions.Options;
+using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// Titan's client identity toward Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity): generated
-// once by the control plane, then the same certificate forever — a new one would leave every cluster that trusts the
-// old one refusing Titan, with nothing pointing at the cause.
+// Titan's client identity toward Incus comes from a Secret (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity):
+// the control plane never generates one, so a restart, a second replica or a rebuilt database all present the
+// certificate every cluster already trusts.
 public class ProviderClientIdentityStoreTests
 {
     [Fact]
-    public async Task FirstUse_GeneratesAnEcdsaP384ClientCertificate()
+    public async Task TheClientCertificate_IsTheConfiguredOne_WithItsPrivateKey()
     {
-        var store = IncusTestKit.IdentityStore();
+        var identity = IncusTestKit.NewIdentity();
+        var store = IncusTestKit.IdentityStore(identity);
 
         X509Certificate2 cert = await store.GetClientCertificateAsync(CancellationToken.None);
 
         Assert.True(cert.HasPrivateKey);
-        using ECDsa? key = cert.GetECDsaPublicKey();
-        Assert.NotNull(key);
-        Assert.Equal(384, key.KeySize);
-        var eku = cert.Extensions.OfType<X509EnhancedKeyUsageExtension>().Single();
-        Assert.Contains(eku.EnhancedKeyUsages.Cast<Oid>(), o => o.Value == "1.3.6.1.5.5.7.3.2");
-    }
-
-    [Fact]
-    public async Task EveryRead_ReturnsTheSameCertificate_AndGeneratesOnce()
-    {
-        var repository = new StubIdentityRepository();
-        var store = IncusTestKit.IdentityStore(repository);
-
-        var first = await store.GetCertificateAsync(CancellationToken.None);
-        var second = await store.GetCertificateAsync(CancellationToken.None);
-        // A fresh store over the same rows stands in for a restarted control plane.
-        var afterRestart = await IncusTestKit.IdentityStore(repository).GetCertificateAsync(CancellationToken.None);
-
-        Assert.Equal(first.Fingerprint, second.Fingerprint);
-        Assert.Equal(first.Fingerprint, afterRestart.Fingerprint);
-        Assert.Equal(1, repository.Adds);
+        using var configured = X509Certificate2.CreateFromPem(identity.CertificatePem);
+        Assert.Equal(configured.RawData, cert.RawData);
     }
 
     [Fact]
@@ -52,80 +36,120 @@ public class ProviderClientIdentityStoreTests
     }
 
     [Fact]
-    public async Task ThePublicHalf_CarriesNoPrivateKey_AndTheStoredKeyIsEncrypted()
+    public async Task ThePublicHalf_CarriesNoPrivateKey()
     {
-        var repository = new StubIdentityRepository();
-        var store = IncusTestKit.IdentityStore(repository);
+        var store = IncusTestKit.IdentityStore();
 
         var publicHalf = await store.GetCertificateAsync(CancellationToken.None);
 
         Assert.DoesNotContain("PRIVATE KEY", publicHalf.CertificatePem);
-        string storedKeyBytes = System.Text.Encoding.UTF8.GetString(repository.Stored!.KeyCipher);
-        Assert.DoesNotContain("PRIVATE KEY", storedKeyBytes);
     }
 
-    // Two control planes starting at once: the one that loses the insert uses the winner's identity.
+    // Two stores over the same Secret stand in for a restarted control plane or a second replica.
     [Fact]
-    public async Task LosingTheInsertRace_UsesTheWinnersIdentity()
+    public async Task TheSameSecret_IsTheSameIdentity_AfterARestart()
     {
-        var winnerRepository = new StubIdentityRepository();
-        var winner = await IncusTestKit.IdentityStore(winnerRepository).GetCertificateAsync(CancellationToken.None);
-        var loserRepository = new StubIdentityRepository { WinnerOfARace = winnerRepository.Stored };
+        var identity = IncusTestKit.NewIdentity();
 
-        var loser = await IncusTestKit.IdentityStore(loserRepository).GetCertificateAsync(CancellationToken.None);
-        using X509Certificate2 loserClientCert =
-            await IncusTestKit.IdentityStore(loserRepository).GetClientCertificateAsync(CancellationToken.None);
+        var first = await IncusTestKit.IdentityStore(identity).GetCertificateAsync(CancellationToken.None);
+        var afterRestart = await IncusTestKit.IdentityStore(identity).GetCertificateAsync(CancellationToken.None);
 
-        Assert.Equal(winner.Fingerprint, loser.Fingerprint);
-        Assert.Equal(winner.Fingerprint, Convert.ToHexStringLower(SHA256.HashData(loserClientCert.RawData)));
+        Assert.Equal(first.Fingerprint, afterRestart.Fingerprint);
     }
 
-    // Built once per process: every catalog request would otherwise decrypt the key and load a new certificate.
+    // Built once per process: every catalog request would otherwise load a new certificate.
     [Fact]
     public async Task TheClientCertificate_IsBuiltOnce_AndShared()
     {
-        var repository = new StubIdentityRepository();
-        var cache = new ProviderClientCertificateCache();
-        var store = new Titan.Infrastructure.Incus.ProviderClientIdentityStore(repository, IncusTestKit.Cipher(), cache);
+        var store = IncusTestKit.IdentityStore();
 
         X509Certificate2 first = await store.GetClientCertificateAsync(CancellationToken.None);
-        X509Certificate2 second = await new Titan.Infrastructure.Incus.ProviderClientIdentityStore(
-            repository, IncusTestKit.Cipher(), cache).GetClientCertificateAsync(CancellationToken.None);
+        X509Certificate2 second = await store.GetClientCertificateAsync(CancellationToken.None);
 
         Assert.Same(first, second);
     }
 
-    // A replaced identity row (database restore, a deliberate reset) must not leave the process presenting the old
-    // certificate while the admin page shows the new one.
     [Fact]
-    public async Task AReplacedIdentityRow_IsNotServedFromTheOldCertificate()
+    public async Task TheKeyPair_IsWhatTheSecretHolds()
     {
-        var repository = new StubIdentityRepository();
-        var cache = new ProviderClientCertificateCache();
-        var store = new Titan.Infrastructure.Incus.ProviderClientIdentityStore(repository, IncusTestKit.Cipher(), cache);
-        X509Certificate2 before = await store.GetClientCertificateAsync(CancellationToken.None);
-        repository.Stored = null;
-        var replacement = await IncusTestKit.IdentityStore(repository).GetCertificateAsync(CancellationToken.None);
+        var identity = IncusTestKit.NewIdentity();
 
-        X509Certificate2 after = await store.GetClientCertificateAsync(CancellationToken.None);
+        var pair = await IncusTestKit.IdentityStore(identity).GetKeyPairAsync(CancellationToken.None);
 
-        Assert.NotEqual(Convert.ToHexStringLower(SHA256.HashData(before.RawData)), replacement.Fingerprint);
-        Assert.Equal(replacement.Fingerprint, Convert.ToHexStringLower(SHA256.HashData(after.RawData)));
+        Assert.Equal(identity.CertificatePem, pair.CertificatePem);
+        Assert.Equal(identity.KeyPem, pair.KeyPem);
     }
 
-    // A truncated or tampered key blob is a named failure, not a 500.
+    // With no cluster configured the control plane may start without an identity; asking for it is then a named failure.
     [Fact]
-    public async Task ACorruptedKeyBlob_IsANamedFailure()
+    public async Task NoIdentityConfigured_IsANamedFailure_NotA500()
     {
-        var repository = new StubIdentityRepository();
-        await IncusTestKit.IdentityStore(repository).GetCertificateAsync(CancellationToken.None);
-        var stored = repository.Stored!;
-        repository.Stored = Titan.Domain.Aggregates.Platform.ProviderClientIdentity.ProviderClientIdentity.Create(
-            stored.CertificatePem, [1, 2, 3], stored.Fingerprint);
+        var store = new ProviderClientIdentityStore(Options.Create(new ProviderClientIdentityOptions()));
 
-        var error = await Assert.ThrowsAsync<Titan.Domain.Exceptions.ServiceUnavailableException>(() =>
-            IncusTestKit.IdentityStore(repository).GetClientCertificateAsync(CancellationToken.None));
+        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() =>
+            store.GetCertificateAsync(CancellationToken.None));
 
         Assert.Equal("CLUSTER_IDENTITY_UNREADABLE", error.Code);
+    }
+
+    [Fact]
+    public void Validation_AValidIdentity_Passes()
+    {
+        string? problem = ProviderClientIdentityOptions.ProblemWith(IncusTestKit.NewIdentity(), clustersConfigured: true);
+
+        Assert.Null(problem);
+    }
+
+    [Fact]
+    public void Validation_NoIdentity_AndNoCluster_Passes()
+    {
+        string? problem = ProviderClientIdentityOptions.ProblemWith(new ProviderClientIdentityOptions(), clustersConfigured: false);
+
+        Assert.Null(problem);
+    }
+
+    // A cluster cannot be reached without Titan's certificate: refusing to start beats every Incus call failing.
+    [Fact]
+    public void Validation_AClusterButNoIdentity_StopsStartup()
+    {
+        string? problem = ProviderClientIdentityOptions.ProblemWith(new ProviderClientIdentityOptions(), clustersConfigured: true);
+
+        Assert.NotNull(problem);
+        Assert.Contains("ProviderClientIdentity", problem);
+    }
+
+    [Fact]
+    public void Validation_AKeyOfAnotherCertificate_StopsStartup()
+    {
+        var identity = IncusTestKit.NewIdentity();
+        identity.KeyPem = IncusTestKit.NewIdentity().KeyPem;
+
+        string? problem = ProviderClientIdentityOptions.ProblemWith(identity, clustersConfigured: true);
+
+        Assert.NotNull(problem);
+    }
+
+    [Fact]
+    public void Validation_HalfAnIdentity_StopsStartup_EvenWithoutACluster()
+    {
+        var identity = IncusTestKit.NewIdentity();
+        identity.KeyPem = "";
+
+        string? problem = ProviderClientIdentityOptions.ProblemWith(identity, clustersConfigured: false);
+
+        Assert.NotNull(problem);
+    }
+
+    // The problem text is logged at startup: it names the setting, never the key.
+    [Fact]
+    public void Validation_TheProblem_NeverCarriesTheKey()
+    {
+        var identity = IncusTestKit.NewIdentity();
+        identity.CertificatePem = "not a certificate";
+
+        string? problem = ProviderClientIdentityOptions.ProblemWith(identity, clustersConfigured: true);
+
+        Assert.NotNull(problem);
+        Assert.DoesNotContain("PRIVATE KEY", problem);
     }
 }

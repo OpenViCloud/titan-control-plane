@@ -12,7 +12,6 @@ namespace Titan.Application.Commands.Networking.Network;
 public class CreateNetworkCommandHandler(
     INetworkRepository repo,
     ITenantRepository tenantRepo,
-    IClusterRepository clusters,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
     IActivityRecorder activity,
@@ -60,14 +59,9 @@ public class CreateNetworkCommandHandler(
     // Two creates that pick the same free /64 at once meet at the unique index, not here.
     private async Task<NetworkPublicIpv6> FreePublicIpv6Async(string zoneId, CancellationToken ct)
     {
-        var cluster = await clusters.FindByZoneIdAsync(zoneId, ct);
-        string? block = null;
-        string? uplink = null;
-        if (cluster != null)
-        {
-            block = cluster.ProviderSettings.Ipv6Block;
-            uplink = cluster.ProviderSettings.OvnUplinkNetwork;
-        }
+        var cluster = zones.ClusterOf(zoneId);
+        string? block = cluster.Ipv6Block;
+        string? uplink = cluster.OvnUplinkNetwork;
         if (block == null || uplink == null)
         {
             throw new BusinessException("IPV6_NOT_AVAILABLE", $"Zone '{zoneId}' has no public IPv6.");

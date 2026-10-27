@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm;
+using Titan.Application.Options;
 using Titan.Application.Queries.Compute.Vm;
 using Titan.Domain.Aggregates.Compute.Vm;
 using Titan.Domain.Exceptions;
@@ -15,7 +16,6 @@ using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Sessions;
 using Titan.Tests.Fakes;
 using Titan.Tests.Infrastructure.Incus;
-using ClusterAggregate = Titan.Domain.Aggregates.Platform.Cluster.Cluster;
 
 namespace Titan.Tests.Infrastructure;
 
@@ -28,7 +28,7 @@ public class OpenVmSshEndpointTests
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly FakeActivityRecorder _activity = new();
     private readonly ShellSessionLimiter _limiter = new();
-    private readonly StubClusterRepository _clusters = new();
+    private readonly ZoneOptions _clusters = new();
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly Vm _vm;
 
@@ -95,7 +95,7 @@ public class OpenVmSshEndpointTests
         var titan = await store.GetCertificateAsync(CancellationToken.None);
         await using var incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
         incus.Behaviour = FakeIncusExecServer.Mode.AgentNotRunning;
-        _clusters.Rows.Add(ClusterAggregate.Create("local-mac", null, incus.Endpoint, incus.Fingerprint));
+        _clusters.Zones.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() =>
             Endpoint(upgrade: true, new IncusClientFactory(store)).HandleAsync(CancellationToken.None));
@@ -114,7 +114,7 @@ public class OpenVmSshEndpointTests
     public async Task AClusterFailure_KeepsItsCode_AndHidesItsDetail()
     {
         await using var incus = await FakeIncusExecServer.StartAsync();
-        _clusters.Rows.Add(ClusterAggregate.Create("local-mac", null, incus.Endpoint, incus.Fingerprint));
+        _clusters.Zones.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
 
         var refused = await Assert.ThrowsAsync<ServiceUnavailableException>(() => Endpoint(upgrade: true).HandleAsync(CancellationToken.None));
 

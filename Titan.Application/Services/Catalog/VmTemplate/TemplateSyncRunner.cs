@@ -38,7 +38,7 @@ public class TemplateSyncRunner(
         bool noZoneConfigured = zones.Zones.Count == 0;
         if (noZoneConfigured)
         {
-            logger.LogError("Template sync: no zone configured (Zones__*); nothing can be synced");
+            logger.LogError("Template sync: no zone configured (Clusters__*); nothing can be synced");
             return Result(TemplateSyncOutcome.NoZones, 0, 0, 0, 0);
         }
 

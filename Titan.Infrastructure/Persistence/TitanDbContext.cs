@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Titan.Domain.Aggregates.Platform.Acceptance;
 using Titan.Domain.Aggregates.Platform.ActivityEvent;
 using Titan.Domain.Aggregates.Platform.AdminAuditLog;
-using Titan.Domain.Aggregates.Platform.ProviderClientIdentity;
 using Titan.Domain.Aggregates.Platform.ProviderCommand;
 using Titan.Domain.Aggregates.Platform.Tenant;
 using Titan.Domain.Aggregates.Billing.Invoice;
@@ -55,8 +54,6 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<VmOffering> VmOfferings => Set<VmOffering>();
     public DbSet<VolumeOffering> VolumeOfferings => Set<VolumeOffering>();
     public DbSet<SnapshotOffering> SnapshotOfferings => Set<SnapshotOffering>();
-    public DbSet<Titan.Domain.Aggregates.Platform.Cluster.Cluster> Clusters => Set<Titan.Domain.Aggregates.Platform.Cluster.Cluster>();
-    public DbSet<ProviderClientIdentity> ProviderClientIdentities => Set<ProviderClientIdentity>();
     public DbSet<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord> Backups =>
         Set<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord>();
     public DbSet<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation> BackupObservations =>

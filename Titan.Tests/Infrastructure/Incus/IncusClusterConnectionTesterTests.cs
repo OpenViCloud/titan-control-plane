@@ -1,8 +1,9 @@
+using Microsoft.Extensions.Options;
 using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// "Test connection" probes an endpoint + fingerprint the admin has typed but not saved. It reports, never throws, and
+// "Test connection" probes an endpoint + fingerprint, from the admin's cluster list. It reports, never throws, and
 // tells the three failures apart because each has a different fix: wrong fingerprint (re-copy it), Titan not trusted
 // (add Titan's certificate on the cluster), unreachable (network) — https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus.
 public class IncusClusterConnectionTesterTests
@@ -96,18 +97,16 @@ public class IncusClusterConnectionTesterTests
         Assert.Contains("Incus", result.Error);
     }
 
-    // Encryption__ClusterKey changed after Titan's key was stored: the admin must be told which key, not get a 500.
+    // No identity configured (allowed only while no cluster is): the admin is told which setting, not given a 500.
     [Fact]
-    public async Task AClientKeyThatNoLongerDecrypts_IsAResultNamingTheKey()
+    public async Task NoClientIdentity_IsAResultNamingTheSetting()
     {
-        var repository = new StubIdentityRepository();
-        await IncusTestKit.IdentityStore(repository).GetCertificateAsync(CancellationToken.None);
-        var otherKeyStore = new ProviderClientIdentityStore(repository, IncusTestKit.Cipher(keySeed: 7), new ProviderClientCertificateCache());
-        var tester = new IncusClusterConnectionTester(new IncusClientFactory(otherKeyStore));
+        var noIdentity = new ProviderClientIdentityStore(Options.Create(new ProviderClientIdentityOptions()));
+        var tester = new IncusClusterConnectionTester(new IncusClientFactory(noIdentity));
 
         var result = await tester.TestAsync("https://incus-lab:8443", new string('a', 64), CancellationToken.None);
 
         Assert.False(result.Ok);
-        Assert.Contains("Encryption__ClusterKey", result.Error);
+        Assert.Contains("ProviderClientIdentity", result.Error);
     }
 }

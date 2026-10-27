@@ -103,7 +103,6 @@ public class ExceptionLoggingHostTests
             var configuration = new Dictionary<string, string?>(HostConfiguration)
             {
                 ["ConnectionStrings:Titan"] = "Host=127.0.0.1;Port=1;Database=titan;Username=titan;Password=none;Timeout=2",
-                ["Encryption:ClusterKey"] = RealHostFactory.PlaceholderClusterKey,
                 ["Keycloak:Authority"] = "https://keycloak.test/realms/titan",
                 ["Keycloak:Audience"] = "titan-api",
             };
