@@ -27,7 +27,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
         return new TenantResolutionMiddleware(
             tenants,
             new BootstrapTenantCommandHandler(tenants),
-            new ApproveVerifiedSignupCommandHandler(tenants),
+            new ApproveDeclaredAccountCommandHandler(tenants),
             new OpenWalletCommandHandler(new WalletRepository(db), new CreditOptions { Currency = "VND" }));
     }
 
@@ -40,7 +40,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
             new Claim(ClaimTypes.NameIdentifier, keycloakUserId),
             new Claim("preferred_username", username),
             new Claim("email", username + "@example.com"),
-            new Claim("email_verified", "true"),
+            new Claim(ClaimTypes.Role, TenantResolutionMiddleware.AutoApproveRole),
         }, authenticationType: "test"));
         return ctx;
     }

@@ -26,9 +26,9 @@ public class TenantServiceTests
             => new TenantCmd.BootstrapTenantCommandHandler(repo)
                 .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username, email), ct);
 
-        public Task ApproveVerifiedSignupAsync(Guid tenantId, CancellationToken ct = default)
-            => new TenantCmd.ApproveVerifiedSignupCommandHandler(repo)
-                .HandleAsync(new ApproveVerifiedSignupCommand(tenantId), ct);
+        public Task ApproveDeclaredAccountAsync(Guid tenantId, CancellationToken ct = default)
+            => new TenantCmd.ApproveDeclaredAccountCommandHandler(repo)
+                .HandleAsync(new ApproveDeclaredAccountCommand(tenantId), ct);
 
         public Task UpdateStatusAsync(Guid tenantId, string status, CancellationToken ct = default)
             => new TenantCmd.UpdateTenantStatusCommandHandler(repo)
@@ -391,8 +391,8 @@ public class TenantServiceTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Every signup starts pending, verified or not, whatever the domain: the middleware approves a verified one in
-    // the same request after opening its wallet, so there is one approval path, not two.
+    // Every signup starts pending, whatever the domain: the middleware approves one whose account has the realm role auto-approve
+    // in the same request after opening its wallet, so there is one approval path, not two.
     [Theory]
     [InlineData("alice@gmail.com")]
     [InlineData("bob@openvicloud.com")]
@@ -438,41 +438,41 @@ public class TenantServiceTests
         Assert.Equal("TENANT_NAME_TAKEN", ex.Code);
     }
 
-    // ── ApproveVerifiedSignupAsync (self-heal, no admin) ────
+    // ── ApproveDeclaredAccountAsync (self-heal, no admin) ────
 
     [Fact]
-    public async Task ApproveVerifiedSignup_Pending_MakesItActive()
+    public async Task ApproveDeclaredAccount_Pending_MakesItActive()
     {
         var tenant = MakeTenant(TenantStatus.PendingApproval);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
 
-        await CreateService().ApproveVerifiedSignupAsync(tenant.Id);
+        await CreateService().ApproveDeclaredAccountAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    // Idempotent — two requests of a verified caller can race; the second finds it approved.
+    // Idempotent — two requests of a declared account can race; the second finds it approved.
     [Theory]
     [InlineData(TenantStatus.Active)]
     [InlineData(TenantStatus.Suspended)]
-    public async Task ApproveVerifiedSignup_NonPending_NoOp(TenantStatus status)
+    public async Task ApproveDeclaredAccount_NonPending_NoOp(TenantStatus status)
     {
         var tenant = MakeTenant(status);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
 
-        await CreateService().ApproveVerifiedSignupAsync(tenant.Id);
+        await CreateService().ApproveDeclaredAccountAsync(tenant.Id);
 
         Assert.Equal(status, tenant.Status);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task ApproveVerifiedSignup_TenantNotFound_NoOp()
+    public async Task ApproveDeclaredAccount_TenantNotFound_NoOp()
     {
         _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Tenant?)null);
 
-        await CreateService().ApproveVerifiedSignupAsync(Guid.NewGuid());
+        await CreateService().ApproveDeclaredAccountAsync(Guid.NewGuid());
 
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

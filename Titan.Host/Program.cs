@@ -190,10 +190,10 @@ builder.Services.AddScoped<BillPgtCmd.ReceiveSePayPaymentCommandHandler>();
 builder.Services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#consent-gate-per-user
 builder.Services.AddSingleton<ILegalDocumentCatalog, LegalDocumentCatalog>();
-// BootstrapTenant and ApproveVerifiedSignup have no endpoint: TenantResolutionMiddleware injects them on
+// BootstrapTenant and ApproveDeclaredAccount have no endpoint: TenantResolutionMiddleware injects them on
 // every authenticated request, so a missing line here fails every signed-in call, not just one route.
 builder.Services.AddScoped<PlatTenantCmd.BootstrapTenantCommandHandler>();
-builder.Services.AddScoped<PlatTenantCmd.ApproveVerifiedSignupCommandHandler>();
+builder.Services.AddScoped<PlatTenantCmd.ApproveDeclaredAccountCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantStatusCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantQuotaCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantDebtCeilingCommandHandler>();
