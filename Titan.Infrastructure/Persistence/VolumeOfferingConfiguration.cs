@@ -19,7 +19,7 @@ public class VolumeOfferingConfiguration : IEntityTypeConfiguration<VolumeOfferi
         builder.Property(o => o.PricePerGbPerHour)
             .HasColumnName("price_per_gb_per_hour").HasColumnType("decimal(18,10)").IsRequired();
 
-        // A single tier: every volume is a custom volume in the storage pool of its zone's cluster, and invented
+        // A single tier: every volume is a custom volume in the storage pool of its cluster, and invented
         // tiers would advertise choices that do not exist.
         //
         // "Half of Vultr NVMe block storage": $0.10/GB/mo -> half $0.05 -> x1.2809 USD/SGD -> S$0.00008773/GB/h,

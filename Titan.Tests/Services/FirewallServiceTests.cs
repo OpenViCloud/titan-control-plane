@@ -87,7 +87,7 @@ public class FirewallServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
             It.IsAny<Guid>(), NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
-            "cs-net-id", Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -101,7 +101,7 @@ public class FirewallServiceTests
 
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
             It.IsAny<Guid>(), NetworkId, "Egress", "UDP", 53, 53, "0.0.0.0/0",
-            "cs-net-id", Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class FirewallServiceTests
     public async Task Create_NetworkNotActive_ThrowsBusinessException()
     {
         SetupCurrentUser();
-        var network = Network.CreateUnchecked(TenantId, "net-1", "zone-1"); // status = Creating
+        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // status = Creating
         _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -260,7 +260,7 @@ public class FirewallServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, NetworkId, "cs-rule-abc", Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers like the first.
@@ -338,7 +338,7 @@ public class FirewallServiceTests
 
         Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, NetworkId, "cs-rule-abc", Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -439,7 +439,7 @@ public class FirewallServiceTests
 
     private static Network MakeActiveNetwork(Guid tenantId)
     {
-        var network = Network.CreateUnchecked(tenantId, "net-1", "zone-1");
+        var network = Network.CreateUnchecked(tenantId, "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

@@ -47,7 +47,7 @@ public class DeleteVolumeCommandHandler(
 
         activity.Stage("volume.delete_requested", "volume", volume.Id, volume.Name); // atomic with RequestDelete
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDeleteAsync(volume.Id, externalVolumeId, projectName, volume.ZoneId, ct);
+        await commands.EnqueueVolumeDeleteAsync(volume.Id, externalVolumeId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// Load balancers of a zone, matched against what Incus holds. Same shape as ListReconcilableNetworksEndpoint,
+// Load balancers of a cluster, matched against what Incus holds. Same shape as ListReconcilableNetworksEndpoint,
 // including the heartbeat.
 public class ListReconcilableLoadBalancersEndpoint(
     ListReconcilableLoadBalancersQueryHandler handler,
@@ -29,15 +29,15 @@ public class ListReconcilableLoadBalancersEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        var rows = await handler.HandleAsync(new ListReconcilableLoadBalancersQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.LoadBalancerKind, zoneId), DateTimeOffset.UtcNow);
+        var rows = await handler.HandleAsync(new ListReconcilableLoadBalancersQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.LoadBalancerKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(rows, cancellation: ct);
     }
 }

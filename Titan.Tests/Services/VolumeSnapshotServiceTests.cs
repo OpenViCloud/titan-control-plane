@@ -97,7 +97,7 @@ public class VolumeSnapshotServiceTests
             It.Is<VolumeSnapshot>(x => x.Id == result.SnapshotId
                                     && x.Transition == VolumeSnapshotTransition.Creating), default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotCreateAsync(
-            It.IsAny<Guid>(), volume.Id, "cs-vol-1", Project, volume.ZoneId,
+            It.IsAny<Guid>(), volume.Id, "cs-vol-1", Project, volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -198,7 +198,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, volume.Id, "cs-snap-1", Project, volume.ZoneId,
+            snapshot.Id, volume.Id, "cs-snap-1", Project, volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -232,7 +232,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, volume.Id, "cs-snap-9", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            snapshot.Id, volume.Id, "cs-snap-9", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -285,10 +285,10 @@ public class VolumeSnapshotServiceTests
             new RestoreVolumeSnapshotBody("vol-restored-01"), default);
 
         Assert.NotEqual(Guid.Empty, result.NewVolumeId);
-        _volumeRepo.Verify(r => r.Add(It.Is<Volume>(v => v.Name == "vol-restored-01" && v.ZoneId == volume.ZoneId)), Times.Once);
+        _volumeRepo.Verify(r => r.Add(It.Is<Volume>(v => v.Name == "vol-restored-01" && v.ClusterId == volume.ClusterId)), Times.Once);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, result.NewVolumeId, "cs-snap-1", "vol-restored-01", "t-" + _tenant.Id.ToString("N"), volume.ZoneId,
+            snapshot.Id, result.NewVolumeId, "cs-snap-1", "vol-restored-01", "t-" + _tenant.Id.ToString("N"), volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -407,7 +407,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, volume.Id, "cs-snap-1", Project, volume.ZoneId, It.IsAny<CancellationToken>()), Times.Once);
+            snapshot.Id, volume.Id, "cs-snap-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -609,9 +609,9 @@ public class VolumeSnapshotServiceTests
 
     private static Volume MakeVolume(VolSeed status, string? csId = null)
     {
-        var vol = Volume.CreateUnchecked(TenantId, "vol-01", "zone-1", "offering-1", 50);
+        var vol = Volume.CreateUnchecked(TenantId, "vol-01", "cluster-1", "offering-1", 50);
         var effectiveId = csId ?? "cs-vol-default";
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("cs-vm-1", "10.0.0.5");
         switch (status)
         {

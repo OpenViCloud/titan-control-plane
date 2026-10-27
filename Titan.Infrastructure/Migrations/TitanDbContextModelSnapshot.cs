@@ -659,15 +659,15 @@ namespace Titan.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateZone", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateCluster", b =>
                 {
                     b.Property<Guid>("TemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("template_id");
 
-                    b.Property<string>("ZoneId")
+                    b.Property<string>("ClusterId")
                         .HasColumnType("text")
-                        .HasColumnName("zone_id");
+                        .HasColumnName("cluster_id");
 
                     b.Property<string>("CurrentExistence")
                         .IsRequired()
@@ -703,9 +703,9 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("TemplateId", "ZoneId");
+                    b.HasKey("TemplateId", "ClusterId");
 
-                    b.ToTable("vm_template_zones", "core");
+                    b.ToTable("vm_template_clusters", "core");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering", b =>
@@ -752,6 +752,11 @@ namespace Titan.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -819,11 +824,6 @@ namespace Titan.Infrastructure.Migrations
                     b.Property<int>("VipIndex")
                         .HasColumnType("integer")
                         .HasColumnName("vip_index");
-
-                    b.Property<string>("ZoneId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zone_id");
 
                     b.HasKey("Id");
 
@@ -969,6 +969,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
                     b.Property<bool>("CreateFinished")
                         .HasColumnType("boolean")
                         .HasColumnName("create_finished");
@@ -1059,11 +1064,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("vm_offering_id");
 
-                    b.Property<string>("ZoneId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zone_id");
-
                     b.HasKey("Id");
 
                     b.HasIndex("VmOfferingId");
@@ -1146,6 +1146,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1210,11 +1215,6 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("volume_offering_id");
-
-                    b.Property<string>("ZoneId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zone_id");
 
                     b.HasKey("Id");
 
@@ -1383,6 +1383,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("cidr");
 
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1464,21 +1469,16 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.Property<string>("ZoneId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zone_id");
-
                     b.HasKey("Id");
+
+                    b.HasIndex("ClusterId", "PublicIpv6Index")
+                        .IsUnique()
+                        .HasDatabaseName("ix_networks_cluster_id_public_ipv6_index")
+                        .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique()
                         .HasFilter("current_existence <> 'Deleted'");
-
-                    b.HasIndex("ZoneId", "PublicIpv6Index")
-                        .IsUnique()
-                        .HasDatabaseName("ix_networks_zone_id_public_ipv6_index")
-                        .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
 
                     b.ToTable("networks", "core");
                 });
@@ -1788,6 +1788,12 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("available_at");
 
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("cluster_id");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1841,12 +1847,6 @@ namespace Titan.Infrastructure.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("integer")
                         .HasColumnName("version");
-
-                    b.Property<string>("ZoneId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("zone_id");
 
                     b.HasKey("Id");
 
@@ -2045,10 +2045,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasConstraintName("FK_vm_templates_vm_offerings_vm_offering_id");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateZone", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateCluster", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", null)
-                        .WithMany("Zones")
+                        .WithMany("Clusters")
                         .HasForeignKey("TemplateId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2110,7 +2110,7 @@ namespace Titan.Infrastructure.Migrations
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", b =>
                 {
-                    b.Navigation("Zones");
+                    b.Navigation("Clusters");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer", b =>

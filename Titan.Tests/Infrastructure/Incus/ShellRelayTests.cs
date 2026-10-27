@@ -28,10 +28,10 @@ public class ShellRelayTests
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var configured = new ZoneOptions();
+        var configured = new ClusterOptions();
         FakeIncusExecServer incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
         incus.Behaviour = mode;
-        configured.Zones.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
         IncusExecSession session = await new IncusShellConnector(configured, new IncusClientFactory(store))
             .OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
         (WebSocket server, WebSocket customer) = InMemoryWebSocket.Pair();

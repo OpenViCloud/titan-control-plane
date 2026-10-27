@@ -81,13 +81,13 @@ public class VmSshHandlerTests
     }
 
     [Fact]
-    public async Task Target_OfARunningVm_IsItsZoneProjectAndInstance()
+    public async Task Target_OfARunningVm_IsItsClusterProjectAndInstance()
     {
         Vm vm = SeedVm(_tenantId, running: true);
 
         VmShellTargetQueryResult target = await TargetAsync(vm.Id);
 
-        Assert.Equal("local-mac", target.ZoneId);
+        Assert.Equal("local-mac", target.ClusterId);
         Assert.Equal(Tenant.ProjectNameFor(_tenantId), target.ProjectName);
         Assert.Equal("vmabc", target.InstanceName);
     }

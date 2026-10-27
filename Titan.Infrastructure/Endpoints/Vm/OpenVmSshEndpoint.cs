@@ -68,12 +68,12 @@ public class OpenVmSshEndpoint(
     {
         try
         {
-            return await connector.OpenSshAsync(shell.ZoneId, shell.ProjectName, shell.InstanceName, ct);
+            return await connector.OpenSshAsync(shell.ClusterId, shell.ProjectName, shell.InstanceName, ct);
         }
         catch (ServiceUnavailableException e)
         {
-            logger.LogWarning("SSH session to VM {VmId}: cluster of zone {ZoneId} failed ({Code}): {Detail}", vmId, shell.ZoneId, e.Code, e.Message);
-            throw new ServiceUnavailableException(e.Code, $"The cluster of zone '{shell.ZoneId}' is not available ({e.Code}).");
+            logger.LogWarning("SSH session to VM {VmId}: cluster {ClusterId} failed ({Code}): {Detail}", vmId, shell.ClusterId, e.Code, e.Message);
+            throw new ServiceUnavailableException(e.Code, $"Cluster '{shell.ClusterId}' is not available ({e.Code}).");
         }
     }
 }

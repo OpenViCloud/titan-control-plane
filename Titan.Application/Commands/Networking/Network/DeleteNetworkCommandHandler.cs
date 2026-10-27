@@ -53,7 +53,7 @@ public class DeleteNetworkCommandHandler(
 
         activity.Stage("network.delete_requested", "network", network.Id, network.Name); // atomic with RequestDelete
         await commands.EnqueueNetworkDeleteAsync(
-            network.Id, externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ZoneId, ct);
+            network.Id, externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Deleted
         // report marks them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle).
         await repo.SaveAsync(ct);

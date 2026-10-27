@@ -20,7 +20,7 @@ public class ProviderCommand
     /// What the worker does: `vm.create`, `vm.delete`, … (ProviderCommandKinds).
     public string Kind { get; private set; } = default!;
 
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
 
     /// JSON the worker reads; its property names are the wire format.
     public string Payload { get; private set; } = default!;
@@ -48,7 +48,7 @@ public class ProviderCommand
     private ProviderCommand() { }
 
     public static ProviderCommand Create(
-        string key, string kind, string zoneId, string payload, ProviderCommandRerun rerun, DateTimeOffset now)
+        string key, string kind, string clusterId, string payload, ProviderCommandRerun rerun, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("A provider command needs a key.", nameof(key));
@@ -60,7 +60,7 @@ public class ProviderCommand
             Id = Guid.NewGuid(),
             Key = key,
             Kind = kind,
-            ZoneId = zoneId,
+            ClusterId = clusterId,
             Payload = payload,
             Rerun = rerun,
             Status = ProviderCommandStatus.Pending,

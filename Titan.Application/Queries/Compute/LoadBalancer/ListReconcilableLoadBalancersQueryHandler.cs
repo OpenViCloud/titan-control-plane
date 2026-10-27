@@ -11,7 +11,7 @@ public class ListReconcilableLoadBalancersQueryHandler(ILoadBalancerRepository r
     public async Task<List<ReconcilableLoadBalancerQueryResult>> HandleAsync(
         ListReconcilableLoadBalancersQuery query, CancellationToken ct = default)
     {
-        var rows = await repo.ListReconcilableAsync(query.ZoneId, ct);
+        var rows = await repo.ListReconcilableAsync(query.ClusterId, ct);
         return rows.Select(lb => new ReconcilableLoadBalancerQueryResult(
                 lb.Id, TenantAggregate.ProjectNameFor(lb.TenantId), lb.ExternalNetworkId, lb.Vip,
                 lb.CurrentExistence.ToString()))

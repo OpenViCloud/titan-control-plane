@@ -28,13 +28,13 @@ public class CatalogContractTests : IClassFixture<OpenApiSpecTests.ApiFactory>
     // Adding a route to the public contract without adding it here (or vice versa) is the drift this catches.
     public static TheoryData<string> CatalogRoutes() => new()
     {
-        "/v1/zones",
+        "/v1/clusters",
         "/v1/templates",
         "/v1/vm-offerings",
         "/v1/volume-offerings",
     };
 
-    // Any status but 404 proves the route is registered: zones and the two price lists are anonymous, templates answer 401.
+    // Any status but 404 proves the route is registered: clusters and the two price lists are anonymous, templates answer 401.
     [Theory]
     [MemberData(nameof(CatalogRoutes))]
     public async Task CatalogRoute_IsRegistered(string route)

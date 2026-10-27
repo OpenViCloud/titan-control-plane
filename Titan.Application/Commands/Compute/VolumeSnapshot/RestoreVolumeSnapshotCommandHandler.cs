@@ -40,7 +40,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         var activeVolumeCount = await volumeRepo.CountActiveByTenantAsync(callerId, ct);
 
         var newVolume = VolumeAggregate.CreateFromSnapshot(
-            snapshot, tenant, activeVolumeCount, command.Name, sourceVolume.ZoneId,
+            snapshot, tenant, activeVolumeCount, command.Name, sourceVolume.ClusterId,
             sourceVolume.VolumeOfferingId, sourceVolume.SizeGb);
         var externalSnapshotId = snapshot.BeginRestore(); // same rule, and hands over the id
         volumeRepo.Add(newVolume);
@@ -49,7 +49,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         activity.Stage("volume_snapshot.restore_requested", "volume", newVolume.Id, newVolume.Name); // atomic with Add
         string projectName = TenantAggregate.ProjectNameFor(newVolume.TenantId);
         await commands.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, newVolume.Id, externalSnapshotId, command.Name, projectName, sourceVolume.ZoneId, ct);
+            snapshot.Id, newVolume.Id, externalSnapshotId, command.Name, projectName, sourceVolume.ClusterId, ct);
         await volumeRepo.SaveAsync(ct);
 
         return new RestoreVolumeSnapshotCommandResult(newVolume.Id);

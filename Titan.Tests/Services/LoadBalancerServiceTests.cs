@@ -47,7 +47,7 @@ public class LoadBalancerServiceTests
     private Network NetworkWithIpv6(bool usable = true, Guid? tenantId = null)
     {
         Tenant owner = tenantId == null ? _tenant : TestTenant.Active("other", "kc-o", "o@o.com");
-        var network = Network.Create(owner, 0, 0, $"net-{Guid.NewGuid():N}"[..12], "zone-1", NetworkPublicIpv6.For(Block, 5));
+        var network = Network.Create(owner, 0, 0, $"net-{Guid.NewGuid():N}"[..12], "cluster-1", NetworkPublicIpv6.For(Block, 5));
         if (usable)
         {
             network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
@@ -58,7 +58,7 @@ public class LoadBalancerServiceTests
 
     private Network NetworkWithoutIpv6()
     {
-        var network = Network.Create(_tenant, 0, 0, "plain", "zone-1", null);
+        var network = Network.Create(_tenant, 0, 0, "plain", "cluster-1", null);
         network.MarkActive("net-plain", "10.0.0.0/24", "10.0.0.1");
         _networks.Setup(r => r.FindByIdAsync(network.Id, It.IsAny<CancellationToken>())).ReturnsAsync(network);
         return network;
@@ -66,7 +66,7 @@ public class LoadBalancerServiceTests
 
     private Vm VmOn(Network network, Guid? tenantId = null)
     {
-        var vm = Vm.CreateUnchecked(tenantId ?? TenantId, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(tenantId ?? TenantId, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "cluster-1", 20);
         vm.MarkRunning($"vm{_knownVms.Count:D26}", "10.0.0.5");
         _knownVms.Add(vm);
         return vm;
@@ -131,7 +131,7 @@ public class LoadBalancerServiceTests
         Assert.Equal("2001:41d0:d00:d405::1:1", lb.Vip);
         Assert.Equal("net-ext", lb.ExternalNetworkId);
         Assert.Equal("2001:41d0:d00:d405::/64", lb.NetworkSubnet);
-        Assert.Equal("zone-1", lb.ZoneId);
+        Assert.Equal("cluster-1", lb.ClusterId);
         Assert.Equal(LoadBalancerTransition.Creating, lb.Transition);
         Assert.Equal(1, _repo.Saves);
         _commands.Verify(c => c.EnqueueLoadBalancerCreateAsync(lb, Project, It.IsAny<CancellationToken>()), Times.Once);
@@ -320,7 +320,7 @@ public class LoadBalancerServiceTests
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, "net-ext", lb.Vip, Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.delete_requested" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -527,7 +527,7 @@ public class LoadBalancerServiceTests
         LoadBalancer onIncus = await OnIncusAsync(network, a);
         await CreatedAsync(network, a);
 
-        var rows = await new ListReconcilableLoadBalancersQueryHandler(_repo).HandleAsync(new ListReconcilableLoadBalancersQuery("zone-1"));
+        var rows = await new ListReconcilableLoadBalancersQueryHandler(_repo).HandleAsync(new ListReconcilableLoadBalancersQuery("cluster-1"));
 
         ReconcilableLoadBalancerQueryResult row = Assert.Single(rows);
         Assert.Equal(new ReconcilableLoadBalancerQueryResult(onIncus.Id, Project, "net-ext", onIncus.Vip, "Exists"), row);

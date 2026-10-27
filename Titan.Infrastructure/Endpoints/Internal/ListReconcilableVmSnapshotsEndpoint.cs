@@ -29,15 +29,15 @@ public class ListReconcilableVmSnapshotsEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        List<ReconcilableVmSnapshotQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmSnapshotsQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmSnapshotKind, zoneId), DateTimeOffset.UtcNow);
+        List<ReconcilableVmSnapshotQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmSnapshotsQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmSnapshotKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(rows, cancellation: ct);
     }
 }

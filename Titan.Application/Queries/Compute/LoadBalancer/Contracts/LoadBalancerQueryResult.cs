@@ -13,7 +13,7 @@ public record LoadBalancerQueryResult(
     Guid Id,
     string Name,
     Guid NetworkId,
-    string ZoneId,
+    string ClusterId,
     string Vip,
     List<LoadBalancerListenerQueryResult> Listeners,
     List<LoadBalancerBackendQueryResult> Backends,
@@ -25,7 +25,7 @@ public record LoadBalancerQueryResult(
     DateTimeOffset CreatedAt)
 {
     public static LoadBalancerQueryResult From(LoadBalancerAggregate lb) =>
-        new(lb.Id, lb.Name, lb.NetworkId, lb.ZoneId, lb.Vip,
+        new(lb.Id, lb.Name, lb.NetworkId, lb.ClusterId, lb.Vip,
             lb.DesiredListeners
                 .OrderBy(l => l.Protocol).ThenBy(l => l.Port)
                 .Select(l => new LoadBalancerListenerQueryResult(l.Protocol.ToString(), l.Port, l.TargetPort))

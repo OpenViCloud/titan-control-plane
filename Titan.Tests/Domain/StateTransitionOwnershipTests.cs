@@ -78,7 +78,7 @@ public class StateTransitionOwnershipTests
         ["Invoice.MarkPaid"] = "intent (an admin presses Mark Paid) named as observation — it DOES " +
                                "validate internally, which is what Tôn Chủ's rule asks; only the name " +
                                "is wrong. Rename to SettleOutsideTitan() when Billing gets a story",
-        ["VmTemplateZone.MarkCreated"] = "the refusal is about the PAYLOAD, not the transition: Created with " +
+        ["VmTemplateCluster.MarkCreated"] = "the refusal is about the PAYLOAD, not the transition: Created with " +
                                "no ExternalTemplateId is a template that reports ready and cannot be " +
                                "used (VmService raises TEMPLATE_NOT_SYNCED). It reuses the INVALID_STATUS " +
                                "code this test screens on, so it cannot be told apart mechanically. The " +
@@ -197,7 +197,7 @@ public class StateTransitionOwnershipTests
             var aggregate = Path.GetFileNameWithoutExtension(file);
             // `?` is in the return-type class: Vm.MarkRunning returns VmIntent?, and a pattern without it
             // would skip that method silently — the scan measuring less, still green. `internal` for the same
-            // reason: a child's mutations (VmTemplateZone) are internal, reached only through its root.
+            // reason: a child's mutations (VmTemplateCluster) are internal, reached only through its root.
             foreach (var m in Regex.Matches(src, @"(?:public|internal) (?:void|[A-Za-z<>?]+) (Mark\w*)\([^)]*\)\s*\{").Cast<Match>())
             {
                 var end = src.IndexOf("\n    }", m.Index, StringComparison.Ordinal);
@@ -280,7 +280,7 @@ public class StateTransitionOwnershipTests
     // which a text scan looking only for `throw` would report as a violation.
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
-        ["VmTemplateZone.MarkNotFound"] = "there is genuinely no invariant to enforce: NotFound is reachable " +
+        ["VmTemplateCluster.MarkNotFound"] = "there is genuinely no invariant to enforce: NotFound is reachable " +
             "from every existence, carries no required field, and has no terminal state to absorb. " +
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",

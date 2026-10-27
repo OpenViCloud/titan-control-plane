@@ -14,21 +14,21 @@ public class GroupBRepeatRefusedTests
 {
     private static Vm RunningVm()
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("vm-ext", "10.0.0.5");
         return vm;
     }
 
     private static Network ActiveNetwork()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "zone-a");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-a");
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
 
     private static Volume AllocatedVolume()
     {
-        var volume = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "zone-a", "std", 10);
+        var volume = Volume.CreateUnchecked(Guid.NewGuid(), "vol-1", "cluster-a", "std", 10);
         volume.MarkCreated("vol-ext");
         return volume;
     }

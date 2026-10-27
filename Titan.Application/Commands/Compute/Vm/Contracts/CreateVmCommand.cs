@@ -8,7 +8,7 @@ public record CreateVmCommand(
     Guid NetworkId,
     string VmOfferingId,
     string TemplateId,
-    string ZoneId,
+    string ClusterId,
     int? DiskSizeGb,
     string? UserData = null,
     // Saved keys of the caller's tenant to put into the `ubuntu` user's authorized_keys at first boot

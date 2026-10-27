@@ -58,7 +58,7 @@ public class TenantQueryHandlerTests
     }
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a tenant has no provider account, so the API
-    // carries none — the Incus project is per zone and named from the id.
+    // carries none — the Incus project is per cluster and named from the id.
     [Fact]
     public async Task GetTenant_CarriesNoProviderAccount()
     {

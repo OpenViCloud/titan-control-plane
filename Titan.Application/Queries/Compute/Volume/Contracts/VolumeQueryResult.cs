@@ -18,7 +18,7 @@ public record VolumeQueryResult(
     bool CurrentAttachedElsewhere,
     Guid? DesiredAttachedVmId,
     [property: JsonConverter(typeof(JsonStringEnumConverter))] VolumeTransition? Transition,
-    string ZoneId,
+    string ClusterId,
     string VolumeOfferingId,
     int SizeGb,
     DateTimeOffset CreatedAt,
@@ -27,6 +27,6 @@ public record VolumeQueryResult(
 {
     public static VolumeQueryResult From(VolumeAggregate v) =>
         new(v.Id, v.Name, v.CurrentExistence, v.DesiredExistence, v.CurrentAttachedVmId,
-            v.CurrentAttachedElsewhere, v.DesiredAttachedVmId, v.Transition, v.ZoneId,
+            v.CurrentAttachedElsewhere, v.DesiredAttachedVmId, v.Transition, v.ClusterId,
             v.VolumeOfferingId, v.SizeGb, v.CreatedAt, v.RequestFailureReason, v.RequestFailedAt);
 }

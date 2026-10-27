@@ -57,7 +57,7 @@ public class ScheduleBackupsCommandTests
             _rows.Rows.Select(r => r.Key).ToArray());
         ProviderCommand vmRow = _rows.Rows[0];
         Assert.Equal(ProviderCommandKinds.VmBackup, vmRow.Kind);
-        Assert.Equal("mock", vmRow.ZoneId);
+        Assert.Equal("mock", vmRow.ClusterId);
         Assert.Contains($"\"projectName\":\"t-{vm.TenantId:N}\"", vmRow.Payload);
         Assert.Contains($"\"tenantId\":\"{vm.TenantId}\"", vmRow.Payload);
         Assert.Contains("\"externalVmId\":\"vm-a\"", vmRow.Payload);

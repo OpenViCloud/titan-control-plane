@@ -4,15 +4,13 @@ using Titan.Application.Queries.Catalog.Cluster.Contracts;
 
 namespace Titan.Application.Queries.Catalog.Cluster;
 
-public class ListClustersQueryHandler(IComputeCatalogProvider provider, ZoneOptions zoneOptions)
+public class ListClustersQueryHandler(ClusterOptions clusterOptions)
 {
-    public async Task<List<ClusterInfo>> HandleAsync(ListClustersQuery query, CancellationToken ct = default)
+    public Task<List<ClusterInfo>> HandleAsync(ListClustersQuery query, CancellationToken ct = default)
     {
-        var zoneId = query.ZoneId;
-
-        var zone = zoneOptions.Zones.FirstOrDefault(z => z.Id == zoneId);
-        if (zone is null)
-            throw new KeyNotFoundException($"Zone '{zoneId}' not found.");
-        return await provider.ListClustersAsync(zoneId, ct);
+        var clusters = clusterOptions.Clusters
+            .Select(z => new ClusterInfo(z.Id, z.Name))
+            .ToList();
+        return Task.FromResult(clusters);
     }
 }

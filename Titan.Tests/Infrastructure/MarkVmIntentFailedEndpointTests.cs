@@ -22,7 +22,7 @@ public class MarkVmIntentFailedEndpointTests
 
     private static Vm RunningVmWaitingForAStop(out Guid intentId)
     {
-        Vm vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        Vm vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         intentId = vm.RequestStop().IntentId;
         return vm;

@@ -61,7 +61,7 @@ public class DeleteFirewallRuleCommandHandler(
         string externalRuleId = rule.RequestDelete();
         activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);
         await commands.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, networkId, externalRuleId, TenantAggregate.ProjectNameFor(network.TenantId), network.ZoneId, ct);
+            rule.Id, networkId, externalRuleId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -48,7 +48,7 @@ public class DeleteVmSnapshotCommandHandler(
         activity.Stage("vm_snapshot.delete_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with RequestDelete
 
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, vmId, externalSnapshotId, projectName, vm.ZoneId, ct);
+        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, vmId, externalSnapshotId, projectName, vm.ClusterId, ct);
         await snapshotRepo.SaveAsync(snapshot, ct);
     }
 }

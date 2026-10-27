@@ -35,14 +35,14 @@ public class QuotaInFactoryTests
 
     private static Vm RunningVm(Guid tenantId)
     {
-        var vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         return vm;
     }
 
     private static Volume AllocatedVolume(Guid tenantId)
     {
-        var v = Volume.CreateUnchecked(tenantId, "vol-1", "zone-a", "std", 20);
+        var v = Volume.CreateUnchecked(tenantId, "vol-1", "cluster-a", "std", 20);
         v.MarkCreated("11");
         return v;
     }
@@ -55,7 +55,7 @@ public class QuotaInFactoryTests
     }
 
     private static Vm NewVm(Tenant t, int activeVms) =>
-        Vm.Create(t, activeVms, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20, userData: null);
+        Vm.Create(t, activeVms, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20, userData: null);
 
     private static readonly NetworkPublicIpv6 SomeIpv6 = NetworkPublicIpv6.For("2001:db8:0:100::/56", 1);
 
@@ -73,11 +73,11 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxIpv6: 1);
         Assert.Equal("IPV6_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 1, "net-1", "zone-a", SomeIpv6)).Code);
+            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 1, "net-1", "cluster-a", SomeIpv6)).Code);
 
         // Same tenant, same count, IPv6 not requested — the cap does not apply. This is the half
         // that keeps the assertion above from being "the factory always throws".
-        Assert.NotNull(Network.Create(t, 0, 1, "net-1", "zone-a", null));
+        Assert.NotNull(Network.Create(t, 0, 1, "net-1", "cluster-a", null));
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxNetworks: 3);
         Assert.Equal("NETWORK_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 3, 0, "net-1", "zone-a", null)).Code);
+            Assert.Throws<BusinessException>(() => Network.Create(t, 3, 0, "net-1", "cluster-a", null)).Code);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxVolumes: 4);
         Assert.Equal("VOLUME_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Volume.Create(t, 4, "vol-1", "zone-a", "std", 20)).Code);
+            Assert.Throws<BusinessException>(() => Volume.Create(t, 4, "vol-1", "cluster-a", "std", 20)).Code);
     }
 
     // A restore spends VOLUME quota, not snapshot quota — the thing being created is a volume.
@@ -103,7 +103,7 @@ public class QuotaInFactoryTests
         var t = TenantWith(maxVolumes: 4);
         var snap = BackedUpSnapshot(t);
         Assert.Equal("VOLUME_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => Volume.CreateFromSnapshot(snap, t, 4, "vol-2", "zone-a", "std", 20)).Code);
+            () => Volume.CreateFromSnapshot(snap, t, 4, "vol-2", "cluster-a", "std", 20)).Code);
     }
 
     [Fact]
@@ -148,10 +148,10 @@ public class QuotaInFactoryTests
             maxVolSnaps: 2, maxFwRules: 5, maxIpv6: 1, maxSshKeys: 4);
 
         Assert.NotNull(NewVm(t, 1));
-        Assert.NotNull(Network.Create(t, 2, 0, "net-2", "zone-a", SomeIpv6));
-        Assert.NotNull(Network.Create(t, 2, 0, "net-1", "zone-a", null));
-        Assert.NotNull(Volume.Create(t, 3, "vol-1", "zone-a", "std", 20));
-        Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "zone-a", "std", 20));
+        Assert.NotNull(Network.Create(t, 2, 0, "net-2", "cluster-a", SomeIpv6));
+        Assert.NotNull(Network.Create(t, 2, 0, "net-1", "cluster-a", null));
+        Assert.NotNull(Volume.Create(t, 3, "vol-1", "cluster-a", "std", 20));
+        Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
         Assert.NotNull(VmSnapshotAggregate.Create(RunningVm(t.Id), t, 2, "snap-1"));
         Assert.NotNull(VolumeSnapshot.Create(AllocatedVolume(t.Id), t, 1, "snap-1"));
         Assert.NotNull(FirewallRule.Create(Guid.NewGuid(), t, 4, FirewallDirection.Ingress,

@@ -58,7 +58,7 @@ public class QueryParameterValidationEndpointTests
     [Fact]
     public async Task VmCost_MonthOutsideOneToTwelve_Is400()
     {
-        Vm vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-a", 20);
+        Vm vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         var vms = new Mock<IVmRepository>();
         vms.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
         GetVmCostEndpoint ep = Factory.Create<GetVmCostEndpoint>(

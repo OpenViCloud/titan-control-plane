@@ -99,7 +99,7 @@ public class VmSnapshotServiceTests
                                 && x.Name == "before-upgrade"), default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotCreateAsync(
             It.IsAny<Guid>(), VmId, vm.ExternalId!, "before-upgrade",
-            Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── VM in a status Incus does not snapshot ───────────────
@@ -236,7 +236,7 @@ public class VmSnapshotServiceTests
         _snapshotRepo.Verify(r => r.SaveAsync(snap, default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotRevertAsync(
             snap.Id, VmId, snap.ExternalId!,
-            Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Revert snapshot not Ready ────────────────────────────
@@ -316,7 +316,7 @@ public class VmSnapshotServiceTests
         _snapshotRepo.Verify(r => r.SaveAsync(snap, default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
             snap.Id, VmId, snap.ExternalId!,
-            Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Delete snapshot not Ready ────────────────────────────
@@ -658,7 +658,7 @@ public class VmSnapshotServiceTests
         await CreateService().DeleteAsync(VmId, snap.Id, default);
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(snap));
-        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, VmId, "cs-snap-abc", Project, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, VmId, "cs-snap-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // reports the worker never sends, the old words included
@@ -713,14 +713,14 @@ public class VmSnapshotServiceTests
     }
 
     private static Vm MakeVmForTenant(Guid tenantId) =>
-        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
     public enum Snap { Creating, CreateFailed, Ready, RevertRequested, DeleteRequested, Deleted }
 
     private static VmSnapshot MakeSnapshot(Snap seed)
     {
         var snap = VmSnapshot.CreateUnchecked(VmId, TenantId, "test-snap"); // seed: needs a fixed VmId
-        var runningVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        var runningVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
         runningVm.MarkRunning("cs-vm-id", "10.0.0.1");
         switch (seed)
         {

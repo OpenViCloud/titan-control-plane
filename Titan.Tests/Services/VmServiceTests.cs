@@ -49,10 +49,10 @@ public class VmServiceTests
     private readonly Titan.Tests.Fakes.FakeActivityRecorder _activity = new();
     private readonly FakeSshKeyRepository _sshKeys = new();
 
-    // Two configured zones: "zone-1" (where the fixture's networks live) and "zone-2" (real, but not theirs).
-    private readonly Titan.Application.Options.ZoneOptions _zones = new()
+    // Two configured clusters: "cluster-1" (where the fixture's networks live) and "cluster-2" (real, but not theirs).
+    private readonly Titan.Application.Options.ClusterOptions _clusters = new()
     {
-        Zones = [new() { Id = "zone-1", Name = "Zone 1" }, new() { Id = "zone-2", Name = "Zone 2" }],
+        Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }, new() { Id = "cluster-2", Name = "Cluster 2" }],
     };
 
     // The fixture's default offering ("offering-1", a medium tier) and template ("tmpl-1")
@@ -69,7 +69,7 @@ public class VmServiceTests
     // constructor has nowhere to put them.
     private CreateVmCommandHandler CreateCreateHandler() =>
         new(_repo.Object, _networkRepo.Object, _tenantRepo.Object, _currentUser.Object,
-            _commands.Object, _offeringRepo.Object, _templateRepo.Object, _sshKeys, _activity, _zones);
+            _commands.Object, _offeringRepo.Object, _templateRepo.Object, _sshKeys, _activity, _clusters);
 
     private RenameVmCommandHandler CreateRenameHandler() =>
         new(_repo.Object, _currentUser.Object);
@@ -123,12 +123,12 @@ public class VmServiceTests
     // the provisioned size could not tell them apart.
     private const string TemplateOwnTier = "l";
 
-    // Synced in zone-1, the zone the create tests use (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
-    private VmTemplate SyncedTemplate(string externalId, string zoneId = "zone-1")
+    // Synced in cluster-1, the cluster the create tests use (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+    private VmTemplate SyncedTemplate(string externalId, string clusterId = "cluster-1")
     {
         var t = VmTemplate.Create("Ubuntu-Web", null, "Ubuntu-22.04", 20, TemplateOwnTier);
-        t.RequestSyncIn(zoneId);
-        t.MarkCreatedIn(zoneId, externalId);
+        t.RequestSyncIn(clusterId);
+        t.MarkCreatedIn(clusterId, externalId);
         _knownTemplates[t.Id] = t;
         return t;
     }
@@ -167,7 +167,7 @@ public class VmServiceTests
             .Callback(() => calls.Add("enqueue"))
             .Returns(Task.CompletedTask);
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         Assert.Equal(["enqueue", "save"], calls);
     }
@@ -187,7 +187,7 @@ public class VmServiceTests
         Vm? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(v => added = v);
 
-        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         Assert.NotNull(added);
         Assert.Equal(added!.Id, result.VmId);
@@ -196,7 +196,7 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "77", "zone-1",
+            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -218,10 +218,10 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, chosenTier, _templateId, "zone-1", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, chosenTier, _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", chosenTier, (decimal)cpu, vcpu, memoryMb, "77", "zone-1",
+            It.IsAny<Guid>(), "web-01", chosenTier, (decimal)cpu, vcpu, memoryMb, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -242,7 +242,7 @@ public class VmServiceTests
         Vm? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(v => added = v);
 
-        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         Assert.NotNull(added);
         Assert.Equal(added!.Id, result.VmId);
@@ -265,10 +265,10 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "xl", _templateId, "zone-1", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "xl", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "xl", 4.0m, 8, 16384, "77", "zone-1",
+            It.IsAny<Guid>(), "web-01", "xl", 4.0m, 8, 16384, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -288,39 +288,39 @@ public class VmServiceTests
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var template = SyncedTemplate(externalId: "99");
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "zone-1", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "99", "zone-1",
+            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "99", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // Each cluster has its own image alias: the VM gets the id of ITS zone, never another zone's.
+    // Each cluster has its own image alias: the VM gets the id of ITS cluster, never another cluster's.
     [Fact]
-    public async Task Create_PassesTheTemplateIdOfTheVmsZone()
+    public async Task Create_PassesTheTemplateIdOfTheVmsCluster()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
         SetupOffering();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var network = Network.CreateUnchecked(TenantId, "net-2", "zone-2");
+        var network = Network.CreateUnchecked(TenantId, "net-2", "cluster-2");
         network.MarkActive("cs-net-2", "10.0.1.0/24", "10.0.1.1");
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        var template = SyncedTemplate(externalId: "99", zoneId: "zone-1");
-        template.RequestSyncIn("zone-2");
-        template.MarkCreatedIn("zone-2", "3");
+        var template = SyncedTemplate(externalId: "99", clusterId: "cluster-1");
+        template.RequestSyncIn("cluster-2");
+        template.MarkCreatedIn("cluster-2", "3");
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "zone-2", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-2", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "3", "zone-2",
+            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "3", "cluster-2",
             "cs-net-2", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // Synced in another zone only: in this zone the template does not exist yet.
+    // Synced in another cluster only: in this cluster the template does not exist yet.
     [Fact]
-    public async Task Create_TemplateSyncedOnlyInAnotherZone_ThrowsTemplateNotSynced_AndAddsNoVm()
+    public async Task Create_TemplateSyncedOnlyInAnotherCluster_ThrowsTemplateNotSynced_AndAddsNoVm()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -329,9 +329,9 @@ public class VmServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        var elsewhere = SyncedTemplate(externalId: "3", zoneId: "zone-2");
+        var elsewhere = SyncedTemplate(externalId: "3", clusterId: "cluster-2");
 
-        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", elsewhere.Id.ToString(), "zone-1", null), default));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", elsewhere.Id.ToString(), "cluster-1", null), default));
 
         Assert.Equal("TEMPLATE_NOT_SYNCED", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
@@ -339,7 +339,7 @@ public class VmServiceTests
     }
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed: a template customers are not offered does not exist for them,
-    // even when its image is on the zone's cluster.
+    // even when its image is on the cluster.
     [Fact]
     public async Task Create_UnlistedTemplate_ThrowsTemplateNotFound_AndEnqueuesNoCommand()
     {
@@ -353,7 +353,7 @@ public class VmServiceTests
         VmTemplate hidden = TemplateSeedFields.Unlisted(SyncedTemplate("78"));
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
-            new CreateVmCommand("web-01", network.Id, "offering-1", hidden.Id.ToString(), "zone-1", null), default));
+            new CreateVmCommand("web-01", network.Id, "offering-1", hidden.Id.ToString(), "cluster-1", null), default));
 
         Assert.Equal("TEMPLATE_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
@@ -371,16 +371,16 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", Guid.NewGuid().ToString(), "zone-1", null), default));
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", Guid.NewGuid().ToString(), "cluster-1", null), default));
 
         Assert.Equal("TEMPLATE_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
     }
 
-    // The zone the customer picks is where the VM lands (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#zone-is-a-real-choice): a zone
+    // The cluster the customer picks is where the VM lands (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice): a cluster
     // Titan does not have must not fall through to a default cluster.
     [Fact]
-    public async Task Create_UnknownZone_ThrowsNotFound_AndEnqueuesNoCommand()
+    public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -392,26 +392,26 @@ public class VmServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
             new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "nowhere", null), default));
 
-        Assert.Equal("ZONE_NOT_FOUND", ex.Code);
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }
 
-    // A VM is instantiated on its network's cluster; a network of another zone is not there.
+    // A VM is instantiated on its network's cluster; a network of another cluster is not there.
     [Fact]
-    public async Task Create_NetworkOfAnotherZone_ThrowsMismatch_AndAddsNoVm()
+    public async Task Create_NetworkOfAnotherCluster_ThrowsMismatch_AndAddsNoVm()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var network = MakeActiveNetwork(); // zone-1
+        var network = MakeActiveNetwork(); // cluster-1
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(
-            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-2", null), default));
+            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-2", null), default));
 
-        Assert.Equal("NETWORK_ZONE_MISMATCH", ex.Code);
+        Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         Assert.Empty(_commands.Invocations);
     }
@@ -431,7 +431,7 @@ public class VmServiceTests
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var pending = PendingTemplate();
 
-        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", pending.Id.ToString(), "zone-1", null), default));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", pending.Id.ToString(), "cluster-1", null), default));
 
         Assert.Equal("TEMPLATE_NOT_SYNCED", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
@@ -440,7 +440,7 @@ public class VmServiceTests
     // A template whose alias was seen gone keeps its provider id, so the NOT_SYNCED check alone does not
     // stop it. The customer catalog hides it; creating from it must be refused too.
     [Fact]
-    public async Task Create_TemplateNotFoundInTheZone_ThrowsTemplateUnavailable_AndAddsNoVm()
+    public async Task Create_TemplateNotFoundInTheCluster_ThrowsTemplateUnavailable_AndAddsNoVm()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -450,9 +450,9 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var broken = SyncedTemplate("7");
-        broken.MarkNotFoundIn("zone-1");
+        broken.MarkNotFoundIn("cluster-1");
 
-        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", broken.Id.ToString(), "zone-1", null), default));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", broken.Id.ToString(), "cluster-1", null), default));
 
         Assert.Equal("TEMPLATE_UNAVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
@@ -472,7 +472,7 @@ public class VmServiceTests
         _offeringRepo.Setup(r => r.FindByIdAsync("ghost", default))
             .ReturnsAsync((Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering?)null);
 
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "ghost", _templateId, "zone-1", null), default));
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "ghost", _templateId, "cluster-1", null), default));
 
         Assert.Equal("VM_OFFERING_NOT_FOUND", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
@@ -527,10 +527,10 @@ public class VmServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var otherNetwork = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "zone-1");
+        var otherNetwork = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
         _networkRepo.Setup(r => r.FindByIdAsync(otherNetwork.Id, default)).ReturnsAsync(otherNetwork);
 
-        var req = new CreateVmCommand("web-01", otherNetwork.Id, "offering-1", _templateId, "zone-1", null);
+        var req = new CreateVmCommand("web-01", otherNetwork.Id, "offering-1", _templateId, "cluster-1", null);
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateCreateHandler().HandleAsync(req, default));
 
@@ -544,10 +544,10 @@ public class VmServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var network = Network.CreateUnchecked(TenantId, "net-1", "zone-1"); // status = Creating
+        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // status = Creating
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        var req = new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null);
+        var req = new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null);
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateCreateHandler().HandleAsync(req, default));
 
@@ -579,7 +579,7 @@ public class VmServiceTests
         Assert.Equal(VmIntent.Delete, vm.PendingIntent);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
@@ -708,7 +708,7 @@ public class VmServiceTests
 
         // Must terminate the still-existing provider VM — not silently mark destroyed.
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence); // reconciler owns the terminal transition
     }
 
@@ -743,7 +743,7 @@ public class VmServiceTests
         var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Stop follows Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus): with no Incus status there is
@@ -782,7 +782,7 @@ public class VmServiceTests
 
         var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A VM owned by another tenant is invisible (404), never stopped.
@@ -816,7 +816,7 @@ public class VmServiceTests
         var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmStartAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Start follows Incus: only Stopped and Frozen (a resume); Error is offered stop and delete only.
@@ -850,7 +850,7 @@ public class VmServiceTests
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
         _commands.Verify(w => w.EnqueueVmStartAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", It.IsAny<string>(), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-id", It.IsAny<string>(), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact] // Ready is running: a start is already done, answered like the first request with nothing sent
@@ -1156,7 +1156,7 @@ public class VmServiceTests
 
     private Volume AttachedVolume(Vm vm)
     {
-        Volume volume = Volume.CreateUnchecked(vm.TenantId, "data-1", vm.ZoneId, "std", 20);
+        Volume volume = Volume.CreateUnchecked(vm.TenantId, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -1218,7 +1218,7 @@ public class VmServiceTests
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var userData = "#!/bin/bash\necho hello";
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null, userData), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, userData), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -1237,7 +1237,7 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -1276,7 +1276,7 @@ public class VmServiceTests
             .Returns(Task.CompletedTask);
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand(
-            "web-01", network.Id, "offering-1", _templateId, "zone-1", null, SshKeyIds: [ed.Id, rsa.Id, ed.Id]), default);
+            "web-01", network.Id, "offering-1", _templateId, "cluster-1", null, SshKeyIds: [ed.Id, rsa.Id, ed.Id]), default);
 
         Assert.NotNull(vendorData);
         Assert.Equal(1, CountOccurrences(vendorData, ed.PublicKey));
@@ -1293,7 +1293,7 @@ public class VmServiceTests
         var network = ReadyToCreate();
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand(
-            "web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+            "web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -1309,7 +1309,7 @@ public class VmServiceTests
         _sshKeys.Saved.Add(SshKey.CreateUnchecked(TenantId, "laptop", SshPublicKeyTests.Ed25519));
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
-            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null, SshKeyIds: [Guid.NewGuid()]),
+            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, SshKeyIds: [Guid.NewGuid()]),
             default));
 
         Assert.Equal("SSH_KEY_NOT_FOUND", refused.Code);
@@ -1324,7 +1324,7 @@ public class VmServiceTests
         _sshKeys.Saved.Add(theirs);
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
-            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null, SshKeyIds: [theirs.Id]),
+            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, SshKeyIds: [theirs.Id]),
             default));
 
         Assert.Equal("SSH_KEY_NOT_FOUND", refused.Code);
@@ -1350,7 +1350,7 @@ public class VmServiceTests
         _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(vm => savedVm = vm);
 
         var userData = "#!/bin/bash\necho hello";
-        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null, userData), default);
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, userData), default);
 
         Assert.NotNull(savedVm);
         Assert.Equal(userData, savedVm!.UserData);
@@ -1359,7 +1359,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_UserDataReturned()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0,
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0,
             "#!/bin/bash\necho hello");
         var dto = VmQueryResult.From(vm);
         Assert.Equal("#!/bin/bash\necho hello", dto.UserData);
@@ -1368,7 +1368,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_NoUserData_ReturnsNull()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
         var dto = VmQueryResult.From(vm);
         Assert.Null(dto.UserData);
     }
@@ -1405,7 +1405,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_WithIpv6_IncludesPublicIpv6Address()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
         vm.MarkRunning("cs-vm-1", "10.0.0.1", "2001:db8::1");
 
         var dto = VmQueryResult.From(vm);
@@ -1416,7 +1416,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_WithoutIpv6_PublicIpv6AddressNull()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
         var dto = VmQueryResult.From(vm);
 
@@ -1429,9 +1429,9 @@ public class VmServiceTests
     public async Task List_MixedIpv6_EachItemHasPublicIpv6Address()
     {
         SetupCurrentUser(TenantId);
-        var ipv6Vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "ipv6-vm", "offering-1", "tmpl-1", "zone-1", 0);
+        var ipv6Vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "ipv6-vm", "offering-1", "tmpl-1", "cluster-1", 0);
         ipv6Vm.MarkRunning("cs-vm-1", "10.0.0.1", "2001:db8::1");
-        var plainVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "plain-vm", "offering-1", "tmpl-1", "zone-1", 0);
+        var plainVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "plain-vm", "offering-1", "tmpl-1", "cluster-1", 0);
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(new List<Vm> { ipv6Vm, plainVm });
 
         var result = await CreateListHandler().HandleAsync(new ListVmsQuery(), default);
@@ -1448,7 +1448,7 @@ public class VmServiceTests
     public async Task List_ScopesToCallerTenantOnly_NeverAcrossTenants()
     {
         SetupCurrentUser(TenantId);
-        var callerVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "mine", "offering-1", "tmpl-1", "zone-1", 0);
+        var callerVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "mine", "offering-1", "tmpl-1", "cluster-1", 0);
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(new List<Vm> { callerVm });
 
         var result = await CreateListHandler().HandleAsync(new ListVmsQuery(), default);
@@ -1473,7 +1473,7 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "zone-1", null), default);
+        var result = await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         var e = Assert.Single(_activity.Events);
         Assert.Equal("vm.create_requested", e.Action);
@@ -1575,9 +1575,9 @@ public class VmServiceTests
         // Re-sent, not re-decided: same command key, which the queue absorbs unless the first run failed. A resend,
         // not a new request: a new request on an open row is another request's race and is refused.
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         _commands.Verify(w => w.ResendVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1593,7 +1593,7 @@ public class VmServiceTests
 
         Assert.Equal("vm.stop_requested", Assert.Single(_activity.Events).Action);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
+            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
         _commands.Verify(w => w.EnqueueVmStopAsync(
             vm.Id, It.Is<Guid>(g => g != intentId), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -1782,7 +1782,7 @@ public class VmServiceTests
 
         Assert.Equal("IPv6 could not be assigned.", vm.RequestFailureReason);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-abc", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence);
     }
 
@@ -1801,7 +1801,7 @@ public class VmServiceTests
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-abc", TenantProject, "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "vm.delete_requested", "vm.deleted" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -1896,7 +1896,7 @@ public class VmServiceTests
         Guid secondIntentId = Assert.IsType<Guid>(vm.PendingIntentId);
         Assert.NotEqual(firstIntentId, secondIntentId);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, secondIntentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "zone-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, secondIntentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1946,7 +1946,7 @@ public class VmServiceTests
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(TenantId, "net-1", "zone-1");
+        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -1974,8 +1974,8 @@ public class VmServiceTests
     }
 
     private static Vm MakeVmForTenant(Guid tenantId) =>
-        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "zone-1", 0);
+        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
     private CreateVmCommand MakeCreateCommand() =>
-        new("web-01", Guid.NewGuid(), "offering-1", "tmpl-1", "zone-1", null);
+        new("web-01", Guid.NewGuid(), "offering-1", "tmpl-1", "cluster-1", null);
 }

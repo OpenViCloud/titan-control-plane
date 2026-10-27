@@ -8,38 +8,38 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Services.Catalog.VmTemplate;
 
-public enum TemplateSyncOutcome { AllSynced, TimedOut, HasFailures, NoZones }
+public enum TemplateSyncOutcome { AllSynced, TimedOut, HasFailures, NoClusters }
 
 
-// Drives a full template reconcile to completion: enqueue every template into every zone, then poll the catalog
-// until every (template, zone) has its alias. It backs the one-shot `sync-templates` CLI of Titan.Host; no deploy step
+// Drives a full template reconcile to completion: enqueue every template into every cluster, then poll the catalog
+// until every (template, cluster) has its alias. It backs the one-shot `sync-templates` CLI of Titan.Host; no deploy step
 // runs it any more. The command only enqueues and the worker reconciles asynchronously, so completion is observed by
-// polling. The verdict covers the whole catalog: one zone whose sync gave up makes the run HasFailures even when the other
-// zones synced — their sync goes on regardless, the exit code only reports it
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+// polling. The verdict covers the whole catalog: one cluster whose sync gave up makes the run HasFailures even when the other
+// clusters synced — their sync goes on regardless, the exit code only reports it
+// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
 //
 // A job, not a handler: it injects the command handler the way TenantResolutionMiddleware injects Platform's.
 public class TemplateSyncRunner(
     SyncTemplatesCommandHandler syncTemplates,
     IVmTemplateRepository repo,
-    ZoneOptions zones,
+    ClusterOptions clusters,
     ILogger<TemplateSyncRunner> logger)
 {
     // maxAttempts * pollInterval bounds the wait. `delay` is injected so unit tests run without
-    // real sleeps. Short-circuits on the first (template, zone) in Error (it won't self-heal this run).
+    // real sleeps. Short-circuits on the first (template, cluster) in Error (it won't self-heal this run).
     public async Task<TemplateSyncRunResult> RunAsync(
         int maxAttempts,
         TimeSpan pollInterval,
         Func<TimeSpan, CancellationToken, Task> delay,
         CancellationToken ct = default)
     {
-        // No zone means nothing to sync and nothing left pending — a count that reads as done. The Job gets its zone
-        // list from the same config as the API (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone); without it, fail.
-        bool noZoneConfigured = zones.Zones.Count == 0;
-        if (noZoneConfigured)
+        // No cluster means nothing to sync and nothing left pending — a count that reads as done. The Job gets its cluster
+        // list from the same config as the API (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster); without it, fail.
+        bool noClusterConfigured = clusters.Clusters.Count == 0;
+        if (noClusterConfigured)
         {
-            logger.LogError("Template sync: no zone configured (Clusters__*); nothing can be synced");
-            return Result(TemplateSyncOutcome.NoZones, 0, 0, 0, 0);
+            logger.LogError("Template sync: no cluster configured (Clusters__*); nothing can be synced");
+            return Result(TemplateSyncOutcome.NoClusters, 0, 0, 0, 0);
         }
 
         await syncTemplates.HandleAsync(new SyncTemplatesCommand(), ct);
@@ -50,11 +50,11 @@ public class TemplateSyncRunner(
             int total = 0, synced = 0, failed = 0;
             foreach (var t in all)
             {
-                foreach (ZoneConfig zone in zones.Zones)
+                foreach (ClusterConfig cluster in clusters.Clusters)
                 {
                     total++;
-                    // A zone with no row yet has not been asked: it counts as pending, like a sync still waiting.
-                    VmTemplateZone? row = t.ZoneOrNull(zone.Id);
+                    // A cluster with no row yet has not been asked: it counts as pending, like a sync still waiting.
+                    VmTemplateCluster? row = t.ClusterOrNull(cluster.Id);
                     if (row == null)
                     {
                         continue;

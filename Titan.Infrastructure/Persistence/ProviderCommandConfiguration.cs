@@ -15,7 +15,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.Id).HasColumnName("id");
         builder.Property(c => c.Key).HasColumnName("key").HasMaxLength(128).IsRequired();
         builder.Property(c => c.Kind).HasColumnName("kind").HasMaxLength(64).IsRequired();
-        builder.Property(c => c.ZoneId).HasColumnName("zone_id").HasMaxLength(64).IsRequired();
+        builder.Property(c => c.ClusterId).HasColumnName("cluster_id").HasMaxLength(64).IsRequired();
         builder.Property(c => c.Payload).HasColumnName("payload").HasColumnType("jsonb").IsRequired();
         // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage
         builder.Property(c => c.Rerun).HasColumnName("rerun").HasConversion<string>().HasMaxLength(32).IsRequired();

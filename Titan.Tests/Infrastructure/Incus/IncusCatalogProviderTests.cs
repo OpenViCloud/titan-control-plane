@@ -4,51 +4,20 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// The catalog reads a zone's Incus cluster live (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). Bodies are
-// the lab recordings, which is where the two traps come from: a single server's /1.0/cluster has server_name "", and an
-// untrusted client gets 200 with an empty image list — a catalog that looks healthy and is not.
+// The catalog reads a cluster's Incus live (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). Bodies are
+// the lab recordings, which is where the trap comes from: an untrusted client gets 200 with an empty image list — a
+// catalog that looks healthy and is not.
 public class IncusCatalogProviderTests
 {
     // The clusters start empty: each test configures the ones it needs.
-    private static async Task<(IncusCatalogProvider Catalog, ZoneOptions Clusters, string TitanFingerprint)> Catalog()
+    private static async Task<(IncusCatalogProvider Catalog, ClusterOptions Clusters, string TitanFingerprint)> Catalog()
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
-        var clusters = new ZoneOptions();
+        var clusters = new ClusterOptions();
         var catalog = new IncusCatalogProvider(new IncusClientFactory(store), clusters,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<IncusCatalogProvider>.Instance);
         return (catalog, clusters, titan.Fingerprint);
-    }
-
-    [Fact]
-    public async Task ASingleServer_IsOneClusterNamedAfterTheServer()
-    {
-        var (catalog, configured, titan) = await Catalog();
-        await using var server = await FakeIncusServer.StartAsync(titan);
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
-
-        var clusters = await catalog.ListClustersAsync("mock");
-
-        var only = Assert.Single(clusters);
-        Assert.Equal("lima-incus-lab", only.Name);
-        Assert.Equal("lima-incus-lab", only.Id);
-    }
-
-    // No lab recording of a clustered Incus yet: the member list shape is the documented one (a list of member URLs).
-    [Fact]
-    public async Task AClusteredServer_ListsItsMembers()
-    {
-        var (catalog, configured, titan) = await Catalog();
-        await using var server = await FakeIncusServer.StartAsync(titan);
-        server.TrustedOverrides["/1.0/cluster"] = (200,
-            """{"type":"sync","status":"Success","status_code":200,"operation":"","error_code":0,"error":"","metadata":{"server_name":"node1","enabled":true,"member_config":[]}}""");
-        server.TrustedOverrides["/1.0/cluster/members"] = (200,
-            """{"type":"sync","status":"Success","status_code":200,"operation":"","error_code":0,"error":"","metadata":["/1.0/cluster/members/node1","/1.0/cluster/members/node2"]}""");
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
-
-        var clusters = await catalog.ListClustersAsync("mock");
-
-        Assert.Equal(["node1", "node2"], clusters.Select(c => c.Name).ToList());
     }
 
     [Fact]
@@ -56,12 +25,10 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, _) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync();
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
-        var clusters = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListClustersAsync("mock"));
         var images = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
-        Assert.Equal("CLUSTER_UNTRUSTED", clusters.Code);
         Assert.Equal("CLUSTER_UNTRUSTED", images.Code);
     }
 
@@ -70,9 +37,9 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, new string('a', 64)));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, new string('a', 64)));
 
-        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListClustersAsync("mock"));
+        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
         Assert.Equal("CLUSTER_FINGERPRINT_MISMATCH", error.Code);
     }
@@ -82,19 +49,19 @@ public class IncusCatalogProviderTests
     {
         var (catalog, _, _) = await Catalog();
 
-        var error = await Assert.ThrowsAsync<NotFoundException>(() => catalog.ListClustersAsync("mock"));
+        var error = await Assert.ThrowsAsync<NotFoundException>(() => catalog.ListOsImagesAsync());
 
         Assert.Equal("CLUSTER_NOT_FOUND", error.Code);
     }
 
     // The lab holds one VM image and one container image of Ubuntu noble; Titan only sells VMs.
     [Fact]
-    public async Task OsImages_AreTheVirtualMachineImages_OfTheFirstZone()
+    public async Task OsImages_AreTheVirtualMachineImages_OfTheFirstCluster()
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
-        configured.Zones.Add(IncusTestKit.Cluster("singapore01", server.Endpoint, server.Fingerprint));
-        configured.Zones.Add(IncusTestKit.Cluster("mock", "https://unreachable.invalid:8443", IncusTestKit.AnyFingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("singapore01", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", "https://unreachable.invalid:8443", IncusTestKit.AnyFingerprint));
 
         var images = await catalog.ListOsImagesAsync();
 
@@ -110,9 +77,9 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync();
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
-        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListClustersAsync("mock"));
+        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
         Assert.Equal("CLUSTER_UNTRUSTED", error.Code);
         Assert.DoesNotContain(server.Endpoint, error.Message);
@@ -125,10 +92,10 @@ public class IncusCatalogProviderTests
     {
         var (catalog, configured, titan) = await Catalog();
         await using var server = await FakeIncusServer.StartAsync(titan);
-        server.TrustedOverrides["/1.0/cluster"] = (200, """{"type":"sync","metadata":{"enabled":"yes"}}""");
-        configured.Zones.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
+        server.TrustedOverrides["/1.0/images?recursion=1"] = (200, """{"type":"sync","metadata":{"images":"yes"}}""");
+        configured.Clusters.Add(IncusTestKit.Cluster("mock", server.Endpoint, server.Fingerprint));
 
-        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListClustersAsync("mock"));
+        var error = await Assert.ThrowsAsync<ServiceUnavailableException>(() => catalog.ListOsImagesAsync());
 
         Assert.Equal("CLUSTER_ERROR", error.Code);
     }

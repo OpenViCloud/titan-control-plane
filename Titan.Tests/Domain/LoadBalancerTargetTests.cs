@@ -15,7 +15,7 @@ public class LoadBalancerTargetTests
 
     private static Network UsableNetwork(NetworkPublicIpv6? ipv6)
     {
-        var network = Network.Create(Owner, 0, 0, "net-1", "zone-a", ipv6);
+        var network = Network.Create(Owner, 0, 0, "net-1", "cluster-a", ipv6);
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -32,7 +32,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_WithoutPublicIpv6_IsRefused_BeforeItsState()
     {
-        Network noIpv6 = Network.Create(Owner, 0, 0, "net-1", "zone-a", null);
+        Network noIpv6 = Network.Create(Owner, 0, 0, "net-1", "cluster-a", null);
 
         Assert.Equal("LOAD_BALANCER_NEEDS_PUBLIC_IPV6",
             Assert.Throws<BusinessException>(() => noIpv6.BeginLoadBalancer()).Code);
@@ -41,7 +41,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_NotYetCreated_OrBeingDeleted_IsRefused()
     {
-        Network creating = Network.Create(Owner, 0, 0, "net-1", "zone-a", Ipv6);
+        Network creating = Network.Create(Owner, 0, 0, "net-1", "cluster-a", Ipv6);
         Network deleting = UsableNetwork(Ipv6);
         deleting.RequestDelete();
 
@@ -51,7 +51,7 @@ public class LoadBalancerTargetTests
 
     private static Vm VmOnIncus(Guid networkId)
     {
-        var vm = Vm.CreateUnchecked(Owner.Id, networkId, "vm-1", "m", "tpl", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(Owner.Id, networkId, "vm-1", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("vmabc", "10.0.0.5");
         return vm;
     }
@@ -80,7 +80,7 @@ public class LoadBalancerTargetTests
     {
         Guid networkId = Guid.NewGuid();
         Vm elsewhere = VmOnIncus(Guid.NewGuid());
-        Vm creating = Vm.CreateUnchecked(Owner.Id, networkId, "vm-2", "m", "tpl", "zone-a", 20);
+        Vm creating = Vm.CreateUnchecked(Owner.Id, networkId, "vm-2", "m", "tpl", "cluster-a", 20);
         Vm deleting = VmOnIncus(networkId);
         deleting.RequestDelete();
 

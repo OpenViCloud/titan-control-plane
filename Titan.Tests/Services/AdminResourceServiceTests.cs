@@ -121,7 +121,7 @@ public class AdminResourceServiceTests
         Assert.Equal("Running", dto.CurrentState);
         Assert.Equal("10.0.0.5", dto.IpAddress);
         Assert.Equal("s", dto.VmOfferingId);
-        Assert.Equal("vn-hcm-1", dto.ZoneId);
+        Assert.Equal("vn-hcm-1", dto.ClusterId);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class AdminResourceServiceTests
         Assert.Equal("Created", dto.CurrentState);
         Assert.Equal("Exists", dto.CurrentExistence);
         Assert.Equal("10.0.0.0/24", dto.Cidr);
-        Assert.Equal("vn-hcm-1", dto.ZoneId);
+        Assert.Equal("vn-hcm-1", dto.ClusterId);
     }
 
     [Fact]
@@ -208,7 +208,7 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
     {
         var vm = RunningVm(TenantB, "victim");
-        var volume = Titan.Domain.Aggregates.Compute.Volume.Volume.CreateUnchecked(TenantB, "data-1", vm.ZoneId, "std", 20);
+        var volume = Titan.Domain.Aggregates.Compute.Volume.Volume.CreateUnchecked(TenantB, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -335,7 +335,7 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
     public Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<List<Vm>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByExternalIdsAsync(Guid tenantId, IReadOnlyCollection<string> externalIds, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) => throw new NotSupportedException();
@@ -357,13 +357,13 @@ file sealed class StubNetworkRepo(params Network[] seed) : INetworkRepository
     public Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<HashSet<int>> ListPublicIpv6IndexesInZoneAsync(string zoneId, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInZoneAsync(string zoneId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<List<Network>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public void Add(Network network) => throw new NotSupportedException();
     public Task SaveAsync(CancellationToken ct = default) => throw new NotSupportedException();
 }

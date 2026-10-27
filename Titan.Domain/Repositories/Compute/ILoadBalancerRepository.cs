@@ -18,7 +18,7 @@ public interface ILoadBalancerRepository
     /// A load balancer not yet Deleted asks for this VM, or Incus still sends to it.
     Task<bool> IsBackendAsync(Guid vmId, CancellationToken ct = default);
     /// The reconciler's set: a provider id, not yet Deleted.
-    Task<List<LoadBalancer>> ListReconcilableAsync(string zoneId, CancellationToken ct = default);
+    Task<List<LoadBalancer>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
     void Add(LoadBalancer loadBalancer);
     Task SaveAsync(CancellationToken ct = default);
 }

@@ -5,16 +5,16 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// The worker's way to a zone's Incus cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection): endpoint,
-// the server fingerprint to pin, Titan's client certificate WITH its private key, and the zone's provider settings. Behind X-Internal-Token only;
+// The worker's way to a cluster's Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection): endpoint,
+// the server fingerprint to pin, Titan's client certificate WITH its private key, and the cluster's provider settings. Behind X-Internal-Token only;
 // the body is never logged.
 public class GetClusterConnectionEndpoint(
-    ZoneOptions zones, ProviderClientIdentityStore identity, IConfiguration config)
+    ClusterOptions clusters, ProviderClientIdentityStore identity, IConfiguration config)
     : EndpointWithoutRequest<ClusterConnectionResponse>
 {
     public override void Configure()
     {
-        Get("internal/clusters/{zoneId}/connection");
+        Get("internal/clusters/{clusterId}/connection");
         AllowAnonymous();
     }
 
@@ -28,8 +28,8 @@ public class GetClusterConnectionEndpoint(
             return;
         }
 
-        string zoneId = Route<string>("zoneId") ?? "";
-        ZoneConfig cluster = zones.ClusterOf(zoneId);
+        string clusterId = Route<string>("clusterId") ?? "";
+        ClusterConfig cluster = clusters.ClusterOf(clusterId);
         ProviderClientKeyPair keyPair = await identity.GetKeyPairAsync(ct);
         await SendAsync(
             new ClusterConnectionResponse(cluster.Endpoint, cluster.ServerFingerprint, keyPair.CertificatePem, keyPair.KeyPem,
@@ -43,6 +43,6 @@ public record ClusterConnectionResponse(
     string ServerFingerprint,
     string ClientCertificatePem,
     string ClientKeyPem,
-    // The zone's provider settings (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-provider-settings); null = not set.
+    // The cluster's provider settings (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-provider-settings); null = not set.
     string? OvnUplinkNetwork,
     string? StoragePool);

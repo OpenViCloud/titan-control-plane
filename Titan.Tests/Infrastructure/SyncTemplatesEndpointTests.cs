@@ -18,7 +18,7 @@ public class SyncTemplatesEndpointTests
     {
         var templates = new Mock<IVmTemplateRepository>();
         templates.Setup(r => r.ListAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync([]);
-        return new SyncTemplatesCommandHandler(templates.Object, new ZoneOptions(),
+        return new SyncTemplatesCommandHandler(templates.Object, new ClusterOptions(),
             Mock.Of<IProviderCommandQueue>(), NullLogger<SyncTemplatesCommandHandler>.Instance);
     }
 

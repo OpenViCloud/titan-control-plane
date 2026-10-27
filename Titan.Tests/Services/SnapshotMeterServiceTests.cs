@@ -47,7 +47,7 @@ public class SnapshotMeterServiceTests
     // VM that was never running, in production or in a test.
     private static VmSnapshot ReadyVmSnapshot(string name = "vm-snap")
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         var snap = VmSnapshot.CreateUnchecked(vm.Id, TenantId, name);
         snap.MarkCreated("ext-vm-snap");
@@ -56,7 +56,7 @@ public class SnapshotMeterServiceTests
 
     private static VolumeSnapshot BackedUpVolumeSnapshot(string name = "vol-snap")
     {
-        var vol = Volume.CreateUnchecked(TenantId, "vol-1", "zone-1", "offering-1", 50);
+        var vol = Volume.CreateUnchecked(TenantId, "vol-1", "cluster-1", "offering-1", 50);
         vol.MarkCreated("ext-vol");
         var snap = VolumeSnapshot.CreateUnchecked(vol.Id, TenantId, name);
         snap.MarkCreated("ext-vol-snap");

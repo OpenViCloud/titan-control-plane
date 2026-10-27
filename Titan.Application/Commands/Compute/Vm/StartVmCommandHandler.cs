@@ -29,7 +29,7 @@ public class StartVmCommandHandler(
         if (startIsWaiting)
         {
             VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Start);
-            await commands.EnqueueVmStartAsync(vm.Id, waiting.IntentId, waiting.ProviderId, projectName, vm.ZoneId, ct);
+            await commands.EnqueueVmStartAsync(vm.Id, waiting.IntentId, waiting.ProviderId, projectName, vm.ClusterId, ct);
             await repo.SaveAsync(ct);
             return;
         }
@@ -46,7 +46,7 @@ public class StartVmCommandHandler(
         VmIntentTicket ticket = vm.RequestStart();
 
         activity.Stage("vm.start_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStartAsync(vm.Id, ticket.IntentId, ticket.ProviderId, projectName, vm.ZoneId, ct);
+        await commands.EnqueueVmStartAsync(vm.Id, ticket.IntentId, ticket.ProviderId, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -23,7 +23,7 @@ public class VmRepositoryStateTests
     // Every shape, named; the name is what the assertions list.
     private static List<Vm> EveryShape()
     {
-        Vm New(string name) => Vm.CreateUnchecked(Tenant, NetworkId, name, "m", "tpl-1", "zone-a", 20);
+        Vm New(string name) => Vm.CreateUnchecked(Tenant, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
         Vm Seen(string name, VmState state)
         {
             Vm vm = New(name);
@@ -154,7 +154,7 @@ public class VmRepositoryStateTests
         using var db = NewDb();
         VmRepository repo = await SeededAsync(db);
 
-        List<Vm> watched = await repo.ListReconcilableAsync("zone-a");
+        List<Vm> watched = await repo.ListReconcilableAsync("cluster-a");
 
         Assert.Equal(new[] { "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
             watched.Select(v => v.Name).OrderBy(n => n).ToArray());

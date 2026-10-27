@@ -35,7 +35,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     [Fact]
     public async Task WaitingStop_SurvivesAReload_AndResendsTheSameId()
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "rt-vm", "m", "tpl", "zone-a", 20);
+        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         VmIntentTicket ticket = vm.RequestStop();
 
@@ -63,7 +63,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     public async Task NetworkName_IsHeldDuringADelete_AndFreedOnceDeleted()
     {
         var tenant = Guid.NewGuid();
-        var leaving = Network.CreateUnchecked(tenant, "shared-name", "zone-a");
+        var leaving = Network.CreateUnchecked(tenant, "shared-name", "cluster-a");
         leaving.MarkActive("20", "10.0.0.0/24", "10.0.0.1");
         leaving.RequestDelete();
 
@@ -75,7 +75,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
-            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "zone-a"));
+            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "cluster-a"));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(ex.InnerException).SqlState);
         }
@@ -86,7 +86,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
             stored.MarkDeleted();
             await db.SaveChangesAsync();
 
-            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "zone-a"));
+            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "cluster-a"));
             await db.SaveChangesAsync(); // no violation: the filter drops the deleted row
         }
     }

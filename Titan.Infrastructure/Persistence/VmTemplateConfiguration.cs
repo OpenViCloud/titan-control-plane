@@ -34,12 +34,12 @@ public class VmTemplateConfiguration : IEntityTypeConfiguration<VmTemplate>
             .HasConstraintName("FK_vm_templates_vm_offerings_vm_offering_id")
             .OnDelete(DeleteBehavior.Restrict);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone. The sync state of each zone is a child row.
-        builder.HasMany(t => t.Zones)
+        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster. The sync state of each cluster is a child row.
+        builder.HasMany(t => t.Clusters)
             .WithOne()
             .HasForeignKey(z => z.TemplateId)
             .OnDelete(DeleteBehavior.Cascade);
-        builder.Navigation(t => t.Zones).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Navigation(t => t.Clusters).UsePropertyAccessMode(PropertyAccessMode.Field);
 
         SeedTemplates(builder);
     }
@@ -63,8 +63,8 @@ public class VmTemplateConfiguration : IEntityTypeConfiguration<VmTemplate>
                 null, false, 30, "l", ts));
     }
 
-    // VmTemplate's factory stamps NewGuid()/UtcNow, so HasData maps an anonymous row by property name. No zone rows:
-    // the first sync run asks for each seeded template in every configured zone (SyncTemplatesCommandHandler).
+    // VmTemplate's factory stamps NewGuid()/UtcNow, so HasData maps an anonymous row by property name. No cluster rows:
+    // the first sync run asks for each seeded template in every configured cluster (SyncTemplatesCommandHandler).
     private const string UbuntuJammyImage =
         "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-{arch}.img";
 
@@ -84,17 +84,17 @@ public class VmTemplateConfiguration : IEntityTypeConfiguration<VmTemplate>
         };
 }
 
-public class VmTemplateZoneConfiguration : IEntityTypeConfiguration<VmTemplateZone>
+public class VmTemplateClusterConfiguration : IEntityTypeConfiguration<VmTemplateCluster>
 {
-    public void Configure(EntityTypeBuilder<VmTemplateZone> builder)
+    public void Configure(EntityTypeBuilder<VmTemplateCluster> builder)
     {
-        builder.ToTable("vm_template_zones");
-        // The key IS the invariant "one sync state per template per zone". A composite key also keeps EF from
-        // reading a zone added to a tracked template as an existing row (a generated Guid key that is already
+        builder.ToTable("vm_template_clusters");
+        // The key IS the invariant "one sync state per template per cluster". A composite key also keeps EF from
+        // reading a cluster added to a tracked template as an existing row (a generated Guid key that is already
         // set looks saved).
-        builder.HasKey(z => new { z.TemplateId, z.ZoneId });
+        builder.HasKey(z => new { z.TemplateId, z.ClusterId });
         builder.Property(z => z.TemplateId).HasColumnName("template_id");
-        builder.Property(z => z.ZoneId).HasColumnName("zone_id").HasColumnType("text");
+        builder.Property(z => z.ClusterId).HasColumnName("cluster_id").HasColumnType("text");
         // Incus has no status word for an image alias: existence only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-state-is-existence).
         builder.Property(z => z.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(z => z.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();

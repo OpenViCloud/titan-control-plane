@@ -118,7 +118,7 @@ public class VolumeRepositoryStateTests
     }
 
     [Fact]
-    public async Task Reconcilable_IsWhatReachedIncusInTheZone_AndIsNotConfirmedGone()
+    public async Task Reconcilable_IsWhatReachedIncusInTheCluster_AndIsNotConfirmedGone()
     {
         using var db = NewDb();
         var elsewhere = Volume.CreateUnchecked(Tenant, "elsewhere", "vn-han-1", "vo-std", 20);
@@ -188,8 +188,8 @@ public class VolumeRepositoryStateTests
         Assert.Equal(new[] { "leaving", "ready" }, billed);
     }
 
-    [Fact] // a snapshot has no zone; it lives where its volume lives
-    public async Task SnapshotReconcilable_FollowsItsVolumesZone()
+    [Fact] // a snapshot has no cluster; it lives where its volume lives
+    public async Task SnapshotReconcilable_FollowsItsVolumesCluster()
     {
         using var db = NewDb();
         var here = Available("here");

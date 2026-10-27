@@ -12,18 +12,18 @@ public class AdminClusterServiceTests
     [Fact]
     public async Task List_ShowsEveryConfiguredCluster_InConfigOrder()
     {
-        var zones = new ZoneOptions
+        var clusters = new ClusterOptions
         {
-            Zones =
+            Clusters =
             [
-                new ZoneConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = Fingerprint },
-                new ZoneConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = Fingerprint },
+                new ClusterConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = Fingerprint },
+                new ClusterConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = Fingerprint },
             ],
         };
 
-        var list = await new AdminClusterService(zones).ListForAdminAsync(CancellationToken.None);
+        var list = await new AdminClusterService(clusters).ListForAdminAsync(CancellationToken.None);
 
-        Assert.Equal(["singapore01", "local-mac"], list.Select(c => c.ZoneId).ToList());
+        Assert.Equal(["singapore01", "local-mac"], list.Select(c => c.ClusterId).ToList());
         var local = list[1];
         Assert.Equal("Local Mac", local.Name);
         Assert.Equal("https://titan-incus:8443", local.Endpoint);
@@ -33,11 +33,11 @@ public class AdminClusterServiceTests
     [Fact]
     public async Task List_CarriesTheProviderSettings()
     {
-        var zones = new ZoneOptions
+        var clusters = new ClusterOptions
         {
-            Zones =
+            Clusters =
             [
-                new ZoneConfig
+                new ClusterConfig
                 {
                     Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = Fingerprint,
                     OvnUplinkNetwork = "ovnup", StoragePool = "default", Ipv6Block = "2001:41d0:d00:d400::/56",
@@ -45,7 +45,7 @@ public class AdminClusterServiceTests
             ],
         };
 
-        var cluster = Assert.Single(await new AdminClusterService(zones).ListForAdminAsync(CancellationToken.None));
+        var cluster = Assert.Single(await new AdminClusterService(clusters).ListForAdminAsync(CancellationToken.None));
 
         Assert.Equal("ovnup", cluster.ProviderSettings.OvnUplinkNetwork);
         Assert.Equal("default", cluster.ProviderSettings.StoragePool);
@@ -55,7 +55,7 @@ public class AdminClusterServiceTests
     [Fact]
     public async Task List_NoClusterConfigured_IsEmpty()
     {
-        var list = await new AdminClusterService(new ZoneOptions()).ListForAdminAsync(CancellationToken.None);
+        var list = await new AdminClusterService(new ClusterOptions()).ListForAdminAsync(CancellationToken.None);
 
         Assert.Empty(list);
     }

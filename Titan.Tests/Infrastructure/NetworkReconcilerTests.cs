@@ -16,7 +16,7 @@ namespace Titan.Tests.Infrastructure;
 // the heartbeat that list request leaves behind, and the liveness verdict on that heartbeat.
 public class NetworkReconcilerTests
 {
-    private const string Zone = "vn-hcm-1";
+    private const string Cluster = "vn-hcm-1";
 
     private static IConfiguration ConfigWithToken(string token) =>
         new ConfigurationBuilder()
@@ -28,34 +28,34 @@ public class NetworkReconcilerTests
             .UseInMemoryDatabase($"network-reconcile-{Guid.NewGuid()}")
             .Options);
 
-    private static Network ActiveIn(string zone, string name)
+    private static Network ActiveIn(string cluster, string name)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), name, zone);
+        var network = Network.CreateUnchecked(Guid.NewGuid(), name, cluster);
         network.MarkActive($"ext-{name}", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
 
-    // ── The list: only what reached the provider and is not yet confirmed gone, in this zone ────
+    // ── The list: only what reached the provider and is not yet confirmed gone, in this cluster ────
 
     [Fact]
-    public async Task List_HoldsProvisionedNetworksOfTheZone_IncludingErroredNotFoundAndDeleteInFlight()
+    public async Task List_HoldsProvisionedNetworksOfTheCluster_IncludingErroredNotFoundAndDeleteInFlight()
     {
         using var db = NewDb();
-        var active = ActiveIn(Zone, "active");
-        var errored = ActiveIn(Zone, "errored");
+        var active = ActiveIn(Cluster, "active");
+        var errored = ActiveIn(Cluster, "errored");
         errored.MarkObserved(NetworkStatus.Errored);
-        var lost = ActiveIn(Zone, "lost");
+        var lost = ActiveIn(Cluster, "lost");
         lost.MarkNotFound();
-        var leaving = ActiveIn(Zone, "leaving");
+        var leaving = ActiveIn(Cluster, "leaving");
         leaving.RequestDelete();
-        var gone = ActiveIn(Zone, "gone");
+        var gone = ActiveIn(Cluster, "gone");
         gone.MarkDeleted();
-        var creating = Network.CreateUnchecked(Guid.NewGuid(), "creating", Zone);
-        var otherZone = ActiveIn("vn-han-1", "elsewhere");
-        db.Networks.AddRange(active, errored, lost, leaving, gone, creating, otherZone);
+        var creating = Network.CreateUnchecked(Guid.NewGuid(), "creating", Cluster);
+        var otherCluster = ActiveIn("vn-han-1", "elsewhere");
+        db.Networks.AddRange(active, errored, lost, leaving, gone, creating, otherCluster);
         await db.SaveChangesAsync();
 
-        var names = (await new NetworkRepository(db).ListReconcilableAsync(Zone)).Select(n => n.Name).OrderBy(n => n).ToList();
+        var names = (await new NetworkRepository(db).ListReconcilableAsync(Cluster)).Select(n => n.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "active", "errored", "leaving", "lost" }, names);
     }
@@ -66,7 +66,7 @@ public class NetworkReconcilerTests
     public async Task Endpoint_WithToken_ReturnsTheList_WithWhatTitanRecorded_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var leaving = ActiveIn(Zone, "leaving");
+        var leaving = ActiveIn(Cluster, "leaving");
         leaving.RequestDelete();
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
@@ -75,7 +75,7 @@ public class NetworkReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "secret";
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Cluster}");
             },
             new ListReconcilableNetworksQueryHandler(new NetworkRepository(db)), heartbeat, ConfigWithToken("secret"));
 
@@ -86,7 +86,7 @@ public class NetworkReconcilerTests
         Assert.Equal("ext-leaving", only.ExternalId);
         Assert.Equal("Created", only.CurrentState);
         Assert.Equal("Exists", only.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"networks/{Zone}"].LastPollAt);
+        Assert.NotNull(heartbeat.Snapshot()[$"networks/{Cluster}"].LastPollAt);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class NetworkReconcilerTests
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "wrong";
-                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?zoneId={Zone}");
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?clusterId={Cluster}");
             },
             new ListReconcilableNetworksQueryHandler(new NetworkRepository(db)), heartbeat, ConfigWithToken("secret"));
 

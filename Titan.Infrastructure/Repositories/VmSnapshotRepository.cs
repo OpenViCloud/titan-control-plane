@@ -42,11 +42,11 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task<List<VmSnapshot>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    public async Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.ExternalId != null
                      && s.CurrentExistence != CurrentExistence.Deleted
-                     && db.Vms.Any(v => v.Id == s.VmId && v.ZoneId == zoneId))
+                     && db.Vms.Any(v => v.Id == s.VmId && v.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);
 

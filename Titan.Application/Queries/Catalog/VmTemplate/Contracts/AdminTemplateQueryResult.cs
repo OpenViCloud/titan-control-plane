@@ -2,7 +2,7 @@ using VmTemplateAggregate = Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplat
 
 namespace Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 
-// Admin-facing — DELIBERATELY exposes the internal sync state of every zone that TemplateQueryResult hides.
+// Admin-facing — DELIBERATELY exposes the internal sync state of every cluster that TemplateQueryResult hides.
 public record AdminTemplateQueryResult(
     Guid Id,
     string Name,
@@ -11,9 +11,9 @@ public record AdminTemplateQueryResult(
     string VmOfferingId, // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-borrows-sizing — the tier this template borrows its base sizing from
     int? DiskGb,         // = RootDiskSizeGb
     bool Listed,         // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed — false ⇒ customers neither see nor pick it
-    List<AdminTemplateZoneQueryResult> Zones) // ordered by zone id
+    List<AdminTemplateClusterQueryResult> Clusters) // ordered by cluster id
 {
     public static AdminTemplateQueryResult From(VmTemplateAggregate t) =>
         new(t.Id, t.Name, t.Description, t.OsImageName, t.VmOfferingId, t.RootDiskSizeGb, t.IsListed,
-            t.Zones.OrderBy(z => z.ZoneId, StringComparer.Ordinal).Select(AdminTemplateZoneQueryResult.From).ToList());
+            t.Clusters.OrderBy(z => z.ClusterId, StringComparer.Ordinal).Select(AdminTemplateClusterQueryResult.From).ToList());
 }

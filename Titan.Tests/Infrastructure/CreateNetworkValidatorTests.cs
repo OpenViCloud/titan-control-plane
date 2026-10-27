@@ -4,7 +4,7 @@ using Titan.Infrastructure.Endpoints.Network;
 
 namespace Titan.Tests.Infrastructure;
 
-// A network with public IPv6 sits on the zone's uplink, and Incus refuses one whose IPv4 CIDR the uplink does not
+// A network with public IPv6 sits on the cluster's uplink, and Incus refuses one whose IPv4 CIDR the uplink does not
 // route; the uplink routes the three private ranges (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan).
 public class CreateNetworkValidatorTests
 {

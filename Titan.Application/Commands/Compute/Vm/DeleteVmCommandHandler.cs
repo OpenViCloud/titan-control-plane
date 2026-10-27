@@ -43,7 +43,7 @@ public class DeleteVmCommandHandler(
         if (deleteIsWaiting)
         {
             VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Delete);
-            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, tenant.ProjectName, vm.ZoneId, ct);
+            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, tenant.ProjectName, vm.ClusterId, ct);
             await repo.SaveAsync(ct);
             return;
         }
@@ -90,7 +90,7 @@ public class DeleteVmCommandHandler(
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, tenant.ProjectName, vm.ZoneId, ct);
+        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, tenant.ProjectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct); // intent, request event and provider command together
     }
 }

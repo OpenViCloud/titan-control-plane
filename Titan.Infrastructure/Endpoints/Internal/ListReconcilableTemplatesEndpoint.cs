@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// One template reconciler per zone (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone).
+// One template reconciler per cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
 public class ListReconcilableTemplatesEndpoint(
     ListReconcilableTemplatesQueryHandler handler,
     ReconcilerHeartbeat heartbeat,
@@ -28,15 +28,15 @@ public class ListReconcilableTemplatesEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        List<ReconcilableTemplateQueryResult> rows = await handler.HandleAsync(new ListReconcilableTemplatesQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.TemplateKind, zoneId), DateTimeOffset.UtcNow);
+        List<ReconcilableTemplateQueryResult> rows = await handler.HandleAsync(new ListReconcilableTemplatesQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.TemplateKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(rows, cancellation: ct);
     }
 }

@@ -5,30 +5,16 @@ using Titan.Application.Queries.Catalog.Cluster.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Catalog;
 
-public class ListClustersRequest
-{
-    public string ZoneId { get; set; } = "";
-}
-
-public class ListClustersEndpoint(ListClustersQueryHandler handler) : Endpoint<ListClustersRequest, List<ClusterInfo>>
+public class ListClustersEndpoint(ListClustersQueryHandler handler) : EndpointWithoutRequest<List<ClusterInfo>>
 {
     public override void Configure()
     {
-        Get("v1/zones/{zoneId}/clusters");
+        Get("v1/clusters");
         AllowAnonymous();
     }
 
-    public override async Task HandleAsync(ListClustersRequest req, CancellationToken ct)
+    public override async Task HandleAsync(CancellationToken ct)
     {
-        req.ZoneId = Route<string>("zoneId") ?? "";
-        try
-        {
-            var clusters = await handler.HandleAsync(new ListClustersQuery(req.ZoneId), ct);
-            await SendAsync(clusters, cancellation: ct);
-        }
-        catch (KeyNotFoundException)
-        {
-            await SendNotFoundAsync(ct);
-        }
+        await SendAsync(await handler.HandleAsync(new ListClustersQuery(), ct), cancellation: ct);
     }
 }

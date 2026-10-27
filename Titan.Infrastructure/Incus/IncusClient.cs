@@ -86,22 +86,6 @@ public sealed class IncusClient : IDisposable
             return new IncusServerInfo(serverName);
         }, ct);
 
-    public Task<bool> IsClusteredAsync(CancellationToken ct) =>
-        ReadAsync("1.0/cluster", cluster => cluster.GetProperty("enabled").GetBoolean(), ct);
-
-    /// Member names from the URL list "/1.0/cluster/members/<name>".
-    public Task<List<string>> GetClusterMemberNamesAsync(CancellationToken ct) =>
-        ReadAsync("1.0/cluster/members", members =>
-        {
-            var names = new List<string>();
-            foreach (JsonElement url in members.EnumerateArray())
-            {
-                string value = url.GetString() ?? "";
-                names.Add(Uri.UnescapeDataString(value[(value.LastIndexOf('/') + 1)..]));
-            }
-            return names;
-        }, ct);
-
     public Task<List<IncusImage>> GetImagesAsync(CancellationToken ct) =>
         ReadAsync("1.0/images?recursion=1", images =>
         {

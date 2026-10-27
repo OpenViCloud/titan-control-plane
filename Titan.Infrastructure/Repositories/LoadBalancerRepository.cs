@@ -47,9 +47,9 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
         await db.LoadBalancers.AnyAsync(
             lb => lb.CurrentExistence != CurrentExistence.Deleted && lb.Backends.Any(b => b.VmId == vmId), ct);
 
-    public async Task<List<LoadBalancer>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    public async Task<List<LoadBalancer>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.LoadBalancers
-            .Where(lb => lb.ZoneId == zoneId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted)
+            .Where(lb => lb.ClusterId == clusterId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 

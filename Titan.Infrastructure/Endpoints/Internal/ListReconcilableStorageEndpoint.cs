@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// Volumes and volume snapshots of a zone, matched against what the provider holds. Same shape as
+// Volumes and volume snapshots of a cluster, matched against what the provider holds. Same shape as
 // ListReconcilableNetworksEndpoint, including the heartbeat.
 public class ListReconcilableStorageEndpoint(
     ListReconcilableStorageQueryHandler handler,
@@ -29,15 +29,15 @@ public class ListReconcilableStorageEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        ReconcilableStorageQueryResult storage = await handler.HandleAsync(new ListReconcilableStorageQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VolumeKind, zoneId), DateTimeOffset.UtcNow);
+        ReconcilableStorageQueryResult storage = await handler.HandleAsync(new ListReconcilableStorageQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VolumeKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(storage, cancellation: ct);
     }
 }

@@ -32,15 +32,15 @@ public class ListReconcilableNetworksEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        List<ReconcilableNetworkQueryResult> networks = await handler.HandleAsync(new ListReconcilableNetworksQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.NetworkKind, zoneId), DateTimeOffset.UtcNow);
+        List<ReconcilableNetworkQueryResult> networks = await handler.HandleAsync(new ListReconcilableNetworksQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.NetworkKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(networks, cancellation: ct);
     }
 }

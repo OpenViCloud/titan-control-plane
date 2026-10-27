@@ -16,7 +16,7 @@ public class CreateVmValidator : Validator<CreateVmCommand>
         RuleFor(x => x.NetworkId).NotEmpty();
         RuleFor(x => x.VmOfferingId).NotEmpty();
         RuleFor(x => x.TemplateId).NotEmpty();
-        RuleFor(x => x.ZoneId).NotEmpty();
+        RuleFor(x => x.ClusterId).NotEmpty();
         RuleFor(x => x.DiskSizeGb).GreaterThan(0).When(x => x.DiskSizeGb.HasValue);
         When(x => x.UserData != null, () =>
             RuleFor(x => x.UserData)

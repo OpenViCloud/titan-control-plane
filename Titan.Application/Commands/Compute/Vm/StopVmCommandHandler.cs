@@ -32,7 +32,7 @@ public class StopVmCommandHandler(
         if (stopIsWaiting)
         {
             VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Stop);
-            await commands.EnqueueVmStopAsync(vm.Id, waiting.IntentId, waiting.ProviderId, projectName, vm.ZoneId, ct);
+            await commands.EnqueueVmStopAsync(vm.Id, waiting.IntentId, waiting.ProviderId, projectName, vm.ClusterId, ct);
             await repo.SaveAsync(ct);
             return;
         }
@@ -48,7 +48,7 @@ public class StopVmCommandHandler(
         VmIntentTicket ticket = vm.RequestStop();
 
         activity.Stage("vm.stop_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStopAsync(vm.Id, ticket.IntentId, ticket.ProviderId, projectName, vm.ZoneId, ct);
+        await commands.EnqueueVmStopAsync(vm.Id, ticket.IntentId, ticket.ProviderId, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct); // intent, request event and provider command together
     }
 }

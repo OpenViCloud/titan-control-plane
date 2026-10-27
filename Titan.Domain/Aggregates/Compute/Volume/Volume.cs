@@ -9,7 +9,7 @@ public class Volume
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
     public string VolumeOfferingId { get; private set; } = default!;
     public int SizeGb { get; private set; }
     // Incus has no status word for a custom volume: it is there or not, and used by instances or not
@@ -76,20 +76,20 @@ public class Volume
     /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
     public static Volume Create(
         Tenant tenant, int activeVolumeCount,
-        string name, string zoneId, string volumeOfferingId, int sizeGb)
+        string name, string clusterId, string volumeOfferingId, int sizeGb)
     {
         tenant.EnsureCanCreateVolume(activeVolumeCount);
-        return CreateUnchecked(tenant.Id, name, zoneId, volumeOfferingId, sizeGb);
+        return CreateUnchecked(tenant.Id, name, clusterId, volumeOfferingId, sizeGb);
     }
 
     /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
-    internal static Volume CreateUnchecked(Guid tenantId, string name, string zoneId, string volumeOfferingId, int sizeGb) =>
+    internal static Volume CreateUnchecked(Guid tenantId, string name, string clusterId, string volumeOfferingId, int sizeGb) =>
         new()
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = name,
-            ZoneId = zoneId,
+            ClusterId = clusterId,
             VolumeOfferingId = volumeOfferingId,
             SizeGb = sizeGb,
             CurrentExistence = CurrentExistence.NotCreated,
@@ -104,19 +104,19 @@ public class Volume
     // ---- Intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation).
 
     /// The snapshot's readiness is an invariant of this creation
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-restore-is-a-new-volume). Sizing and zone come from the source
+    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-restore-is-a-new-volume). Sizing and cluster come from the source
     /// volume, which the caller resolves.
     public static Volume CreateFromSnapshot(
         VolumeSnapshot.VolumeSnapshot snapshot, Tenant tenant, int activeVolumeCount, string name,
-        string zoneId, string volumeOfferingId, int sizeGb)
+        string clusterId, string volumeOfferingId, int sizeGb)
     {
         snapshot.EnsureRestorable();
         // A restore spends volume quota, not snapshot quota: the thing being created is a volume.
         tenant.EnsureCanCreateVolume(activeVolumeCount);
-        return CreateUnchecked(tenant.Id, name, zoneId, volumeOfferingId, sizeGb);
+        return CreateUnchecked(tenant.Id, name, clusterId, volumeOfferingId, sizeGb);
     }
 
-    /// Checks the volume, the VM (Vm.BeginVolumeAttach) and the zone; the provider ids come out only past all
+    /// Checks the volume, the VM (Vm.BeginVolumeAttach) and the cluster; the provider ids come out only past all
     /// three (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
     /// waits for Incus to be seen using the volume.
     public VolumeAttachProviderIds Attach(Vm.Vm vm)
@@ -125,8 +125,8 @@ public class Volume
         if (!available)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
         var vmExternalId = vm.BeginVolumeAttach();
-        if (ZoneId != vm.ZoneId)
-            throw new BusinessException("VOLUME_ZONE_MISMATCH", "Volume and VM must be in the same zone.");
+        if (ClusterId != vm.ClusterId)
+            throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 
         DesiredAttachedVmId = vm.Id;
         PendingIntentId = Guid.NewGuid();

@@ -9,7 +9,7 @@ public class ListReconcilableNetworksQueryHandler(INetworkRepository repo)
 {
     public async Task<List<ReconcilableNetworkQueryResult>> HandleAsync(ListReconcilableNetworksQuery query, CancellationToken ct = default)
     {
-        var networks = await repo.ListReconcilableAsync(query.ZoneId, ct);
+        var networks = await repo.ListReconcilableAsync(query.ClusterId, ct);
         return networks.Select(ReconcilableNetworkQueryResult.From).ToList();
     }
 }

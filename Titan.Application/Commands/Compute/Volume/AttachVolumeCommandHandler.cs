@@ -24,7 +24,7 @@ public class AttachVolumeCommandHandler(
         if (vm is null || vm.TenantId != callerId)
             throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        // Volume state, VM state and zone match are all checked inside Attach — one call, and the
+        // Volume state, VM state and cluster match are all checked inside Attach — one call, and the
         // transition cannot happen with any of them skipped (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation).
 
         // The aggregate refuses a repeat, so it is recognised here first
@@ -45,7 +45,7 @@ public class AttachVolumeCommandHandler(
         activity.Stage("volume.attach_requested", "volume", volume.Id, volume.Name); // atomic with Attach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeAttachAsync(
-            volume.Id, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ZoneId, ct);
+            volume.Id, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

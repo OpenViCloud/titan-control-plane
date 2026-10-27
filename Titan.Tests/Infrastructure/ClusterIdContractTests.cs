@@ -19,7 +19,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure;
 
-// The worker moves from zoneId to clusterId; the control plane takes both first, so either worker runs against it
+// The worker names its cluster as clusterId on every route and the lease
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
 public class ClusterIdContractTests
 {
@@ -60,41 +60,41 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task AReconcilerAskingByZoneId_StillWorks()
+    public async Task AReconcilerAskingWithoutAClusterId_Is400_AndRecordsNoPoll()
     {
         using var db = NewDb();
         var heartbeat = new ReconcilerHeartbeat();
-        var ep = TemplateEndpoint(db, heartbeat, "?zoneId=mock");
+        var ep = TemplateEndpoint(db, heartbeat, "?name=mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Equal(200, ep.HttpContext.Response.StatusCode);
-        Assert.True(heartbeat.Snapshot().ContainsKey("templates/mock"));
+        Assert.Equal(400, ep.HttpContext.Response.StatusCode);
+        Assert.Empty(heartbeat.Snapshot());
     }
 
-    // Every reconcile route reads the cluster the same way; one that reads zoneId alone would answer a new worker 400.
+    // Every reconcile route reads the cluster the same way, from clusterId.
     [Fact]
     public void EveryInternalRoute_ReadsTheClusterThroughClusterQuery()
     {
         string folder = Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "Endpoints", "Internal");
-        var readersOfZoneIdAlone = Directory.GetFiles(folder, "*.cs")
-            .Where(f => File.ReadAllText(f).Contains("Query<string>(\"zoneId\""))
+        var readersBypassingClusterQuery = Directory.GetFiles(folder, "*.cs")
+            .Where(f => File.ReadAllText(f).Contains("Query<string>(\"clusterId\""))
             .Select(Path.GetFileName)
             .ToList();
         var readersOfClusterQuery = Directory.GetFiles(folder, "ListReconcilable*Endpoint.cs")
             .Where(f => File.ReadAllText(f).Contains("ClusterQuery.From("))
             .ToList();
 
-        Assert.Empty(readersOfZoneIdAlone);
+        Assert.Empty(readersBypassingClusterQuery);
         Assert.Equal(7, readersOfClusterQuery.Count);
     }
 
     [Fact]
-    public async Task ATemplateReport_WithClusterIdAndNoZoneId_IsRecorded()
+    public async Task ATemplateReport_WithItsClusterId_IsRecorded()
     {
         var templates = new Mock<IVmTemplateRepository>();
-        var zones = new ZoneOptions { Zones = [new ZoneConfig { Id = "mock", Name = "Mock" }] };
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, zones, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
+        var clusters = new ClusterOptions { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
+        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
         var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
             ctx =>
             {
@@ -112,7 +112,7 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task ALease_CarriesTheClusterId_BesideTheZoneId()
+    public async Task ALease_CarriesTheClusterId()
     {
         var repo = new FakeProviderCommandRepository();
         var t0 = new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.Zero);
@@ -124,18 +124,17 @@ public class ClusterIdContractTests
         LeasedProviderCommandResult leased = await new GetLeasedProviderCommandQueryHandler(repo).HandleAsync(new GetLeasedProviderCommandQuery(leaseId));
 
         Assert.Equal("mock", leased.ClusterId);
-        Assert.Equal("mock", leased.ZoneId);
     }
 
     private static ListInternalClustersEndpoint ClustersEndpoint(string token) =>
         Factory.Create<ListInternalClustersEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = token,
-            new ZoneOptions
+            new ClusterOptions
             {
-                Zones =
+                Clusters =
                 [
-                    new ZoneConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) },
-                    new ZoneConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = new string('b', 64) },
+                    new ClusterConfig { Id = "singapore01", Name = "Singapore 01", Endpoint = "https://localhost:8443", ServerFingerprint = new string('a', 64) },
+                    new ClusterConfig { Id = "local-mac", Name = "Local Mac", Endpoint = "https://titan-incus:8443", ServerFingerprint = new string('b', 64) },
                 ],
             },
             ConfigWithToken("secret"));

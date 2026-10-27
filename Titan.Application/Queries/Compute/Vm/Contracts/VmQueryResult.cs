@@ -25,7 +25,7 @@ public record VmQueryResult(
     Guid NetworkId,
     string VmOfferingId,
     string TemplateId,
-    string ZoneId,
+    string ClusterId,
     int DiskSizeGb,
     string? UserData,
     DateTimeOffset CreatedAt,
@@ -36,6 +36,6 @@ public record VmQueryResult(
     public static VmQueryResult From(VmAggregate v) =>
         new(v.Id, v.Name, v.CurrentState, v.DesiredState, v.CurrentExistence,
             v.DesiredExistence, v.Transition, v.IpAddress,
-            v.NetworkId, v.VmOfferingId, v.TemplateId, v.ZoneId, v.DiskSizeGb, v.UserData, v.CreatedAt,
+            v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.DiskSizeGb, v.UserData, v.CreatedAt,
             v.PublicIpv6Address, v.RequestFailureReason, v.RequestFailedAt);
 }

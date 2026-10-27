@@ -3,7 +3,7 @@ namespace Titan.Application.Abstractions;
 // Nothing here is secret: an Incus cluster is reached with Titan's own client identity, not a stored credential
 // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus).
 public record AdminClusterDto(
-    string ZoneId,
+    string ClusterId,
     string Name,
     string Endpoint,
     string ServerFingerprint,

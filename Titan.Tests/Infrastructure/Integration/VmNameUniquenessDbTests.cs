@@ -15,7 +15,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class VmNameUniquenessDbTests(PostgresFixture pg)
 {
     private static Vm NewVm(Guid tenant, string name) =>
-        Vm.CreateUnchecked(tenant, Guid.NewGuid(), name, "m", "tpl", "zone-a", 20);
+        Vm.CreateUnchecked(tenant, Guid.NewGuid(), name, "m", "tpl", "cluster-a", 20);
 
     private async Task SaveAsync(Vm vm)
     {

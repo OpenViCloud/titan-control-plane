@@ -9,7 +9,7 @@ public class ListReconcilableFirewallRulesQueryHandler(IFirewallRuleRepository r
 {
     public async Task<List<ReconcilableFirewallRuleQueryResult>> HandleAsync(ListReconcilableFirewallRulesQuery query, CancellationToken ct = default)
     {
-        var rows = await rules.ListReconcilableAsync(query.ZoneId, ct);
+        var rows = await rules.ListReconcilableAsync(query.ClusterId, ct);
         return rows.Select(ReconcilableFirewallRuleQueryResult.From).ToList();
     }
 }

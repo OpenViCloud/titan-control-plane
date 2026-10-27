@@ -34,9 +34,9 @@ public class VmRepository(TitanDbContext db) : IVmRepository
                  v.Name == name &&
                  v.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    public async Task<List<Vm>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    public async Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.ZoneId == zoneId
+            .Where(v => v.ClusterId == clusterId
                         && v.ExternalId != null
                         && v.CurrentExistence != CurrentExistence.Deleted
                         && (v.HasBeenRunning || v.RequestFailureReason == null))

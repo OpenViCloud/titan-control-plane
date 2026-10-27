@@ -32,7 +32,7 @@ public class CreateVolumeSnapshotCommandHandler(
         activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the insert
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, volumeId, externalVolumeId, projectName,
-            volume.ZoneId, ct);
+            volume.ClusterId, ct);
         await snapshotRepo.SaveAsync(snapshot, ct);
 
         return new CreateVolumeSnapshotCommandResult(snapshot.Id);

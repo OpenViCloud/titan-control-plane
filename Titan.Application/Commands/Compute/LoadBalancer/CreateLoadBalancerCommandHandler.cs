@@ -47,7 +47,7 @@ public class CreateLoadBalancerCommandHandler(
 
         // Quota refuses inside the factory — see CreateVmCommandHandler.
         var loadBalancer = LoadBalancerAggregate.Create(tenant, activeCount, req.Name, network.Id, externalNetworkId,
-            subnet, network.ZoneId, vip, listeners, backends);
+            subnet, network.ClusterId, vip, listeners, backends);
         repo.Add(loadBalancer);
         activity.Stage("load_balancer.create_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
         await commands.EnqueueLoadBalancerCreateAsync(loadBalancer, TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);

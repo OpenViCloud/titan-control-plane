@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// Firewall rules of a zone, matched against what the provider holds. Same shape as
+// Firewall rules of a cluster, matched against what the provider holds. Same shape as
 // ListReconcilableNetworksEndpoint, including the heartbeat.
 public class ListReconcilableFirewallRulesEndpoint(
     ListReconcilableFirewallRulesQueryHandler handler,
@@ -29,15 +29,15 @@ public class ListReconcilableFirewallRulesEndpoint(
             return;
         }
 
-        string? zoneId = ClusterQuery.From(HttpContext.Request);
-        if (string.IsNullOrEmpty(zoneId))
+        string? clusterId = ClusterQuery.From(HttpContext.Request);
+        if (string.IsNullOrEmpty(clusterId))
         {
             await SendErrorsAsync(400, ct);
             return;
         }
 
-        List<ReconcilableFirewallRuleQueryResult> rows = await handler.HandleAsync(new ListReconcilableFirewallRulesQuery(zoneId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.FirewallKind, zoneId), DateTimeOffset.UtcNow);
+        List<ReconcilableFirewallRuleQueryResult> rows = await handler.HandleAsync(new ListReconcilableFirewallRulesQuery(clusterId), ct);
+        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.FirewallKind, clusterId), DateTimeOffset.UtcNow);
         await SendAsync(rows, cancellation: ct);
     }
 }

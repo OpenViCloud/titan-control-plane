@@ -2,22 +2,22 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.Catalog.VmTemplate;
 
-/// One template in ONE zone (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-zone): whether that zone's cluster holds
+/// One template in ONE cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster): whether that cluster holds
 /// the image alias. Incus has no status word for an alias (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-state-is-existence).
-/// A child of VmTemplate: "one provider id per zone" is the template's invariant, so only the root reaches these methods.
-public class VmTemplateZone
+/// A child of VmTemplate: "one provider id per cluster" is the template's invariant, so only the root reaches these methods.
+public class VmTemplateCluster
 {
     public Guid TemplateId { get; private set; }
-    public string ZoneId { get; private set; } = default!;
+    public string ClusterId { get; private set; } = default!;
 
     /// Only observations write it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Never Deleted: a
-    /// template is never removed from a zone.
+    /// template is never removed from a cluster.
     public CurrentExistence CurrentExistence { get; private set; }
     /// Always Exists (add-only sync).
     public DesiredExistence DesiredExistence { get; private set; }
     /// The sync request still waiting for the worker.
     public Guid? PendingIntentId { get; private set; }
-    /// The image alias tpl-<templateId> on this zone's cluster.
+    /// The image alias tpl-<templateId> on this cluster.
     public string? ExternalTemplateId { get; private set; }
     /// Why the last sync gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure); Detail is the operator's.
     public string? RequestFailureReason { get; private set; }
@@ -38,13 +38,13 @@ public class VmTemplateZone
         }
     }
 
-    private VmTemplateZone() { }
+    private VmTemplateCluster() { }
 
-    /// A zone nothing has been asked of or observed in yet. The root adds a request or an observation at once.
-    internal static VmTemplateZone NotYetSynced(Guid templateId, string zoneId) => new()
+    /// A cluster nothing has been asked of or observed in yet. The root adds a request or an observation at once.
+    internal static VmTemplateCluster NotYetSynced(Guid templateId, string clusterId) => new()
     {
         TemplateId = templateId,
-        ZoneId = zoneId,
+        ClusterId = clusterId,
         CurrentExistence = CurrentExistence.NotCreated,
         DesiredExistence = DesiredExistence.Exists,
         UpdatedAt = DateTimeOffset.UtcNow,
@@ -58,11 +58,11 @@ public class VmTemplateZone
         bool aliasIsThere = CurrentExistence == CurrentExistence.Exists;
         if (syncIsWaiting)
         {
-            throw new BadRequestException("INVALID_STATUS", $"A sync is already waiting in zone '{ZoneId}'.");
+            throw new BadRequestException("INVALID_STATUS", $"A sync is already waiting in cluster '{ClusterId}'.");
         }
         if (aliasIsThere)
         {
-            throw new BadRequestException("INVALID_STATUS", $"The template is already on the cluster of zone '{ZoneId}'.");
+            throw new BadRequestException("INVALID_STATUS", $"The template is already on cluster '{ClusterId}'.");
         }
 
         DesiredExistence = DesiredExistence.Exists;
@@ -70,8 +70,8 @@ public class VmTemplateZone
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// The sync command found or pulled the alias. Without the alias the zone would read ready yet be unusable:
-    /// VM create refuses a zone with no ExternalTemplateId. Returns whether it ended a waiting sync.
+    /// The sync command found or pulled the alias. Without the alias the cluster would read ready yet be unusable:
+    /// VM create refuses a cluster with no ExternalTemplateId. Returns whether it ended a waiting sync.
     internal bool MarkCreated(string externalTemplateId)
     {
         if (string.IsNullOrEmpty(externalTemplateId))

@@ -5,7 +5,7 @@ using Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 namespace Titan.Infrastructure.Endpoints.Catalog;
 
 // Separate from the customer GET /v1/templates (existing aliases only): AdminTemplateQueryResult exposes the
-// sync of every zone, which TemplateQueryResult hides.
+// sync of every cluster, which TemplateQueryResult hides.
 public class ListAdminTemplatesEndpoint(ListAdminTemplatesQueryHandler handler)
     : EndpointWithoutRequest<List<AdminTemplateQueryResult>>
 {

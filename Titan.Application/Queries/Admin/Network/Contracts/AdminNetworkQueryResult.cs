@@ -10,7 +10,7 @@ public record AdminNetworkQueryResult(
     Guid Id,
     Guid TenantId,
     string Name,
-    string ZoneId,
+    string ClusterId,
     string? Cidr,
     string? CurrentState,
     string CurrentExistence,
@@ -23,7 +23,7 @@ public record AdminNetworkQueryResult(
     string? PublicIpv6Subnet)
 {
     public static AdminNetworkQueryResult From(NetworkAggregate n) =>
-        new(n.Id, n.TenantId, n.Name, n.ZoneId, n.Cidr, StatusName(n.CurrentState), n.CurrentExistence.ToString(),
+        new(n.Id, n.TenantId, n.Name, n.ClusterId, n.Cidr, StatusName(n.CurrentState), n.CurrentExistence.ToString(),
             n.DesiredExistence.ToString(), TransitionName(n.Transition),
             n.RequestFailureReason, n.RequestFailureDetail, n.RequestFailedAt, n.CreatedAt, n.PublicIpv6Subnet);
 

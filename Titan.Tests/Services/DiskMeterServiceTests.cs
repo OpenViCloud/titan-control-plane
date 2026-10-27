@@ -34,7 +34,7 @@ public class DiskMeterServiceTests
         Options.Create(new BillingMeterOptions { IntervalMinutes = intervalMinutes }));
 
     private static Volume MakeVolume(int sizeGb = 40, string offeringId = OfferingId) =>
-        Volume.CreateUnchecked(TenantId, "data-vol", "zone-1", offeringId, sizeGb);
+        Volume.CreateUnchecked(TenantId, "data-vol", "cluster-1", offeringId, sizeGb);
 
     private void SeedVolumes(params Volume[] volumes) =>
         _volumeRepo.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>()))
@@ -67,7 +67,7 @@ public class DiskMeterServiceTests
     {
         var volume = MakeVolume(80);
         volume.MarkCreated("ext-vol-2");
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "zone-1", 20);
+        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm-1", "10.0.0.5");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);

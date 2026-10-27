@@ -50,7 +50,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_DefaultPoliciesAreAllow()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "zone-1");
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
 
         Assert.Equal(FirewallPolicy.Allow, network.DefaultIngressPolicy);
         Assert.Equal(FirewallPolicy.Allow, network.DefaultEgressPolicy);
@@ -59,7 +59,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_WithDenyEgressPolicy_SetsEgressPolicy()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "zone-1",
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1",
             defaultIngressPolicy: FirewallPolicy.Deny,
             defaultEgressPolicy: FirewallPolicy.Deny);
 
@@ -70,7 +70,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_MixedPolicies_SetsIndependently()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "zone-1",
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1",
             defaultIngressPolicy: FirewallPolicy.Deny,
             defaultEgressPolicy: FirewallPolicy.Allow);
 

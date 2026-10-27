@@ -37,10 +37,10 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
 
     // Like the name, a /64 stays taken until the delete command confirms the network gone: Incus still has its
     // router until then. Same condition as the unique index in NetworkConfiguration.
-    public async Task<HashSet<int>> ListPublicIpv6IndexesInZoneAsync(string zoneId, CancellationToken ct = default)
+    public async Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default)
     {
         var indexes = await db.Networks
-            .Where(n => n.ZoneId == zoneId && n.PublicIpv6Index != null && n.CurrentExistence != CurrentExistence.Deleted)
+            .Where(n => n.ClusterId == clusterId && n.PublicIpv6Index != null && n.CurrentExistence != CurrentExistence.Deleted)
             .Select(n => n.PublicIpv6Index!.Value)
             .ToListAsync(ct);
         return indexes.ToHashSet();
@@ -52,11 +52,11 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
 
     // A VM holds the network while its instance exists on the provider (whatever its status, a delete in flight
     // included: Incus refuses to delete a network an instance still uses) or its create is still waiting.
-    public async Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInZoneAsync(string zoneId,
+    public async Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId,
         CancellationToken ct = default)
     {
         var releases = await db.Networks
-            .Where(n => n.ZoneId == zoneId && n.PublicIpv6Index != null && n.CurrentExistence == CurrentExistence.Deleted)
+            .Where(n => n.ClusterId == clusterId && n.PublicIpv6Index != null && n.CurrentExistence == CurrentExistence.Deleted)
             .GroupBy(n => n.PublicIpv6Index!.Value)
             .Select(g => new { Index = g.Key, ReleasedAt = g.Max(n => n.PublicIpv6ReleasedAt) })
             .ToListAsync(ct);
@@ -117,9 +117,9 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task<List<Network>> ListReconcilableAsync(string zoneId, CancellationToken ct = default) =>
+    public async Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Networks
-            .Where(n => n.ZoneId == zoneId
+            .Where(n => n.ClusterId == clusterId
                         && n.ExternalId != null
                         && n.CurrentExistence != CurrentExistence.Deleted)
             .AsNoTracking()

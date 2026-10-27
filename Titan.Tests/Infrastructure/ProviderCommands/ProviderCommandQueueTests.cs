@@ -27,7 +27,7 @@ public class ProviderCommandQueueTests
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal($"vm-provision-{vmId}", row.Key);
         Assert.Equal(ProviderCommandKinds.VmCreate, row.Kind);
-        Assert.Equal("mock", row.ZoneId);
+        Assert.Equal("mock", row.ClusterId);
         Assert.Equal(ProviderCommandStatus.Pending, row.Status);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
@@ -262,7 +262,7 @@ public class ProviderCommandQueueTests
         {
             using JsonDocument payload = JsonDocument.Parse(row.Payload);
             Assert.Equal("t-1", payload.RootElement.GetProperty("projectName").GetString());
-            Assert.Equal("mock", payload.RootElement.GetProperty("zoneId").GetString());
+            Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
         }
         Assert.Equal(2, _repo.Rows.Count);
     }
@@ -314,7 +314,7 @@ public class ProviderCommandQueueTests
     }
 
     [Fact]
-    public async Task TemplateSync_IsKeyedPerTemplatePerZone()
+    public async Task TemplateSync_IsKeyedPerTemplatePerCluster()
     {
         Guid templateId = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
@@ -340,7 +340,7 @@ public class ProviderCommandQueueTests
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal($"vm-backup-{vmId}-20261026", row.Key);
         Assert.Equal(ProviderCommandKinds.VmBackup, row.Kind);
-        Assert.Equal("mock", row.ZoneId);
+        Assert.Equal("mock", row.ClusterId);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
         Assert.Equal("vm-x", payload.RootElement.GetProperty("externalVmId").GetString());
@@ -443,15 +443,15 @@ public class ProviderCommandQueueTests
 
     [Theory]
     [MemberData(nameof(StorageAndSnapshotKinds))]
-    public async Task StorageAndSnapshotCommands_CarryTheTenantsProject_AndTheZone(string kind)
+    public async Task StorageAndSnapshotCommands_CarryTheTenantsProject_AndTheCluster(string kind)
     {
-        await EnqueueOne(Queue(), kind, project: "t-0123", zone: "mock");
+        await EnqueueOne(Queue(), kind, project: "t-0123", cluster: "mock");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal(kind, row.Kind);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal("t-0123", payload.RootElement.GetProperty("projectName").GetString());
-        Assert.Equal("mock", payload.RootElement.GetProperty("zoneId").GetString());
+        Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
     }
 
     // The worker has no catalog: an offering id is a Titan id the provider cannot use; the pool comes from the cluster.
@@ -466,36 +466,36 @@ public class ProviderCommandQueueTests
         Assert.False(payload.RootElement.TryGetProperty("volumeOfferingId", out _));
     }
 
-    private static Task EnqueueOne(ProviderCommandQueue queue, string kind, string project, string zone)
+    private static Task EnqueueOne(ProviderCommandQueue queue, string kind, string project, string cluster)
     {
         Guid id = Guid.NewGuid();
         Guid other = Guid.NewGuid();
         switch (kind)
         {
             case ProviderCommandKinds.VolumeCreate:
-                return queue.EnqueueVolumeCreateAsync(id, "data-1", zone, 10, project);
+                return queue.EnqueueVolumeCreateAsync(id, "data-1", cluster, 10, project);
             case ProviderCommandKinds.VolumeAttach:
-                return queue.EnqueueVolumeAttachAsync(id, "vol-x", "vm-x", project, zone);
+                return queue.EnqueueVolumeAttachAsync(id, "vol-x", "vm-x", project, cluster);
             case ProviderCommandKinds.VolumeDetach:
-                return queue.EnqueueVolumeDetachAsync(id, "vol-x", project, zone);
+                return queue.EnqueueVolumeDetachAsync(id, "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeDelete:
-                return queue.EnqueueVolumeDeleteAsync(id, "vol-x", project, zone);
+                return queue.EnqueueVolumeDeleteAsync(id, "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotCreate:
-                return queue.EnqueueVolumeSnapshotCreateAsync(id, other, "vol-x", project, zone);
+                return queue.EnqueueVolumeSnapshotCreateAsync(id, other, "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotDelete:
-                return queue.EnqueueVolumeSnapshotDeleteAsync(id, other, "vol-x/snap-x", project, zone);
+                return queue.EnqueueVolumeSnapshotDeleteAsync(id, other, "vol-x/snap-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotRestore:
-                return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, "vol-x/snap-x", "restored", project, zone);
+                return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, "vol-x/snap-x", "restored", project, cluster);
             case ProviderCommandKinds.VmSnapshotCreate:
-                return queue.EnqueueVmSnapshotCreateAsync(id, other, "vm-x", "before-upgrade", project, zone);
+                return queue.EnqueueVmSnapshotCreateAsync(id, other, "vm-x", "before-upgrade", project, cluster);
             case ProviderCommandKinds.VmSnapshotRevert:
-                return queue.EnqueueVmSnapshotRevertAsync(id, other, "vm-x/snap-x", project, zone);
+                return queue.EnqueueVmSnapshotRevertAsync(id, other, "vm-x/snap-x", project, cluster);
             case ProviderCommandKinds.VmSnapshotDelete:
-                return queue.EnqueueVmSnapshotDeleteAsync(id, other, "vm-x/snap-x", project, zone);
+                return queue.EnqueueVmSnapshotDeleteAsync(id, other, "vm-x/snap-x", project, cluster);
             case ProviderCommandKinds.VmBackup:
-                return queue.EnqueueVmBackupAsync(id, "vm-x", project, other, zone, new DateOnly(2026, 10, 26));
+                return queue.EnqueueVmBackupAsync(id, "vm-x", project, other, cluster, new DateOnly(2026, 10, 26));
             case ProviderCommandKinds.VolumeBackup:
-                return queue.EnqueueVolumeBackupAsync(id, "vol-x", project, other, zone, new DateOnly(2026, 10, 26));
+                return queue.EnqueueVolumeBackupAsync(id, "vol-x", project, other, cluster, new DateOnly(2026, 10, 26));
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "not a storage or snapshot kind");
         }
