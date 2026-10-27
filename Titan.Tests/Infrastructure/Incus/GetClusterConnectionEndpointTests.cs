@@ -113,7 +113,7 @@ public class GetClusterConnectionEndpointTests
     }
 
     [Fact]
-    public async Task AClusterWithoutACluster_IsClusterNotFound()
+    public async Task AnUnconfiguredCluster_IsClusterNotFound()
     {
         GetClusterConnectionEndpoint endpoint = EndpointFor(new ClusterOptions(), "expected");
 
