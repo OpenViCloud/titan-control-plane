@@ -42,7 +42,7 @@ run_step() {
 run_step "unit"      'Category!=Integration&Category!=FullHost'
 
 DEV_KUBECONFIG="$HOME/.lima/titan-k3s/copied-from-guest/kubeconfig.yaml"
-# Same value as https://github.com/OpenViCloud/titan-local-cluster/blob/main/mac/scripts/bootstrap-secrets.sh: a test password, the cluster only listens on 127.0.0.1.
+# Same value as https://github.com/OpenViCloud/titan-local-cluster/blob/main/lima/scripts/bootstrap-secrets.sh: a test password, the cluster only listens on 127.0.0.1.
 # SSL off: .NET on macOS fails the TLS handshake with CNPG ("bad protocol version"); the hop is loopback into
 # kubectl's port-forward tunnel, not the network.
 DEV_TEST_SERVER="Host=127.0.0.1;Port=15432;Username=titan_it;Password=titan-it-local-only;Database=postgres;SSL Mode=Disable"
