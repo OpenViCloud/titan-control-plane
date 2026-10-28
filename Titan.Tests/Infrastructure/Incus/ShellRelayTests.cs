@@ -268,11 +268,13 @@ public class ShellRelayTests
     public async Task BytesFromTheCustomerOnly_KeepTheSessionOpen()
     {
         await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Swallows);
-        var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(600) };
+        // A byte every 250 ms for 3 s against a 1.5 s idle timeout: the run outlasts the timeout twice, and a slow CI
+        // runner has 1.25 s of slack per gap.
+        var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(1500) };
         Task<ShellRelayResult> relay = RelayAsync(rig, idleSoon);
 
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < 12; i++)
         {
             await Task.Delay(250);
             await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("k"), WebSocketMessageType.Binary, true, CancellationToken.None);
