@@ -47,13 +47,31 @@ DEV_KUBECONFIG="$HOME/.lima/titan-k3s/copied-from-guest/kubeconfig.yaml"
 # kubectl's port-forward tunnel, not the network.
 DEV_TEST_SERVER="Host=127.0.0.1;Port=15432;Username=titan_it;Password=titan-it-local-only;Database=postgres;SSL Mode=Disable"
 port_forward_pid=""
+# One line per tunnel the loop below opens: a second line during a database step means the tunnel died in it.
+port_forward_opens="$(mktemp)"
 
 stop_port_forward() {
     if [ -n "$port_forward_pid" ]; then
         kill "$port_forward_pid" 2>/dev/null
     fi
+    rm -f "$port_forward_opens"
 }
 trap stop_port_forward EXIT
+
+# A single kubectl port-forward dies now and then mid-run; one in a loop kept the tunnel 101 times out of 101
+# (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/environments/local-cluster/topology.md#runbook,
+# TEST-ALL-TUNNEL). TERM, from stop_port_forward, ends the loop and the kubectl it waits on.
+keep_port_forward() {
+    local child=""
+    trap 'kill "$child" 2>/dev/null; exit 0' TERM
+    while true; do
+        echo open >> "$port_forward_opens"
+        kubectl --kubeconfig "$DEV_KUBECONFIG" -n titan-db-dev port-forward svc/titan-db-rw 15432:5432 >/dev/null 2>&1 &
+        child=$!
+        wait "$child"
+        sleep 1
+    done
+}
 
 # Returns 0 once 127.0.0.1:15432 accepts a connection, 1 after 30 seconds.
 wait_for_port() {
@@ -71,9 +89,9 @@ sys.exit(1)'
 integration_source=""
 if [ -n "${TITAN_IT_POSTGRES:-}" ]; then
     integration_source="TITAN_IT_POSTGRES (already set)"
-elif [ -f "$DEV_KUBECONFIG" ] && kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-staging get svc titan-db-rw >/dev/null 2>&1; then
+elif [ -f "$DEV_KUBECONFIG" ] && kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-dev get svc titan-db-rw >/dev/null 2>&1; then
     server=$(kubectl --kubeconfig "$DEV_KUBECONFIG" config view --minify -o 'jsonpath={.clusters[0].cluster.server}')
-    kubectl --kubeconfig "$DEV_KUBECONFIG" -n titan-db-staging port-forward svc/titan-db-rw 15432:5432 >/dev/null 2>&1 &
+    keep_port_forward &
     port_forward_pid=$!
     if wait_for_port; then
         export TITAN_IT_POSTGRES="$DEV_TEST_SERVER"
@@ -88,19 +106,20 @@ if [ -z "$integration_source" ] && docker info >/dev/null 2>&1; then
 fi
 
 # The port-forward can die mid-run: every test after that fails on a refused connection, hundreds of red lines that
-# say nothing about the code. Checked before and after each database step; a dead tunnel makes the run INCOMPLETE.
+# say nothing about the code. Checked before and after each database step; a tunnel that is gone, or that the loop had
+# to reopen during the step, makes the run INCOMPLETE.
 tunnel_died_in=""
 
 tunnel_alive() {
     if [ -z "$port_forward_pid" ]; then
         return 0
     fi
-    kill -0 "$port_forward_pid" 2>/dev/null && python3 -I -c '
-import socket, sys
-try:
-    socket.create_connection(("127.0.0.1", 15432), timeout=2).close()
-except OSError:
-    sys.exit(1)'
+    # Before a step a tunnel the loop has just reopened is fine: give it the time wait_for_port gives the first one.
+    kill -0 "$port_forward_pid" 2>/dev/null && wait_for_port
+}
+
+tunnel_opens() {
+    wc -l < "$port_forward_opens" | tr -d ' '
 }
 
 run_db_step() {
@@ -116,9 +135,10 @@ run_db_step() {
         echo "==> $label: skipped, the port-forward to the dev database is gone"
         return
     fi
-    local failed_before="$failed"
+    local failed_before="$failed" opens_before
+    opens_before="$(tunnel_opens)"
     run_step "$label" "$filter"
-    if ! tunnel_alive; then
+    if ! tunnel_alive || [ "$(tunnel_opens)" != "$opens_before" ]; then
         tunnel_died_in="$label"
         failed="$failed_before"
         echo "==> $label: the port-forward to the dev database died during this step; its failures are not counted"
