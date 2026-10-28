@@ -142,6 +142,70 @@ public class TemplateServiceTests
         wf.Verify(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), times);
 
+    // ── Templates never asked into a cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-sync-never-asked) ──
+
+    private static Task RunNeverAsked(StubRepo repo, Mock<IProviderCommandQueue> wf) =>
+        Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService.RunOnceAsync(
+            new ListClustersWithNeverAskedTemplatesQueryHandler(repo, Clusters),
+            new SyncTemplatesCommandHandler(repo, Clusters, wf.Object, new SyncCountLogger()),
+            NullLogger.Instance, CancellationToken.None);
+
+    // A new environment (empty database, the catalog from the migrations) or a cluster added to the config: nobody
+    // presses sync, so the control plane asks itself.
+    [Fact]
+    public async Task NeverAsked_AClusterATemplateWasNeverAskedInto_AsksEveryTemplateThere()
+    {
+        var t = SyncedTemplate("in-mock-only", "5", Mock);
+        var (_, repo, wf) = Make(t);
+
+        await RunNeverAsked(repo, wf);
+
+        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Singapore));
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Singapore, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.True(repo.Saved);
+    }
+
+    // Asked once is enough: a failed sync waits for the admin, as before, instead of being retried every tick.
+    [Fact]
+    public async Task NeverAsked_EveryTemplateAskedInEveryCluster_SendsNothing_EvenWhenOneFailed()
+    {
+        var t = FailedTemplate("failed-in-mock", "bad image", Mock);
+        t.RequestSyncIn(Singapore);
+        t.MarkCreatedIn(Singapore, "9");
+        var (_, repo, wf) = Make(t);
+
+        await RunNeverAsked(repo, wf);
+
+        VerifySync(wf, Times.Never());
+        Assert.False(repo.Saved);
+    }
+
+    // One template is enough: a template added later by a migration is asked although the others are everywhere.
+    [Fact]
+    public async Task NeverAsked_OneTemplateMissingACluster_AmongOthersThatAreThere_IsAsked()
+    {
+        var everywhere = SyncedTemplate("everywhere", "1", Mock);
+        everywhere.RequestSyncIn(Singapore);
+        everywhere.MarkCreatedIn(Singapore, "2");
+        var added = SyncedTemplate("added-later", "3", Mock);
+        var (_, repo, wf) = Make(everywhere, added);
+
+        await RunNeverAsked(repo, wf);
+
+        Assert.Equal("NotCreated/Exists/Syncing", Shape(added, Singapore));
+    }
+
+    [Fact]
+    public async Task NeverAsked_AnEmptyCatalog_SendsNothing()
+    {
+        var (_, repo, wf) = Make();
+
+        await RunNeverAsked(repo, wf);
+
+        VerifySync(wf, Times.Never());
+    }
+
     // ── ListAsync (customer read) ───────────────────────────────────
 
     // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed: the customer catalog leaves out templates not offered, even

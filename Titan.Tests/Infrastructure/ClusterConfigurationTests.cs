@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
 
@@ -95,6 +97,65 @@ public class ClusterConfigurationTests
         var options = ClusterOptions.FromConfiguration([cluster]);
 
         Assert.Equal("2001:41d0:d00:d400::/56", options.Clusters[0].Ipv6Block);
+    }
+
+    // Terraform cannot hash a certificate's DER, so an environment may give the server certificate instead of its
+    // fingerprint; the pin is the same SHA-256 of the DER that `incus remote add` prints.
+    [Fact]
+    public void ACertificateWithoutAFingerprint_IsPinnedByTheSha256OfItsDer()
+    {
+        using var certificate = SelfSigned();
+        var cluster = Valid();
+        cluster.ServerFingerprint = "";
+        cluster.ServerCertificatePem = certificate.ExportCertificatePem();
+
+        var options = ClusterOptions.FromConfiguration([cluster]);
+
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(certificate.RawData)), options.Clusters[0].ServerFingerprint);
+    }
+
+    [Fact]
+    public void ACertificateAndItsOwnFingerprint_AreKept()
+    {
+        using var certificate = SelfSigned();
+        var cluster = Valid();
+        cluster.ServerCertificatePem = certificate.ExportCertificatePem();
+        cluster.ServerFingerprint = Convert.ToHexString(SHA256.HashData(certificate.RawData));
+
+        var options = ClusterOptions.FromConfiguration([cluster]);
+
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(certificate.RawData)), options.Clusters[0].ServerFingerprint);
+    }
+
+    [Fact]
+    public void ACertificateAndAnotherFingerprint_StopsStartup_NamingTheFingerprint()
+    {
+        using var certificate = SelfSigned();
+        var cluster = Valid();
+        cluster.ServerCertificatePem = certificate.ExportCertificatePem();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ClusterOptions.FromConfiguration([cluster]));
+
+        Assert.Contains("Clusters:0:ServerFingerprint", ex.Message);
+    }
+
+    [Fact]
+    public void AnUnreadableCertificate_StopsStartup_NamingTheCertificate()
+    {
+        var cluster = Valid();
+        cluster.ServerFingerprint = "";
+        cluster.ServerCertificatePem = "-----BEGIN CERTIFICATE-----\nnot a certificate\n-----END CERTIFICATE-----";
+
+        var ex = Assert.Throws<InvalidOperationException>(() => ClusterOptions.FromConfiguration([cluster]));
+
+        Assert.Contains("Clusters:0:ServerCertificatePem", ex.Message);
+    }
+
+    private static X509Certificate2 SelfSigned()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP384);
+        var request = new CertificateRequest("CN=singapore01", key, HashAlgorithmName.SHA384);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddYears(1));
     }
 
     public static TheoryData<string, Action<ClusterConfig>> Refused => new()

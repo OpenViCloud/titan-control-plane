@@ -58,7 +58,8 @@ stop_port_forward() {
 }
 trap stop_port_forward EXIT
 
-# A single kubectl port-forward dies now and then mid-run; one in a loop kept the tunnel 101 times out of 101
+# A single kubectl port-forward dies now and then mid-run. The loop reopens it and counts each reopen, so a run that
+# lost the tunnel is reported INCOMPLETE rather than trusted; the cause is still unknown
 # (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/environments/local-cluster/topology.md#runbook,
 # TEST-ALL-TUNNEL). TERM, from stop_port_forward, ends the loop and the kubectl it waits on.
 keep_port_forward() {
