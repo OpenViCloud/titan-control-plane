@@ -10,7 +10,7 @@
 #
 # FullHost and Integration tests need a real Postgres (Titan.Tests/Infrastructure/Integration/TestPostgres.cs), first that works:
 #   1. TITAN_IT_POSTGRES already set ⇒ that server (loopback only).
-#   2. The dev cluster on the Mac is up ⇒ port-forward its database to 127.0.0.1:15432, role titan_it.
+#   2. The dev cluster on this machine is up ⇒ port-forward its database to 127.0.0.1:15432, role titan_it.
 #   3. Docker ⇒ a throwaway postgres:16 container, as CI does.
 # None of them ⇒ RESULT: INCOMPLETE and exit 2: they are the only coverage of real migrations and of the
 # money-path concurrency guards, so a run without them is not a pass.
