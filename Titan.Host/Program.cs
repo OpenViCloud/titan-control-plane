@@ -279,6 +279,8 @@ builder.Services.AddSingleton<ReconcilerHeartbeat>();
 // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering
 builder.Services.AddMeters();
 builder.Services.AddScoped<CatTemplateCmd.SyncTemplatesCommandHandler>();
+builder.Services.AddScoped<CatTemplateQry.ListClustersWithNeverAskedTemplatesQueryHandler>();
+builder.Services.AddHostedService<Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService>();
 builder.Services.AddScoped<CatTemplateCmd.UpdateTemplateStatusCommandHandler>();
 builder.Services.AddScoped<CatOfferingCmd.UpdateVmOfferingPriceCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListTemplatesQueryHandler>();

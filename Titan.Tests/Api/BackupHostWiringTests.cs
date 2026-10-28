@@ -30,4 +30,15 @@ public class BackupHostWiringTests : IClassFixture<OpenApiSpecTests.ApiFactory>
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ScheduleBackupsCommandHandler>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler>());
     }
+
+    // The same holds for the template sync a new environment needs before its first VM.
+    [Fact]
+    public void TheNeverAskedTemplateSyncRunsInTheHost_AndItsHandlerResolves()
+    {
+        Assert.Contains(_factory.Services.GetServices<IHostedService>(), s => s is TemplateSyncNeverAskedService);
+
+        using IServiceScope scope = _factory.Services.CreateScope();
+        Assert.NotNull(scope.ServiceProvider
+            .GetRequiredService<Titan.Application.Queries.Catalog.VmTemplate.ListClustersWithNeverAskedTemplatesQueryHandler>());
+    }
 }
