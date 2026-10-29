@@ -8,7 +8,7 @@ using Titan.Application.Services.Billing.Metering;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// One timer ticks every registered <see cref="IMeter"/> (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering).
+/// One timer ticks every registered <see cref="IMeter"/> (titan-ops architecture/money-and-wallet.md#append-only-metering).
 /// Each meter has its own try/catch, so one throwing does not stop the others. Every attempt is stamped
 /// into <see cref="MeterHeartbeat"/> so the liveness check can see a meter that has gone silent.
 /// </summary>

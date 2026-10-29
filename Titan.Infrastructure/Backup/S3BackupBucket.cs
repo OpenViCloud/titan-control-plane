@@ -43,7 +43,7 @@ public sealed class S3BackupBucket : IBackupBucket
             using var body = new MemoryStream(content);
             // R2 does not support the Streaming SigV4 framing of AWSSDK.S3 uploads (https://developers.cloudflare.com/r2/examples/aws/aws-sdk-net/):
             // one body with its SHA-256 signed in the header avoids it. Why not Cloudflare's DisablePayloadSigning, and what R2 answered:
-            // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target
+            // titan-ops features/backup/design.md#backup-target
             await _client.PutObjectAsync(
                 new PutObjectRequest { BucketName = _bucket, Key = key, InputStream = body, UseChunkEncoding = false }, ct);
         }, ct);

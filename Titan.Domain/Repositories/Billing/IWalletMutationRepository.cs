@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Billing.WalletMutation;
 
 namespace Titan.Domain.Repositories.Billing;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — shares the DbContext with IWalletRepository, so
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — shares the DbContext with IWalletRepository, so
 /// its SaveChanges commits MarkApplied together with the balance change and ledger row in one transaction.
 public interface IWalletMutationRepository
 {
@@ -17,7 +17,7 @@ public interface IWalletMutationRepository
     /// Oldest first, tracked. The age cutoff keeps the sweeper off the hot path: a mutation enqueued a moment
     /// ago belongs to the bus notify already in flight, and sweeping it would put two writers on one wallet.
     /// FOR UPDATE SKIP LOCKED holds its lock only for the statement, so it does not keep the sweep off a mutation
-    /// the consumer is applying (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+    /// the consumer is applying (titan-ops features/billing/wallet/design.md#wallet-debts).
     Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(
         DateTimeOffset cutoff, int batchSize, CancellationToken ct);
 
@@ -26,7 +26,7 @@ public interface IWalletMutationRepository
     Task<WalletMutation?> GetForRefAsync(string refType, Guid refId, CancellationToken ct);
 
     /// The source's one mutation, tracked, for reopening a failed invoice debit
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit).
+    /// (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
     Task<WalletMutation?> GetForRefForUpdateAsync(string refType, Guid refId, CancellationToken ct);
 
     /// One query for the whole invoice list, not a per-row lookup in a loop.

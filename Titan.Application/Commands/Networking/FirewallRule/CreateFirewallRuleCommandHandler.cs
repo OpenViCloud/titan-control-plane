@@ -21,7 +21,7 @@ public class CreateFirewallRuleCommandHandler(
 {
     public async Task<CreateFirewallRuleCommandResult> HandleAsync(CreateFirewallRuleCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the wire contract (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract)
+        var req = command;   // the command IS the wire contract (titan-ops architecture/code-structure.md#command-is-wire-contract)
         var networkId = command.NetworkId;
 
         var network = await NetworkOwnership.RequireNetworkAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
@@ -30,7 +30,7 @@ public class CreateFirewallRuleCommandHandler(
         // call: the precondition cannot be skipped, and there is no `!` below.
         var externalNetworkId = network.BeginFirewallRule();
 
-        // Cap is per network and owned by the network's tenant (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota).
+        // Cap is per network and owned by the network's tenant (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
         var tenant = await tenantRepo.FindByIdAsync(network.TenantId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
         var ruleCount = await repo.CountByNetworkAsync(networkId, ct);

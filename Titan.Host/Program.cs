@@ -102,7 +102,7 @@ builder.Services.AddHealthChecks()
     // meter is a billing signal and must never pull the API pod out of rotation.
     .AddCheck<MeterLivenessHealthCheck>("meters", tags: ["meters"])
     // A stuck wallet mutation means a payment is waiting; failing readiness over it would turn a delayed
-    // payment into an outage (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+    // payment into an outage (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
     .AddCheck<WalletMutationHealthCheck>("wallet-async", tags: ["background", "wallet"])
     // A stale reconciler means observations are late, not that this pod cannot serve.
     .AddCheck<ReconcilerLivenessHealthCheck>("reconcilers", tags: ["background", "reconcilers"]);
@@ -152,7 +152,7 @@ builder.Services.AddScoped<CompSshKeyQry.ListSshKeysQueryHandler>();
 builder.Services.AddScoped<PlatApiTokenCmd.CreateApiTokenCommandHandler>();
 builder.Services.AddScoped<PlatApiTokenCmd.DeleteApiTokenCommandHandler>();
 builder.Services.AddScoped<PlatApiTokenQry.ListApiTokensQueryHandler>();
-// Handlers are registered by hand, one line each (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-mediatr): this
+// Handlers are registered by hand, one line each (titan-ops architecture/code-structure.md#no-mediatr): this
 // list is the greppable inventory of what exists, which an assembly scan would delete.
 builder.Services.AddScoped<ListVmsQueryHandler>();
 builder.Services.AddScoped<GetVmQueryHandler>();
@@ -186,9 +186,9 @@ builder.Services.AddScoped<BillInvoiceCmd.GenerateInvoicesForPeriodCommandHandle
 builder.Services.AddScoped<BillWalletCmd.OpenWalletCommandHandler>();
 builder.Services.AddScoped<BillPgtCmd.ReceiveSePayPaymentCommandHandler>();
 // Scoped: the subscriber opens a scope per notification, the sweeper one per pass
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+// (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 builder.Services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#consent-gate-per-user
+// titan-ops features/legal/design.md#consent-gate-per-user
 builder.Services.AddSingleton<ILegalDocumentCatalog, LegalDocumentCatalog>();
 // BootstrapTenant and ApproveDeclaredAccount have no endpoint: TenantResolutionMiddleware injects them on
 // every authenticated request, so a missing line here fails every signed-in call, not just one route.
@@ -205,7 +205,7 @@ builder.Services.AddScoped<PlatLegalQry.GetLegalDocumentQueryHandler>();
 builder.Services.AddScoped<PlatLegalQry.GetConsentStatusQueryHandler>();
 builder.Services.AddScoped<PlatActivityQry.ListActivityEventsQueryHandler>();
 builder.Services.AddScoped<PlatAuditQry.ListAdminAuditLogQueryHandler>();
-// A cluster no handshake could reach throws here, so the host does not start (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
+// A cluster no handshake could reach throws here, so the host does not start (titan-ops features/cluster/design.md#cluster-from-config).
 var clusterOptions = ClusterOptions.FromConfiguration(
     builder.Configuration.GetSection(ClusterOptions.SectionName).Get<List<ClusterConfig>>());
 builder.Services.AddSingleton(clusterOptions);
@@ -218,7 +218,7 @@ var sePayOptions = builder.Configuration.GetSection(SePayOptions.SectionName).Ge
 builder.Services.AddSingleton(sePayOptions);
 
 // NATS is off by default: the outbox table is the durable queue and NATS only a speed layer, so a missed
-// notify is a delayed apply, never lost money (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+// notify is a delayed apply, never lost money (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 // At control-plane replicas: 1 the single subscriber is the one writer per wallet.
 var natsOptions = builder.Configuration.GetSection(NatsOptions.SectionName).Get<NatsOptions>() ?? new NatsOptions();
 builder.Services.AddSingleton(natsOptions);
@@ -268,7 +268,7 @@ builder.Services.AddOptions<IdempotencyCleanupOptions>().BindConfiguration(Idemp
 builder.Services.AddHostedService<IdempotencyCleanupService>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
 // and nothing alerts on its absence (/healthz/wallet only reports it). Its SKIP LOCKED does not keep it off
-// a mutation the subscriber is applying (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+// a mutation the subscriber is applying (titan-ops features/billing/wallet/design.md#wallet-debts).
 builder.Services.AddOptions<WalletSweeperOptions>().BindConfiguration(WalletSweeperOptions.SectionName);
 // Singleton: written by the sweeper loop, read by the health check.
 builder.Services.AddSingleton<WalletSweeperHeartbeat>();
@@ -276,7 +276,7 @@ builder.Services.AddHostedService<WalletMutationSweeper>();
 // The worker's reconcilers poll GET /internal/reconcile/*; each poll feeds this heartbeat, read by /healthz/reconcilers.
 builder.Services.AddOptions<ReconcilerLivenessOptions>().BindConfiguration(ReconcilerLivenessOptions.SectionName);
 builder.Services.AddSingleton<ReconcilerHeartbeat>();
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering
+// titan-ops architecture/money-and-wallet.md#append-only-metering
 builder.Services.AddMeters();
 builder.Services.AddScoped<CatTemplateCmd.SyncTemplatesCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListClustersWithNeverAskedTemplatesQueryHandler>();
@@ -291,11 +291,11 @@ builder.Services.AddScoped<CatVolumeOfferingQry.ListVolumeOfferingsQueryHandler>
 builder.Services.AddScoped<CatClusterQry.ListClustersQueryHandler>();
 builder.Services.AddScoped<CatOsImageQry.ListOsImagesQueryHandler>();
 builder.Services.AddScoped<TemplateSyncRunner>();
-// Cross-tenant, platform-admin only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).
+// Cross-tenant, platform-admin only (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read).
 builder.Services.AddScoped<AdminVmCmd.DeleteAdminVmCommandHandler>();
 builder.Services.AddScoped<AdminVmQry.ListAdminVmsQueryHandler>();
 builder.Services.AddScoped<AdminNetworkQry.ListAdminNetworksQueryHandler>();
-// The provider command table (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table): handlers stage rows,
+// The provider command table (titan-ops architecture/provider-and-worker.md#provider-command-table): handlers stage rows,
 // the worker leases them over /internal.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IProviderCommandRepository, ProviderCommandRepository>();
@@ -306,7 +306,7 @@ builder.Services.AddScoped<ProviderCommandCmd.CompleteProviderCommandCommandHand
 builder.Services.AddScoped<ProviderCommandCmd.FailProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandQry.GetLeasedProviderCommandQueryHandler>();
 // Validated on start so a broken Secret, or a configured cluster without one, stops startup rather than every Incus call
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
+// (titan-ops features/cluster/design.md#provider-client-identity).
 builder.Services.AddOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>()
     .BindConfiguration(Titan.Infrastructure.Incus.ProviderClientIdentityOptions.SectionName)
     .ValidateOnStart();
@@ -335,7 +335,7 @@ builder.Services.AddSingleton<IProviderClientIdentityStore>(sp =>
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusClientFactory>();
 builder.Services.AddScoped<IComputeCatalogProvider, Titan.Infrastructure.Incus.IncusCatalogProvider>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusShellConnector>();
-// One count for the whole process: right while the control plane runs one replica (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session).
+// One count for the whole process: right while the control plane runs one replica (titan-ops features/vm/design.md#ssh-session).
 builder.Services.AddSingleton<Titan.Infrastructure.Sessions.ShellSessionLimiter>();
 builder.Services.AddScoped<IClusterConnectionTester, Titan.Infrastructure.Incus.IncusClusterConnectionTester>();
 builder.Services.AddScoped<IAdminClusterService, Titan.Infrastructure.Incus.AdminClusterService>();
@@ -347,17 +347,17 @@ builder.Services.AddFastEndpoints();
 builder.Services.SwaggerDocument(o =>
 {
     // Without this NSwag names every schema after its namespace, so a folder move inside Titan.Application
-    // breaks the published contract (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#openapi-schema-names).
+    // breaks the published contract (titan-ops architecture/http-contract.md#openapi-schema-names).
     o.ShortSchemaNames = true;
     o.DocumentSettings = s =>
     {
         s.DocumentName = "v1";
         s.Title = "Titan API";
         s.Version = "v1";
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key: a create refuses a request without Idempotency-Key, so the published contract says
+        // titan-ops architecture/http-contract.md#idempotency-key: a create refuses a request without Idempotency-Key, so the published contract says
         // so — otherwise a client generated from this spec would send requests the server rejects.
         s.AddOperationFilter(AddRequiredIdempotencyKeyHeader);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#state-enums: a nullable enum field comes out as `oneOf`, which
+        // titan-ops features/public-api/design.md#state-enums: a nullable enum field comes out as `oneOf`, which
         // oapi-codegen turns into a wrapper type; `allOf` gives the client a plain pointer to the enum.
         s.DocumentProcessors.Add(new NullableReferenceAsAllOf());
     };
@@ -383,7 +383,7 @@ builder.Services.AddCors(options =>
     }));
 
 // Two schemes behind one selector: an ovc_ bearer is an API token, anything else is a Keycloak JWT
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token). With two schemes there is no implicit default any more.
+// (titan-ops features/public-api/design.md#api-token). With two schemes there is no implicit default any more.
 builder.Services.AddAuthentication(ApiTokenSchemes.Selector)
     .AddPolicyScheme(ApiTokenSchemes.Selector, ApiTokenSchemes.Selector,
         options => options.ForwardDefaultSelector = ApiTokenSchemes.Choose)
@@ -407,7 +407,7 @@ builder.Services.AddAuthorizationBuilder()
 var app = builder.Build();
 
 // One-shot CLI: sync every template, exit non-zero unless all are Synced. Nothing calls it since the PostSync Job
-// was removed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md, debt table).
+// was removed (titan-ops features/catalog/design.md, debt table).
 if (args.Contains("sync-templates"))
 {
     using var scope = app.Services.CreateScope();
@@ -435,7 +435,7 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
 
 app.UseCors(corsPolicyName);
 
-// SSH sessions (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): a keep-alive frame every 30 s keeps an idle session's path open.
+// SSH sessions (titan-ops features/vm/design.md#ssh-session): a keep-alive frame every 30 s keeps an idle session's path open.
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 
 app.UseAuthentication();
@@ -469,7 +469,7 @@ app.MapHealthChecks("/healthz/meters", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("meters")
 }).AllowAnonymous();
 
-// Nothing polls this: no Prometheus, no livenessProbe (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/runbooks/runbook-wallet-async.md). It is a
+// Nothing polls this: no Prometheus, no livenessProbe (titan-ops infra/runbooks/runbook-wallet-async.md). It is a
 // question someone has to ask, not an alert.
 app.MapHealthChecks("/healthz/wallet", new HealthCheckOptions
 {
@@ -486,7 +486,7 @@ app.Run();
 
 return 0;
 
-// Uses IRequiresIdempotencyKey, the same marker the middleware enforces (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key).
+// Uses IRequiresIdempotencyKey, the same marker the middleware enforces (titan-ops architecture/http-contract.md#idempotency-key).
 static bool AddRequiredIdempotencyKeyHeader(NSwag.Generation.Processors.Contexts.OperationProcessorContext context)
 {
     var aspNetContext = context as NSwag.Generation.AspNetCore.AspNetCoreOperationProcessorContext;

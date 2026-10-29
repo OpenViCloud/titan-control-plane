@@ -17,7 +17,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// The backup cache on Postgres through the real handlers, repositories, S3 adapter and clock: rows written and read back,
 /// the unique index, a bucket that cannot be reached (a real connection refused: the configured target points at a port nobody
 /// listens on) leaving the rows and the last log time in place, and no wallet or ledger row touched by any of it
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/user-stories.md#bak-03). A bucket that answers is
+/// (titan-ops features/backup/user-stories.md#bak-03). A bucket that answers is
 /// not reproduced here: R2 cannot run in CI and no service is faked, so what a listing turns into rows is unit-tested
 /// (RefreshBackupStatusCommandTests).
 /// Category=Integration — its own CI step; needs real Postgres.

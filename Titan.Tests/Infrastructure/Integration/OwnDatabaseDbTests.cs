@@ -26,7 +26,7 @@ public sealed class OwnDatabaseDbTests : IAsyncLifetime
     private TitanDbContext NewDbContext() =>
         new(new DbContextOptionsBuilder<TitanDbContext>().UseNpgsql(_container.GetConnectionString()).Options);
 
-    // The listed price is kept at the precision usage is billed at (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
+    // The listed price is kept at the precision usage is billed at (titan-ops architecture/money-and-wallet.md#rate-value-object).
     [Fact]
     public async Task ACatalogPriceWithTenDecimals_SurvivesTheRoundTrip()
     {

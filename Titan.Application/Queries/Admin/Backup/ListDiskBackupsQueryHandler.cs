@@ -11,7 +11,7 @@ using Titan.Domain.Values;
 namespace Titan.Application.Queries.Admin.Backup;
 
 /// The newest backup and health of every VM and custom volume Incus holds, across tenants, from the cache the refresh keeps
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup). Listed from the resources, not from the cache: a
+/// (titan-ops features/backup/design.md#incus-backup). Listed from the resources, not from the cache: a
 /// resource with no backup at all is the one to warn about.
 public class ListDiskBackupsQueryHandler(
     IVmRepository vms,

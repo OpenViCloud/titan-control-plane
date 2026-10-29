@@ -13,7 +13,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The first request of a signed-in user creates their tenant, and the unique indexes on the tenant's name and its
-/// owner are the only guard when two such requests overlap (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-name-taken).
+/// owner are the only guard when two such requests overlap (titan-ops architecture/tenancy-and-admin.md#tenant-name-taken).
 /// InMemory enforces no index, so only Postgres shows them. A request under test runs the real middleware on its own
 /// context, as the host does per request.
 /// Category=Integration — its own CI step; needs real Postgres.

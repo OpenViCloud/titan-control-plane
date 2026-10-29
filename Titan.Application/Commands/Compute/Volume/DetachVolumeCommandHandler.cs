@@ -19,7 +19,7 @@ public class DetachVolumeCommandHandler(
         var volume = await ComputeOwnership.RequireVolumeAsync(repo, callerId, command.VolumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // A detach is already running, or no instance uses the volume and none is asked for. One used outside Titan
         // is not a repeat: the aggregate refuses it.
         // Answer like the first request: nothing recorded, nothing sent.

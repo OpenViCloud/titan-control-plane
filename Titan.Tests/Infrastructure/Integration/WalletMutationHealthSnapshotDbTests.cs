@@ -5,7 +5,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the backlog query behind /healthz/wallet, on real Postgres.
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the backlog query behind /healthz/wallet, on real Postgres.
 //
 // Why this cannot be a unit test: the query aggregates with GroupBy(_ => 1) + Count + Min so the
 // database does the work rather than pulling every pending row back. That shape is exactly the kind
@@ -99,7 +99,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
         await ClearAsync();
         var walletId = Guid.NewGuid();
 
-        // A business failure: the consumer's re-check found the wallet short (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). MarkFailed
+        // A business failure: the consumer's re-check found the wallet short (titan-ops architecture/money-and-wallet.md#single-writer-outbox). MarkFailed
         // is called directly, so Attempts stays 0. Nobody should be paged for this.
         var shortfall = WalletMutation.ForDebit(walletId, 500L, "Invoice", Guid.NewGuid());
         shortfall.MarkFailed("insufficient funds at apply time");
@@ -120,7 +120,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
     }
 
     // A given-up invoice debit the customer has since paid again is reopened, not stuck
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit): Pending with its attempts back at zero,
+    // (titan-ops features/billing/invoice/design.md#retry-after-failed-debit): Pending with its attempts back at zero,
     // and its pending age counts from the reopen, not from the first press two days ago. A given-up one nobody
     // paid again still pages.
     [Fact]

@@ -3,8 +3,8 @@ using Titan.Domain.Aggregates.Billing.UsageRecord;
 namespace Titan.Domain.Aggregates.Billing.Invoice;
 
 /// One resource for the billed period. Amount is frozen at generation and never recomputed
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot). Every line is usage: wallet credit is spent
-/// when a person pays (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit), not netted into the invoice.
+/// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot). Every line is usage: wallet credit is spent
+/// when a person pays (titan-ops architecture/money-and-wallet.md#human-confirmed-debit), not netted into the invoice.
 public class InvoiceItem
 {
     public Guid Id { get; private set; }

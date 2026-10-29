@@ -36,9 +36,8 @@ Clean Architecture, one assembly per layer:
 
 ## Docs
 
-Design docs and the rules this code follows live in the titan-ops repository:
-[docs/architecture](https://github.com/OpenViCloud/titan-ops/tree/main/docs/architecture) and
-[docs/features](https://github.com/OpenViCloud/titan-ops/tree/main/docs/features).
+Design docs and the rules this code follows live in the titan-ops repository (private): `docs/architecture/` and
+`docs/features/`. Code comments name one of them as `titan-ops <path under docs/>#<anchor>`.
 
 ## License
 

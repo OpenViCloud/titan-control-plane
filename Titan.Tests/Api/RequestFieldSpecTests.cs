@@ -4,7 +4,7 @@ using FastEndpoints;
 
 namespace Titan.Tests.Api;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#nullable-request-fields: a request field the endpoint binds as nullable is
+// titan-ops features/public-api/design.md#nullable-request-fields: a request field the endpoint binds as nullable is
 // optional and nullable in the public spec, whatever validator rules sit on it. Reads the spec the running host serves.
 // FullHost — WebApplicationFactory test; own CI process (see CatalogContractTests for why).
 [Trait("Category", "FullHost")]

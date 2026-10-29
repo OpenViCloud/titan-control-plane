@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation: the state machine belongs in the aggregate.
+// titan-ops architecture/intent-and-observation.md#intent-versus-observation: the state machine belongs in the aggregate.
 // Four invariants, all read from the source tree, all failing in BOTH directions like the
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary allowlist: an undeclared violation is red, and a
+// titan-ops architecture/code-structure.md#module-boundary allowlist: an undeclared violation is red, and a
 // declaration for a violation that no longer exists is also red.
 //
 // What these tests are SILENT about: they read source text, not behaviour. A rule expressed some
@@ -70,7 +70,7 @@ public class StateTransitionOwnershipTests
             "Invoice.SettleFromWallet(), which validates internally already — US-DDD-14",
     };
 
-    // Mark* is the OBSERVATION vocabulary (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): a report
+    // Mark* is the OBSERVATION vocabulary (titan-ops architecture/intent-and-observation.md#observation-converges): a report
     // of what the provider is, which cannot be illegal. So a Mark* method must never throw a transition-legality
     // error; each exception below says why it does.
     private static readonly Dictionary<string, string> MarkThrowAllowlist = new()
@@ -102,7 +102,7 @@ public class StateTransitionOwnershipTests
             + "mutated again — there is no observation path into this aggregate",
     };
 
-    // ── a caller may not assert a provider id the aggregate owns (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
+    // ── a caller may not assert a provider id the aggregate owns (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
     //
     // `vm.ExternalId!` is a claim the application layer cannot prove — that a Running VM carries an id is an
     // invariant of Vm. The id is handed out by the method that validated the state (Vm.RequestStop,
@@ -218,7 +218,7 @@ public class StateTransitionOwnershipTests
     }
 
     // Measures the mechanism, not the existence of a test: an aggregate that declares IsTerminal must consult
-    // it in EVERY Mark* method, because the terminal absorb (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs)
+    // it in EVERY Mark* method, because the terminal absorb (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs)
     // is enforced by that early return and nothing else.
     [Fact]
     public void EveryAggregateWithIsTerminal_ChecksItInEveryMarkMethod()
@@ -253,7 +253,7 @@ public class StateTransitionOwnershipTests
 
         // And the aggregates with a Status but no IsTerminal at all must be declared, with a reason.
         var withStatus = ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates"))
-            // CurrentState: an aggregate split into desired/current (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current)
+            // CurrentState: an aggregate split into desired/current (titan-ops architecture/desired-and-current.md#desired-and-current)
             // still has a state that must absorb; dropping it here would shrink the scan without a signal.
             .Where(t => Regex.IsMatch(t.Source, @"public (?:\w+Status|string) Status \{ get; private set; \}")
                      || Regex.IsMatch(t.Source, @"public \w+State\?? CurrentState \{ get; private set; \}"))
@@ -272,11 +272,11 @@ public class StateTransitionOwnershipTests
             + string.Join("\n  ", staleTerminal));
     }
 
-    // EVERY mutation inside an aggregate validates internally (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation):
+    // EVERY mutation inside an aggregate validates internally (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation):
     // a guard the caller has to remember is advice; this test is what makes it an invariant.
     //
     // Internal validation counts in three shapes: it throws; it consults IsTerminal (absorb instead
-    // of refuse — the observation path, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges); or it delegates to an EnsureCanX() on itself,
+    // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an EnsureCanX() on itself,
     // which a text scan looking only for `throw` would report as a violation.
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
@@ -308,7 +308,7 @@ public class StateTransitionOwnershipTests
                 var body = end > 0 ? src[m.Index..end] : src[m.Index..];
                 // DesiredState/CurrentState too: without them every split aggregate's mutation would drop out
                 // of this scan while the count stayed above 20 — green and blind.
-                // The existence pair too (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis).
+                // The existence pair too (titan-ops architecture/desired-and-current.md#existence-axis).
                 if (!Regex.IsMatch(body, @"(?:Status|CurrentState|DesiredState|CurrentExistence|DesiredExistence)\s*=(?!=)")) continue;
                 if (body.Contains("static ")) continue;              // Create() sets initial state
                 scanned++;

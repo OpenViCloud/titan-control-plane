@@ -18,7 +18,7 @@ using Titan.Domain.Aggregates.Billing.WalletMutation;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// <summary>
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit — paying an outstanding invoice from the wallet
+/// titan-ops architecture/money-and-wallet.md#human-confirmed-debit — paying an outstanding invoice from the wallet
 /// through the settle handler (the admin button): the request enqueues one debit mutation, and the
 /// single-writer consumer debits the Wallet aggregate and flips the invoice in one SaveChanges. What only
 /// real Postgres can prove:
@@ -31,7 +31,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 ///         MarkPaid that lands between enqueue and apply fails the debit instead of charging twice;</item>
 ///   <item>balance and ledger stay equal: every committed debit leaves exactly one matching movement;</item>
 ///   <item>`ListOutstandingByTenantAsync` returns Status == New rows including long-overdue ones —
-///         `Overdue` is derived, never stored (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot).</item>
+///         `Overdue` is derived, never stored (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot).</item>
 /// </list>
 /// Category=Integration — its own CI step (InMemory enforces neither the transaction nor the unique
 /// index).
@@ -59,7 +59,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
                     new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus,
                     new AdminAuditLogRepository(db), Admin())
                 .HandleAsync(new SettleInvoiceFromWalletCommand(invoiceId), ct);
-            // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: the command returns nothing; read the invoice back the way the admin list does.
+            // titan-ops architecture/http-contract.md#commands-return-no-data: the command returns nothing; read the invoice back the way the admin list does.
             return Assert.Single(await ListAllAsync(null, ct), i => i.Id == invoiceId);
         }
 
@@ -141,7 +141,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
             .ToListAsync();
     }
 
-    /// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — runs the debit mutation(s) an invoice payment
+    /// titan-ops architecture/money-and-wallet.md#single-writer-outbox — runs the debit mutation(s) an invoice payment
     /// queued, the way the subscriber or the sweeper would. Applying them by hand keeps these tests deterministic: they are about what the
     /// settlement DOES, not about how fast a background service gets to it.
     private async Task DrainMutationsAsync(Guid invoiceId)
@@ -174,7 +174,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
         var invoice = NewOutstandingInvoice(tenantId, 5, 200L, DateTimeOffset.UtcNow.AddDays(-10));
         await SeedInvoiceAsync(invoice);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — pressing pay ACCEPTS the payment; the
+        // titan-ops architecture/money-and-wallet.md#single-writer-outbox — pressing pay ACCEPTS the payment; the
         // money moves in the consumer, so the wallet and invoice only change after the drain.
         await using (var db = pg.NewDbContext())
         {

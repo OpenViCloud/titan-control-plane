@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current: every resource the
+// titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback) writes CurrentState. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
@@ -16,7 +16,7 @@ public class DesiredCurrentOwnershipTests
 {
     // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
     // there is no observation coming, so the control plane is the only witness
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    // (titan-ops architecture/desired-and-current.md#delete-locally).
     private static readonly Dictionary<string, string> IntentWritesCurrentAllowlist = new()
     {
         ["Vm.DeleteLocally"] = "delete of a VM with no provider id: nothing to terminate, no reconciler to report it",
@@ -33,7 +33,7 @@ public class DesiredCurrentOwnershipTests
         RegexOptions.Compiled);
 
     // The existence pair, and a volume's attachment pair, have the same two writers as the state pair
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis, https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-state-is-existence).
+    // (titan-ops architecture/desired-and-current.md#existence-axis, titan-ops features/volume/design.md#volume-state-is-existence).
     private static readonly Regex WritesCurrent = new(@"\bCurrent(?:State|Existence|Attached\w*)\s*=(?!=)", RegexOptions.Compiled);
     private static readonly Regex WritesDesired = new(@"\bDesired(?:State|Existence|Attached\w*)\s*=(?!=)", RegexOptions.Compiled);
 
@@ -98,7 +98,7 @@ public class DesiredCurrentOwnershipTests
         }
 
         // 8 = the resources the control plane provisions to the provider (the tenant has no provider account:
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
+        // titan-ops architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
         Assert.Equal(8, provisioned.Count);
 
         // No allowlist: a new provisioned aggregate is born split, or this fails.
@@ -156,7 +156,7 @@ public class DesiredCurrentOwnershipTests
     // `?` in the type: Vm.CurrentState is VmState? (null while Incus has no instance) — a pattern without it would
     // drop the VM from every scan here, still green. Desired is DesiredState or, where Titan sets no Incus status
     // (network, firewall rule), only DesiredExistence; current is CurrentState or, where Incus has no status word
-    // (volume, snapshots), only CurrentExistence (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis) — a
+    // (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.
     private static bool DeclaresBothStates(string src) =>
         Regex.IsMatch(src, @"public [\w?]+ Desired(?:State|Existence) \{ get; private set; \}")

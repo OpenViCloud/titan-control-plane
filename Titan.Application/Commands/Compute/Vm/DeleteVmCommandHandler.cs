@@ -30,7 +30,7 @@ public class DeleteVmCommandHandler(
         var vm = await ComputeOwnership.RequireVmAsync(repo, callerId, command.VmId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // Already deleted: answer like the first request — nothing recorded, nothing sent.
         if (vm.IsTerminal)
         {
@@ -38,7 +38,7 @@ public class DeleteVmCommandHandler(
         }
 
         // A delete still waiting: enqueue it again under the same key. An open command absorbs it, a failed one
-        // reopens (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table); the save persists the reopen.
+        // reopens (titan-ops architecture/provider-and-worker.md#provider-command-table); the save persists the reopen.
         bool deleteIsWaiting = vm.PendingIntent == VmIntent.Delete;
         if (deleteIsWaiting)
         {
@@ -59,7 +59,7 @@ public class DeleteVmCommandHandler(
         }
 
         // Refused rather than editing the load balancer behind the customer's back
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network). Same discard as above.
+        // (titan-ops features/load-balancer/design.md#lb-and-vm-network). Same discard as above.
         if (await loadBalancerRepo.IsBackendAsync(command.VmId, ct))
         {
             throw new BusinessException("VM_IS_LOAD_BALANCER_BACKEND",
@@ -68,7 +68,7 @@ public class DeleteVmCommandHandler(
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
-        // The volumes go with the VM's delete as detaches (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes);
+        // The volumes go with the VM's delete as detaches (titan-ops features/volume/design.md#vm-delete-releases-volumes);
         // one already being detached is left to its own request.
         List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)

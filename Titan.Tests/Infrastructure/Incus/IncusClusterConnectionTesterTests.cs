@@ -5,7 +5,7 @@ namespace Titan.Tests.Infrastructure.Incus;
 
 // "Test connection" probes an endpoint + fingerprint, from the admin's cluster list. It reports, never throws, and
 // tells the three failures apart because each has a different fix: wrong fingerprint (re-copy it), Titan not trusted
-// (add Titan's certificate on the cluster), unreachable (network) — https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus.
+// (add Titan's certificate on the cluster), unreachable (network) — titan-ops features/cluster/design.md#cluster-incus.
 public class IncusClusterConnectionTesterTests
 {
     private static async Task<(IncusClusterConnectionTester Tester, string TitanFingerprint)> Tester()

@@ -2,7 +2,7 @@ using VolumeOfferingAggregate = Titan.Domain.Aggregates.Catalog.VolumeOffering.V
 
 namespace Titan.Application.Queries.Catalog.VolumeOffering.Contracts;
 
-// Carries the tier's own price (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+// Carries the tier's own price (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 public record VolumeOfferingQueryResult(
     string Id, string Name, int SizeGb, bool IsCustomized, decimal PricePerGbPerHour)
 {

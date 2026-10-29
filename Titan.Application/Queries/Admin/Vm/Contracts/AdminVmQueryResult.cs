@@ -3,9 +3,9 @@ using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
 
 namespace Titan.Application.Queries.Admin.Vm.Contracts;
 
-// Admin-facing — carries TenantId so no cross-tenant item is shown "orphaned" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).
+// Admin-facing — carries TenantId so no cross-tenant item is shown "orphaned" (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read).
 // States are strings so the UI contract is stable regardless of global enum-serializer config
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current).
+// (titan-ops architecture/desired-and-current.md#desired-and-current).
 public record AdminVmQueryResult(
     Guid Id,
     Guid TenantId,

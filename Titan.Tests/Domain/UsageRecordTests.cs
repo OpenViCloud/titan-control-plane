@@ -3,7 +3,7 @@ using Titan.Domain.Aggregates.Billing.UsageRecord;
 
 namespace Titan.Tests.Domain;
 
-// The append-only ledger (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering). Each record is one
+// The append-only ledger (titan-ops architecture/money-and-wallet.md#append-only-metering). Each record is one
 // fixed-width bucket of one resource (Bucket + IntervalMinutes), never a span that grows, and never mutated
 // after creation.
 // Cost is computed once, at creation, from a rate snapshot — never recomputed later.

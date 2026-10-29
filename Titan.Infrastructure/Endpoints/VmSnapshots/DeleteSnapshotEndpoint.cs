@@ -18,6 +18,6 @@ public class DeleteSnapshotEndpoint(DeleteVmSnapshotCommandHandler handler) : En
         var vmId = Route<Guid>("vmId");
         var snapshotId = Route<Guid>("snapshotId");
         await handler.HandleAsync(new DeleteVmSnapshotCommand(vmId, snapshotId), ct);
-        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202: no body, not `{}`
+        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // titan-ops architecture/http-contract.md#async-actions-return-202: no body, not `{}`
     }
 }

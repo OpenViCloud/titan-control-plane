@@ -12,7 +12,7 @@ namespace Titan.Application.Commands.Platform.Backup;
 
 /// Reads the bucket of the configured backup target and rewrites the backup cache from it: Postgres under postgres/, VMs
 /// and volumes under incus/
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket). The bucket is the truth: rows it no longer shows are removed, so dropping the
+/// (titan-ops features/backup/design.md#backup-status-reads-the-bucket). The bucket is the truth: rows it no longer shows are removed, so dropping the
 /// table and running this again gives back the same rows. A bucket that cannot be read is recorded as such and the rows stay.
 /// Writes nothing to a wallet or a ledger.
 public class RefreshBackupStatusCommandHandler(
@@ -93,7 +93,7 @@ public class RefreshBackupStatusCommandHandler(
         Apply(snapshot, known, observation, now);
     }
 
-    /// VM and volume backups under incus/ (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup): each object is a
+    /// VM and volume backups under incus/ (titan-ops features/backup/design.md#incus-backup): each object is a
     /// row, and a resource's backups past the newest seven are deleted from the bucket first. Deleting here, where the
     /// listing is read, keeps the worker from needing a delete of its own.
     private async Task RefreshIncusAsync(IBackupBucket bucket, BackupObservation observation, DateTimeOffset now, CancellationToken ct)

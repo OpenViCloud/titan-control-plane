@@ -15,7 +15,7 @@ public static class LoadBalancerRequest
             .ToList();
 
     /// A VM that does not exist and a VM of another tenant answer the same, so neither tells the caller about the
-    /// other's resources (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping). The aggregate checks the rest.
+    /// other's resources (titan-ops architecture/http-contract.md#tenant-scoping). The aggregate checks the rest.
     public static async Task<List<VmAggregate>> BackendsAsync(
         IVmRepository vmRepo, Guid tenantId, List<LoadBalancerBackendInput> inputs, CancellationToken ct)
     {

@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
-// The write half of opening an SSH session (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): who asked, recorded before the
+// The write half of opening an SSH session (titan-ops features/vm/design.md#ssh-session): who asked, recorded before the
 // endpoint reaches Incus. The session itself changes nothing on the VM.
 public class RequestVmSshCommandHandler(IVmRepository repo, ICurrentUser currentUser, IActivityRecorder activity)
 {

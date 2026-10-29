@@ -4,7 +4,7 @@ using Titan.Infrastructure.Endpoints.Network;
 namespace Titan.Tests.Infrastructure;
 
 // A rule's CIDR may be IPv4 or IPv6: a network with public IPv6 needs rules for it, and ICMP follows the CIDR's
-// address family on the worker (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-on-incus).
+// address family on the worker (titan-ops features/network/design.md#firewall-on-incus).
 public class CreateFirewallRuleValidatorTests
 {
     private readonly CreateFirewallRuleValidator _validator = new();

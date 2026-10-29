@@ -16,14 +16,14 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
         builder.Property(v => v.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(v => v.VolumeOfferingId).HasColumnName("volume_offering_id").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
+        // titan-ops features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
         builder.HasOne<VolumeOffering>()
             .WithMany()
             .HasForeignKey(v => v.VolumeOfferingId)
             .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id")
             .OnDelete(DeleteBehavior.Restrict);
         builder.Property(v => v.SizeGb).HasColumnName("size_gb");
-        // Incus has no status word for it: existence only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis).
+        // Incus has no status word for it: existence only (titan-ops architecture/desired-and-current.md#existence-axis).
         builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         builder.Property(v => v.PendingIntentId).HasColumnName("pending_intent_id");

@@ -9,7 +9,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the single-writer consumer on real Postgres.
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the single-writer consumer on real Postgres.
 // These prove what the InMemory provider and the stub-based unit tests (WalletMutationConsumerTests) cannot:
 // the apply is atomic (one SaveChanges = one BEGIN…COMMIT), idempotent under redelivery against the DB
 // itself, and threads a correct BalanceAfter chain when a wallet's mutations are applied in order.

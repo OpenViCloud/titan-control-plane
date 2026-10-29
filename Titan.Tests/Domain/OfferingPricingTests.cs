@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Catalog.VolumeOffering;
 
 namespace Titan.Tests.Domain;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering — price is an attribute of the product. A tier
+/// titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — price is an attribute of the product. A tier
 /// that exists but has no price is unreachable, so a running VM cannot silently bill zero for lack of a price.
 public class OfferingPricingTests
 {

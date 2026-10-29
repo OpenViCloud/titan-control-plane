@@ -20,12 +20,12 @@ public interface IInvoiceRepository
     Task<Invoice?> GetForUpdateAsync(Guid id, CancellationToken ct);
 
     /// Status == New, oldest issue first, untracked. Overdue is derived at read time and never stored
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot), so filtering on "Overdue" would silently
+    /// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot), so filtering on "Overdue" would silently
     /// return nothing.
     Task<IReadOnlyList<Invoice>> ListOutstandingByTenantAsync(Guid tenantId, CancellationToken ct);
 
     /// All tenants, oldest issue first, untracked — the admin receivables read
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake).
+    /// (titan-ops architecture/money-and-wallet.md#postpaid-no-brake).
     Task<IReadOnlyList<Invoice>> ListOutstandingAllAsync(CancellationToken ct);
 
     Task<IReadOnlyList<Invoice>> ListAllAsync(CancellationToken ct);

@@ -5,7 +5,7 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Network;
 
-// CP-only metadata, no provider command. 204 with no body (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+// CP-only metadata, no provider command. 204 with no body (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class RenameNetworkEndpoint(RenameNetworkCommandHandler handler) : Endpoint<RenameNetworkRequest>
 {
     public override void Configure()
@@ -22,5 +22,5 @@ public class RenameNetworkEndpoint(RenameNetworkCommandHandler handler) : Endpoi
     }
 }
 
-// The JSON body; RenameNetworkCommand additionally carries the route's network id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// The JSON body; RenameNetworkCommand additionally carries the route's network id (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record RenameNetworkRequest(string Name);

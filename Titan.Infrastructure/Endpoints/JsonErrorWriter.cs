@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace Titan.Infrastructure.Endpoints;
 
-// Every error body declares its length (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#error-envelope). The framework JSON writer sends it
+// Every error body declares its length (titan-ops architecture/http-contract.md#error-envelope). The framework JSON writer sends it
 // chunked, and the edge in front of staging answers a refused websocket upgrade with a chunked body by its own 502.
 public static class JsonErrorWriter
 {

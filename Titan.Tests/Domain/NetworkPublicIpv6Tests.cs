@@ -3,7 +3,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan: /64 number n of the cluster's /56 goes with the router address
+// titan-ops infra/incus/design.md#ipv6-address-plan: /64 number n of the cluster's /56 goes with the router address
 // ::(0x100 + n) of the first /64, the next hop of the static OVH route for that /64. A wrong digit here is a
 // network that gets its /64 and never receives a packet.
 public class NetworkPublicIpv6Tests

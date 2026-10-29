@@ -18,7 +18,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
 
         builder.Property(n => n.ExternalId).HasColumnName("external_id");
         builder.Property(n => n.Gateway).HasColumnName("gateway");
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current: the Incus word (null while Incus has none)
+        // titan-ops architecture/desired-and-current.md#desired-and-current: the Incus word (null while Incus has none)
         // and the existence pair, two writers.
         builder.Property(n => n.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(n => n.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
@@ -48,11 +48,11 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.HasIndex(n => new { n.TenantId, n.Name })
             .IsUnique()
             // The name stays taken until the delete command confirms the network gone: a delete in flight still
-            // holds it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-name-reuse). Same filter as ExistsByNameAsync.
+            // holds it (titan-ops features/network/design.md#network-name-reuse). Same filter as ExistsByNameAsync.
             .HasFilter("current_existence <> 'Deleted'");
 
         // One /64 per live network of a cluster: two creates that picked the same number race here, not in Incus
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Same condition as ListPublicIpv6IndexesInClusterAsync.
+        // (titan-ops infra/incus/design.md#ipv6-address-plan). Same condition as ListPublicIpv6IndexesInClusterAsync.
         builder.HasIndex(n => new { n.ClusterId, n.PublicIpv6Index })
             .IsUnique()
             .HasDatabaseName(PublicIpv6IndexName)

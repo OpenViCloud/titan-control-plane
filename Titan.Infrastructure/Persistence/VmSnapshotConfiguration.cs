@@ -14,7 +14,7 @@ public class VmSnapshotConfiguration : IEntityTypeConfiguration<VmSnapshot>
         builder.Property(s => s.VmId).HasColumnName("vm_id");
         builder.Property(s => s.TenantId).HasColumnName("tenant_id");
         builder.Property(s => s.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
-        // Incus has no status word for it: existence only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis).
+        // Incus has no status word for it: existence only (titan-ops architecture/desired-and-current.md#existence-axis).
         builder.Property(s => s.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(s => s.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         builder.Property(s => s.PendingIntentId).HasColumnName("pending_intent_id");

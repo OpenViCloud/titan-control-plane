@@ -3,7 +3,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// The module boundary of Titan (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary). A measurement cannot tell
+// The module boundary of Titan (titan-ops architecture/code-structure.md#module-boundary). A measurement cannot tell
 // "0 by design" from "0 by luck"; these tests are the invariant.
 //
 // What these guards do NOT see, stated here because a green run reads like "no coupling left":
@@ -15,11 +15,11 @@ namespace Titan.Tests.Domain;
 //     aggregate, and that is the correct direction.
 public class ModuleBoundaryTests
 {
-    // Same five names in Domain/Aggregates and Domain/Repositories (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#domain-tree).
+    // Same five names in Domain/Aggregates and Domain/Repositories (titan-ops architecture/code-structure.md#domain-tree).
     private static readonly string[] DomainModules =
         ["Billing", "Catalog", "Compute", "Networking", "Platform"];
 
-    // Application has a SIXTH group, deliberately (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#admin-read-model): Admin is a
+    // Application has a SIXTH group, deliberately (titan-ops architecture/code-structure.md#admin-read-model): Admin is a
     // read-model for the admin portal with no aggregate and no repository. It reads out of Compute, Networking and
     // Platform and nothing points back at it, which keeps the dependency graph acyclic.
     //
@@ -63,7 +63,7 @@ public class ModuleBoundaryTests
             + string.Join(", ", wrongModule));
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge: ONE typed cross-module edge is allowed, and it is Tenant ────────────────────
+    // ── titan-ops architecture/code-structure.md#tenant-typed-edge: ONE typed cross-module edge is allowed, and it is Tenant ────────────────────
     //
     // A quota check must reach the tenant's caps from inside the factory of the thing being created, and a
     // Guid cannot answer "may I". Allowed, narrowly: a factory parameter of type Platform.Tenant. Not a
@@ -125,7 +125,7 @@ public class ModuleBoundaryTests
             + string.Join(" | ", stale));
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#shared-value-types: Titan.Domain.Values is a DECLARED shared kernel, not a hole in the guard ────
+    // ── titan-ops architecture/code-structure.md#shared-value-types: Titan.Domain.Values is a DECLARED shared kernel, not a hole in the guard ────
     //
     // Rate is used by Catalog (offering prices) and Billing (usage records). In Titan.Domain.Values it is
     // INVISIBLE to the guard above (ModuleOf() returns null outside Titan.Domain.Aggregates.<Module>), so the
@@ -316,7 +316,7 @@ public class ModuleBoundaryTests
             + "CreateFirewallRuleCommandHandler needs it for the per-network rule cap (docs/architecture/tenancy-and-admin.md#tenant-quota).",
 
         // Admin reads outward into three modules and nothing reads back into Admin
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#admin-read-model), which is why DependencyGraph_HasNoCycles can
+        // (titan-ops architecture/code-structure.md#admin-read-model), which is why DependencyGraph_HasNoCycles can
         // hold. That test, not this comment, is the guarantee.
         [("Admin", "Compute")] =
             "ListAdminVmsQueryHandler lists VMs ACROSS tenants for the admin portal, and "
@@ -334,7 +334,7 @@ public class ModuleBoundaryTests
             + "and its health rule (docs/features/backup/design.md#incus-backup).",
     };
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#guard-sees-every-module — the anti-false-green check for the prefix table itself.
+    // titan-ops architecture/code-structure.md#guard-sees-every-module — the anti-false-green check for the prefix table itself.
     // Every "0 offenders" in this file is computed over whatever TypesByModule saw; if ApplicationPrefixes drifted
     // from the real tree, the zeros would stay zeros over an empty set. So the scan must reach every module by name.
     [Fact]
@@ -356,7 +356,7 @@ public class ModuleBoundaryTests
             .ToDictionary(x => x.Type, x => x.Module);
         Assert.Equal("Compute", typed[typeof(Titan.Application.Queries.Compute.Vm.ListVmsQueryHandler)]);
         Assert.Equal("Billing", typed[typeof(Titan.Application.Services.Billing.TopUp.TopUpConfirmation)]);
-        // A module-level Services/ type too (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch), so the third branch is
+        // A module-level Services/ type too (titan-ops architecture/code-structure.md#services-branch), so the third branch is
         // proven readable, not just compiled.
         Assert.Equal("Compute", typed[typeof(Titan.Application.Services.Compute.ComputeOwnership)]);
     }
@@ -370,7 +370,7 @@ public class ModuleBoundaryTests
 
     // Getting this list wrong does not produce a failure, it produces SILENCE: ModuleOf returns null for a
     // namespace it does not recognise, so every test in this file goes on reporting zero offenders computed
-    // over nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#guard-sees-every-module). EveryModule_IsSeenByTheScan
+    // over nothing (titan-ops architecture/code-structure.md#guard-sees-every-module). EveryModule_IsSeenByTheScan
     // is what stands in the way.
     private static readonly string[] ApplicationPrefixes = ["Titan.Application"];
 
@@ -432,7 +432,7 @@ public class ModuleBoundaryTests
 
     // Returns the module segment if the type sits under "<prefix>.<Module>", else null. It matches the segment
     // right after the prefix, because Domain aggregates nest one level deeper (Aggregates/<Module>/<Aggregate>/).
-    // Under a branch the module is the segment AFTER it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#application-tree):
+    // Under a branch the module is the segment AFTER it (titan-ops architecture/code-structure.md#application-tree):
     // Titan.Application.Queries.Compute.Vm is Compute, Titan.Application.Services.Billing.TopUp is Billing. The
     // shorter Titan.Application.Billing is still read, so a type dropped back at the root stays measured.
     //

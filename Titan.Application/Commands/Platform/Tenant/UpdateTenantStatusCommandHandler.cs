@@ -6,7 +6,7 @@ using Titan.Domain.Repositories.Platform;
 namespace Titan.Application.Commands.Platform.Tenant;
 
 /// Platform-admin suspends or activates a tenant, and decides a pending signup. Activating opens no wallet here:
-/// the endpoint opens it first (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
+/// the endpoint opens it first (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
 public class UpdateTenantStatusCommandHandler(ITenantRepository repo)
 {
     /// The one reading of the admin's status string, shared with the endpoint that opens the wallet first: if the two
@@ -35,7 +35,7 @@ public class UpdateTenantStatusCommandHandler(ITenantRepository repo)
         if (parsed == TenantStatus.Suspended)
         {
             // The aggregate refuses a repeat, so the handler recognises it first
-            // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): already suspended answers 204, saves nothing.
+            // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): already suspended answers 204, saves nothing.
             bool alreadySuspended = tenant.Status == TenantStatus.Suspended;
             if (alreadySuspended)
             {
@@ -53,7 +53,7 @@ public class UpdateTenantStatusCommandHandler(ITenantRepository repo)
         }
 
         // A press after the tenant is already Active is the same request with its result already there
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity): answer 204, save nothing.
+        // (titan-ops architecture/intent-and-observation.md#intent-has-identity): answer 204, save nothing.
         bool alreadyActive = tenant.Status == TenantStatus.Active;
         if (alreadyActive)
         {

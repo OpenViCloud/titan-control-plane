@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering — at most one usage_record per
+// titan-ops architecture/money-and-wallet.md#append-only-metering — at most one usage_record per
 // (resource_type, resource_id, bucket), ever, enforced by the database rather than by application code
 // checking-then-inserting (which two concurrent meter replicas, or two ticks in one process, can both
 // win). EF's InMemory provider does not enforce unique indexes and does not support the raw SQL
@@ -76,7 +76,7 @@ public class UsageRecordSchemaTests
         Assert.Equal("decimal(18,10)", ConfiguredColumnType(property));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#round-once — Cost is the raw product of one record; whole VND happens once, on the
+    // titan-ops architecture/money-and-wallet.md#round-once — Cost is the raw product of one record; whole VND happens once, on the
     // invoice line. A bigint column would round every record on write and bring back the 0 ₫ snapshot.
     [Fact]
     public void Cost_IsWideDecimal_TheRawProduct()

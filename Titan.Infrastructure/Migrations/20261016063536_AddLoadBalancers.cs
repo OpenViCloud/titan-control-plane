@@ -11,7 +11,7 @@ namespace Titan.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // The scaffold wrote 0, and 0 is "none allowed" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none):
+            // The scaffold wrote 0, and 0 is "none allowed" (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none):
             // every existing tenant would be refused its first load balancer. Backfill with the default cap, as
             // AddSshKeys did (TenantQuota.DefaultMaxLoadBalancers).
             migrationBuilder.AddColumn<int>(

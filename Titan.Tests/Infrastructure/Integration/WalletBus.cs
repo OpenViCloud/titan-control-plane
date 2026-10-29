@@ -5,7 +5,7 @@ using Titan.Infrastructure.Messaging;
 namespace Titan.Tests.Infrastructure.Integration;
 
 // The publisher Program.cs registers when NATS is off: the mutation stays durable and the sweeper drives it.
-// Whether a handler notifies is asserted in unit tests (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests).
+// Whether a handler notifies is asserted in unit tests (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 internal static class WalletBus
 {
     public static IWalletMutationPublisher None() =>

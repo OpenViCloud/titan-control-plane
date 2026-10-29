@@ -6,7 +6,7 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// Titan's client identity toward Incus comes from a Secret (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity):
+// Titan's client identity toward Incus comes from a Secret (titan-ops features/cluster/design.md#provider-client-identity):
 // the control plane never generates one, so a restart, a second replica or a rebuilt database all present the
 // certificate every cluster already trusts.
 public class ProviderClientIdentityStoreTests

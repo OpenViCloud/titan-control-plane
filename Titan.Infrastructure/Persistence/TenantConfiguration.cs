@@ -15,7 +15,7 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(t => t.Email).HasColumnName("email").IsRequired();
         builder.Property(t => t.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         // A value object, so ComplexProperty: columns in this table, no identity. OwnsOne would hand the model an
-        // owned-entity key it does not need (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota).
+        // owned-entity key it does not need (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
         // max_vms / max_networks keep their original names: renaming them would be a data migration, not an
         // additive one (TenantQuotaSchemaTests.PreExistingColumns_KeepTheirNames).
         builder.ComplexProperty(t => t.Quota, q =>

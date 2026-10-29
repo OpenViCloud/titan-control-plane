@@ -4,7 +4,7 @@ using Titan.Application.Options;
 
 namespace Titan.Infrastructure.Incus;
 
-// The Incus half of an SSH session (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): `nc -N 127.0.0.1 22` run inside the
+// The Incus half of an SSH session (titan-ops features/vm/design.md#ssh-session): `nc -N 127.0.0.1 22` run inside the
 // guest by its agent, and the operation's four websockets. -N passes the customer's end of the stream on to sshd; a
 // plain nc keeps running after a failed login until sshd's login grace time runs out.
 public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFactory factory)

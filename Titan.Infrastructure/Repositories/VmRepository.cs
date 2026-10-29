@@ -17,7 +17,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Quota counts what occupies the provider or is about to (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#counting-and-billing):
+    // Quota counts what occupies the provider or is about to (titan-ops features/vm/design.md#counting-and-billing):
     // the instance exists, or its create is still waiting. A failed create, an instance not found, and a VM
     // whose delete was asked do not count.
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
@@ -43,7 +43,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // A VM is billed while its instance holds CPU and RAM (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#counting-and-billing): every
+    // A VM is billed while its instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every
     // Incus status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode).
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
@@ -55,7 +55,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read. tenantId == null spans all tenants.
+    // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read. tenantId == null spans all tenants.
     public async Task<List<Vm>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || v.TenantId == tenantId))

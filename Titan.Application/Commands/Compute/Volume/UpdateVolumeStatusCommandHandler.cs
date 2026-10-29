@@ -9,11 +9,11 @@ using VolumeSnapshotAggregate = Titan.Domain.Aggregates.Compute.VolumeSnapshot.V
 
 namespace Titan.Application.Commands.Compute.Volume;
 
-// Worker callback — an observation of Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation:
+// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
 // observation converges). No ICurrentUser: the reconciler acts for no tenant, and the caller is authenticated by
 // X-Internal-Token at the endpoint — which is why there is no ownership check here and why no customer path may ever
 // route to it. Outcomes are recorded once: the aggregate says whether a report fulfilled the waiting request
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+// (titan-ops features/activity/design.md#outcome-source).
 public class UpdateVolumeStatusCommandHandler(
     IVolumeRepository repo,
     IVolumeSnapshotRepository snapshotRepo,
@@ -22,7 +22,7 @@ public class UpdateVolumeStatusCommandHandler(
 {
     public async Task HandleAsync(UpdateVolumeStatusCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the callback payload (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
 
         // Parsed before the volume is loaded: a malformed report is the worker's bug, whatever the volume.
         switch (req.Report)
@@ -76,7 +76,7 @@ public class UpdateVolumeStatusCommandHandler(
                     }
                 }
                 // A request Incus refused moves the desired pair back to what Incus holds
-                // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request); a create's give-up only records why.
+                // (titan-ops architecture/desired-and-current.md#abandoned-request); a create's give-up only records why.
                 bool attachDetachOrDeleteWaiting = volume.Transition == VolumeTransition.Attaching
                                                    || volume.Transition == VolumeTransition.Detaching
                                                    || volume.Transition == VolumeTransition.Deleting;
@@ -95,7 +95,7 @@ public class UpdateVolumeStatusCommandHandler(
                 {
                     outcome = "volume.deleted";
                 }
-                // Incus deletes a volume's snapshots with it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#delete-refused-with-snapshots).
+                // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots).
                 // A snapshot whose own delete was waiting is done here: its delete command will only find it already
                 // Deleted, so its outcome is recorded now.
                 List<VolumeSnapshotAggregate> snapshots = await snapshotRepo.ListLiveOfVolumeForUpdateAsync(volume.Id, ct);
@@ -145,7 +145,7 @@ public class UpdateVolumeStatusCommandHandler(
     }
 
     // The worker reports instance names as Incus lists them; which of them are Titan VMs is Titan's to say
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#attachment-from-used-by). Only the volume's own tenant is searched: an instance
+    // (titan-ops features/volume/design.md#attachment-from-used-by). Only the volume's own tenant is searched: an instance
     // name of another tenant's VM must never read as this volume's VM. A name matching no VM, or a second VM, is an
     // instance Titan does not manage for this volume.
     private async Task<VolumeAttachment> ResolveAttachmentAsync(

@@ -6,7 +6,7 @@ using Titan.Infrastructure.Auth;
 
 namespace Titan.Infrastructure.Endpoints.LoadBalancer;
 
-// 202: the load balancer waits for Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id).
+// 202: the load balancer waits for Incus (titan-ops architecture/http-contract.md#create-returns-id).
 public class CreateLoadBalancerEndpoint(CreateLoadBalancerCommandHandler handler)
     : Endpoint<CreateLoadBalancerCommand, CreateLoadBalancerCommandResult>, IRequiresIdempotencyKey
 {

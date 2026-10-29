@@ -7,7 +7,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
 namespace Titan.Application.Commands.Admin.Backup;
 
 /// Asks the worker for today's backup of every VM and custom volume Incus holds, across tenants
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup). Runs every hour: the
+/// (titan-ops features/backup/design.md#incus-backup). Runs every hour: the
 /// day is in the command's key, so a day's backup that ran is not asked again and one that failed is. The commands are
 /// saved once, at the end.
 public class ScheduleBackupsCommandHandler(

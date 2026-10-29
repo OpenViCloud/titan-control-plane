@@ -4,7 +4,7 @@ using Titan.Application.Queries.Billing.Wallet.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Wallet;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping
+// titan-ops architecture/http-contract.md#tenant-scoping
 public class GetWalletEndpoint(GetWalletQueryHandler handler) : EndpointWithoutRequest<WalletQueryResult>
 {
     public override void Configure() => Get("v1/tenant/wallet");

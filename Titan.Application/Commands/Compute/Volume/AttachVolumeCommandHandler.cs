@@ -25,10 +25,10 @@ public class AttachVolumeCommandHandler(
             throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
         // Volume state, VM state and cluster match are all checked inside Attach — one call, and the
-        // transition cannot happen with any of them skipped (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation).
+        // transition cannot happen with any of them skipped (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
 
         // The aggregate refuses a repeat, so it is recognised here first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): this volume is already attaching
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this volume is already attaching
         // or attached to THIS VM. A repeat succeeds like the first request and sends nothing. Another VM falls
         // through and is refused.
         bool attachIsWaiting = volume.Transition == VolumeTransition.Attaching;

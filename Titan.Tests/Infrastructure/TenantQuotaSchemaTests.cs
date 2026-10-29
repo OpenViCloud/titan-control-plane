@@ -6,7 +6,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — TenantQuota is mapped as a ComplexProperty, so eight
+// titan-ops architecture/tenancy-and-admin.md#tenant-quota — TenantQuota is mapped as a ComplexProperty, so eight
 // columns live in core.tenants with no separate entity. The InMemory provider does not enforce any of that, so
 // what is pinned here is EF MODEL METADATA — the same technique UsageRecordSchemaTests uses.
 public class TenantQuotaSchemaTests

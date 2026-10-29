@@ -17,7 +17,7 @@ namespace Titan.Infrastructure.Migrations
                 table: "tenants",
                 type: "integer",
                 nullable: false,
-                // Hand-edited from 0: a cap of 0 means "no key allowed" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none),
+                // Hand-edited from 0: a cap of 0 means "no key allowed" (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none),
                 // so existing tenants get the default cap, as every earlier cap's migration did.
                 defaultValue: 20);
 

@@ -16,7 +16,7 @@ using Titan.Infrastructure.Sessions;
 namespace Titan.Infrastructure.Endpoints.Vm;
 
 // An SSH session: a websocket that carries the bytes of `nc -N 127.0.0.1 22` run in the guest
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session). Every refusal happens before the upgrade, so it is the usual JSON error.
+// (titan-ops features/vm/design.md#ssh-session). Every refusal happens before the upgrade, so it is the usual JSON error.
 // Left out of the OpenAPI spec: a websocket has no JSON body to describe.
 public class OpenVmSshEndpoint(
     GetVmShellTargetQueryHandler target,

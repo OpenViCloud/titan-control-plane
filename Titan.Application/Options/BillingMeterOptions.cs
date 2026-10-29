@@ -2,7 +2,7 @@ namespace Titan.Application.Options;
 
 /// <summary>
 /// Tick cadence for the append-only usage meters. Prices are not here: every rate lives on its offering
-/// row (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering), so changing a price is not a redeploy.
+/// row (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering), so changing a price is not a redeploy.
 /// </summary>
 public class BillingMeterOptions
 {

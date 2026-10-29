@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Vm;
 
-// The command IS the request type (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts), so FastEndpoints binds the body straight to it.
+// The command IS the request type (titan-ops architecture/code-structure.md#contracts), so FastEndpoints binds the body straight to it.
 public class CreateVmEndpoint(CreateVmCommandHandler handler)
     : Endpoint<CreateVmCommand, CreateVmCommandResult>, IRequiresIdempotencyKey
 {

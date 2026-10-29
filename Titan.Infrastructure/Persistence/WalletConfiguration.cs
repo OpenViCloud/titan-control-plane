@@ -6,7 +6,7 @@ using Titan.Domain.Aggregates.Billing.Wallet;
 
 namespace Titan.Infrastructure.Persistence;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance
+// titan-ops architecture/money-and-wallet.md#wallet-one-balance
 public class WalletConfiguration : IEntityTypeConfiguration<Wallet>
 {
     public void Configure(EntityTypeBuilder<Wallet> builder)
@@ -16,12 +16,12 @@ public class WalletConfiguration : IEntityTypeConfiguration<Wallet>
         builder.Property(w => w.Id).HasColumnName("id");
         builder.Property(w => w.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(w => w.Currency).HasColumnName("currency").IsRequired();
-        // Whole VND, bigint (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd): same type as Invoice.Total,
+        // Whole VND, bigint (titan-ops architecture/money-and-wallet.md#money-is-long-vnd): same type as Invoice.Total,
         // so a balance and the invoice it pays compare exactly.
         builder.Property(w => w.AvailableAmount)
             .HasColumnName("available_amount").HasColumnType("bigint").IsRequired();
         // `AND version = @loaded` on every wallet UPDATE: a payer who read a stale balance loses at commit
-        // instead of overdrawing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#version-token).
+        // instead of overdrawing (titan-ops architecture/money-and-wallet.md#version-token).
         builder.Property(w => w.Version).HasColumnName("version").IsConcurrencyToken();
         builder.Property(w => w.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(w => w.UpdatedAt).HasColumnName("updated_at").IsRequired();
@@ -42,10 +42,10 @@ public class WalletTransactionConfiguration : IEntityTypeConfiguration<WalletTra
         builder.Property(t => t.Id).HasColumnName("id");
         builder.Property(t => t.WalletId).HasColumnName("wallet_id").IsRequired();
         // Signed: positive in, negative out, so SUM(amount) per wallet equals wallets.available_amount
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#signed-ledger).
+        // (titan-ops architecture/money-and-wallet.md#signed-ledger).
         builder.Property(t => t.Amount)
             .HasColumnName("amount").HasColumnType("bigint").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage (WalletSchemaTests.WalletTransactionType_IsStoredAsString)
+        // titan-ops architecture/code-structure.md#enum-storage (WalletSchemaTests.WalletTransactionType_IsStoredAsString)
         builder.Property(t => t.Type)
             .HasColumnName("type").HasConversion<string>().IsRequired();
         builder.Property(t => t.RefId).HasColumnName("ref_id").IsRequired();

@@ -20,7 +20,7 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.Cidr).HasColumnName("cidr").IsRequired();
         builder.Property(r => r.ExternalId).HasColumnName("external_id");
         // The Incus ACL rule state as Incus spells it (enabled · disabled · logged): the enum member names are the
-        // words (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+        // words (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
         builder.Property(r => r.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(r => r.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(r => r.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();

@@ -4,7 +4,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
 
-// The quota RULE lives on the aggregate that owns the NUMBER (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota).
+// The quota RULE lives on the aggregate that owns the NUMBER (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
 // These pin the rule itself; that every factory asks it is pinned by QuotaInFactoryTests.
 public class TenantQuotaInvariantTests
 {

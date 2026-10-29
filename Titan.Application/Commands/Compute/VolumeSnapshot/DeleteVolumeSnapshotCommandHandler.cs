@@ -23,7 +23,7 @@ public class DeleteVolumeSnapshotCommandHandler(
         var snapshot = await ComputeOwnership.RequireVolumeSnapshotAsync(snapshotRepo, command.SnapshotId, volumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // This delete is still waiting, or the snapshot is already deleted. A delete that failed is not a repeat:
         // it falls through and the aggregate decides. Answer like the first request: nothing recorded, nothing sent.
         bool deleteIsWaiting = snapshot.Transition == VolumeSnapshotTransition.Deleting;
@@ -34,7 +34,7 @@ public class DeleteVolumeSnapshotCommandHandler(
         }
 
         // The create failed before Incus had it: nothing to delete on Incus
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally). The request and its outcome happen here at once.
+        // (titan-ops architecture/desired-and-current.md#delete-locally). The request and its outcome happen here at once.
         bool neverReachedIncus = snapshot.ExternalId is null && snapshot.Transition == null;
         if (neverReachedIncus)
         {

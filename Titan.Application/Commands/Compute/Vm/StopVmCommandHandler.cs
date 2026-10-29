@@ -9,7 +9,7 @@ namespace Titan.Application.Commands.Compute.Vm;
 
 
 // The CP records the request (Vm.PendingIntent) and enqueues the provider command; it writes no status
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity). The reconciler observes POWEROFF and
+// (titan-ops architecture/intent-and-observation.md#intent-has-identity). The reconciler observes POWEROFF and
 // reports Stopped, and UpdateVmStatusCommandHandler records the "vm.stopped" outcome there, not here.
 public class StopVmCommandHandler(
     IVmRepository repo,
@@ -24,10 +24,10 @@ public class StopVmCommandHandler(
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // A stop still waiting: enqueue it again with the SAME intent id. The command row absorbs it while
         // open or after it succeeded, and reopens only if it failed
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table); the save persists the reopen.
+        // (titan-ops architecture/provider-and-worker.md#provider-command-table); the save persists the reopen.
         bool stopIsWaiting = vm.PendingIntent == VmIntent.Stop;
         if (stopIsWaiting)
         {
@@ -44,7 +44,7 @@ public class StopVmCommandHandler(
             return;
         }
 
-        // The guard stays on the aggregate (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id): any other state is refused there.
+        // The guard stays on the aggregate (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id): any other state is refused there.
         VmIntentTicket ticket = vm.RequestStop();
 
         activity.Stage("vm.stop_requested", "vm", vm.Id, vm.Name);

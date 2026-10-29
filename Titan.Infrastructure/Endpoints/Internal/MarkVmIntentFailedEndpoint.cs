@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The worker's vm.stop / vm.start handler calls this when its command gave up. No body: the route names the VM and
-// the intent id the command carries (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#intent-failed-callback).
+// the intent id the command carries (titan-ops features/vm/design.md#intent-failed-callback).
 public class MarkVmIntentFailedEndpoint(MarkVmIntentFailedCommandHandler handler, IConfiguration config)
     : EndpointWithoutRequest
 {

@@ -15,7 +15,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit — an invoice holds exactly one wallet debit
+// titan-ops features/billing/invoice/design.md#retry-after-failed-debit — an invoice holds exactly one wallet debit
 // row, ever. Paying again after that debit failed reopens the same row; it never adds a second one. What only
 // Postgres can prove: the unique index refuses a second row whatever the first one's status, and presses that
 // race on a reopen leave one row, one ledger line, one charge.

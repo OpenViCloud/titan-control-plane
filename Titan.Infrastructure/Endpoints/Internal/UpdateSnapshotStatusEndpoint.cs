@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// Both ids ride the route (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// Both ids ride the route (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record UpdateSnapshotStatusBody(
     string Report,
     bool? Exists = null,

@@ -4,7 +4,7 @@ using Titan.Application.Queries.Platform.Legal.Contracts;
 namespace Titan.Application.Queries.Platform.Legal;
 
 /// The current document (content + version + effectiveAt) in the asked language — served anonymously for the public page.
-/// Nothing to await — the document is git-tracked config (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#legal-document-in-code), not a database row — but it keeps
+/// Nothing to await — the document is git-tracked config (titan-ops features/legal/design.md#legal-document-in-code), not a database row — but it keeps
 /// the HandleAsync shape every handler has, so a reader never has to check which kind this one is.
 public class GetLegalDocumentQueryHandler(ILegalDocumentCatalog catalog)
 {

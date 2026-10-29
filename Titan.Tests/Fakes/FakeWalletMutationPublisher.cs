@@ -2,7 +2,7 @@ using Titan.Application.Abstractions;
 
 namespace Titan.Tests.Fakes;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — records the post-commit notifications an enqueuer publishes, so a test can assert the
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — records the post-commit notifications an enqueuer publishes, so a test can assert the
 /// notify fired (and for which mutation) without a real bus. Publishing never throws: a real bus error
 /// is swallowed by the enqueuer anyway (the durable mutation + sweeper are the net), so the fake models
 /// the happy path the test cares about.

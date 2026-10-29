@@ -2,12 +2,12 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Catalog.VmOffering;
 
-// Sizing tier, decoupled from the OS template (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing). Never synced
+// Sizing tier, decoupled from the OS template (titan-ops features/catalog/design.md#vm-offering-sizing). Never synced
 // to the provider: the sizing travels with each VM create.
 //
 // Id is a readable slug ("s"/"m"/"l"/"xl") because Vm.VmOfferingId is a plain string used as the billing key.
 //
-// The price is a NOT NULL column on the tier (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering):
+// The price is a NOT NULL column on the tier (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering):
 // a tier with no price would bill VMs zero, silently.
 public class VmOffering
 {
@@ -17,7 +17,7 @@ public class VmOffering
     public int VcpuCount { get; private set; }
     public int MemoryMb { get; private set; }
 
-    /// VND per hour (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object). The factory takes decimal because
+    /// VND per hour (titan-ops architecture/money-and-wallet.md#rate-value-object). The factory takes decimal because
     /// prices arrive from seed data and admin JSON as primitives.
     public Rate PricePerHour { get; private set; }
 
@@ -47,7 +47,7 @@ public class VmOffering
     }
 
     /// Does not rewrite anything already billed: usage records hold the unit price they were collected at
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot). The caller records the change as an
+    /// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot). The caller records the change as an
     /// AdminAuditLog row; the tier holds only the price in force.
     public void ChangePrice(decimal pricePerHour)
     {

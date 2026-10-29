@@ -8,7 +8,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Repositories;
 
 /// Shares the scope's DbContext with the other repositories, so a handler's SaveAsync writes its aggregate and the
-/// command it enqueued in one transaction (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
+/// command it enqueued in one transaction (titan-ops architecture/provider-and-worker.md#provider-command-table).
 public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepository
 {
     public async Task<ProviderCommand?> FindByKeyAsync(string key, CancellationToken ct)

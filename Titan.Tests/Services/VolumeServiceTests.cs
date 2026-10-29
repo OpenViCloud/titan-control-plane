@@ -18,7 +18,7 @@ namespace Titan.Tests.Services;
 public class VolumeServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
-    // The tenant's Incus project, as https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name spells it.
+    // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
 
     private readonly Mock<IVolumeRepository> _repo = new();
@@ -99,7 +99,7 @@ public class VolumeServiceTests
 
         var result = await CreateService().CreateAsync(MakeCreateRequest(), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the
         // starting status is asserted on the volume that was actually added.
         Assert.NotEqual(Guid.Empty, result.VolumeId);
         _repo.Verify(r => r.Add(It.Is<Volume>(v => v.Id == result.VolumeId
@@ -110,7 +110,7 @@ public class VolumeServiceTests
             "t-" + _tenant!.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // A volume Incus holds without a price stops the disk meter (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#offering-must-exist).
+    // A volume Incus holds without a price stops the disk meter (titan-ops features/volume/design.md#offering-must-exist).
     [Fact]
     public async Task Create_UnknownOffering_Is404_AndNothingIsWritten()
     {
@@ -144,7 +144,7 @@ public class VolumeServiceTests
     }
 
     // A cluster Titan does not have must not fall through to a default cluster
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
+    // (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
     public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
     {
@@ -348,7 +348,7 @@ public class VolumeServiceTests
             volume.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
+    [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
     [InlineData(VolumeSeed.Deleting)]
     [InlineData(VolumeSeed.Deleted)]
     public async Task Delete_RepeatedOrDone_IsANoOp_RecordsNoActivity_EnqueuesNoCommand(VolumeSeed from)
@@ -380,7 +380,7 @@ public class VolumeServiceTests
     }
 
     // On Incus a volume's delete takes its snapshots with it (lab-storage 07): refused while one lives
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#delete-refused-with-snapshots).
+    // (titan-ops features/volume/design.md#delete-refused-with-snapshots).
     [Fact]
     public async Task Delete_VolumeWithALiveSnapshot_IsRefused_RecordsNothing_SendsNothing()
     {
@@ -432,7 +432,7 @@ public class VolumeServiceTests
     // ── Helpers ───────────────────────────────────────────────────────────
 
     // The tenant SetupTenant built; every provider call carries its Incus project
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name).
+    // (titan-ops architecture/tenancy-and-admin.md#project-name).
     private Tenant? _tenant;
 
     // ── Activity recording ──────────────────────────────────────
@@ -519,7 +519,7 @@ public class VolumeServiceTests
     private static CreateVolumeCommand MakeCreateRequest() =>
         new("vol-01", "offering-1", "cluster-1", 50);
 
-    // ── Callbacks (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-reports) ─────────────
+    // ── Callbacks (titan-ops features/volume/design.md#volume-reports) ─────────────
 
     // No snapshot of the volume is live unless a test says so: a Deleted report reads them.
     private void SetupVolume(Volume volume)
@@ -529,13 +529,13 @@ public class VolumeServiceTests
             .ReturnsAsync(new List<VolumeSnapshot>());
     }
 
-    // The tenant's VMs the callback resolves instance names against (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#attachment-from-used-by).
+    // The tenant's VMs the callback resolves instance names against (titan-ops features/volume/design.md#attachment-from-used-by).
     private void SetupTenantVms(params Vm[] vms) =>
         _vmRepo.Setup(r => r.ListByExternalIdsAsync(It.IsAny<Guid>(), It.IsAny<IReadOnlyCollection<string>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid tenantId, IReadOnlyCollection<string> names, CancellationToken _) =>
                 vms.Where(v => v.TenantId == tenantId && v.ExternalId != null && names.Contains(v.ExternalId)).ToList());
 
-    [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source: each request's outcome, once, for the volume's tenant
+    [Theory] // titan-ops features/activity/design.md#outcome-source: each request's outcome, once, for the volume's tenant
     [InlineData(VolumeSeed.Creating, "volume.created")]
     [InlineData(VolumeSeed.Attaching, "volume.attached")]
     [InlineData(VolumeSeed.Detaching, "volume.detached")]
@@ -757,7 +757,7 @@ public class VolumeServiceTests
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
     }
 
-    // Incus deletes a volume's snapshots with it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#delete-refused-with-snapshots): the
+    // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots): the
     // volume's Deleted report marks every one not yet Deleted, and records the outcome of a snapshot whose own delete
     // was waiting — its delete command will only find it already Deleted.
     [Fact]
@@ -850,7 +850,7 @@ public class VolumeServiceTests
     }
 
     // A create that failed before Incus had the volume leaves the list at once, with no command
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    // (titan-ops architecture/desired-and-current.md#delete-locally).
     [Fact]
     public async Task Delete_OfACreateThatFailedBeforeIncusHadIt_DeletesLocally_AndSendsNothing()
     {
@@ -999,8 +999,8 @@ public class VolumeServiceTests
         return vm;
     }
 
-    // The raw error of a give-up is admin-only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure); Incus has
-    // no status word for a volume (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-state-is-existence).
+    // The raw error of a give-up is admin-only (titan-ops architecture/desired-and-current.md#request-failure); Incus has
+    // no status word for a volume (titan-ops features/volume/design.md#volume-state-is-existence).
     [Fact]
     public void TenantVolumeQueryResult_HasNoFailureDetailField_NorAStateWord()
     {

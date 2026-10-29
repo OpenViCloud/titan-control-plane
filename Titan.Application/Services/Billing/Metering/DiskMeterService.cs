@@ -14,7 +14,7 @@ public interface IDiskMeterService : IMeter;
 
 /// Occupying storage is billed whatever the VM's state: a volume attached to a Stopped VM still bills,
 /// and so does a detached one. Price comes from the volume's offering
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+/// (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 public class DiskMeterService(
     IVolumeRepository volumeRepo,
     IUsageRecordRepository usageRepo,
@@ -35,7 +35,7 @@ public class DiskMeterService(
 
         // Price every volume before writing any row: each insert commits on its own, so refusing halfway
         // would bill the volumes the database happened to return first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/metering/design.md#missing-offering). Same rule as the compute
+        // (titan-ops features/billing/metering/design.md#missing-offering). Same rule as the compute
         // meter: a missing offering is damaged catalog data, not a zero price.
         var records = new List<UsageRecord>(volumes.Count);
         foreach (var volume in volumes)

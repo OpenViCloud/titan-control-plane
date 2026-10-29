@@ -12,7 +12,7 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
     {
         builder.ToTable("vm_offerings");
         // Slug PK ("s"/"m"/"l"/"xl") — it is also the billing key stored on Vm, a plain string, so
-        // a surrogate GUID would only add a lookup (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing).
+        // a surrogate GUID would only add a lookup (titan-ops features/catalog/design.md#vm-offering-sizing).
         builder.HasKey(o => o.Id);
         builder.Property(o => o.Id).HasColumnName("id").HasColumnType("text");
         builder.Property(o => o.Name).HasColumnName("name").HasColumnType("text").IsRequired();
@@ -21,7 +21,7 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
         builder.Property(o => o.MemoryMb).HasColumnName("memory_mb").IsRequired();
         // NOT NULL: a tier without a price would bill every VM on it zero, silently
         // (OfferingPricingSchemaTests.PriceColumnIsNotNullable). The Rate <-> decimal conversion is a
-        // convention in TitanDbContext (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
+        // convention in TitanDbContext (titan-ops architecture/money-and-wallet.md#rate-value-object).
         builder.Property(o => o.PricePerHour)
             .HasColumnName("price_per_hour").HasColumnType("decimal(18,10)").IsRequired();
 
@@ -34,7 +34,7 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
     // Source: Vultr's public plan API (api.vultr.com/v2/plans?type=vc2), converted at
     // 1 USD = 1.2809 SGD (ECB via Frankfurter, 2026-08-07).
     //
-    //   tier  Titan spec      Vultr plan      Vultr $/h   half   SGD/h      × 18000 = VND/h (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd)
+    //   tier  Titan spec      Vultr plan      Vultr $/h   half   SGD/h      × 18000 = VND/h (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
     //   s     1 vCPU /  2 GB  vc2-1c-2gb        0.014     0.007  0.008966   161.388
     //   m     2 vCPU /  4 GB  vc2-2c-4gb        0.027     0.0135 0.017292   311.256
     //   l     4 vCPU /  8 GB  vc2-4c-8gb        0.055     0.0275 0.035225   634.050

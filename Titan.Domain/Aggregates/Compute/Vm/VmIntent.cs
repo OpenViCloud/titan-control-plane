@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Compute.Vm;
 
-/// Derived, not stored (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#pending-intent). Observation methods return it so the
+/// Derived, not stored (titan-ops features/vm/design.md#pending-intent). Observation methods return it so the
 /// caller records each request's outcome once.
 public enum VmIntent
 {

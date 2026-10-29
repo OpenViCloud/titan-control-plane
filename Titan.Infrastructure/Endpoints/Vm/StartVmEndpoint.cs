@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Vm;
 
-// The state guard lives in the aggregate (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+// The state guard lives in the aggregate (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
 public class StartVmEndpoint(StartVmCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()
@@ -18,6 +18,6 @@ public class StartVmEndpoint(StartVmCommandHandler handler) : EndpointWithoutReq
     {
         var vmId = Route<Guid>("vmId");
         await handler.HandleAsync(new StartVmCommand(vmId), ct);
-        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202: no body, not `{}`
+        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // titan-ops architecture/http-contract.md#async-actions-return-202: no body, not `{}`
     }
 }

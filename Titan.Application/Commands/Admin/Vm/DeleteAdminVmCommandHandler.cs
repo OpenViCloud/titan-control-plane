@@ -12,11 +12,11 @@ using VolumeAggregate = Titan.Domain.Aggregates.Compute.Volume.Volume;
 
 namespace Titan.Application.Commands.Admin.Vm;
 
-// The only cross-tenant write on a tenant resource (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write):
+// The only cross-tenant write on a tenant resource (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write):
 // a platform admin deletes any tenant's VM. Bypasses tenant scope but not lifecycle rules — the same
 // deletable-state and snapshot-in-progress guards as DeleteVmCommandHandler apply here.
 //
-// A separate admin handler, not a flag on the tenant one (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#no-bypass-flag),
+// A separate admin handler, not a flag on the tenant one (titan-ops architecture/tenancy-and-admin.md#no-bypass-flag),
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.
 public class DeleteAdminVmCommandHandler(
     IVmRepository vms,
@@ -35,8 +35,8 @@ public class DeleteAdminVmCommandHandler(
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
         // The aggregate refuses a repeat, so it is recognised here first, whoever sent it
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted: nothing to audit
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#admin-delete-audit), nothing to send.
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted: nothing to audit
+        // (titan-ops features/vm/design.md#admin-delete-audit), nothing to send.
         if (vm.IsTerminal)
         {
             return;
@@ -61,7 +61,7 @@ public class DeleteAdminVmCommandHandler(
             throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
         }
 
-        // Audited with the destructive request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-audit). Two sinks on
+        // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.
         const string action = "vm.delete.cross_tenant";
         logger.LogWarning(
@@ -69,7 +69,7 @@ public class DeleteAdminVmCommandHandler(
             action, currentUser.KeycloakUserId, vm.Id, vm.TenantId);
         auditLog.Add(AdminAuditLog.Create(action, currentUser.KeycloakUserId, "vm", vm.Id, vm.TenantId));
 
-        // The volumes go with the VM's delete as detaches (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes);
+        // The volumes go with the VM's delete as detaches (titan-ops features/volume/design.md#vm-delete-releases-volumes);
         // one already being detached is left to its own request.
         List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)
@@ -92,7 +92,7 @@ public class DeleteAdminVmCommandHandler(
 
         // The audit row, the pending intent and the provider command commit together (same DbContext), so
         // the worker never deletes a VM the audit log does not show
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
+        // (titan-ops architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
         await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
             vm.ClusterId, ct);

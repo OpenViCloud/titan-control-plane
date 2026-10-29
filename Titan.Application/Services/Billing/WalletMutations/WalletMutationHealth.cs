@@ -1,7 +1,7 @@
 namespace Titan.Application.Services.Billing.WalletMutations;
 
 /// <summary>
-/// The async wallet path for the health check (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// The async wallet path for the health check (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 /// Two independent kinds of evidence, the backlog (database) and the sweeper's pulse (memory), because
 /// either alone can read "fine" while the path is broken: a quiet system and one whose sweeper died both
 /// show zero pending, and a sweeper whose every apply fails still pulses.
@@ -24,7 +24,7 @@ namespace Titan.Application.Services.Billing.WalletMutations;
 /// </param>
 /// <param name="SweeperEnabled">
 /// Off is a fault however quiet the backlog: with a non-persistent bus, a disabled sweeper loses money
-/// without an error anywhere (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// without an error anywhere (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 /// </param>
 public sealed record WalletMutationHealth(
     int PoisonCount,

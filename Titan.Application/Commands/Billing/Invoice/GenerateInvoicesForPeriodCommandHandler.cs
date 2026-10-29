@@ -8,7 +8,7 @@ using UsageRecordAggregate = Titan.Domain.Aggregates.Billing.UsageRecord.UsageRe
 namespace Titan.Application.Commands.Billing.Invoice;
 
 /// An Invoice is a frozen snapshot of the UsageRecord ledger, derived once per (tenant, month) and never
-/// recomputed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot). The only creator of Invoice rows.
+/// recomputed (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot). The only creator of Invoice rows.
 /// Run once a month after the period has closed; safe to re-run.
 public class GenerateInvoicesForPeriodCommandHandler(IInvoiceRepository invoiceRepo, IUsageRecordRepository usageRepo)
 {
@@ -42,7 +42,7 @@ public class GenerateInvoicesForPeriodCommandHandler(IInvoiceRepository invoiceR
                 .ToList();
 
             // An invoice states what the tenant used and touches no money
-            // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit): the wallet moves only when a person pays it.
+            // (titan-ops architecture/money-and-wallet.md#human-confirmed-debit): the wallet moves only when a person pays it.
             var invoice = InvoiceAggregate.Generate(tenantId, year, month, issuedAt, items, DefaultCurrency);
 
             // A 0 ₫ bill settles itself: no money moves, and leaving it New would let a bill for nothing

@@ -2,7 +2,7 @@ namespace Titan.Application.Options;
 
 /// <summary>
 /// The sweeper re-drives wallet mutations the fast path did not finish, which is what makes a
-/// non-persistent bus safe (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox): a lost notify leaves the
+/// non-persistent bus safe (titan-ops architecture/money-and-wallet.md#single-writer-outbox): a lost notify leaves the
 /// row Pending, and without the sweeper nothing would look at it again.
 /// </summary>
 public class WalletSweeperOptions

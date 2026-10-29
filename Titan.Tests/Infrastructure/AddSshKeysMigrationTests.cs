@@ -5,7 +5,7 @@ using Titan.Infrastructure.Migrations;
 namespace Titan.Tests.Infrastructure;
 
 // The scaffold wrote defaultValue 0 for the new cap: every existing tenant would have been allowed no key at all
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none). The hand edit is pinned here.
+// (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none). The hand edit is pinned here.
 public class AddSshKeysMigrationTests
 {
     [Fact]

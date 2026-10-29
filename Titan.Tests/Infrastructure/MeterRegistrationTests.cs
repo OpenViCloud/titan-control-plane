@@ -9,7 +9,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering — UsageResourceType / meter Name is a closed set
+// titan-ops architecture/money-and-wallet.md#append-only-metering — UsageResourceType / meter Name is a closed set
 // the compiler does not check for exhaustiveness, so the money-path hazard is silently dropping a meter.
 // AddMeters (the path Program.cs calls) must expose exactly {Compute, Disk, Snapshot} as IMeter.
 public class MeterRegistrationTests

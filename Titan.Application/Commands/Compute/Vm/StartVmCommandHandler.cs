@@ -23,7 +23,7 @@ public class StartVmCommandHandler(
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // A start still waiting: enqueue it again with the SAME intent id (see StopVmCommandHandler).
         bool startIsWaiting = vm.PendingIntent == VmIntent.Start;
         if (startIsWaiting)

@@ -8,7 +8,7 @@ using Titan.Tests.Domain;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The two unique indexes of core.api_tokens are the net under two creates racing past the handler's checks
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token). InMemory enforces no index, so only Postgres shows them.
+/// (titan-ops features/public-api/design.md#api-token). InMemory enforces no index, so only Postgres shows them.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]

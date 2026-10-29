@@ -6,7 +6,7 @@ using Titan.Domain.Repositories.Networking;
 
 namespace Titan.Application.Commands.Networking.Network;
 
-// Rename in-place (CP-only metadata, no provider command). Returns nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+// Rename in-place (CP-only metadata, no provider command). Returns nothing (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class RenameNetworkCommandHandler(INetworkRepository repo, ICurrentUser currentUser)
 {
     public async Task HandleAsync(RenameNetworkCommand command, CancellationToken ct = default)

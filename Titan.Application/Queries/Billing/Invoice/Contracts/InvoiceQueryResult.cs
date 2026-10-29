@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Billing.Invoice;
 
 namespace Titan.Application.Queries.Billing.Invoice.Contracts;
 
-// The read side's own shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse).
+// The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse).
 public record InvoiceQueryResult(
     Guid Id, Guid TenantId, int PeriodYear, int PeriodMonth, [property: JsonConverter(typeof(JsonStringEnumConverter))] InvoiceDisplayStatus Status,
     DateTimeOffset IssuedAt, DateTimeOffset DueAt, DateTimeOffset? PaidAt, string? PaidBy,

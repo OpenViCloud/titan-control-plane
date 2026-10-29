@@ -8,8 +8,8 @@ namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
 /// Every failure of the async wallet path is quiet: a lost notify, a dead sweeper and a poison mutation
-/// all just leave rows Pending (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). Not an alert:
-/// nothing polls this (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/runbooks/runbook-wallet-async.md).
+/// all just leave rows Pending (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Not an alert:
+/// nothing polls this (titan-ops infra/runbooks/runbook-wallet-async.md).
 /// </summary>
 public sealed class WalletMutationHealthCheck(
     IWalletMutationRepository mutations,

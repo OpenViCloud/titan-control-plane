@@ -5,9 +5,9 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 
-// The read side's own shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse); the create command returns
-// only an id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id). Existence and transition
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-is-existence); the failure detail is the operator's, never the tenant's.
+// The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse); the create command returns
+// only an id (titan-ops architecture/http-contract.md#create-returns-id). Existence and transition
+// (titan-ops features/vm/design.md#vm-snapshot-is-existence); the failure detail is the operator's, never the tenant's.
 public record VmSnapshotQueryResult(
     Guid Id,
     string Name,

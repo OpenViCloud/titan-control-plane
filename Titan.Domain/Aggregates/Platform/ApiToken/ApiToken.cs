@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Domain.Aggregates.Platform.ApiToken;
 
 /// A long-lived bearer a tenant member creates for Terraform, CI and the CLI
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token). It acts as the member who created it. Only a hash of the
+/// (titan-ops features/public-api/design.md#api-token). It acts as the member who created it. Only a hash of the
 /// secret is kept: the portal makes the secret and shows it once. Titan-only, deleted outright when revoked.
 public partial class ApiToken
 {

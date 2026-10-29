@@ -23,7 +23,7 @@ public class RevertVmSnapshotCommandHandler(
         var snapshot = await ComputeOwnership.RequireVmSnapshotAsync(snapshotRepo, command.SnapshotId, vmId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // This snapshot is already reverting.
         // Answer like the first request: nothing recorded, nothing sent.
         bool alreadyReverting = snapshot.Transition == VmSnapshotTransition.Reverting;

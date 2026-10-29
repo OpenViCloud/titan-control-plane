@@ -17,14 +17,14 @@ using Xunit.Sdk;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#new-async-intent-checklist: a new asynchronous intent states what a
+// titan-ops architecture/intent-and-observation.md#new-async-intent-checklist: a new asynchronous intent states what a
 // repeat does. Every command handler that takes IProviderCommandQueue has exactly one row below, and the row is
 // checked against something outside this table.
 //
-//   RepeatCheck    — the handler recognises a repeat before calling the aggregate (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat). The row
+//   RepeatCheck    — the handler recognises a repeat before calling the aggregate (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). The row
 //                    names a handler-level test by nameof, so deleting or renaming that test is a
 //                    compile error, and the guard checks it is a real [Fact]/[Theory].
-//   IdempotencyKey — a create: a repeat is replayed by the Idempotency-Key middleware (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key). The
+//   IdempotencyKey — a create: a repeat is replayed by the Idempotency-Key middleware (titan-ops architecture/http-contract.md#idempotency-key). The
 //                    guard checks an endpoint marked IRequiresIdempotencyKey injects this handler.
 //   Excluded       — a written reason. Reviewed like any other line of code.
 //
@@ -46,7 +46,7 @@ public class IntentRepeatDeclarationTests
 
     private static readonly Dictionary<Type, RepeatHandling> Declared = new()
     {
-        // ── creates (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key) ──
+        // ── creates (titan-ops architecture/http-contract.md#idempotency-key) ──
         [typeof(CreateVmCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateVmSnapshotCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateVolumeCommandHandler)] = new IdempotencyKey(),

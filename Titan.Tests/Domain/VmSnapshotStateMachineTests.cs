@@ -6,9 +6,9 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation, same split as VmStateMachineTests: a request
+// titan-ops architecture/intent-and-observation.md#intent-versus-observation, same split as VmStateMachineTests: a request
 // throws when it cannot be accepted, an observation (Mark*) never throws, Deleted absorbs. Incus has no status word
-// for an instance snapshot, so the model is existence plus the waiting request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-is-existence).
+// for an instance snapshot, so the model is existence plus the waiting request (titan-ops features/vm/design.md#vm-snapshot-is-existence).
 // The Seed enum names every situation so each "from every other situation" test walks all of them.
 public class VmSnapshotStateMachineTests
 {
@@ -78,7 +78,7 @@ public class VmSnapshotStateMachineTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
-    [Fact] // Incus snapshots and restores (disk only) a Stopped instance (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus)
+    [Fact] // Incus snapshots and restores (disk only) a Stopped instance (titan-ops features/vm/design.md#requests-follow-incus)
     public void CreateAndRevert_OfAStoppedVm_AreAccepted()
     {
         Vm stopped = VmIn(VmState.Stopped);

@@ -20,7 +20,7 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         builder.Property(lb => lb.VipIndex).HasColumnName("vip_index");
         builder.Property(lb => lb.Vip).HasColumnName("vip").IsRequired();
         builder.Property(lb => lb.ExternalId).HasColumnName("external_id");
-        // Incus has no status word for it: existence only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-lifecycle).
+        // Incus has no status word for it: existence only (titan-ops features/load-balancer/design.md#lb-lifecycle).
         builder.Property(lb => lb.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(lb => lb.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         builder.Property(lb => lb.PendingIntentId).HasColumnName("pending_intent_id");
@@ -44,7 +44,7 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
             .IsUnique()
             .HasFilter("current_existence <> 'Deleted'");
         // One VIP per live load balancer of a network: two creates that picked the same number race here
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#vip-in-network-64). Same condition as ListVipIndexesOfNetworkAsync.
+        // (titan-ops features/load-balancer/design.md#vip-in-network-64). Same condition as ListVipIndexesOfNetworkAsync.
         builder.HasIndex(lb => new { lb.NetworkId, lb.VipIndex })
             .IsUnique()
             .HasDatabaseName(VipIndexName)
@@ -68,7 +68,7 @@ public class LoadBalancerListenerConfiguration : IEntityTypeConfiguration<LoadBa
         builder.Property(l => l.Port).HasColumnName("port");
         builder.Property(l => l.TargetPort).HasColumnName("target_port");
         // No unique (protocol, port): while an update waits, the listener Incus has and the one asked for may share
-        // them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model). The aggregate keeps the asked ones distinct.
+        // them (titan-ops features/load-balancer/design.md#lb-resource-model). The aggregate keeps the asked ones distinct.
         builder.Property(l => l.IsDesired).HasColumnName("is_desired");
         builder.Property(l => l.IsApplied).HasColumnName("is_applied");
     }

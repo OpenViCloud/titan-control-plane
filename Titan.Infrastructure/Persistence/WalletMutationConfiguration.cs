@@ -5,7 +5,7 @@ using Titan.Domain.Aggregates.Billing.WalletMutation;
 namespace Titan.Infrastructure.Persistence;
 
 // The durable queue of the wallet outbox: the bus only notifies, and the sweeper re-drives rows it missed
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+// (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 public class WalletMutationConfiguration : IEntityTypeConfiguration<WalletMutation>
 {
     public void Configure(EntityTypeBuilder<WalletMutation> builder)
@@ -14,10 +14,10 @@ public class WalletMutationConfiguration : IEntityTypeConfiguration<WalletMutati
         builder.HasKey(c => c.Id);
         builder.Property(c => c.Id).HasColumnName("id");
         builder.Property(c => c.WalletId).HasColumnName("wallet_id").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage (WalletMutationSchemaTests.Type_IsStoredAsString)
+        // titan-ops architecture/code-structure.md#enum-storage (WalletMutationSchemaTests.Type_IsStoredAsString)
         builder.Property(c => c.Type)
             .HasColumnName("type").HasConversion<string>().IsRequired();
-        // Positive whole VND (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd): Type carries the sign.
+        // Positive whole VND (titan-ops architecture/money-and-wallet.md#money-is-long-vnd): Type carries the sign.
         builder.Property(c => c.Amount)
             .HasColumnName("amount").HasColumnType("bigint").IsRequired();
         builder.Property(c => c.RefType).HasColumnName("ref_type").HasMaxLength(32).IsRequired();
@@ -36,7 +36,7 @@ public class WalletMutationConfiguration : IEntityTypeConfiguration<WalletMutati
 
         // One source document has exactly one mutation row, whatever its status: two concurrent enqueues
         // collide here (23505), and paying an invoice again reopens its failed row
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit). InMemory does not enforce it:
+        // (titan-ops features/billing/invoice/design.md#retry-after-failed-debit). InMemory does not enforce it:
         // WalletMutationSchemaTests pins the metadata, WalletMutationIdempotencyDbTests and
         // InvoiceDebitRetryDbTests the behaviour.
         builder.HasIndex(c => new { c.RefType, c.RefId }).IsUnique();

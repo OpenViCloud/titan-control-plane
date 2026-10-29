@@ -9,7 +9,7 @@ using VmTemplateAggregate = Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplat
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 
-// Returns nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202): the enqueue is async, the worker
+// Returns nothing (titan-ops architecture/http-contract.md#async-actions-return-202): the enqueue is async, the worker
 // reconciles later, and the admin reads the outcome back from the template list. The per-run counts are
 // logged below.
 public class SyncTemplatesCommandHandler(
@@ -18,19 +18,19 @@ public class SyncTemplatesCommandHandler(
     IProviderCommandQueue commands,
     ILogger<SyncTemplatesCommandHandler> logger)
 {
-    // Add-only reconcile (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-sync-add-only) into EVERY configured cluster
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster): the worker creates the templates missing on that cluster's
+    // Add-only reconcile (titan-ops features/catalog/design.md#template-sync-add-only) into EVERY configured cluster
+    // (titan-ops features/catalog/design.md#template-per-cluster): the worker creates the templates missing on that cluster's
     // cluster and no-ops the ones whose image alias it finds, never updating or deleting an existing one. One enqueue
     // failure is counted and logged, not fatal — the other templates and clusters still enqueue, and a re-trigger is safe.
     // The sync requests and the provider commands are saved once, at the end, so they commit together
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
+    // (titan-ops architecture/provider-and-worker.md#provider-command-table).
     public async Task HandleAsync(SyncTemplatesCommand command, CancellationToken ct = default)
     {
         var templates = await repo.ListAllAsync(ct);
 
         // A cluster the template is not yet synced in gets a sync request before it is enqueued, so the admin list
         // shows it waiting. A cluster that has the alias asks for nothing, and one with a sync waiting is the repeat
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): only its command is enqueued again.
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): only its command is enqueued again.
         // Loaded untracked (ListAllAsync), so the requests are saved through the tracked copy.
         foreach (var t in templates)
         {

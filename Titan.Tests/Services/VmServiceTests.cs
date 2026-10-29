@@ -64,7 +64,7 @@ public class VmServiceTests
         SetupDefaultTemplate();
     }
 
-    // One factory per handler (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#handlers): each line names exactly what
+    // One factory per handler (titan-ops architecture/code-structure.md#handlers): each line names exactly what
     // its operation touches, and no query handler can be handed _commands or _activity because its
     // constructor has nowhere to put them.
     private CreateVmCommandHandler CreateCreateHandler() =>
@@ -119,11 +119,11 @@ public class VmServiceTests
     private string _templateId = "";
 
     // The template's own tier is deliberately NOT the tier the create tests ask for
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-borrows-sizing): if both sources agreed, an assertion on
+    // (titan-ops features/catalog/design.md#template-borrows-sizing): if both sources agreed, an assertion on
     // the provisioned size could not tell them apart.
     private const string TemplateOwnTier = "l";
 
-    // Synced in cluster-1, the cluster the create tests use (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+    // Synced in cluster-1, the cluster the create tests use (titan-ops features/catalog/design.md#template-per-cluster).
     private VmTemplate SyncedTemplate(string externalId, string clusterId = "cluster-1")
     {
         var t = VmTemplate.Create("Ubuntu-Web", null, "Ubuntu-22.04", 20, TemplateOwnTier);
@@ -143,7 +143,7 @@ public class VmServiceTests
     // ── CreateAsync ───────────────────────────────────────────────────────
 
     // The VM row and its provider command commit in one SaveAsync
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table): enqueued after the save, the command
+    // (titan-ops architecture/provider-and-worker.md#provider-command-table): enqueued after the save, the command
     // would be staged in a context nobody saves again, and the VM would wait for a worker that never hears of it.
     [Fact]
     public async Task Create_EnqueuesTheProviderCommand_BeforeItSaves()
@@ -182,7 +182,7 @@ public class VmServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the starting status is asserted on the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the starting status is asserted on the
         // VM that was actually added.
         Vm? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(v => added = v);
@@ -200,7 +200,7 @@ public class VmServiceTests
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-borrows-sizing — the customer's chosen tier is what
+    // titan-ops features/catalog/design.md#template-borrows-sizing — the customer's chosen tier is what
     // provisions the VM. The template points at a DIFFERENT tier ("l"), so the two sources disagree by
     // construction and the assertion below can only be satisfied by the offering, across three tiers.
     [Theory]
@@ -225,7 +225,7 @@ public class VmServiceTests
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // The debt ceiling gates NOTHING (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake): a tenant
+    // The debt ceiling gates NOTHING (titan-ops architecture/money-and-wallet.md#postpaid-no-brake): a tenant
     // whose ceiling is 0 still creates a VM. Only a passing create is evidence that no gate exists.
     [Fact]
     public async Task Create_TenantAtADebtCeilingOfZero_StillSucceeds_NoMoneyGate()
@@ -237,7 +237,7 @@ public class VmServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the starting status is asserted on the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the starting status is asserted on the
         // VM that was actually added.
         Vm? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(v => added = v);
@@ -251,7 +251,7 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Once);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing — the offering's sizing must reach the worker,
+    // titan-ops features/catalog/design.md#vm-offering-sizing — the offering's sizing must reach the worker,
     // which sets it as the instance's limits.cpu / limits.memory; otherwise the VM silently gets a default
     // size whatever tier the customer picked.
     [Fact]
@@ -273,7 +273,7 @@ public class VmServiceTests
     }
 
     // Templates are a curated Titan catalog
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-desired-state), so the customer-facing id is a GUID and the
+    // (titan-ops features/catalog/design.md#template-desired-state), so the customer-facing id is a GUID and the
     // control plane must translate it to the synced ExternalTemplateId — sending the GUID straight
     // through fails provisioning at the provider.
     [Fact]
@@ -338,7 +338,7 @@ public class VmServiceTests
         Assert.Empty(_commands.Invocations);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed: a template customers are not offered does not exist for them,
+    // titan-ops features/catalog/design.md#template-listed: a template customers are not offered does not exist for them,
     // even when its image is on the cluster.
     [Fact]
     public async Task Create_UnlistedTemplate_ThrowsTemplateNotFound_AndEnqueuesNoCommand()
@@ -377,7 +377,7 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
     }
 
-    // The cluster the customer picks is where the VM lands (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice): a cluster
+    // The cluster the customer picks is where the VM lands (titan-ops features/catalog/design.md#cluster-is-a-real-choice): a cluster
     // Titan does not have must not fall through to a default cluster.
     [Fact]
     public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
@@ -582,7 +582,7 @@ public class VmServiceTests
             vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
+    // titan-ops features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
     [Fact]
     public async Task Delete_WhileALoadBalancerSendsToTheVm_IsRefused_AndNothingIsSent()
     {
@@ -746,7 +746,7 @@ public class VmServiceTests
             vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // Stop follows Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus): with no Incus status there is
+    // Stop follows Incus (titan-ops features/vm/design.md#requests-follow-incus): with no Incus status there is
     // nothing to stop — 422 VM_INVALID_STATUS, no command.
     [Theory]
     [InlineData(VmSeed.Creating)]
@@ -767,7 +767,7 @@ public class VmServiceTests
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Incus force-stops Ready, Frozen and Error instances too (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus).
+    // Incus force-stops Ready, Frozen and Error instances too (titan-ops features/vm/design.md#requests-follow-incus).
     [Theory]
     [InlineData(VmSeed.Ready)]
     [InlineData(VmSeed.Frozen)]
@@ -840,7 +840,7 @@ public class VmServiceTests
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact] // Start on a Frozen instance is Incus's resume (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus)
+    [Fact] // Start on a Frozen instance is Incus's resume (titan-ops features/vm/design.md#requests-follow-incus)
     public async Task Start_OnAFrozenVm_SendsTheStart()
     {
         SetupCurrentUser(TenantId);
@@ -894,7 +894,7 @@ public class VmServiceTests
 
         await CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-renamed"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts: the command returns nothing, so the rename is
+        // titan-ops architecture/code-structure.md#contracts: the command returns nothing, so the rename is
         // observed on the aggregate; a caller reads it back through GetVmQuery.
         Assert.Equal("web-renamed", vm.Name);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
@@ -925,11 +925,11 @@ public class VmServiceTests
         await CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-01"), default);
 
         // Renaming to the same name is a no-op that must not spend a uniqueness query. The name is
-        // asserted on the aggregate because the command returns nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts).
+        // asserted on the aggregate because the command returns nothing (titan-ops architecture/code-structure.md#contracts).
         Assert.Equal("web-01", vm.Name);
         _repo.Verify(r => r.ExistsByNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), default), Times.Never);
         // The handler recognises it as done before touching the aggregate
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat), so nothing is written either.
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat), so nothing is written either.
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -991,7 +991,7 @@ public class VmServiceTests
     }
 
     // The worker sends a clean reason for the tenant and the raw diagnostic in Detail. Both persist; the detail is
-    // what admins later read (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure).
+    // what admins later read (titan-ops architecture/desired-and-current.md#request-failure).
     [Fact]
     public async Task UpdateStatus_RequestFailed_PersistsBothReasonAndDetail_AndLeavesNoIncusStatus()
     {
@@ -1119,7 +1119,7 @@ public class VmServiceTests
     }
 
     // A volume left attached to a deleted VM must not stay Attached for ever: it could not be detached, attached or
-    // deleted, and its disk would still be billed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes).
+    // deleted, and its disk would still be billed (titan-ops features/volume/design.md#vm-delete-releases-volumes).
     [Fact]
     public async Task Delete_ThenDeleted_LeavesTheAttachedVolumeDeletable()
     {
@@ -1246,7 +1246,7 @@ public class VmServiceTests
             null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ── SSH keys picked at create (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-key) ──────
+    // ── SSH keys picked at create (titan-ops features/vm/design.md#ssh-key) ──────
 
     private Network ReadyToCreate()
     {
@@ -1508,7 +1508,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         var e = Assert.Single(_activity.Events);
-        Assert.Equal("vm.delete_requested", e.Action); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity: the request, not the outcome
+        Assert.Equal("vm.delete_requested", e.Action); // titan-ops architecture/intent-and-observation.md#intent-has-identity: the request, not the outcome
         Assert.Equal(vm.Id, e.ResourceId);
         Assert.False(e.Saved); // staged, flushed with the pending intent and the provider command
     }
@@ -1554,7 +1554,7 @@ public class VmServiceTests
         Assert.Equal("vm.start_requested", Assert.Single(_activity.Events).Action);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity: a request is applied once; its outcome is recorded once ─────
+    // ── titan-ops architecture/intent-and-observation.md#intent-has-identity: a request is applied once; its outcome is recorded once ─────
 
     // A second DELETE before the reconciler notices records no second request; it only enqueues the
     // same command again.
@@ -1614,7 +1614,7 @@ public class VmServiceTests
     }
 
     // Asking for the state the VM is already in is done, not illegal
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity).
+    // (titan-ops architecture/intent-and-observation.md#intent-has-identity).
     [Fact]
     public async Task Stop_OnAStoppedVm_IsANoOp()
     {
@@ -1928,7 +1928,7 @@ public class VmServiceTests
     // ── Helpers ───────────────────────────────────────────────────────────
 
     // The tenant SetupTenant built; every provider call carries its Incus project
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name).
+    // (titan-ops architecture/tenancy-and-admin.md#project-name).
     private Tenant? _tenant;
     private string TenantProject => _tenant!.ProjectName;
 
@@ -1951,7 +1951,7 @@ public class VmServiceTests
         return network;
     }
 
-    // What a test starts from: an Incus status, or a shape with none (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis).
+    // What a test starts from: an Incus status, or a shape with none (titan-ops architecture/desired-and-current.md#existence-axis).
     public enum VmSeed { Creating, CreatedNotSeen, Running, Ready, Stopped, Frozen, Error, NotFound, CreateFailed, Deleted }
 
     private static Vm MakeVm(VmSeed seed)

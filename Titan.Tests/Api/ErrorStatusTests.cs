@@ -49,7 +49,7 @@ public class ErrorStatusTests
     }
 
     // Cloudflare answers an origin 502 or 504 with its own page, so the body and its code never reach a client
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#error-envelope).
+    // (titan-ops architecture/http-contract.md#error-envelope).
     [Fact]
     public void NoDomainException_MapsToAStatusTheEdgeReplaces()
     {

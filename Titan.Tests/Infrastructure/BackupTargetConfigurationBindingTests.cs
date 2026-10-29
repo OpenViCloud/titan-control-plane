@@ -7,7 +7,7 @@ namespace Titan.Tests.Infrastructure;
 
 // The setting names are the ones the Deployment's env and the Secret in GitOps use (BackupTarget__Endpoint …): rename one here
 // and the environment silently has no target, so the names are pinned
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target).
+// (titan-ops features/backup/design.md#backup-target).
 public class BackupTargetConfigurationBindingTests
 {
     [Fact]

@@ -12,7 +12,7 @@ using Titan.Application.Services.Billing.WalletMutations;
 namespace Titan.Tests.Infrastructure.Integration;
 
 // The SePay webhook end-to-end against a real Postgres: a matched payment ENQUEUES exactly one credit
-// mutation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — confirm defers the credit), a retried
+// mutation (titan-ops architecture/money-and-wallet.md#single-writer-outbox — confirm defers the credit), a retried
 // webhook (same SePay txn id) is deduped by the payment_transactions PK so no second mutation is enqueued, and
 // the confirm is stamped at the payment's transactionDate. Draining the mutation then proves the wallet is
 // credited exactly once.
@@ -70,7 +70,7 @@ public class SePayWebhookDbTests(PostgresFixture pg)
         Assert.Equal(SePayWebhookOutcome.Duplicate, second); // deduped by payment_transactions PK
 
         await using var check = pg.NewDbContext();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the webhook DEFERS the credit: exactly one credit mutation enqueued (a double
+        // titan-ops architecture/money-and-wallet.md#single-writer-outbox — the webhook DEFERS the credit: exactly one credit mutation enqueued (a double
         // webhook would be 2, a miss 0), and no ledger row until the consumer runs.
         var mutations = await check.WalletMutations.AsNoTracking()
             .Where(c => c.RefType == "TopUp" && c.RefId == topUp.Id).ToListAsync();

@@ -5,7 +5,7 @@ using Titan.Application.Commands.Billing.Invoice.Contracts;
 namespace Titan.Infrastructure.Endpoints.Billing;
 
 // Money that arrived outside Titan: never touches the wallet, so PaymentState stays null
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit).
+// (titan-ops architecture/money-and-wallet.md#human-confirmed-debit).
 public class MarkInvoicePaidEndpoint(MarkInvoicePaidCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()

@@ -29,7 +29,7 @@ public class GrantTopUpCommandHandler(
         var topUp = TopUpAggregate.GrantPromo(tenantId, amount, options.Currency, reason, currentUser.KeycloakUserId);
 
         // The grant row and the money commit in one SaveChanges. A Promo ledger movement keeps free credit
-        // separable from real money (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#tax-legal-posture).
+        // separable from real money (titan-ops architecture/money-and-wallet.md#tax-legal-posture).
         var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, ct)
             ?? throw new NotFoundException("WALLET_NOT_FOUND",
                 $"Tenant {tenantId} has no wallet; it should have been opened at activation.");

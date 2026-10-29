@@ -7,7 +7,7 @@ namespace Titan.Tests.Domain;
 
 // The two cross-aggregate checks a load balancer create and update go through: the network (Networking) and each
 // backend VM (Compute). Each aggregate hands out its provider id only past its own check
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
 public class LoadBalancerTargetTests
 {
     private static readonly Tenant Owner = TestTenant.WithRoomToSpare();
@@ -28,7 +28,7 @@ public class LoadBalancerTargetTests
         Assert.Equal("net-ext", network.BeginLoadBalancer());
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-needs-public-ipv6: Incus refuses an isolated OVN network.
+    // titan-ops features/load-balancer/design.md#lb-needs-public-ipv6: Incus refuses an isolated OVN network.
     [Fact]
     public void Network_WithoutPublicIpv6_IsRefused_BeforeItsState()
     {
@@ -64,7 +64,7 @@ public class LoadBalancerTargetTests
         Assert.Equal("vmabc", VmOnIncus(networkId).BeginLoadBalancerBackend(networkId));
     }
 
-    // Stopped is fine: the health check takes it out of rotation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network).
+    // Stopped is fine: the health check takes it out of rotation (titan-ops features/load-balancer/design.md#lb-and-vm-network).
     [Fact]
     public void Vm_Stopped_IsStillABackend()
     {

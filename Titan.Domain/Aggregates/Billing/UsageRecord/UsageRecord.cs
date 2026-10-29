@@ -2,7 +2,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Billing.UsageRecord;
 
-/// One bucket of one resource, never updated (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering). A missed
+/// One bucket of one resource, never updated (titan-ops architecture/money-and-wallet.md#append-only-metering). A missed
 /// tick under-bills and never over-bills; that approximation is intended.
 public class UsageRecord
 {
@@ -16,10 +16,10 @@ public class UsageRecord
     public int Quantity { get; private set; }                    // SizeGb for Disk, 1 for Snapshot, 0 for Compute
     public string UsageType { get; private set; } = default!;    // "RUNNING_VM" | "ALLOCATED_STORAGE" | "SNAPSHOT_STORAGE"
     /// Copied at collect time: this is where price history lives, so changing an offering's price never
-    /// reaches back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+    /// reaches back (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
     public Rate UnitPricePerHour { get; private set; }
     /// The raw product for this one interval (rate × hours × quantity), not rounded: VND becomes whole once, on an invoice
-    /// line (TotalVnd, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#round-once).
+    /// line (TotalVnd, titan-ops architecture/money-and-wallet.md#round-once).
     public decimal Cost { get; private set; }
     public string Currency { get; private set; } = default!;
     public DateTimeOffset CollectedAt { get; private set; }
@@ -104,7 +104,7 @@ public class UsageRecord
 
     /// Whole VND for a set of records — one invoice line — rounded half away from zero once, on the sum. Rounding each
     /// record instead billed a 1 GB volume (0.26 ₫ a record) and every snapshot (0.3 ₫) at nothing
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#round-once).
+    /// (titan-ops architecture/money-and-wallet.md#round-once).
     public static long TotalVnd(IEnumerable<UsageRecord> records)
     {
         decimal raw = records.Sum(r => r.Cost);

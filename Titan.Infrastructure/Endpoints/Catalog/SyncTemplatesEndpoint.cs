@@ -6,7 +6,7 @@ using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 namespace Titan.Infrastructure.Endpoints.Catalog;
 
 // 202: the worker reconciles later, so the admin reads the outcome back from GET /v1/admin/templates
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202).
+// (titan-ops architecture/http-contract.md#async-actions-return-202).
 public class SyncTemplatesEndpoint(SyncTemplatesCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()

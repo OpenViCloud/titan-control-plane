@@ -12,11 +12,11 @@ namespace Titan.Tests.Infrastructure.Integration;
 
 // The double-credit race, under real concurrency on Postgres. Confirm does not touch the wallet: it
 // enqueues ONE credit WalletMutation guarded by UNIQUE(ref_type, ref_id), and the single-writer consumer
-// applies it later (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). Two concurrent confirms of
+// applies it later (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Two concurrent confirms of
 // the same top-up must leave EXACTLY ONE mutation (WalletRepository translates the loser's unique
 // violation to ConcurrencyConflictException, which the confirm rule catches), and DRAINING it must credit the wallet exactly once.
 // The ledger UNIQUE(type, ref_id) stays as defense-in-depth on the consumer path; only its declaration is
-// pinned (WalletSchemaTests.WalletTransactionTypeRefId_IsUnique, https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+// pinned (WalletSchemaTests.WalletTransactionTypeRefId_IsUnique, titan-ops features/billing/wallet/design.md#wallet-debts).
 //
 // The stress loop proves the mutation index actually blocks the race (WalletMutationSchemaTests pins that it
 // is declared; InMemory does not enforce it). Category=Integration — its own CI step; the dev box has no Docker.
@@ -99,7 +99,7 @@ public class WalletLedgerIdempotencyDbTests(PostgresFixture pg)
             Assert.True(mutations.Count == 1,
                 $"iter {i}: mutations={mutations.Count} (expected 1) — double or missing enqueue");
 
-            // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: neither confirm returns the TopUp, so
+            // titan-ops architecture/http-contract.md#commands-return-no-data: neither confirm returns the TopUp, so
             // which caller won is not observable. What is observable is the one stored row: Confirmed, by
             // exactly one of the two channels.
             await using (var db = pg.NewDbContext())

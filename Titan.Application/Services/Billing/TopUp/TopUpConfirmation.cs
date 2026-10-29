@@ -9,10 +9,10 @@ namespace Titan.Application.Services.Billing.TopUp;
 // An admin (ConfirmTopUpCommandHandler) and the SePay webhook (ReceiveSePayPaymentCommandHandler) both
 // confirm a TopUp, and handlers may not call each other
 // (ReadWriteSeparationTests.Handlers_DoNotReferenceOtherHandlers), so the rule lives here
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch).
+// (titan-ops architecture/code-structure.md#services-branch).
 public static class TopUpConfirmation
 {
-    /// Money is in. The credit is enqueued, not applied (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+    /// Money is in. The credit is enqueued, not applied (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
     /// Not tenant-scoped: an admin or the SePay webhook calls it.
     public static async Task ConfirmAsync(
         ICreditRepository repo,
@@ -32,7 +32,7 @@ public static class TopUpConfirmation
         // payment's own transactionDate; null means now. topUp is tracked, so the SaveChanges below persists it.
         topUp.Confirm(source, confirmedBy, paymentTxnRef, confirmedAt);
 
-        // The credit is deferred to the single-writer consumer (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox):
+        // The credit is deferred to the single-writer consumer (titan-ops architecture/money-and-wallet.md#single-writer-outbox):
         // crediting here would let two confirms of one top-up race on the balance. The mutation commits
         // with the Confirmed status, and UNIQUE(ref_type, ref_id) stops a second confirm from enqueueing a
         // second credit. The wallet is only read to name it in the mutation.

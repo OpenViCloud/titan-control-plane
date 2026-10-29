@@ -17,7 +17,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md, acceptance tests A-E of the NETWORK-LOAD-BALANCER iteration. The handlers
+// titan-ops features/load-balancer/design.md, acceptance tests A-E of the NETWORK-LOAD-BALANCER iteration. The handlers
 // over a fake repository; the provider command queue is a Moq mock where the command itself is the assertion.
 public class LoadBalancerServiceTests
 {
@@ -163,7 +163,7 @@ public class LoadBalancerServiceTests
         Assert.Empty(_repo.Rows);
     }
 
-    // A missing VM and another tenant's VM answer alike (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping).
+    // A missing VM and another tenant's VM answer alike (titan-ops architecture/http-contract.md#tenant-scoping).
     [Fact]
     public async Task Create_WithAnotherTenantsVm_OrAMissingOne_IsRefusedAlike()
     {
@@ -533,7 +533,7 @@ public class LoadBalancerServiceTests
         Assert.Equal(new ReconcilableLoadBalancerQueryResult(onIncus.Id, Project, "net-ext", onIncus.Vip, "Exists"), row);
     }
 
-    // ---- rename (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-rename)
+    // ---- rename (titan-ops features/load-balancer/design.md#lb-rename)
 
     [Fact]
     public async Task Rename_ChangesTheName_AndSendsNoCommand()

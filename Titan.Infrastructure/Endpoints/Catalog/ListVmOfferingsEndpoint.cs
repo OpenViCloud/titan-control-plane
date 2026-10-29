@@ -4,14 +4,14 @@ using Titan.Application.Queries.Catalog.VmOffering.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Catalog;
 
-// Titan-owned, never synced to the provider (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing).
+// Titan-owned, never synced to the provider (titan-ops features/catalog/design.md#vm-offering-sizing).
 public class ListVmOfferingsEndpoint(ListVmOfferingsQueryHandler handler)
     : EndpointWithoutRequest<List<VmOfferingQueryResult>>
 {
     public override void Configure()
     {
         Get("v1/vm-offerings");
-        // Anonymous: the public site shows prices before sign-up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-site/design.md#live-pricing).
+        // Anonymous: the public site shows prices before sign-up (titan-ops features/public-site/design.md#live-pricing).
         AllowAnonymous();
     }
 

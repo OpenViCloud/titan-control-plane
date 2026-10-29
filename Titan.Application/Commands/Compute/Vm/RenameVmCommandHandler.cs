@@ -11,7 +11,7 @@ namespace Titan.Application.Commands.Compute.Vm;
 // It still belongs in Commands/ because it WRITES — the split is read-vs-write, not remote-vs-local.
 public class RenameVmCommandHandler(IVmRepository repo, ICurrentUser currentUser)
 {
-    // Returns nothing on purpose (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse): a caller that wants the
+    // Returns nothing on purpose (titan-ops architecture/code-structure.md#no-contract-reuse): a caller that wants the
     // renamed VM asks the query side for it.
     public async Task HandleAsync(RenameVmCommand command, CancellationToken ct = default)
     {
@@ -19,7 +19,7 @@ public class RenameVmCommandHandler(IVmRepository repo, ICurrentUser currentUser
         Domain.Aggregates.Compute.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, command.VmId, ct);
 
         // The name asked for is already the name — done, nothing to write
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         bool alreadyNamedSo = command.Name == vm.Name;
         if (alreadyNamedSo)
         {

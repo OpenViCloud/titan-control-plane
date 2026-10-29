@@ -4,7 +4,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Application.Options;
 
 /// The bucket this environment's backups live in, declared in the environment's GitOps config
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target): endpoint, region and bucket in the Deployment env, the key pair in a Secret.
+/// (titan-ops features/backup/design.md#backup-target): endpoint, region and bucket in the Deployment env, the key pair in a Secret.
 public class BackupTargetOptions
 {
     public const string SectionName = "BackupTarget";

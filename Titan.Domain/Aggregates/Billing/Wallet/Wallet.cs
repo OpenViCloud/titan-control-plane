@@ -2,9 +2,9 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Domain.Aggregates.Billing.Wallet;
 
-/// One row per tenant (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance). The balance is stored, not
+/// One row per tenant (titan-ops architecture/money-and-wallet.md#wallet-one-balance). The balance is stored, not
 /// derived, and must equal the sum of the wallet's WalletTransaction rows; both are written in one SaveChanges.
-/// Credit and Debit are the only ways it changes (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-invariant-in-aggregate):
+/// Credit and Debit are the only ways it changes (titan-ops architecture/money-and-wallet.md#wallet-invariant-in-aggregate):
 /// the aggregate owns the non-negative rule, Version owns the race.
 public class Wallet
 {
@@ -15,7 +15,7 @@ public class Wallet
     /// Whole VND. Never negative because Debit refuses, not because of the type.
     public long AvailableAmount { get; private set; }
 
-    /// Concurrency token (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#version-token), bumped by every balance change:
+    /// Concurrency token (titan-ops architecture/money-and-wallet.md#version-token), bumped by every balance change:
     /// two writers who read the same balance cannot both commit.
     public int Version { get; private set; }
 

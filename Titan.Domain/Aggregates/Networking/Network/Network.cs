@@ -14,13 +14,13 @@ public class Network
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
     // Only Mark* writes the current pair; only a request writes DesiredExistence
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus word, null while
-    // Incus has no network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+    // (titan-ops architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus word, null while
+    // Incus has no network (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     public NetworkStatus? CurrentState { get; private set; }
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     public Guid? PendingIntentId { get; private set; }
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure
+    // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -28,7 +28,7 @@ public class Network
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
     // The network's public /64 and the router address OVH routes it to; null = no public IPv6
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). The index is unique per cluster among live networks.
+    // (titan-ops infra/incus/design.md#ipv6-address-plan). The index is unique per cluster among live networks.
     public int? PublicIpv6Index { get; private set; }
     public string? PublicIpv6Subnet { get; private set; }
     public string? PublicIpv6RouterAddress { get; private set; }
@@ -59,7 +59,7 @@ public class Network
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge).
     public static Network Create(
         Tenant tenant, int activeNetworkCount, int activePublicIpv6Count, string name, string clusterId,
         NetworkPublicIpv6? publicIpv6,
@@ -103,11 +103,11 @@ public class Network
         };
     }
 
-    /// Deleted absorbs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs). Its name is already free
+    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs). Its name is already free
     /// for reuse, so a revived network could collide with a live one.
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
 
     /// The create command: Incus has the network, with the address it was given. The status is left to the
     /// reconciler, so a report lost after this still leaves a network whose delete reaches Incus.
@@ -152,7 +152,7 @@ public class Network
     }
 
     /// The reconciler did not find the network. Never Deleted: only Titan's own delete command confirms that
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps
+    /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps
     /// waiting for its command.
     public void MarkNotFound()
     {
@@ -187,7 +187,7 @@ public class Network
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure): records why and ends
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale and records nothing; a delete's give-up is
     /// AbandonRequest.
     public void MarkRequestFailed(string? reason, string? detail)
@@ -212,12 +212,12 @@ public class Network
     }
 
     // ---- The provider id is handed out only after validating
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    // (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
 
     /// Intent. Follows Incus: whatever its word, even not found, a network with a provider id is deleted through
     /// Incus, which answers. The current pair waits for the delete command
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a repeat
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a repeat
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public string RequestDelete()
     {
         if (DeleteIsWaiting)
@@ -238,9 +238,9 @@ public class Network
         return ExternalId;
     }
 
-    /// The delete command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request): the network is
+    /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the network is
     /// still on Incus, so DesiredExistence returns to Exists (it counts against the quota again), the reason is kept
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure) and the next delete is a new request. Not a Mark*:
+    /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request. Not a Mark*:
     /// it changes what was asked for.
     public void AbandonRequest(string? reason, string? detail)
     {
@@ -257,7 +257,7 @@ public class Network
     }
 
     /// A VM is instantiated on its network's cluster, so it must ask for the network's own cluster
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice). Checked before the state: another cluster is never right.
+    /// (titan-ops features/catalog/design.md#cluster-is-a-real-choice). Checked before the state: another cluster is never right.
     public string BeginVmDeployment(string vmClusterId)
     {
         bool vmIsInAnotherCluster = vmClusterId != ClusterId;
@@ -277,7 +277,7 @@ public class Network
     }
 
     /// A load balancer needs the network's public /64 for its VIP: Incus refuses one on a network with no uplink
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
+    /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
     public string BeginLoadBalancer()
     {
         if (PublicIpv6Subnet == null)
@@ -314,7 +314,7 @@ public class Network
     }
 
     /// Intent: a network that never reached Incus has no command and no observation coming, so this writes the
-    /// current pair itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// current pair itself (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;

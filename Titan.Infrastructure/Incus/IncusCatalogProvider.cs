@@ -5,7 +5,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 
-// Live reads of a cluster's Incus for the public catalog (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus).
+// Live reads of a cluster's Incus for the public catalog (titan-ops features/cluster/design.md#cluster-incus).
 // The route is anonymous: a failure keeps its code but loses its detail (endpoint, fingerprints), which goes to the
 // log for the operator.
 public sealed class IncusCatalogProvider(

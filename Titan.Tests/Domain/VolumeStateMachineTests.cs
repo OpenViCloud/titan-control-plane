@@ -7,9 +7,9 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation: a request throws when it cannot be accepted,
+// titan-ops architecture/intent-and-observation.md#intent-versus-observation: a request throws when it cannot be accepted,
 // an observation (Mark*) never throws, Deleted absorbs. Incus has no status word for a custom volume or its snapshots
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-state-is-existence), so the model is existence plus, for a volume, the VM it
+// (titan-ops features/volume/design.md#volume-state-is-existence), so the model is existence plus, for a volume, the VM it
 // is attached to: the current pair is written only by observations, the desired pair only by requests. The Seed enums
 // name every situation so each "from every other situation" test walks all of them.
 public class VolumeStateMachineTests
@@ -334,7 +334,7 @@ public class VolumeStateMachineTests
         Assert.Equal("detach failed", v.RequestFailureReason);
     }
 
-    // ---------- VM delete releases the volume (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes) ----------
+    // ---------- VM delete releases the volume (titan-ops features/volume/design.md#vm-delete-releases-volumes) ----------
 
     [Theory]
     [InlineData(Seed.Attached)]

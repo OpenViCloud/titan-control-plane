@@ -15,7 +15,7 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.TenantId).HasColumnName("tenant_id");
         builder.Property(v => v.NetworkId).HasColumnName("network_id");
         builder.Property(v => v.Name).HasColumnName("name").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current: observation writes current_*, request
+        // titan-ops architecture/desired-and-current.md#desired-and-current: observation writes current_*, request
         // writes desired_*. current_state holds the Incus status word for word (the enum names ARE the Incus
         // words), NULL while Incus has no instance.
         builder.Property(v => v.CurrentState).HasColumnName("current_state").HasConversion<string>();
@@ -30,7 +30,7 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.CreateFinished).HasColumnName("create_finished").IsRequired();
         builder.Property(v => v.IpAddress).HasColumnName("ip_address");
         builder.Property(v => v.VmOfferingId).HasColumnName("vm_offering_id").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
+        // titan-ops features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
         builder.HasOne<VmOffering>()
             .WithMany()
             .HasForeignKey(v => v.VmOfferingId)
@@ -42,7 +42,7 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity. The intent's kind is not stored: it follows
+        // titan-ops architecture/intent-and-observation.md#intent-has-identity. The intent's kind is not stored: it follows
         // from the desired columns (Vm.PendingIntent), so the two cannot disagree.
         builder.Property(v => v.PendingIntentId).HasColumnName("pending_intent_id");
         builder.Ignore(v => v.PendingIntent);

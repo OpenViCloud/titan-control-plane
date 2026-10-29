@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 namespace Titan.Infrastructure.Endpoints.LoadBalancer;
 
 // The whole configuration in one PUT, applied by the worker in one Incus write; 204 with no body even though it
-// is asynchronous (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+// is asynchronous (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class UpdateLoadBalancerEndpoint(UpdateLoadBalancerCommandHandler handler) : Endpoint<UpdateLoadBalancerBody>
 {
     public override void Configure()
@@ -24,5 +24,5 @@ public class UpdateLoadBalancerEndpoint(UpdateLoadBalancerCommandHandler handler
 }
 
 // The JSON body; UpdateLoadBalancerCommand additionally carries the route's id
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record UpdateLoadBalancerBody(List<LoadBalancerListenerInput> Listeners, List<LoadBalancerBackendInput> Backends);

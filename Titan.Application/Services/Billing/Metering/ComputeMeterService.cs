@@ -13,7 +13,7 @@ public interface IComputeMeterService : IMeter;
 
 /// A missed tick under-bills and never over-bills: the accepted "approximate" trade-off.
 ///
-/// Price comes from the VM offering (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering). A missing
+/// Price comes from the VM offering (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering). A missing
 /// tier is a broken catalog, and this meter refuses to bill through it.
 public class ComputeMeterService(
     IVmRepository vmRepo,
@@ -35,7 +35,7 @@ public class ComputeMeterService(
 
         // Price every VM before writing any row: each insert commits on its own, so refusing halfway would
         // bill the VMs the database happened to return first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/metering/design.md#missing-offering). The whole tick fails instead of
+        // (titan-ops features/billing/metering/design.md#missing-offering). The whole tick fails instead of
         // skipping this VM or billing it zero: a VM on a missing tier is damaged catalog data, and a stale
         // meter is what /healthz/meters reports.
         var records = new List<UsageRecord>(billableVms.Count);

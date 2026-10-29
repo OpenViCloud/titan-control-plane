@@ -33,7 +33,7 @@ public class NetworkRepositoryStateTests
         return network;
     }
 
-    // Counted by occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle): what Incus holds — whatever its word —
+    // Counted by occupancy (titan-ops features/network/design.md#network-lifecycle): what Incus holds — whatever its word —
     // or is about to hold. A delete in flight, a network Incus no longer has and a create that gave up before Incus
     // had it do not count.
     [Fact]
@@ -58,7 +58,7 @@ public class NetworkRepositoryStateTests
         Assert.Equal(3, count);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle — a network whose delete is in flight still holds its
+    // titan-ops features/network/design.md#network-lifecycle — a network whose delete is in flight still holds its
     // CIDR, like its name: the network is still on the provider until it confirms, and handing the range
     // out again could overlap there.
     [Fact]
@@ -116,7 +116,7 @@ public class NetworkRepositoryStateTests
         Assert.True(overlaps);
     }
 
-    // Occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle): a network Incus holds keeps its range whatever
+    // Occupancy (titan-ops features/network/design.md#network-lifecycle): a network Incus holds keeps its range whatever
     // its word; one Incus no longer has frees it.
     [Fact]
     public async Task CidrOverlap_SeesAnErroredNetwork_ButNotOneIncusNoLongerHas()

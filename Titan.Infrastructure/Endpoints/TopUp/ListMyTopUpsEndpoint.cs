@@ -4,7 +4,7 @@ using Titan.Application.Queries.Billing.TopUp.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.TopUp;
 
-// The portal filters Confirmed to render receipts (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#confirmed-topup-is-receipt).
+// The portal filters Confirmed to render receipts (titan-ops architecture/money-and-wallet.md#confirmed-topup-is-receipt).
 public class ListMyTopUpsEndpoint(ListMyTopUpsQueryHandler handler)
     : EndpointWithoutRequest<IReadOnlyList<TopUpQueryResult>>
 {

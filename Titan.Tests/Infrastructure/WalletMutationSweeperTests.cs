@@ -14,9 +14,9 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — what the sweeper does when another writer moves a
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — what the sweeper does when another writer moves a
 // mutation between the sweeper's read and its write. Both cases need a hook between those two steps, which only a
-// test double gives (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests), so they run on the InMemory provider:
+// test double gives (titan-ops architecture/testing.md#doubles-only-in-unit-tests), so they run on the InMemory provider:
 // it enforces concurrency tokens but no unique index, so a mutation applied twice shows up as money moved twice.
 // The list is LINQ here, not the production FOR UPDATE SKIP LOCKED (WalletMutationSweeperDbTests covers that).
 public class WalletMutationSweeperTests

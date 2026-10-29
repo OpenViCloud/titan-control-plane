@@ -7,17 +7,17 @@ using InvoiceAggregate = Titan.Domain.Aggregates.Billing.Invoice.Invoice;
 
 namespace Titan.Application.Services.Billing.WalletMutations;
 
-// The single-writer consumer (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox): the one place a
+// The single-writer consumer (titan-ops architecture/money-and-wallet.md#single-writer-outbox): the one place a
 // wallet mutation is applied to the balance. The subscriber and the sweeper both call it; the wallet version
 // token catches two applies that read the wallet at the same time.
 //
 // A non-Pending mutation is a no-op, so a redelivered notify is safe. The check reads the mutation this
 // context loaded, so it only sees another context's apply when the context is fresh: every caller gives each
-// apply its own scope (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-mutation-flow).
+// apply its own scope (titan-ops features/billing/wallet/design.md#wallet-mutation-flow).
 public interface IWalletMutationConsumer
 {
     /// Commits the balance change, the ledger row and the mutation's MarkApplied in one transaction
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-invariant-in-aggregate).
+    /// (titan-ops architecture/money-and-wallet.md#wallet-invariant-in-aggregate).
     Task ApplyAsync(Guid mutationId, CancellationToken ct = default);
 }
 
@@ -51,7 +51,7 @@ public class WalletMutationConsumer(
                 break;
 
             case WalletMutationType.Debit:
-                // The authoritative funds check (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox): two
+                // The authoritative funds check (titan-ops architecture/money-and-wallet.md#single-writer-outbox): two
                 // payments can both pass the pre-check at the button, and only one can be honoured.
                 // A test before Wallet.Debit, not a catch around it: once Debit throws, the ChangeTracker may
                 // hold half-made changes that the MarkFailed SaveChanges would commit along with the verdict.

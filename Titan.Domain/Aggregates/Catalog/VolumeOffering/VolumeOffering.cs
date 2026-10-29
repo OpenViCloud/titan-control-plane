@@ -4,7 +4,7 @@ namespace Titan.Domain.Aggregates.Catalog.VolumeOffering;
 
 // Titan owns this catalog; it is not read from the provider: storage placement is a worker concern.
 // The tier carries its own per-GB price
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+// (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 //
 // IsCustomized = true means the customer supplies the size at create time; SizeGb is then unused.
 public class VolumeOffering
@@ -14,7 +14,7 @@ public class VolumeOffering
     public int SizeGb { get; private set; }
     public bool IsCustomized { get; private set; }
 
-    /// VND per GB per hour (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
+    /// VND per GB per hour (titan-ops architecture/money-and-wallet.md#rate-value-object).
     public Rate PricePerGbPerHour { get; private set; }
 
     private VolumeOffering() { }

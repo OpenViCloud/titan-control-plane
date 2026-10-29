@@ -11,16 +11,16 @@ public record ErrorStatus(int Status, string Code)
     public const string InternalErrorCode = "INTERNAL_ERROR";
 
     /// Two identical requests at the same instant both enqueue the same provider command key; the second commit hits
-    /// the unique index (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key). The first request did the work.
+    /// the unique index (titan-ops architecture/provider-and-worker.md#provider-command-key). The first request did the work.
     public const string RequestInProgressCode = "REQUEST_IN_PROGRESS";
     public const string ProviderCommandKeyIndex = "IX_provider_commands_key";
 
     /// Two network creates in one cluster picked the same free /64 at the same instant; the second commit hits the
-    /// per-cluster unique index (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Asking again picks another /64.
+    /// per-cluster unique index (titan-ops infra/incus/design.md#ipv6-address-plan). Asking again picks another /64.
     public const string Ipv6AllocationConflictCode = "IPV6_ALLOCATION_CONFLICT";
 
     /// Two load balancer creates on one network picked the same free VIP at the same instant
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#vip-in-network-64). Asking again picks another.
+    /// (titan-ops features/load-balancer/design.md#vip-in-network-64). Asking again picks another.
     public const string LoadBalancerVipConflictCode = "LOAD_BALANCER_VIP_CONFLICT";
 
     public static ErrorStatus For(Exception? ex) => ex switch

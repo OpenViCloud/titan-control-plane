@@ -8,7 +8,7 @@ using Titan.Application.Options;
 namespace Titan.Application.Commands.Platform.BackupTarget;
 
 /// Writes, lists, reads back and deletes one object of its own in the configured target
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-target).
+/// (titan-ops features/backup/design.md#backup-target).
 /// A target that fails is a result (ok: false), never an exception; no key pair and a configuration that cannot work are the environment's errors.
 public class TestBackupTargetCommandHandler(IOptions<BackupTargetOptions> options, IBackupBucketFactory buckets)
 {

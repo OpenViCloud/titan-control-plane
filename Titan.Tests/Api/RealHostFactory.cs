@@ -8,7 +8,7 @@ using Titan.Tests.Infrastructure.Integration;
 namespace Titan.Tests.Api;
 
 // The host as Program.cs wires it, on its own migrated Postgres database: no service is replaced
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests). Postgres comes from TestPostgres, as for Category=Integration.
+// (titan-ops architecture/testing.md#doubles-only-in-unit-tests). Postgres comes from TestPostgres, as for Category=Integration.
 // A test that builds one with `new` calls InitializeAsync first; xUnit does it for a class fixture.
 public class RealHostFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {

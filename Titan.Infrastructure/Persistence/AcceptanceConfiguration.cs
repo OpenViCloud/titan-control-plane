@@ -18,7 +18,7 @@ public class AcceptanceConfiguration : IEntityTypeConfiguration<Acceptance>
         builder.Property(a => a.SourceIp).HasColumnName("source_ip"); // nullable
 
         // One acceptance per subject per document version, append-only
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#acceptance-append-only): the DB guard that keeps RecordAcceptance
+        // (titan-ops features/legal/design.md#acceptance-append-only): the DB guard that keeps RecordAcceptance
         // idempotent under a double-submit race. InMemory does not enforce it; AcceptanceSchemaTests pins it.
         builder.HasIndex(a => new { a.SubjectId, a.DocumentKey, a.DocumentVersion }).IsUnique();
     }

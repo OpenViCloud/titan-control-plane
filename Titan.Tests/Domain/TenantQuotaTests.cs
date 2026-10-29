@@ -4,7 +4,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// TenantQuota is the value object that holds all nine caps (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-value-object),
+// TenantQuota is the value object that holds all nine caps (titan-ops architecture/tenancy-and-admin.md#quota-value-object),
 // and Tenant is the only thing that decides.
 public class TenantQuotaTests
 {

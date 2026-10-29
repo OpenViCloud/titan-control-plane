@@ -13,7 +13,7 @@ public interface IVmRepository
     Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
     /// All tenants, not scoped to a caller: the compute meter is a platform-wide background job.
     Task<List<Vm>> ListBillableAsync(CancellationToken ct = default);
-    /// Admin cross-tenant read (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read): every non-Deleted
+    /// Admin cross-tenant read (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read): every non-Deleted
     /// VM, or one tenant's when tenantId is given. Not scoped to a caller; ListByTenantAsync stays the
     /// tenant path.
     Task<List<Vm>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);

@@ -2,18 +2,18 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Domain.Aggregates.Billing.Invoice;
 
-/// A frozen snapshot of one month's UsageRecords (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot):
+/// A frozen snapshot of one month's UsageRecords (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot):
 /// after Generate only the single payment transition changes it; Total and every item Amount are fixed.
 public class Invoice
 {
-    /// DueAt = IssuedAt + PaymentTermDays (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#invoice-generation).
+    /// DueAt = IssuedAt + PaymentTermDays (titan-ops features/billing/invoice/design.md#invoice-generation).
     public const int PaymentTermDays = 7;
 
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public int PeriodYear { get; private set; }
     public int PeriodMonth { get; private set; }
-    /// A concurrency token: the double-pay guard (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#double-pay-guard).
+    /// A concurrency token: the double-pay guard (titan-ops architecture/money-and-wallet.md#double-pay-guard).
     public InvoiceStatus Status { get; private set; }
     public DateTimeOffset IssuedAt { get; private set; }
     public DateTimeOffset DueAt { get; private set; }
@@ -69,7 +69,7 @@ public class Invoice
         PaidBy = paidBy;
     }
 
-    /// Not an exception to https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit: at zero no money moves, so
+    /// Not an exception to titan-ops architecture/money-and-wallet.md#human-confirmed-debit: at zero no money moves, so
     /// there is nothing to confirm, and a 0 ₫ bill left New would age to Overdue. Paid, not SettledByWallet:
     /// the wallet is untouched, and claiming otherwise would put a phantom spend in the statement.
     public void AutoSettleZeroTotal()
@@ -86,8 +86,8 @@ public class Invoice
         PaidBy = "system";
     }
 
-    /// A person pressed pay (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
-    /// DueAt does not matter — overdue only reminds (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake).
+    /// A person pressed pay (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
+    /// DueAt does not matter — overdue only reminds (titan-ops architecture/money-and-wallet.md#postpaid-no-brake).
     public void SettleFromWallet(DateTimeOffset paidAt)
     {
         if (Status != InvoiceStatus.New)

@@ -63,9 +63,9 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<ActivityEvent> ActivityEvents => Set<ActivityEvent>();
     public DbSet<Acceptance> LegalAcceptances => Set<Acceptance>();
 
-    // Money columns are bare `long` -> bigint with no converter (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd).
+    // Money columns are bare `long` -> bigint with no converter (titan-ops architecture/money-and-wallet.md#money-is-long-vnd).
     // Rate's converter is a convention rather than per-property, so the next Rate property cannot forget it
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object). Rate.Of refuses a negative, so a negative
+    // (titan-ops architecture/money-and-wallet.md#rate-value-object). Rate.Of refuses a negative, so a negative
     // rate row throws on read instead of serving a corrupt price.
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

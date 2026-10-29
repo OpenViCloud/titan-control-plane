@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table — InMemory enforces neither the unique key nor the
+// titan-ops architecture/provider-and-worker.md#provider-command-table — InMemory enforces neither the unique key nor the
 // version token, so this pins the metadata the migration comes from; ProviderCommandLeaseDbTests measures them on
 // Postgres.
 public class ProviderCommandSchemaTests

@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
-/// A backend row: one VM of the load balancer's network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#backend-address).
+/// A backend row: one VM of the load balancer's network (titan-ops features/load-balancer/design.md#backend-address).
 /// ExternalVmId is the instance name the worker reads the MAC from; IsDesired/IsApplied as on LoadBalancerListener.
 public class LoadBalancerBackend
 {

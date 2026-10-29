@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Platform.Tenant;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name. Titan names the tenant's Incus project from the tenant id, so a
+// titan-ops architecture/tenancy-and-admin.md#project-name. Titan names the tenant's Incus project from the tenant id, so a
 // rebuilt cluster gets the same name back instead of a provider-assigned id that collides with an old one.
 public class TenantProjectNameTests
 {

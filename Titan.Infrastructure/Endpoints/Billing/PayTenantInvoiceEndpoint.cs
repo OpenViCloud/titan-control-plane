@@ -5,11 +5,11 @@ using Titan.Application.Commands.Billing.Invoice.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Billing;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit. No body: an amount would invite a partial payment,
+/// titan-ops architecture/money-and-wallet.md#human-confirmed-debit. No body: an amount would invite a partial payment,
 /// and a payment is all or nothing.
 ///
 /// 202, because the money has not moved yet: the consumer applies the debit mutation later
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202). A rejection the request can answer (nothing
+/// (titan-ops architecture/http-contract.md#async-actions-return-202). A rejection the request can answer (nothing
 /// owing, not enough money) is still a 4xx, before any mutation is written.
 public class PayTenantInvoiceEndpoint(PayInvoiceFromWalletCommandHandler handler) : EndpointWithoutRequest
 {

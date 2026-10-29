@@ -4,7 +4,7 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// The catalog reads a cluster's Incus live (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). Bodies are
+// The catalog reads a cluster's Incus live (titan-ops features/cluster/design.md#cluster-incus). Bodies are
 // the lab recordings, which is where the trap comes from: an untrusted client gets 200 with an empty image list — a
 // catalog that looks healthy and is not.
 public class IncusCatalogProviderTests

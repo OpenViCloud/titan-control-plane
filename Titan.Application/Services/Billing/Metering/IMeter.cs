@@ -2,7 +2,7 @@ namespace Titan.Application.Services.Billing.Metering;
 
 /// <summary>
 /// One append-only sampling strategy, driven by the single
-/// <see cref="Titan.Infrastructure.Hosting.MeterHostedService"/> loop (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering).
+/// <see cref="Titan.Infrastructure.Hosting.MeterHostedService"/> loop (titan-ops architecture/money-and-wallet.md#append-only-metering).
 /// </summary>
 public interface IMeter
 {

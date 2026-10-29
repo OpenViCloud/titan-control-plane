@@ -5,7 +5,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Application.Options;
 
 // A cluster: where a customer places resources, and the Incus cluster Titan reaches there. All of it is config
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config); Titan authenticates with its own client identity, so
+// (titan-ops features/cluster/design.md#cluster-from-config); Titan authenticates with its own client identity, so
 // nothing here is secret.
 public class ClusterConfig
 {
@@ -15,7 +15,7 @@ public class ClusterConfig
     public string ServerFingerprint { get; set; } = "";
     public string? ServerCertificatePem { get; set; }
 
-    // Provider settings (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-provider-settings); null = not set.
+    // Provider settings (titan-ops features/cluster/design.md#cluster-provider-settings); null = not set.
     public string? OvnUplinkNetwork { get; set; }
     public string? StoragePool { get; set; }
     public string? Ipv6Block { get; set; }

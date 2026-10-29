@@ -3,7 +3,7 @@ using Titan.Domain.Repositories.Compute;
 
 namespace Titan.Application.Queries.Admin.Vm;
 
-// Cross-tenant (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read) VM read for platform-admin. Straight to the repository, never
+// Cross-tenant (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read) VM read for platform-admin. Straight to the repository, never
 // through a tenant-scoped handler (which would require a caller tenant).
 public class ListAdminVmsQueryHandler(IVmRepository vms)
 {

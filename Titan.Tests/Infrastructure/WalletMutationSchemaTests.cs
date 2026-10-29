@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the InMemory provider enforces no unique
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the InMemory provider enforces no unique
 // index, so this pins the model metadata the migration is generated from. The refused second insert
 // itself is proven on Postgres in WalletMutationIdempotencyDbTests.
 public class WalletMutationSchemaTests
@@ -44,7 +44,7 @@ public class WalletMutationSchemaTests
         Assert.Equal(2, index!.Properties.Count);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit — one row per source document whatever
+    // titan-ops features/billing/invoice/design.md#retry-after-failed-debit — one row per source document whatever
     // its status: paying an invoice again reopens its failed debit row instead of adding a second one.
     [Fact]
     public void UniquePerRefTypeAndRefId_HasNoFilter()
@@ -116,7 +116,7 @@ public class WalletMutationSchemaTests
         Assert.Equal(typeof(string), StoredAsProviderType(property));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd — amount is whole VND (long -> bigint), never a wide decimal.
+    // titan-ops architecture/money-and-wallet.md#money-is-long-vnd — amount is whole VND (long -> bigint), never a wide decimal.
     [Fact]
     public void Amount_IsBigint()
     {

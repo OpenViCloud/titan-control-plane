@@ -11,7 +11,7 @@ namespace Titan.Infrastructure.Hosting;
 /// <summary>
 /// Runs the admin's sync-all (SyncTemplatesCommandHandler) when a template was never asked into a configured cluster, so a new
 /// environment or a new cluster gets its catalog without an admin; not a deploy hook, so an unreachable cluster blocks no
-/// deploy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-sync-never-asked).
+/// deploy (titan-ops features/catalog/design.md#template-sync-never-asked).
 /// </summary>
 public class TemplateSyncNeverAskedService(
     IServiceScopeFactory scopeFactory,

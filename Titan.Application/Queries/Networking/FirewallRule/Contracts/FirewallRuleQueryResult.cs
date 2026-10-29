@@ -7,7 +7,7 @@ namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
 
 // CurrentState is the Incus ACL rule state word for word (enabled · disabled · logged), null while the rule is not
 // in the ACL; the existence pair and the request failure tell a rule being created from one whose create failed
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
 public record FirewallRuleQueryResult(
     Guid Id,
     string Direction,

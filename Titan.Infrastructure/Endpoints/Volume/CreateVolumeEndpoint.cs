@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Volume;
 
-// The command IS the request type (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract), so FastEndpoints binds the body straight to it.
+// The command IS the request type (titan-ops architecture/code-structure.md#command-is-wire-contract), so FastEndpoints binds the body straight to it.
 public class CreateVolumeEndpoint(CreateVolumeCommandHandler handler)
     : Endpoint<CreateVolumeCommand, CreateVolumeCommandResult>, IRequiresIdempotencyKey
 {

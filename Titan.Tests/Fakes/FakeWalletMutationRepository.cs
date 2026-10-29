@@ -3,7 +3,7 @@ using Titan.Domain.Repositories.Billing;
 
 namespace Titan.Tests.Fakes;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — an in-memory mutation outbox for service-level tests: it records what an enqueuer
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — an in-memory mutation outbox for service-level tests: it records what an enqueuer
 /// staged, so a test can assert on the mutation that WOULD be written without a database.
 ///
 /// It holds one row per (ref_type, ref_id), as Postgres does: a second Add for the same source throws instead of
@@ -17,7 +17,7 @@ public sealed class FakeWalletMutationRepository : IWalletMutationRepository
     public Dictionary<(string RefType, Guid RefId), WalletMutation> ByRef { get; } = [];
 
     // A staged mutation is also what a later payment-state lookup finds, the way the real repository
-    // returns it once committed. The pay commands return nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data), so a
+    // returns it once committed. The pay commands return nothing (titan-ops architecture/http-contract.md#commands-return-no-data), so a
     // test reads the invoice back and must see the mutation it just caused — one row per ref.
     public void Add(WalletMutation mutation)
     {

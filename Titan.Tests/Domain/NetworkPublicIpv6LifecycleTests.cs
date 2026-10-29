@@ -5,7 +5,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
 
-// A network's public /64 (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
+// A network's public /64 (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
 // MaxPublicIpv6 by the factory, and given back when the create gives up before Incus had the network — otherwise
 // a failed create would hold one of the cluster's 255 /64s until the tenant deletes it.
 public class NetworkPublicIpv6LifecycleTests

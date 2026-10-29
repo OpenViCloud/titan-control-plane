@@ -11,7 +11,7 @@ public class CompleteProviderCommandCommandHandler(IProviderCommandRepository re
     public async Task HandleAsync(CompleteProviderCommandCommand command, CancellationToken ct = default)
     {
         ProviderCommandAggregate leased = await ProviderCommandLease.RequireAsync(repository, command.LeaseId, ct);
-        // A worker retrying its report after a lost response: the first one landed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // A worker retrying its report after a lost response: the first one landed (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         bool alreadyCompleted = leased.Status == ProviderCommandStatus.Done;
         if (alreadyCompleted)
         {

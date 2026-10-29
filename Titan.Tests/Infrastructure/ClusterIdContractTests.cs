@@ -20,7 +20,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Infrastructure;
 
 // The worker names its cluster as clusterId on every route and the lease
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#contract-changes).
+// (titan-ops architecture/provider-and-worker.md#contract-changes).
 public class ClusterIdContractTests
 {
     private static IConfiguration ConfigWithToken(string token) =>

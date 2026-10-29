@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 namespace Titan.Infrastructure.Endpoints.Vm;
 
 // The command side owns no read shape: a caller that wants the renamed VM reads GET /v1/tenant/vms/{vmId}
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+// (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class UpdateVmEndpoint(RenameVmCommandHandler handler) : Endpoint<RenameVmBody>
 {
     public override void Configure()
@@ -24,5 +24,5 @@ public class UpdateVmEndpoint(RenameVmCommandHandler handler) : Endpoint<RenameV
 }
 
 // The JSON body alone; RenameVmCommand additionally carries the route id
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record RenameVmBody(string Name);

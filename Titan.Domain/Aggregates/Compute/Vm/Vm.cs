@@ -11,8 +11,8 @@ public class Vm
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
     // Only an observation (Mark*) writes CurrentState and CurrentExistence; only a request writes DesiredState and
-    // DesiredExistence (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus
-    // status word for word, null while Incus has no instance (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+    // DesiredExistence (titan-ops architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus
+    // status word for word, null while Incus has no instance (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     public VmState? CurrentState { get; private set; }
     public VmDesiredState DesiredState { get; private set; }
     public CurrentExistence CurrentExistence { get; private set; }
@@ -26,9 +26,9 @@ public class Vm
     public bool CreateFinished { get; private set; }
     public string? IpAddress { get; private set; }
     public string? PublicIpv6Address { get; private set; }
-    // A provider command that gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure). The reason is a
+    // A provider command that gave up (titan-ops architecture/desired-and-current.md#request-failure). The reason is a
     // fixed text the tenant reads; the detail is the raw error, admin-only, never on the /v1/tenant path
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#status-reason).
+    // (titan-ops features/public-api/design.md#status-reason).
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -39,7 +39,7 @@ public class Vm
     public string? UserData { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    // Null means nothing is waiting (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#pending-intent).
+    // Null means nothing is waiting (titan-ops features/vm/design.md#pending-intent).
     public Guid? PendingIntentId { get; private set; }
 
     /// Derived, not stored: a stored kind would be a second copy of the desired fields that can disagree.
@@ -94,7 +94,7 @@ public class Vm
 
     private Vm() { }
 
-    /// Quota is checked inside the only way to obtain a Vm (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    /// Quota is checked inside the only way to obtain a Vm (titan-ops architecture/code-structure.md#tenant-typed-edge).
     public static Vm Create(
         Tenant tenant,
         int activeVmCount,
@@ -113,7 +113,7 @@ public class Vm
     }
 
     /// Test seam that skips the quota check; `internal`, so only Titan.Tests reaches it
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
     internal static Vm CreateUnchecked(
         Guid tenantId,
         Guid networkId,
@@ -146,17 +146,17 @@ public class Vm
         };
     }
 
-    /// Deleted absorbs every later Mark* (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Deleted absorbs every later Mark* (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     /// ComputeMeterService bills a VM whose instance exists and runs, so a late poll that revived a deleted VM
     /// would charge for a machine that no longer exists.
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    // ---- Intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation): a request from a person, refused when illegal.
+    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): a request from a person, refused when illegal.
     // What a request may do in each Incus status is what Incus itself allows there
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus). The provider carries out stop/start/delete, so the
-    // provider id leaves only on the ticket (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    // (titan-ops features/vm/design.md#requests-follow-incus). The provider carries out stop/start/delete, so the
+    // provider id leaves only on the ticket (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     // A repeat or an already-done request is refused; the handler recognises it before calling
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
 
     public VmIntentTicket RequestStop()
     {
@@ -229,11 +229,11 @@ public class Vm
             return new VmIntentTicket(VmIntentOutcome.FinishLocally, Guid.NewGuid(), "");
         }
 
-        return Accept(DesiredState, DesiredExistence.Deleted); // replaces a waiting stop/start (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#conflict-and-delete-wins)
+        return Accept(DesiredState, DesiredExistence.Deleted); // replaces a waiting stop/start (titan-ops features/vm/design.md#conflict-and-delete-wins)
     }
 
     /// Changes nothing: the caller re-sends the command under the same intent id
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#resend-waiting-intent). Refuses an intent the VM is not waiting on,
+    /// (titan-ops features/vm/design.md#resend-waiting-intent). Refuses an intent the VM is not waiting on,
     /// which would act on a stale request.
     public VmIntentTicket ResendWaitingIntent(VmIntent intent)
     {
@@ -282,7 +282,7 @@ public class Vm
     }
 
     /// Throws rather than let a caller assert the id
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the VM reconciler's
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the VM reconciler's
     /// read model.
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
@@ -299,8 +299,8 @@ public class Vm
 
     /// A load balancer of this VM's network may send to it: the instance is on Incus and its delete was not pressed.
     /// Any Incus state will do — the health check takes a stopped VM out of rotation
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network). Hands out the instance name the worker reads the
-    /// MAC from (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#backend-address).
+    /// (titan-ops features/load-balancer/design.md#lb-and-vm-network). Hands out the instance name the worker reads the
+    /// MAC from (titan-ops features/load-balancer/design.md#backend-address).
     public string BeginLoadBalancerBackend(Guid networkId)
     {
         bool usable = NetworkId == networkId
@@ -314,7 +314,7 @@ public class Vm
     }
 
     /// Incus attaches a volume to, and snapshots, an instance that is Running, Ready, Stopped or Frozen
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus); Error is not offered.
+    /// (titan-ops features/vm/design.md#requests-follow-incus); Error is not offered.
     private bool IncusCanAttachOrSnapshot()
     {
         bool instanceExists = CurrentExistence == CurrentExistence.Exists;
@@ -327,7 +327,7 @@ public class Vm
 
     /// Another aggregate's command against this VM would race a waiting stop or delete on the provider,
     /// and CurrentState still reads Running until the reconciler observes the outcome
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#conflict-and-delete-wins).
+    /// (titan-ops features/vm/design.md#conflict-and-delete-wins).
     private void EnsureNoStopOrDeleteWaiting()
     {
         bool stopOrDeleteWaiting = PendingIntent == VmIntent.Stop || PendingIntent == VmIntent.Delete;
@@ -338,7 +338,7 @@ public class Vm
     }
 
     /// A shell session execs inside the guest, which needs its agent, which runs only while Incus reports Running
-    /// or Ready (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session). A waiting stop or delete would cut the session.
+    /// or Ready (titan-ops features/vm/design.md#ssh-session). A waiting stop or delete would cut the session.
     public string ShellInstanceName()
     {
         bool instanceExists = CurrentExistence == CurrentExistence.Exists;
@@ -361,7 +361,7 @@ public class Vm
     }
 
     /// A cross-aggregate precondition for VmSnapshot.Create and VmSnapshot.Revert, never called by a
-    /// handler (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation).
+    /// handler (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     internal void EnsureSnapshottable()
     {
         if (!IncusCanAttachOrSnapshot())
@@ -370,7 +370,7 @@ public class Vm
     }
 
     /// Intent, Titan-side display name only. The aggregate carries it out itself, so the check sits inside
-    /// the mutation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation).
+    /// the mutation (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     public void Rename(string newName)
     {
         if (IsTerminal)
@@ -379,7 +379,7 @@ public class Vm
     }
 
     /// Intent: a VM that never reached the provider has no command and no observation coming, so the
-    /// aggregate writes the current fields itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// aggregate writes the current fields itself (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         if (IsTerminal)
@@ -394,7 +394,7 @@ public class Vm
         PendingIntentId = null;
     }
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): a report of what the provider is,
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what the provider is,
     // so no transition guard. Running seen before a stop finishes is legitimate; throwing would fail
     // the internal callback and leave the VM stuck.
 
@@ -444,7 +444,7 @@ public class Vm
     }
 
     /// The reconciler did not find the instance. Never Deleted: pointing at the wrong cluster also finds nothing
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#reconciler-never-dies); only the delete command reports Deleted.
+    /// (titan-ops architecture/desired-and-current.md#reconciler-never-dies); only the delete command reports Deleted.
     public void MarkNotFound()
     {
         if (IsTerminal) return;
@@ -457,7 +457,7 @@ public class Vm
     }
 
     /// A create, stop or start cannot complete on an instance in Error or gone, so it may be asked again; a
-    /// waiting delete is legal from both and keeps waiting (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#pending-intent).
+    /// waiting delete is legal from both and keeps waiting (titan-ops features/vm/design.md#pending-intent).
     private void DropAWaitingStatusRequest(VmIntent? waitingBeforeThisReport)
     {
         bool deleteIsWaiting = waitingBeforeThisReport == VmIntent.Delete;
@@ -487,7 +487,7 @@ public class Vm
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure). Ends the waiting
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure). Ends the waiting
     /// create — a failed create may be deleted, not retried — and leaves the observed fields to the reconciler. A
     /// waiting delete keeps waiting. A give-up for a create that already ended on a running guest is stale (an
     /// overlapping lease): the create succeeded, so it records no failure. A guest paused during its first boot has
@@ -511,10 +511,10 @@ public class Vm
         CreateFinished = true;
     }
 
-    /// The stop/start command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#intent-failed-callback). Not a Mark*: it
+    /// The stop/start command gave up (titan-ops features/vm/design.md#intent-failed-callback). Not a Mark*: it
     /// changes what was asked for. Clears only the request it names, so a report for an older run cannot
     /// free a newer one; a waiting Delete waits for the provider
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm). A repeated report returns null.
+    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). A repeated report returns null.
     public VmIntent? AbandonRequest(Guid intentId)
     {
         if (IsTerminal)

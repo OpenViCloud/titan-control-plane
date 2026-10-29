@@ -19,7 +19,7 @@ public enum ShellEnding
 
 public sealed record ShellRelayResult(long BytesUp, long BytesDown, long BytesStderr, ShellEnding Ending);
 
-// Copies bytes between the customer's websocket and an Incus exec's (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session).
+// Copies bytes between the customer's websocket and an Incus exec's (titan-ops features/vm/design.md#ssh-session).
 // Incus ends a command with an empty message on stdout and drops the socket without a close handshake: both are the
 // end of the command, never an error. An empty frame that finishes a fragmented message is not that end. The relay
 // keeps no byte it copies.

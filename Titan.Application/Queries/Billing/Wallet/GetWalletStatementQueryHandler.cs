@@ -7,7 +7,7 @@ using Titan.Domain.Repositories.Billing;
 namespace Titan.Application.Queries.Billing.Wallet;
 
 /// Every movement (TopUp +, promo +, spend −) in chronological order with the balance after each
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance).
+/// (titan-ops architecture/money-and-wallet.md#wallet-one-balance).
 public class GetWalletStatementQueryHandler(IWalletRepository walletRepo, ICurrentUser currentUser, CreditOptions options)
 {
     public async Task<WalletStatementQueryResult> HandleAsync(GetWalletStatementQuery query, CancellationToken ct = default)

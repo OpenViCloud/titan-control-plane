@@ -1,7 +1,7 @@
 namespace Titan.Domain.Aggregates.Compute.Vm;
 
-/// What the caller must do with a request the VM accepted (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity). A repeat or an already-done
-/// request is never accepted — the aggregate refuses it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat) — so there is no "nothing to do".
+/// What the caller must do with a request the VM accepted (titan-ops architecture/intent-and-observation.md#intent-has-identity). A repeat or an already-done
+/// request is never accepted — the aggregate refuses it (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat) — so there is no "nothing to do".
 public enum VmIntentOutcome
 {
     Dispatch,

@@ -28,7 +28,7 @@ public class FirewallServiceTests
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<IActivityRecorder> _activity = new();
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
+    // titan-ops architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
     // quota; Tenant.Create's default caps are what the quota assertions in this file count against.
     public FirewallServiceTests()
         => _tenantRepo
@@ -66,7 +66,7 @@ public class FirewallServiceTests
         SetupCurrentUser();
         SetupActiveNetwork();
         _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(0);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the rule's own fields are asserted on the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the rule's own fields are asserted on the
         // instance that was added — the layer that still owns them.
         FirewallRule? added = null;
         _repo.Setup(r => r.Add(It.IsAny<FirewallRule>())).Callback<FirewallRule>(r => added = r);
@@ -185,7 +185,7 @@ public class FirewallServiceTests
 
     // ── ListAsync ─────────────────────────────────────────────────────────
 
-    // The raw error of a give-up is admin-only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure).
+    // The raw error of a give-up is admin-only (titan-ops architecture/desired-and-current.md#request-failure).
     [Fact]
     public void FirewallRuleQueryResult_HasNoFailureDetailField()
     {
@@ -244,7 +244,7 @@ public class FirewallServiceTests
         _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm: the rule is NOT forgotten when the delete is accepted — it stays Deleting until the
+    // titan-ops architecture/desired-and-current.md#forget-on-provider-confirm: the rule is NOT forgotten when the delete is accepted — it stays Deleting until the
     // provider confirms, so a failed delete cannot leave a rule enforced that Titan no longer lists.
     [Fact]
     public async Task Delete_ActiveRule_WaitsForTheProvider_AndRecordsTheRequest()
@@ -263,7 +263,7 @@ public class FirewallServiceTests
             rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers like the first.
+    // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers like the first.
     [Theory]
     [InlineData(Seed.DeleteRequested)]
     [InlineData(Seed.Deleted)]

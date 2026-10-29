@@ -2,7 +2,7 @@ name: CI — API contract
 
 # A Terraform provider or CLI already on a customer's machine was generated from an older copy of
 # api/openapi-v1.json, so a PR may add to /v1 but never break it
-# (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#spec-breaking-gate).
+# (titan-ops features/public-api/design.md#spec-breaking-gate).
 # --fail-on WARN, not ERR: response properties are not declared required, so removing one is only a
 # warning. api/breaking-change-levels.txt lowers the rules a client must tolerate (a new value in a
 # state enum) to INFO.

@@ -7,7 +7,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Infrastructure.Incus;
 
 // Singleton: Titan's client identity is read from its Secret and the TLS client certificate is loaded once per
-// process, shared by every Incus call (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
+// process, shared by every Incus call (titan-ops features/cluster/design.md#provider-client-identity).
 public sealed class ProviderClientIdentityStore(IOptions<ProviderClientIdentityOptions> options) : IProviderClientIdentityStore
 {
     private readonly Lazy<LoadedIdentity> _loaded = new(() => Load(options.Value));
@@ -22,7 +22,7 @@ public sealed class ProviderClientIdentityStore(IOptions<ProviderClientIdentityO
     public Task<X509Certificate2> GetClientCertificateAsync(CancellationToken ct) =>
         Task.FromResult(_loaded.Value.ClientCertificate);
 
-    /// Only for the worker's connection route (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection): the private
+    /// Only for the worker's connection route (titan-ops features/cluster/design.md#worker-cluster-connection): the private
     /// key leaves the control plane here and nowhere else.
     public Task<ProviderClientKeyPair> GetKeyPairAsync(CancellationToken ct)
     {

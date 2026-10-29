@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Billing.Wallet;
 namespace Titan.Tests.Domain;
 
 // A tenant's wallet is ONE entity holding what they can spend, and its history is ONE append-only ledger of
-// signed movements (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance); amounts are whole VND (long).
+// signed movements (titan-ops architecture/money-and-wallet.md#wallet-one-balance); amounts are whole VND (long).
 //
 // What is worth testing without a database: the SIGN is applied by the factory, not by the caller.
 // That is the invariant that keeps "paid an invoice" from ever landing in the ledger as income.
@@ -58,7 +58,7 @@ public class WalletTests
     public void ForPromo_IsMoneyIn_AndDistinguishableFromTopUp()
     {
         // The Type split exists for accounting: money the customer paid (deferred revenue) must stay separable
-        // from credit Titan gave away. Spending never reads it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#credit-is-money).
+        // from credit Titan gave away. Spending never reads it (titan-ops architecture/money-and-wallet.md#credit-is-money).
         var requestId = Guid.NewGuid();
 
         var txn = WalletTransaction.ForPromo(Guid.NewGuid(), 100_000L, requestId, balanceAfter: 100_000L);

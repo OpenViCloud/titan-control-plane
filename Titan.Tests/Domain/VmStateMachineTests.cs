@@ -4,16 +4,16 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation. Two different laws live on this one aggregate and this file is split to match:
+// titan-ops architecture/intent-and-observation.md#intent-versus-observation. Two different laws live on this one aggregate and this file is split to match:
 //   - Intent  (RequestX)   : a REQUEST from a person. Illegal from the wrong state -> throws.
 //   - Observation (MarkX)  : a REPORT of what the provider is. Cannot be "illegal" — if it disagrees
 //                            with Titan, Titan's copy is stale. Never throws for transition legality.
 // The one invariant the observation path does carry: Deleted is absorbing
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
+// (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
 //
 // CurrentState is the Incus status word for word, null while Incus has no instance; whether the instance
-// exists is CurrentExistence (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim). What a
-// request may do from each status is what Incus allows there (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus).
+// exists is CurrentExistence (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim). What a
+// request may do from each status is what Incus allows there (titan-ops features/vm/design.md#requests-follow-incus).
 public class VmStateMachineTests
 {
     // What a test starts from: an Incus status, or one of the shapes with no status at all.
@@ -603,7 +603,7 @@ public class VmStateMachineTests
         Assert.Equal(first.IntentId, vm.PendingIntentId);
     }
 
-    [Theory] // Start on a Frozen instance is a resume (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus)
+    [Theory] // Start on a Frozen instance is a resume (titan-ops features/vm/design.md#requests-follow-incus)
     [InlineData(Seed.Stopped)]
     [InlineData(Seed.Frozen)]
     public void RequestStart_FromStoppedOrFrozen_IsAccepted(Seed from)
@@ -815,7 +815,7 @@ public class VmStateMachineTests
         Assert.Equal(VmIntent.Delete, vm.PendingIntent);
     }
 
-    // ---------- ResendWaitingIntent: the handler's retry path (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#resend-waiting-intent) ----------
+    // ---------- ResendWaitingIntent: the handler's retry path (titan-ops features/vm/design.md#resend-waiting-intent) ----------
 
     [Theory]
     [InlineData(VmIntent.Stop)]
@@ -853,7 +853,7 @@ public class VmStateMachineTests
 
     // ---------- snapshot and attach follow what Incus allows ----------
 
-    [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#requests-follow-incus
+    [Theory] // titan-ops features/vm/design.md#requests-follow-incus
     [InlineData(Seed.Running)]
     [InlineData(Seed.Ready)]
     [InlineData(Seed.Stopped)]

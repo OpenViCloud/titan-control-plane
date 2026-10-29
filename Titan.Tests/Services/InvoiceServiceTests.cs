@@ -22,7 +22,7 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
-// Acceptance tests — https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/user-stories.md#inv-1. The fakes reproduce the DB's
+// Acceptance tests — titan-ops features/billing/invoice/user-stories.md#inv-1. The fakes reproduce the DB's
 // idempotency/race semantics without a real database.
 public class InvoiceServiceTests
 {
@@ -52,7 +52,7 @@ public class InvoiceServiceTests
     private readonly FakeAdminAuditLogRepository _auditLog = new();
 
     // Facade over the invoice handlers; every method forwards to exactly one handler and adds nothing —
-    // EXCEPT the three pay methods, which return nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+    // EXCEPT the three pay methods, which return nothing (titan-ops architecture/http-contract.md#commands-return-no-data).
     // For those the facade does what a real caller does: it reads the invoice back through the query
     // side (the tenant through GetTenantInvoice, an admin through the admin list), so the PaymentState
     // these tests assert comes from the outbox lookup.
@@ -138,7 +138,7 @@ public class InvoiceServiceTests
         Assert.Equal(invoice.Items.Sum(i => i.Amount), invoice.Total);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#round-once — a line is the raw sum of its records, rounded once. Six 10-minute
+    // titan-ops architecture/money-and-wallet.md#round-once — a line is the raw sum of its records, rounded once. Six 10-minute
     // records of a 1 GB volume at 1.57914 ₫/GB/h are 1.57914 ₫ → 2 ₫; rounding each record (0.26319 → 0) billed 0 ₫.
     [Fact]
     public async Task Generate_ALine_IsRoundedOnce_NotPerRecord()
@@ -252,7 +252,7 @@ public class InvoiceServiceTests
         Assert.Equal(0L, item.Amount);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit: generation touches NO money ──────────────────────────────
+    // ── titan-ops architecture/money-and-wallet.md#human-confirmed-debit: generation touches NO money ──────────────────────────────
     //
     // An invoice states usage, and the wallet is untouched until someone presses a button
     // (PayFromWalletAsync): generation never offsets or settles from the wallet.
@@ -294,7 +294,7 @@ public class InvoiceServiceTests
         Assert.Equal(InvoiceDisplayStatus.Overdue, invoice.DisplayStatus(invoice.DueAt.AddDays(1)));
     }
 
-    // Promo credit is the customer's too: https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit makes
+    // Promo credit is the customer's too: titan-ops architecture/money-and-wallet.md#human-confirmed-debit makes
     // no distinction between promo and purchased.
     [Fact]
     public async Task Generate_TenantHasPromoCredit_StillNotApplied()
@@ -541,7 +541,7 @@ public class InvoiceServiceTests
         Assert.Equal(InvoiceStatus.Paid, invoice.Status);
     }
 
-    // ── GetReceivablesAsync (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake) ──────────────────────────────
+    // ── GetReceivablesAsync (titan-ops architecture/money-and-wallet.md#postpaid-no-brake) ──────────────────────────────
 
     // Overdue is DERIVED (New past DueAt), never stored. This test is the one that fails if someone
     // "optimises" the report into a `WHERE status = 'Overdue'` query — which would return nothing.
@@ -628,13 +628,13 @@ public class InvoiceServiceTests
         Assert.False(ar.PerTenant.Single().OverCeiling);
     }
 
-    // ── PayFromWalletAsync / SettleFromWalletAsAdminAsync (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit) ───────
+    // ── PayFromWalletAsync / SettleFromWalletAsAdminAsync (titan-ops architecture/money-and-wallet.md#human-confirmed-debit) ───────
     //
     // A wallet is only ever debited by a person pressing a button — the tenant or an admin on their
     // behalf. Both go through the same path, so these tests assert the enqueued debit and the invoice
     // state; the real apply on Postgres is proven by InvoicePaymentAsyncDbTests and DebtSettlementDbTests.
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — enough credit: the request ACCEPTS the
+    // titan-ops architecture/money-and-wallet.md#single-writer-outbox — enough credit: the request ACCEPTS the
     // payment and writes a debit mutation. It does not move money.
     [Fact]
     public async Task PayFromWallet_EnoughCredit_EnqueuesDebitMutation_MovesNoMoneyYet()
@@ -750,7 +750,7 @@ public class InvoiceServiceTests
         await CreateService().PayFromWalletAsync(invoice.Id, default);
 
         // Accepted, same as any other outstanding invoice: being late changes nothing about whether the
-        // payment may be made (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake — overdue reminds, it does not enforce).
+        // payment may be made (titan-ops architecture/money-and-wallet.md#postpaid-no-brake — overdue reminds, it does not enforce).
         Assert.Single(_mutationRepo.Added);
     }
 
@@ -784,7 +784,7 @@ public class InvoiceServiceTests
         Assert.Equal(InvoiceStatus.New, invoice.Status);
     }
 
-    // ── A repeat of the same money route answers like the first (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat) ──
+    // ── A repeat of the same money route answers like the first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat) ──
 
     [Fact]
     public async Task PayFromWallet_InvoiceTheWalletAlreadyPaid_ChangesNothing()
@@ -818,7 +818,7 @@ public class InvoiceServiceTests
 
     // A FAILED debit is not a waiting one: nobody is paying this invoice, so a new press is not a repeat. It
     // reopens the invoice's one debit row instead of adding a second
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit).
+    // (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
     [Fact]
     public async Task PayFromWallet_AfterADebitFailed_ReopensTheSameRow()
     {
@@ -923,7 +923,7 @@ public class InvoiceServiceTests
     }
 
     // The admin path reaches the same outcome for a tenant that is NOT the caller's own:
-    // an admin pressing the button on someone's behalf, never a tenant-scoped read. Under https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox that
+    // an admin pressing the button on someone's behalf, never a tenant-scoped read. Under titan-ops architecture/money-and-wallet.md#single-writer-outbox that
     // shared outcome is an ENQUEUED mutation, which is the point of both buttons sharing one method —
     // neither can drift into debiting synchronously while the other queues.
     [Fact]
@@ -946,7 +946,7 @@ public class InvoiceServiceTests
     }
 
     // An admin spends a tenant's money on the tenant's behalf: that leaves an audit row naming who pressed
-    // it and whose wallet it was (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-audit).
+    // it and whose wallet it was (titan-ops architecture/tenancy-and-admin.md#admin-audit).
     [Fact]
     public async Task SettleFromWalletAsAdmin_WritesOneAuditRow_ActorIsTheAdmin_OwnerIsTheInvoiceTenant()
     {
@@ -1023,7 +1023,7 @@ public class InvoiceServiceTests
         return tenant;
     }
 
-    // ── The payment state an invoice shows its owner (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox) ──
+    // ── The payment state an invoice shows its owner (titan-ops architecture/money-and-wallet.md#single-writer-outbox) ──
     //
     // The customer's question is "did my payment go through?", and under an async debit the invoice's
     // own Status cannot answer it: a New invoice might be one nobody has paid, or one whose payment is
@@ -1138,7 +1138,7 @@ public class FakeInvoiceRepository : IInvoiceRepository
     public Task<Invoice?> GetForUpdateAsync(Guid id, CancellationToken ct) =>
         Task.FromResult(All.FirstOrDefault(i => i.Id == id));
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake — outstanding = Status New only, oldest first. Deliberately NOT filtered on the string
+    // titan-ops architecture/money-and-wallet.md#postpaid-no-brake — outstanding = Status New only, oldest first. Deliberately NOT filtered on the string
     // "Overdue": that is derived at read time and stored nowhere, so filtering on it returns nothing.
     public Task<IReadOnlyList<Invoice>> ListOutstandingByTenantAsync(Guid tenantId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Invoice>>(All

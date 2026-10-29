@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Infrastructure.Incus;
 
 // Probes an endpoint and fingerprint: GET /1.0 must come back "trusted" from the pinned server.
-// A failure is a result, never an exception (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus).
+// A failure is a result, never an exception (titan-ops features/cluster/design.md#cluster-incus).
 public sealed class IncusClusterConnectionTester(IncusClientFactory factory) : IClusterConnectionTester
 {
     public async Task<ClusterTestResult> TestAsync(string endpoint, string serverFingerprint, CancellationToken ct)

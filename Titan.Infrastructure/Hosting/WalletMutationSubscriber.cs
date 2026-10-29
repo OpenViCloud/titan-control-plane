@@ -7,7 +7,7 @@ using Titan.Application.Services.Billing.WalletMutations;
 namespace Titan.Infrastructure.Hosting;
 
 /// The single writer per wallet only because control-plane runs at replicas: 1, with no leader election
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). Registered only when NatsOptions.IsActive.
+/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Registered only when NatsOptions.IsActive.
 public class WalletMutationSubscriber(
     IServiceScopeFactory scopeFactory,
     IWalletMutationSubscription subscription,

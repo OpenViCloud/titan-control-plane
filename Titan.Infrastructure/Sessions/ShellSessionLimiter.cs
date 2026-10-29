@@ -1,6 +1,6 @@
 namespace Titan.Infrastructure.Sessions;
 
-// Open shell sessions per tenant, counted in this process (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): right while the
+// Open shell sessions per tenant, counted in this process (titan-ops features/vm/design.md#ssh-session): right while the
 // control plane runs one replica; a second replica would need the count somewhere shared.
 public sealed class ShellSessionLimiter
 {

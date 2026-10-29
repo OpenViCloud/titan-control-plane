@@ -6,7 +6,7 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Queries.Billing.Invoice;
 
-/// Accounts receivable for admin (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake). `Overdue` is
+/// Accounts receivable for admin (titan-ops architecture/money-and-wallet.md#postpaid-no-brake). `Overdue` is
 /// derived at read time and stored nowhere, so nothing can alert on it directly; this is how a postpaid
 /// platform measures what it is owed.
 public class GetReceivablesQueryHandler(IInvoiceRepository invoiceRepo, ITenantRepository tenantRepo)

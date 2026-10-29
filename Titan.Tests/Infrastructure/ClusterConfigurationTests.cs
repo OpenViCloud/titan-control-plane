@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Tests.Infrastructure;
 
 // A cluster is config, checked once at startup: a value the handshake would refuse stops the control plane instead
-// of failing the first customer request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
+// of failing the first customer request (titan-ops features/cluster/design.md#cluster-from-config).
 public class ClusterConfigurationTests
 {
     private const string Fingerprint = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f";

@@ -5,7 +5,7 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// The worker's way to a cluster's Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#worker-cluster-connection): endpoint,
+// The worker's way to a cluster's Incus (titan-ops features/cluster/design.md#worker-cluster-connection): endpoint,
 // the server fingerprint to pin, Titan's client certificate WITH its private key, and the cluster's provider settings. Behind X-Internal-Token only;
 // the body is never logged.
 public class GetClusterConnectionEndpoint(
@@ -43,6 +43,6 @@ public record ClusterConnectionResponse(
     string ServerFingerprint,
     string ClientCertificatePem,
     string ClientKeyPem,
-    // The cluster's provider settings (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-provider-settings); null = not set.
+    // The cluster's provider settings (titan-ops features/cluster/design.md#cluster-provider-settings); null = not set.
     string? OvnUplinkNetwork,
     string? StoragePool);

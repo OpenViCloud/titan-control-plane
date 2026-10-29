@@ -5,13 +5,13 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.Vm.Contracts;
 
-// The read side's own view of a VM, not shared with the command side (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts):
+// The read side's own view of a VM, not shared with the command side (titan-ops architecture/code-structure.md#contracts):
 // RenameVm answers 204 and the caller re-reads.
 //
 // CurrentState is the Incus instance status word for word, null while Incus has no instance; CurrentExistence
 // says whether it does. The desired pair is what the customer asked for, and Transition the request still
 // waiting (null = none; null with the pairs differing is drift)
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current). RequestFailureReason is the fixed text of a
+// (titan-ops architecture/desired-and-current.md#desired-and-current). RequestFailureReason is the fixed text of a
 // create the provider refused; the raw error is admin-only.
 public record VmQueryResult(
     Guid Id,

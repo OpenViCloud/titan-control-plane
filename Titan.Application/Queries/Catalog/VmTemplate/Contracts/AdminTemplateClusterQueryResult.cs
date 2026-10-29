@@ -2,9 +2,9 @@ using Titan.Domain.Aggregates.Catalog.VmTemplate;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 
-// The sync of one template in one cluster, admin-facing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster). Incus has
+// The sync of one template in one cluster, admin-facing (titan-ops features/catalog/design.md#template-per-cluster). Incus has
 // no state word for an image alias, so only existence, transition and the last give-up are carried
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-state-is-existence); the failure detail is the operator's.
+// (titan-ops features/catalog/design.md#template-state-is-existence); the failure detail is the operator's.
 public record AdminTemplateClusterQueryResult(
     string ClusterId,
     string CurrentExistence, // NotCreated | Exists | NotFound — what that cluster was last observed to hold

@@ -5,12 +5,12 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Tests.Infrastructure;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the verdict on the async money path. Tested
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the verdict on the async money path. Tested
 /// through the pure Evaluate(now, state, thresholds) so the clock is an injected oracle rather than
 /// DateTimeOffset.UtcNow, and the backlog figures are hand-built: the oracle sits outside the thing
 /// under test.
 ///
-/// The threshold is 90 SECONDS, and that number is not the SLO. The SLO (~5-10s, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox) describes
+/// The threshold is 90 SECONDS, and that number is not the SLO. The SLO (~5-10s, titan-ops architecture/money-and-wallet.md#single-writer-outbox) describes
 /// the FAST path — the bus notify. When a notify is lost the sweeper is what recovers the mutation,
 /// and its worst case is StaleAfterSeconds (10) + IntervalSeconds (30) = ~40s. Alerting at the SLO
 /// would therefore fire every time the safety net does its job correctly. 90s is just over twice the
@@ -30,7 +30,7 @@ public class WalletMutationHealthCheckTests
     // The distinction that decides whether this check is worth having.
     //
     // A mutation Failed because the wallet could not cover the invoice at apply time is a NORMAL,
-    // designed outcome (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox, risk-accepted): the customer spent their balance elsewhere
+    // designed outcome (titan-ops architecture/money-and-wallet.md#single-writer-outbox, risk-accepted): the customer spent their balance elsewhere
     // between pressing pay and the consumer running. Nobody should be woken for it. A mutation Failed
     // because it exhausted its attempts is POISON: a payment is stuck with nobody looking at it.
     //
@@ -177,7 +177,7 @@ public class WalletMutationHealthCheckTests
     [Fact]
     public void Disabled_sweeper_is_Unhealthy_even_with_nothing_pending()
     {
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the sweeper off is the one configuration that can lose money silently. An
+        // titan-ops architecture/money-and-wallet.md#single-writer-outbox — the sweeper off is the one configuration that can lose money silently. An
         // empty backlog while it is off is not evidence of health; it is the absence of a witness.
         var result = Evaluate(new WalletMutationHealth(
             PoisonCount: 0,
@@ -234,7 +234,7 @@ public class WalletMutationHealthThresholdTests
     [Fact]
     public void Pending_threshold_is_not_set_to_the_fast_path_SLO()
     {
-        // The ~5-10s SLO of https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox describes the bus notify path. Using it here is the specific mistake
+        // The ~5-10s SLO of titan-ops architecture/money-and-wallet.md#single-writer-outbox describes the bus notify path. Using it here is the specific mistake
         // this test exists to catch: it would alert on every sweeper-recovered mutation.
         Assert.True(WalletMutationHealthCheck.PendingThresholdSeconds > 10);
     }

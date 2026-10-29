@@ -8,7 +8,7 @@ public interface ILoadBalancerRepository
     Task<LoadBalancer?> FindByIdAsync(Guid id, CancellationToken ct = default);
     /// Not Deleted, newest first, with listeners and backends.
     Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);
-    /// MaxLoadBalancers (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-quota-and-billing): desired Exists and Incus has it
+    /// MaxLoadBalancers (titan-ops features/load-balancer/design.md#lb-quota-and-billing): desired Exists and Incus has it
     /// or the create waits.
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     /// Same condition as the unique index on (tenant_id, name).

@@ -7,7 +7,7 @@ using Titan.Domain.Repositories.Billing;
 namespace Titan.Application.Queries.Billing.UsageRecord;
 
 /// Cost is a sum over usage_records, never a mutable running total
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering).
+/// (titan-ops architecture/money-and-wallet.md#append-only-metering).
 public class GetTenantBillingSummaryQueryHandler(IUsageRecordRepository usageRepo, ICurrentUser currentUser)
 {
     // See GetVmCostQueryHandler: the read path reports the constant, not the rows' Currency column.

@@ -23,7 +23,7 @@ public class UpdateLoadBalancerCommandHandler(
         List<Guid> backendVmIds = command.Backends.Select(b => b.VmId).ToList();
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): the configuration already asked for,
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): the configuration already asked for,
         // whether Incus has it or the request still waits. Answer like the first request: nothing recorded, nothing
         // sent — the waiting command, if any, already carries it.
         bool notBeingDeleted = loadBalancer.Transition != LoadBalancerTransition.Deleting && !loadBalancer.IsTerminal;

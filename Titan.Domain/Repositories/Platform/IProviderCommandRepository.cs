@@ -3,7 +3,7 @@ using Titan.Domain.Aggregates.Platform.ProviderCommand;
 namespace Titan.Domain.Repositories.Platform;
 
 /// Shares the scope's DbContext with every other repository, so a handler's SaveAsync commits the aggregate and the
-/// command it enqueued together (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
+/// command it enqueued together (titan-ops architecture/provider-and-worker.md#provider-command-table).
 public interface IProviderCommandRepository
 {
     /// Tracked. Null when the key never had a row.

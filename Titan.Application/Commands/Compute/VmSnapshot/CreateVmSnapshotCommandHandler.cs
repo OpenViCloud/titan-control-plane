@@ -5,7 +5,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories.Compute;
 using Titan.Domain.Repositories.Platform;
 // Inside this namespace the bare name `VmSnapshot` binds to the namespace, not to the aggregate
-// (CS0118, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#aggregate-alias). Same for `Vm`. The aliases say which one is meant.
+// (CS0118, titan-ops architecture/code-structure.md#aggregate-alias). Same for `Vm`. The aliases say which one is meant.
 using VmSnapshotAggregate = Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot;
 using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
 
@@ -25,7 +25,7 @@ public class CreateVmSnapshotCommandHandler(
         var vmId = command.VmId;
         var vm = await ComputeOwnership.RequireVmAsync(vmRepo, callerId, vmId, ct);
 
-        // The cap is per VM and lives on the tenant (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota), so it is
+        // The cap is per VM and lives on the tenant (titan-ops architecture/tenancy-and-admin.md#tenant-quota), so it is
         // configurable per customer.
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");

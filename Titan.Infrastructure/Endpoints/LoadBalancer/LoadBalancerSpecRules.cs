@@ -4,7 +4,7 @@ using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadB
 namespace Titan.Infrastructure.Endpoints.LoadBalancer;
 
 /// The configuration rules the create and the update validators share; the aggregate holds the same ones
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model).
+/// (titan-ops features/load-balancer/design.md#lb-resource-model).
 public static class LoadBalancerSpecRules
 {
     private static readonly string[] Protocols = ["TCP", "UDP"];

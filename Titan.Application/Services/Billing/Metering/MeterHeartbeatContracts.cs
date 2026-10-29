@@ -1,4 +1,4 @@
-// Same namespace as MeterHeartbeat on purpose (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch).
+// Same namespace as MeterHeartbeat on purpose (titan-ops architecture/code-structure.md#services-branch).
 
 namespace Titan.Application.Services.Billing.Metering;
 

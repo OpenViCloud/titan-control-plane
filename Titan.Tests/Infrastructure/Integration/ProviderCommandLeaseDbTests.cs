@@ -10,7 +10,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table on real Postgres: the unique key and the version
+// titan-ops architecture/provider-and-worker.md#provider-command-table on real Postgres: the unique key and the version
 // token, which InMemory does not enforce (ProviderCommandSchemaTests pins only their metadata).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]

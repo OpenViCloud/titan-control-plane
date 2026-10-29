@@ -8,6 +8,6 @@ public interface IVmOfferingRepository
     Task<List<VmOffering>> ListAllAsync(CancellationToken ct = default);
 
     /// Shares the DbContext with the other repositories, so an audit row staged alongside a price change
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering) is written in the same transaction.
+    /// (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering) is written in the same transaction.
     Task SaveAsync(CancellationToken ct = default);
 }

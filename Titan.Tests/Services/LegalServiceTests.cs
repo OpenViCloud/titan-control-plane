@@ -144,7 +144,7 @@ public class LegalServiceTests
         Assert.Equal(new DateTimeOffset(2026, 9, 1, 0, 0, 0, TimeSpan.Zero), doc.EffectiveAt);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#legal-document-in-code: one version, one text per language.
+    // titan-ops features/legal/design.md#legal-document-in-code: one version, one text per language.
     [Fact]
     public void GetCurrentDocument_Vietnamese_ReturnsTheVietnameseTextWithTheSameVersion()
     {

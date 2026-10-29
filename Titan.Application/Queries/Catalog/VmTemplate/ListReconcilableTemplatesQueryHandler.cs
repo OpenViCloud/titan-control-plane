@@ -3,7 +3,7 @@ using Titan.Domain.Repositories.Catalog;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate;
 
-// Read side of the template reconciler of one cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current).
+// Read side of the template reconciler of one cluster (titan-ops architecture/desired-and-current.md#desired-and-current).
 public class ListReconcilableTemplatesQueryHandler(IVmTemplateRepository templates)
 {
     public async Task<List<ReconcilableTemplateQueryResult>> HandleAsync(ListReconcilableTemplatesQuery query, CancellationToken ct = default)

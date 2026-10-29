@@ -7,7 +7,7 @@ using ProviderCommandAggregate = Titan.Domain.Aggregates.Platform.ProviderComman
 
 namespace Titan.Application.Queries.Platform.ProviderCommand;
 
-// The read half of a lease (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-lease): 404 is "this lease holds
+// The read half of a lease (titan-ops architecture/provider-and-worker.md#provider-command-lease): 404 is "this lease holds
 // nothing", the normal answer when no work was due.
 public class GetLeasedProviderCommandQueryHandler(IProviderCommandRepository repository)
 {

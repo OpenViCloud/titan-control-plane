@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Titan.Tests.Domain;
 
-// WHERE the quota rule lives (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota) is a placement invariant, and
+// WHERE the quota rule lives (titan-ops architecture/tenancy-and-admin.md#tenant-quota) is a placement invariant, and
 // placement is not observable from behaviour, so these guards read source text. A service that re-grew its own
 // `const int MaxVolumes = 10` would pass every behavioural test in the suite.
 //
@@ -17,7 +17,7 @@ public class QuotaOwnershipTests
     // Folders under Titan.Application that are NOT modules. Named so the exclusion is visible rather
     // than implied — and so that adding one is a decision, not an accident.
     //
-    // The branches are here for a different reason than the others (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#application-tree):
+    // The branches are here for a different reason than the others (titan-ops architecture/code-structure.md#application-tree):
     // they ARE scanned, but as BRANCHES whose module sits one level in (Commands/Compute/Vm), not as modules.
     // A branch missing from this list is read as a module name (TheScanReachesTheHandlerTree turns red).
     private static readonly string[] Branches = ["Commands", "Queries", "Services"];
@@ -90,9 +90,9 @@ public class QuotaOwnershipTests
 
     // ── the check must be UNREACHABLE from a service, not merely available ────────
     //
-    // A check the caller can skip is advice. As in https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id,
+    // A check the caller can skip is advice. As in titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id,
     // the aggregate hands out the ONE thing the caller cannot proceed without; for creation that is the entity
-    // itself, so the check lives INSIDE the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    // itself, so the check lives INSIDE the factory (titan-ops architecture/code-structure.md#tenant-typed-edge).
     //
     // Two guards, deliberately measuring different things. The text one below can be fooled by an
     // indirection; the reflection one cannot, but it only sees the surface Titan.Application is
@@ -146,7 +146,7 @@ public class QuotaOwnershipTests
     [Fact] // the guards above are only meaningful if the scan reaches the real application tree
     public void TheScanReachesEveryServiceModule()
     {
-        // The service modules sit one level in, under Services/ (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch).
+        // The service modules sit one level in, under Services/ (titan-ops architecture/code-structure.md#services-branch).
         var dirs = Directory
             .EnumerateDirectories(Path.Combine(RepoRoot.ControlPlane, ApplicationDir, "Services"))
             .Select(Path.GetFileName)

@@ -54,7 +54,7 @@ public class UpdateTemplateStatusEndpointTests
     }
 
     // A worker older than per-cluster templates reports no cluster: whose alias it is cannot be told, so nothing is
-    // recorded (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+    // recorded (titan-ops features/catalog/design.md#template-per-cluster).
     [Fact]
     public async Task HandleAsync_WithoutACluster_Returns400_AndNeverTouchesTheTemplate()
     {

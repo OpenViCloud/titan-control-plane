@@ -1,6 +1,6 @@
 namespace Titan.Application.Services.Platform.Legal;
 
-// Content is git-tracked, not a CMS table (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#legal-document-in-code): bumping
+// Content is git-tracked, not a CMS table (titan-ops features/legal/design.md#legal-document-in-code): bumping
 // content = bumping Version here. Go-live is blocked until legal sign-off replaces the placeholder
 // (BLOCK-LEGAL-1).
 
@@ -60,7 +60,7 @@ public class LegalDocumentCatalog : ILegalDocumentCatalog
 }
 
 // The catalog's own record — not a query contract: RecordAcceptance (a command) reads catalog.Current
-// too, so it cannot sit on either side's Contracts/ (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse).
+// too, so it cannot sit on either side's Contracts/ (titan-ops architecture/code-structure.md#no-contract-reuse).
 public record LegalDocument(string Key, string Version, DateTimeOffset EffectiveAt, LegalText English, LegalText Vietnamese);
 
 public record LegalText(string Title, string Content);

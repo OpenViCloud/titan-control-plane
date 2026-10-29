@@ -32,7 +32,7 @@ public class VmOfferingServiceTests
         Assert.Equal(new[] { "s", "m", "l", "xl" }, result.Select(o => o.Id).ToArray());
     }
 
-    // Sizing is the whole point of the offering (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing) — the DTO must carry the numbers
+    // Sizing is the whole point of the offering (titan-ops features/catalog/design.md#vm-offering-sizing) — the DTO must carry the numbers
     // the worker sets on the instance, not just a display label.
     [Fact]
     public async Task ListAsync_ExposesSizingOnDto()
@@ -42,7 +42,7 @@ public class VmOfferingServiceTests
         var dto = Assert.Single(await svc.ListAsync());
 
         Assert.Equal("m", dto.Id);
-        Assert.Equal(1.0m, dto.Cpu);      // CPU = vCPU × 0.5 — 2:1 overcommit (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing)
+        Assert.Equal(1.0m, dto.Cpu);      // CPU = vCPU × 0.5 — 2:1 overcommit (titan-ops features/catalog/design.md#vm-offering-sizing)
         Assert.Equal(2, dto.Vcpu);
         Assert.Equal(4096, dto.MemoryMb);
     }
@@ -75,9 +75,9 @@ public class VmOfferingServiceTests
             VmOffering.Create("bad", "Bad", 0m, 2, 4096, DefaultPrice));
     }
 
-    // ── UpdatePriceAsync (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering) ───────────────────────────────────
+    // ── UpdatePriceAsync (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering) ───────────────────────────────────
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: the change returns nothing, so this
+    // titan-ops architecture/http-contract.md#commands-return-no-data: the change returns nothing, so this
     // reads it back the way the admin table does — through the list.
     [Fact]
     public async Task UpdatePrice_ReplacesPrice_VisibleOnReadBack()
@@ -166,7 +166,7 @@ public class VmOfferingServiceTests
     }
 
     // A customer can see what a tier costs before creating one
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+    // (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
     [Fact]
     public async Task ListAsync_ExposesPriceToCustomers()
     {

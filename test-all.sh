@@ -60,7 +60,7 @@ trap stop_port_forward EXIT
 
 # A single kubectl port-forward dies now and then mid-run. The loop reopens it and counts each reopen, so a run that
 # lost the tunnel is reported INCOMPLETE rather than trusted; the cause is still unknown
-# (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/environments/local-cluster/topology.md#runbook,
+# (https://github.com/OpenViCloud/titan-local-cluster/blob/main/docs/topology.md#runbook,
 # TEST-ALL-TUNNEL). TERM, from stop_port_forward, ends the loop and the kubectl it waits on.
 keep_port_forward() {
     local child=""
@@ -146,7 +146,7 @@ run_db_step() {
     fi
 }
 
-# FullHost runs the real host on its own Postgres database (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests),
+# FullHost runs the real host on its own Postgres database (titan-ops architecture/testing.md#doubles-only-in-unit-tests),
 # so it needs the same server as Integration.
 if [ -n "$integration_source" ]; then
     echo

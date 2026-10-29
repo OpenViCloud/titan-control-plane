@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Platform.ProviderCommand;
 
-/// What enqueuing a key that already has a row does (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key).
+/// What enqueuing a key that already has a row does (titan-ops architecture/provider-and-worker.md#provider-command-key).
 /// An open row (Pending or Leased) always absorbs the repeat.
 public enum ProviderCommandRerun
 {

@@ -10,7 +10,7 @@ namespace Titan.Infrastructure.Messaging;
 /// Per-wallet subject "<prefix>.<walletId>": per-subject order is per-wallet order. A plain JSON string
 /// payload sidesteps NATS.Net's custom-type serializer registry. NATS core drops a message published while
 /// the subscriber is down; that is acceptable only because the mutation is a durable row the sweeper
-/// re-drives (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// re-drives (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 ///
 /// NOTE: no Testcontainers NATS, so the round-trip against a real broker is verified only on the cluster.
 public sealed class NatsWalletMutationBus : IWalletMutationPublisher, IWalletMutationSubscription, IAsyncDisposable

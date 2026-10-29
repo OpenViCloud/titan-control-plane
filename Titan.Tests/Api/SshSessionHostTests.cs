@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.TestHost;
 
 namespace Titan.Tests.Api;
 
-// The SSH session route on the real pipeline (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): the websocket upgrade goes
+// The SSH session route on the real pipeline (titan-ops features/vm/design.md#ssh-session): the websocket upgrade goes
 // through the same JWT authentication as every route, and the route stays out of the OpenAPI spec the CLI client is
 // generated from.
 // FullHost — WebApplicationFactory test; own CI process (see CatalogContractTests for why).

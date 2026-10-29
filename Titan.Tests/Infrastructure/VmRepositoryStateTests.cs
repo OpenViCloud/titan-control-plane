@@ -6,7 +6,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The VM queries that decide billing, quota, the name and whether a network is in use
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#counting-and-billing), one row per shape a VM can be in.
+// (titan-ops features/vm/design.md#counting-and-billing), one row per shape a VM can be in.
 //
 // Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it); the
 // unique index itself is VmNameUniquenessDbTests.

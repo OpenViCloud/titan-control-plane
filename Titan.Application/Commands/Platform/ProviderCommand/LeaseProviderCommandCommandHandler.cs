@@ -6,7 +6,7 @@ using ProviderCommandAggregate = Titan.Domain.Aggregates.Platform.ProviderComman
 namespace Titan.Application.Commands.Platform.ProviderCommand;
 
 // The worker asks for work under a lease id it minted, then reads what it got with GetLeasedProviderCommandQuery
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-lease). Nothing claimable, or another worker won the
+// (titan-ops architecture/provider-and-worker.md#provider-command-lease). Nothing claimable, or another worker won the
 // same row: the lease stays empty and the worker asks again on its next tick.
 public class LeaseProviderCommandCommandHandler(IProviderCommandRepository repository, TimeProvider clock)
 {

@@ -10,7 +10,7 @@ namespace Titan.Application.Commands.Networking.FirewallRule;
 
 // Worker callback — authenticated by X-Internal-Token at the endpoint, so no ownership check here. The create and
 // delete commands and the firewall reconciler all report here. Outcomes are recorded once per request: the aggregate
-// says whether a report fulfilled the waiting one (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+// says whether a report fulfilled the waiting one (titan-ops features/activity/design.md#outcome-source).
 public class UpdateFirewallRuleStatusCommandHandler(IFirewallRuleRepository repo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateFirewallRuleStatusCommand command, CancellationToken ct = default)
@@ -76,7 +76,7 @@ public class UpdateFirewallRuleStatusCommandHandler(IFirewallRuleRepository repo
                     rule.MarkCreated(command.ExternalRuleId!);
                 }
                 // A failed delete gives the rule back — it is still in the ACL and still enforced
-                // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+                // (titan-ops architecture/desired-and-current.md#abandoned-request).
                 bool deleteWasWaiting = rule.Transition == FirewallRuleTransition.Deleting;
                 if (deleteWasWaiting)
                 {
@@ -104,7 +104,7 @@ public class UpdateFirewallRuleStatusCommandHandler(IFirewallRuleRepository repo
         await repo.SaveAsync(ct);
     }
 
-    // The worker sends the Incus ACL rule state word for word (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+    // The worker sends the Incus ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     // Matched by name, exactly: Enum.TryParse would also take "1" or "Enabled".
     private static FirewallRuleState ParseIncusState(string? state)
     {

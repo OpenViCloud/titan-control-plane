@@ -15,7 +15,7 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(i => i.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(i => i.PeriodYear).HasColumnName("period_year").IsRequired();
         builder.Property(i => i.PeriodMonth).HasColumnName("period_month").IsRequired();
-        // Status is the double-pay guard (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#double-pay-guard): the second
+        // Status is the double-pay guard (titan-ops architecture/money-and-wallet.md#double-pay-guard): the second
         // payer's `UPDATE ... AND status = @loaded` matches no row. The wallet's Version cannot catch it, since two
         // sequential debits both pass (InvoiceSchemaTests.Invoice_Status_IsConcurrencyToken).
         builder.Property(i => i.Status).HasColumnName("status").HasConversion<string>().IsRequired().IsConcurrencyToken();
@@ -23,7 +23,7 @@ public class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         builder.Property(i => i.DueAt).HasColumnName("due_at").IsRequired();
         builder.Property(i => i.PaidAt).HasColumnName("paid_at");
         builder.Property(i => i.PaidBy).HasColumnName("paid_by");
-        // Whole VND (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd; InvoiceSchemaTests.Invoice_Total_Is_Bigint).
+        // Whole VND (titan-ops architecture/money-and-wallet.md#money-is-long-vnd; InvoiceSchemaTests.Invoice_Total_Is_Bigint).
         builder.Property(i => i.Total).HasColumnName("total").HasColumnType("bigint").IsRequired();
         builder.Property(i => i.Currency).HasColumnName("currency").IsRequired();
 
@@ -49,7 +49,7 @@ public class InvoiceItemConfiguration : IEntityTypeConfiguration<InvoiceItem>
         builder.Property(i => i.Id).HasColumnName("id");
         builder.Property(i => i.InvoiceId).HasColumnName("invoice_id").IsRequired();
         // Same explicit token mapping as usage_records.resource_type: the value is a snapshot copied from a
-        // UsageRecord, so it must persist the identical uppercase token (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage).
+        // UsageRecord, so it must persist the identical uppercase token (titan-ops architecture/code-structure.md#enum-storage).
         builder.Property(i => i.ResourceType).HasColumnName("resource_type")
             .HasConversion(v => v.ToDbString(), s => UsageResourceTypeExtensions.FromDbString(s))
             .IsRequired();

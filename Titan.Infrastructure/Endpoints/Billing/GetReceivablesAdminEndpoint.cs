@@ -4,8 +4,8 @@ using Titan.Application.Queries.Billing.Invoice.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Billing;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake. Overdue is derived at read time
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot), so this is the only aggregate view of it.
+// titan-ops architecture/money-and-wallet.md#postpaid-no-brake. Overdue is derived at read time
+// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot), so this is the only aggregate view of it.
 public class GetReceivablesAdminEndpoint(GetReceivablesQueryHandler handler)
     : EndpointWithoutRequest<ReceivablesQueryResult>
 {

@@ -7,14 +7,14 @@ using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadB
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
-// Worker callback — an observation of Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation).
+// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 // No ICurrentUser: the caller is authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the
-// aggregate says whether a report fulfilled the waiting request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+// aggregate says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
 public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateLoadBalancerStatusCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the callback payload (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
 
         // Parsed before the load balancer is loaded: a malformed report is the worker's bug.
         switch (req.Report)
@@ -93,7 +93,7 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
     private static string? ApplyGiveUp(LoadBalancerAggregate loadBalancer, UpdateLoadBalancerStatusCommand req)
     {
         // An update's give-up names its intent: one a delete has since replaced is stale, and must not abandon the
-        // delete (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+        // delete (titan-ops architecture/desired-and-current.md#abandoned-request).
         bool isAStaleUpdate = req.IntentId != null && req.IntentId != loadBalancer.PendingIntentId;
         if (isAStaleUpdate)
         {
