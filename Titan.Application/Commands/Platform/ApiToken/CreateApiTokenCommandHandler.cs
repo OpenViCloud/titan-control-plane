@@ -7,7 +7,7 @@ using ApiTokenAggregate = Titan.Domain.Aggregates.Platform.ApiToken.ApiToken;
 namespace Titan.Application.Commands.Platform.ApiToken;
 
 /// Titan-only: no provider command, so the request and its outcome are recorded in the same save
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#actor-and-tenant).
+/// (titan-ops features/activity/design.md#actor-and-tenant).
 public class CreateApiTokenCommandHandler(
     IApiTokenRepository repo,
     ICurrentUser currentUser,

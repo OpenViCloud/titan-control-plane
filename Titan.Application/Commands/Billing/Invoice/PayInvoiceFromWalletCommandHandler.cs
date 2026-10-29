@@ -7,7 +7,7 @@ using Titan.Domain.Repositories.Billing;
 namespace Titan.Application.Commands.Billing.Invoice;
 
 /// The tenant pays one of its own invoices from its wallet because it pressed a button saying so
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit).
+/// (titan-ops architecture/money-and-wallet.md#human-confirmed-debit).
 public class PayInvoiceFromWalletCommandHandler(
     IInvoiceRepository invoiceRepo,
     IWalletRepository walletRepo,
@@ -26,7 +26,7 @@ public class PayInvoiceFromWalletCommandHandler(
         if (invoice is null || invoice.TenantId != tenantId)
             throw new NotFoundException("INVOICE_NOT_FOUND", $"Invoice {invoiceId} not found.");
 
-        // A repeat is recognised here first (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat):
+        // A repeat is recognised here first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat):
         // answer like the first press, nothing enqueued, nothing charged.
         bool alreadyPaidFromWallet = await InvoiceWalletSettlement.IsAlreadyPaidFromWalletAsync(mutationRepo, invoice, ct);
         if (alreadyPaidFromWallet)

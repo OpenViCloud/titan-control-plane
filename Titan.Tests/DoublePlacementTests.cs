@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace Titan.Tests;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests — a test that runs on Postgres (Category=Integration) or
+// titan-ops architecture/testing.md#doubles-only-in-unit-tests — a test that runs on Postgres (Category=Integration) or
 // through the real host (Category=FullHost) uses the real implementation of everything it touches. The scan reads
 // those test files and the helpers next to them. It reads text: it does not see a double reached through a
 // helper outside that set, or one built without these names.

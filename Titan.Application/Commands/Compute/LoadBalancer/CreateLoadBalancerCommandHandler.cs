@@ -33,7 +33,7 @@ public class CreateLoadBalancerCommandHandler(
         }
 
         var network = await NetworkOwnership.RequireNetworkAsync(networkRepo, callerId, req.NetworkId, ct);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-needs-public-ipv6: the VIP lives in the network's /64.
+        // titan-ops features/load-balancer/design.md#lb-needs-public-ipv6: the VIP lives in the network's /64.
         string externalNetworkId = network.BeginLoadBalancer();
         string subnet = network.PublicIpv6Subnet!;
 

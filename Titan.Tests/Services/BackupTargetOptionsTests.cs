@@ -5,7 +5,7 @@ namespace Titan.Tests.Services;
 
 // The target is what the environment's GitOps config says. No key pair is "not configured" (404), a value that cannot work is
 // the environment's error (503) naming the setting, and no message carries the key pair
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/user-stories.md#bak-01).
+// (titan-ops features/backup/user-stories.md#bak-01).
 public class BackupTargetOptionsTests
 {
     private static BackupTargetOptions With(Action<BackupTargetOptions> change)

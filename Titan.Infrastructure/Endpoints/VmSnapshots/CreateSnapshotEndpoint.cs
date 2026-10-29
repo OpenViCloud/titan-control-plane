@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.VmSnapshots;
 
-// {vmId} rides the route, so the BODY record carries only Name (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// {vmId} rides the route, so the BODY record carries only Name (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record CreateSnapshotBody(string Name);
 
 public class CreateSnapshotEndpoint(CreateVmSnapshotCommandHandler handler)

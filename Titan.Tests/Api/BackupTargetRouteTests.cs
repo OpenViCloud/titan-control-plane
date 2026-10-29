@@ -9,7 +9,7 @@ namespace Titan.Tests.Api;
 
 // The backup target is configuration, so the route that wrote it is gone: PUT answers 405 (the path is routed for GET and POST
 // only), while the routes that remain exist and ask for a login. A half-done change (the old PUT still served) fails the first.
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/user-stories.md#bak-01
+// titan-ops features/backup/user-stories.md#bak-01
 //
 // FullHost — WebApplicationFactory on its own Postgres database, own CI process. Reuses OpenApiSpecTests.ApiFactory.
 [Trait("Category", "FullHost")]

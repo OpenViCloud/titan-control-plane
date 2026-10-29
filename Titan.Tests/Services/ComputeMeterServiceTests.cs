@@ -11,9 +11,9 @@ using Titan.Domain.Repositories.Compute;
 namespace Titan.Tests.Services;
 
 // One INSERT per Running VM per tick, idempotent on (vm, bucket)
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering). A missed tick under-bills and never
+// (titan-ops architecture/money-and-wallet.md#append-only-metering). A missed tick under-bills and never
 // over-bills — the accepted trade-off. Price comes from the VM offering
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+// (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 public class ComputeMeterServiceTests
 {
     private const string OfferingId = "m";
@@ -112,7 +112,7 @@ public class ComputeMeterServiceTests
     // measured on a real query in VmRepositoryStateTests.Billable_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent;
     // this meter bills exactly what that query returns.
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering — a VM pointing at a tier that is not
+    // titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — a VM pointing at a tier that is not
     // in the catalog is damaged data, not a zero price: the meter refuses to bill rather than write a
     // silent 0. The failed tick is what makes /healthz/meters report it instead of it surfacing months
     // later as a hole in an invoice.
@@ -131,7 +131,7 @@ public class ComputeMeterServiceTests
 
     // The refusal must be total, not per-VM: a half-billed tick would under-bill some tenants and
     // not others, with nothing recording which. The repository returns rows in no fixed order, so the
-    // broken VM is put on each side of the healthy one (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/metering/design.md#missing-offering).
+    // broken VM is put on each side of the healthy one (titan-ops features/billing/metering/design.md#missing-offering).
     [Fact]
     public async Task RunTick_MissingOfferingBeforeAHealthyVm_WritesNothing()
     {

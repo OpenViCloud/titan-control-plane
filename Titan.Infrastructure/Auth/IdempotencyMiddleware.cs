@@ -16,7 +16,7 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddlewar
 
     public async Task InvokeAsync(HttpContext context, RequestDelegate next)
     {
-        // A create without a key is refused before anything runs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key);
+        // A create without a key is refused before anything runs (titan-ops architecture/http-contract.md#idempotency-key);
         // for every other request the key is optional.
         bool endpointRequiresKey = RequiresKey(context);
         bool keyIsMissing = string.IsNullOrWhiteSpace(context.Request.Headers[HeaderName]);
@@ -71,7 +71,7 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddlewar
         }
     }
 
-    /// True when the matched endpoint class implements IRequiresIdempotencyKey (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key).
+    /// True when the matched endpoint class implements IRequiresIdempotencyKey (titan-ops architecture/http-contract.md#idempotency-key).
     private static bool RequiresKey(HttpContext context)
     {
         Endpoint? endpoint = context.GetEndpoint();

@@ -9,7 +9,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering — price is a NOT NULL column on the offering.
+// titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — price is a NOT NULL column on the offering.
 // The InMemory provider enforces neither nullability nor column types, so this pins the model metadata the
 // migration depends on, the same way UsageRecordSchemaTests pins the append-only unique index.
 //
@@ -18,7 +18,7 @@ namespace Titan.Tests.Infrastructure;
 // Proving the old source is DEAD is a separate assertion, and it is the one that can actually fail.
 public class OfferingPricingSchemaTests
 {
-    // The approved price table (VND, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd). Written here as
+    // The approved price table (VND, titan-ops architecture/money-and-wallet.md#money-is-long-vnd). Written here as
     // constants ON PURPOSE: the oracle must live outside the thing being measured. Reading these from the
     // seed builder would compare the data against the very code that produced it and pass no matter what
     // either one said.
@@ -190,7 +190,7 @@ public class OfferingPricingSchemaTests
             .GetSeedData()
             .ToDictionary(
                 row => (string)row["Id"]!,
-                // Seed values are Rate (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object); unwrapped HERE
+                // Seed values are Rate (titan-ops architecture/money-and-wallet.md#rate-value-object); unwrapped HERE
                 // so the approved-price assertions keep reading as prices.
                 row => ((Rate)row[priceProperty]!).PerUnit);
     }

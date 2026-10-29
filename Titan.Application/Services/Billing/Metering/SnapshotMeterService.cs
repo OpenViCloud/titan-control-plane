@@ -17,7 +17,7 @@ public interface ISnapshotMeterService : IMeter;
 /// meters reads them.
 ///
 /// Flat per-snapshot rate: Titan tracks no snapshot size. Snapshots carry no offering id, so the rate
-/// comes from the SnapshotOffering.DefaultId row (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
+/// comes from the SnapshotOffering.DefaultId row (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 /// A rate of 0 switches snapshot billing off on purpose; a missing row is a data-integrity fault and
 /// fails the tick.
 public class SnapshotMeterService(

@@ -9,7 +9,7 @@ public class UsageRecordRepository(TitanDbContext db) : IUsageRecordRepository
 {
     // EF Core has no "INSERT ... ON CONFLICT DO NOTHING", so the meter's idempotency guard is raw SQL against
     // the (resource_type, resource_id, bucket) unique index: a duplicate returns 0 rows instead of throwing
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering). The index is pinned by UsageRecordSchemaTests.
+    // (titan-ops architecture/money-and-wallet.md#append-only-metering). The index is pinned by UsageRecordSchemaTests.
     public async Task<bool> TryInsertAsync(UsageRecord record, CancellationToken ct)
     {
         // Raw SQL bypasses EF value converters, so ResourceType (.ToDbString()) and the Rate (.PerUnit) are

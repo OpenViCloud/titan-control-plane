@@ -4,7 +4,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// <summary>
-/// The migration history starts at Initial (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#migrations): an empty database
+/// The migration history starts at Initial (titan-ops architecture/code-structure.md#migrations): an empty database
 /// is built by Initial and the migrations after it. What carries risk is a migration ordered before Initial
 /// (a database built from it would miss the base schema), and the catalog seeds the first customer needs
 /// (templates and offerings) not being part of the result.

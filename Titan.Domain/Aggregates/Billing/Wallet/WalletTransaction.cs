@@ -1,7 +1,7 @@
 namespace Titan.Domain.Aggregates.Billing.Wallet;
 
 /// Append-only ledger row; SUM(Amount) over a wallet must equal its AvailableAmount
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#signed-ledger). The factories apply the sign, not callers: a caller
+/// (titan-ops architecture/money-and-wallet.md#signed-ledger). The factories apply the sign, not callers: a caller
 /// that forgot a minus would record a spend as income, and the balance would still reconcile against its
 /// own wrong ledger.
 public class WalletTransaction

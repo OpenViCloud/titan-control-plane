@@ -11,7 +11,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Api;
 
 /// A request with an API token goes through the host as Program.cs wires it: the token scheme, then
-/// TenantResolutionMiddleware, then the endpoint (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token). The tokens are put
+/// TenantResolutionMiddleware, then the endpoint (titan-ops features/public-api/design.md#api-token). The tokens are put
 /// in the database directly; the secret is the bearer.
 [Trait("Category", "FullHost")]
 [Collection("Http")]

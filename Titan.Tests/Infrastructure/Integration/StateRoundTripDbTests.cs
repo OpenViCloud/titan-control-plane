@@ -10,7 +10,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// Desired/current state and the existence pair as Postgres stores them: what InMemory cannot show — filtered unique
-/// indexes, the column spelling, and ExecuteUpdate (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current).
+/// indexes, the column spelling, and ExecuteUpdate (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -117,7 +117,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
                 .ToListAsync();
             Assert.Equal("Deleted", stored.Single());
             // Incus spells the ACL rule state in lower case, and so does the column
-            // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+            // (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
             List<string> state = await db.Database
                 .SqlQueryRaw<string>("SELECT current_state AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
                 .ToListAsync();

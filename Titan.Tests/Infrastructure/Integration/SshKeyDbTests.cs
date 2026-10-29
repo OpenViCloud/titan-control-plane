@@ -8,7 +8,7 @@ using Titan.Tests.Domain;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The two unique indexes of core.ssh_keys are the net under two adds racing past the handler's checks
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-key). InMemory enforces no index, so only Postgres shows them.
+/// (titan-ops features/vm/design.md#ssh-key). InMemory enforces no index, so only Postgres shows them.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]

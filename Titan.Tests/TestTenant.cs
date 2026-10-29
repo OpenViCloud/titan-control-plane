@@ -15,7 +15,7 @@ internal static class TestTenant
     /// 10 public IPv6. Paired with a count of 0 at the call site, quota cannot fire.
     internal static Tenant WithRoomToSpare() => Active("test-tenant", "kc-test", "test@titan.local");
 
-    /// An approved tenant: approval is activation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
+    /// An approved tenant: approval is activation (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
     internal static Tenant Active(string name, string ownerKeycloakId, string email, int maxVms = 10, int maxNetworks = 1)
     {
         Tenant tenant = Tenant.CreatePending(name, ownerKeycloakId, email, maxVms, maxNetworks);

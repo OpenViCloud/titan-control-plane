@@ -12,7 +12,7 @@ namespace Titan.Application.Services.Compute;
 /// The one place Compute decides whether a caller may see a resource.
 ///
 /// Every lookup here answers <b>404</b> when the resource belongs to another tenant — never 403, which
-/// would tell a caller about resources they cannot see (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping).
+/// would tell a caller about resources they cannot see (titan-ops architecture/http-contract.md#tenant-scoping).
 /// A missing resource and a foreign one are indistinguishable, down to the error code and the message.
 /// ComputeOwnershipTests pins it.
 /// </summary>

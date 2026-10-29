@@ -3,7 +3,7 @@ namespace Titan.Application.Services.Billing.WalletMutations;
 /// <summary>
 /// The sweeper's pulse, like <see cref="MeterHeartbeat"/>: it lets the health check see a sweeper that stopped,
 /// which a log line alone does not. The sweeper is the only thing that recovers a lost notify
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox); while it is dead, a mutation whose notify was lost is
+/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox); while it is dead, a mutation whose notify was lost is
 /// never applied.
 /// No lock: a DateTimeOffset? read from the health-check thread can tear, and a health signal tolerates that.
 /// </summary>

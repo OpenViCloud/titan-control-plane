@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Compute.Volume;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#resources-reference-their-offering — on real Postgres: a VM or volume row
+// titan-ops features/catalog/design.md#resources-reference-their-offering — on real Postgres: a VM or volume row
 // that names an offering the catalog does not have is refused, and so is deleting an offering something
 // still points at. OfferingForeignKeySchemaTests pins the model; this proves the migration built it.
 [Trait("Category", "Integration")]

@@ -10,7 +10,7 @@ namespace Titan.Infrastructure.Auth;
 
 /// Turns an API token into the principal of the member who created it: only `sub`, no email and no role. From there
 /// TenantResolutionMiddleware finds the tenant through the member exactly as for a JWT, so suspension and pending
-/// approval apply unchanged (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token).
+/// approval apply unchanged (titan-ops features/public-api/design.md#api-token).
 public class ApiTokenAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,

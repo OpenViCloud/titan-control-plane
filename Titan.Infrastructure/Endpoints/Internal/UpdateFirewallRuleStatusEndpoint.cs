@@ -6,7 +6,7 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The create and delete commands and the firewall reconciler all report here
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-rule-soft-delete).
+// (titan-ops features/network/design.md#firewall-rule-soft-delete).
 public class UpdateFirewallRuleStatusEndpoint(UpdateFirewallRuleStatusCommandHandler handler, IConfiguration config)
     : Endpoint<UpdateFirewallRuleStatusBody>
 {

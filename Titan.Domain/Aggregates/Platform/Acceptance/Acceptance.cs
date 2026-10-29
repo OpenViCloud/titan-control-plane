@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Platform.Acceptance;
 
-/// Click-wrap consent proof (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#consent-gate-per-user). Append-only: a new document
+/// Click-wrap consent proof (titan-ops features/legal/design.md#consent-gate-per-user). Append-only: a new document
 /// version produces a new row. Per user, not per tenant: every member accepts individually.
 public class Acceptance
 {

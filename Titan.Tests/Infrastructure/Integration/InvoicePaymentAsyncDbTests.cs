@@ -17,7 +17,7 @@ using Titan.Application.Services.Billing.WalletMutations;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — paying an invoice from the wallet, asynchronously, on real Postgres.
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — paying an invoice from the wallet, asynchronously, on real Postgres.
 ///
 /// What only Postgres can prove here, and why unit tests are not the gate:
 ///  - a second press raises no second debit (the waiting-debit read catches it; two presses at the same
@@ -48,7 +48,7 @@ public class InvoicePaymentAsyncDbTests(PostgresFixture pg)
                     new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus,
                     new AdminAuditLogRepository(db), Admin())
                 .HandleAsync(new SettleInvoiceFromWalletCommand(invoiceId), ct);
-            // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: the command returns nothing; read the invoice back the way the admin list does.
+            // titan-ops architecture/http-contract.md#commands-return-no-data: the command returns nothing; read the invoice back the way the admin list does.
             return Assert.Single(await ListAllAsync(null, ct), i => i.Id == invoiceId);
         }
 
@@ -226,7 +226,7 @@ public class InvoicePaymentAsyncDbTests(PostgresFixture pg)
         Assert.Equal(1, movements);
     }
 
-    // ⭐ THE case https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox exists for, and the reason the
+    // ⭐ THE case titan-ops architecture/money-and-wallet.md#single-writer-outbox exists for, and the reason the
     // pre-check is not a guard.
     //
     // No threads and no clock: two invoices are each paid while the wallet still shows the full balance,

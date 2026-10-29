@@ -1,7 +1,7 @@
 namespace Titan.Application.Options;
 
 /// The NATS core notify bus is a speed layer on the durable outbox
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox): the DB is the queue, NATS only says "there is
+/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox): the DB is the queue, NATS only says "there is
 /// work" sooner than a poll. Disabled by default, so control-plane is healthy without NATS; a missed
 /// notify is a delayed apply that the sweeper drives, never lost money.
 public class NatsOptions

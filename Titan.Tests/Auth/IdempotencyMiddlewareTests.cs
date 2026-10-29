@@ -148,7 +148,7 @@ public class IdempotencyMiddlewareTests
         _idem.Verify(s => s.CompleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key: a create must carry a key. The middleware reads the
+    // titan-ops architecture/http-contract.md#idempotency-key: a create must carry a key. The middleware reads the
     // marker from the routed endpoint's FastEndpoints definition; ApiIdempotencyKeyTests pins that the real
     // routing table carries it for exactly the nine creates.
 

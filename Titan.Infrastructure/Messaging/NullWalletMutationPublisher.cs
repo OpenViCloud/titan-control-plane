@@ -4,7 +4,7 @@ using Titan.Application.Abstractions;
 namespace Titan.Infrastructure.Messaging;
 
 /// A no-op is safe: the mutation is already durable in the outbox, so a missing notify costs latency until the
-/// sweeper drives it, never money (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// sweeper drives it, never money (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 public class NullWalletMutationPublisher(ILogger<NullWalletMutationPublisher> logger) : IWalletMutationPublisher
 {
     public Task PublishAsync(WalletMutationNotification notification, CancellationToken ct = default)

@@ -4,7 +4,7 @@ using Titan.Application.Services.Billing;
 
 namespace Titan.Tests.Domain;
 
-// Billing is denominated in VND (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd).
+// Billing is denominated in VND (titan-ops architecture/money-and-wallet.md#money-is-long-vnd).
 public class BillingDenominationVndTests
 {
     [Fact] // the one source meters and billing handlers read the currency from
@@ -15,7 +15,7 @@ public class BillingDenominationVndTests
     public void CreditOptions_DefaultsToVnd() =>
         Assert.Equal("VND", new CreditOptions().Currency);
 
-    // Prices belong to their offerings (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering), and
+    // Prices belong to their offerings (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering), and
     // their VND magnitude is pinned on the seed in OfferingPricingSchemaTests. This guards that no price is in config.
     [Fact]
     public void BillingMeterOptions_CarriesNoPrices()

@@ -2,7 +2,7 @@ using System.Net;
 
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
-/// VIP number n of a network's /64 is interface id 0:0:1:n (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#vip-in-network-64):
+/// VIP number n of a network's /64 is interface id 0:0:1:n (titan-ops features/load-balancer/design.md#vip-in-network-64):
 /// never the gateway ::1, never an EUI-64 address (those carry ff:fe mid-way). Incus does not refuse a VIP that
 /// collides with an address in use, so Titan picks it.
 public sealed record LoadBalancerVip

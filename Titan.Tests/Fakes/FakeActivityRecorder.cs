@@ -7,7 +7,7 @@ namespace Titan.Tests.Fakes;
 // captured content, not call setup.
 public class FakeActivityRecorder : IActivityRecorder
 {
-    // OutcomeTenantId is set only for outcome events (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#request-and-outcome-names): the tenant comes from the
+    // OutcomeTenantId is set only for outcome events (titan-ops features/activity/design.md#request-and-outcome-names): the tenant comes from the
     // resource, because the callback that observes the outcome has no current user.
     public record Entry(string Action, string ResourceType, Guid ResourceId, string ResourceName, bool Saved,
         Guid? OutcomeTenantId = null);

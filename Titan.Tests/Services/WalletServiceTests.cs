@@ -143,7 +143,7 @@ public class WalletServiceTests
         Assert.Equal("VND", st.Currency);
     }
 
-    // A spend is dated when the money left, which is when the button was pressed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit).
+    // A spend is dated when the money left, which is when the button was pressed (titan-ops architecture/money-and-wallet.md#human-confirmed-debit).
     [Fact]
     public async Task GetMyStatement_SpendIsDatedWhenTheMoneyLeft()
     {

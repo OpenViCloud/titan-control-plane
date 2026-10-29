@@ -13,7 +13,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the sweeper, the component that makes a
+/// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the sweeper, the component that makes a
 /// NON-PERSISTENT bus safe.
 ///
 /// Sweep_PendingNeverPublished_IsApplied is the test the whole design rests on: a mutation that was never
@@ -135,7 +135,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
 
     // A mutation younger than the cutoff is LEFT ALONE. Without this, the sweeper would race the
     // subscriber for every mutation the instant it is written, putting two writers on one wallet — the
-    // exact condition https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox removes. The symmetric
+    // exact condition titan-ops architecture/money-and-wallet.md#single-writer-outbox removes. The symmetric
     // partner of the test above: on its own, that one passes just as well for a sweeper that grabs everything.
     [Fact]
     public async Task Sweep_FreshMutation_IsLeftAlone()

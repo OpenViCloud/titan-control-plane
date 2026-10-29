@@ -58,7 +58,7 @@ public class ActivityRecorderTests
         Assert.Throws<ForbiddenException>(() => Create().Stage("vm.created", "vm", Guid.NewGuid(), "x"));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#request-and-outcome-names — an outcome is observed by an internal callback that acts for no tenant and
+    // titan-ops features/activity/design.md#request-and-outcome-names — an outcome is observed by an internal callback that acts for no tenant and
     // no user. The tenant comes from the resource; the actor is "system". The request-side rule above
     // (throw without a tenant) must NOT reach this path, or every outcome would 403.
     [Fact]

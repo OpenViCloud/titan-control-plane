@@ -85,7 +85,7 @@ public class VolumeRepositoryStateTests
         return volume;
     }
 
-    // Occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#counting-and-billing): a volume whose delete was pressed stops counting
+    // Occupancy (titan-ops features/volume/design.md#counting-and-billing): a volume whose delete was pressed stops counting
     // at once, so the customer can create its replacement; one Incus no longer has, or never had, does not count.
     [Fact]
     public async Task Quota_CountsWhatIncusHoldsOrIsAboutTo_ButNotADeleteInFlight_NotFound_NorAFailedCreate()
@@ -145,7 +145,7 @@ public class VolumeRepositoryStateTests
         return snapshot;
     }
 
-    // One count serves the per-volume quota and VOLUME_HAS_SNAPSHOTS (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#counting-and-billing).
+    // One count serves the per-volume quota and VOLUME_HAS_SNAPSHOTS (titan-ops features/volume/design.md#counting-and-billing).
     [Fact]
     public async Task SnapshotQuota_CountsCreatingAndExisting_ButNotADeleteInFlight_NotFound_NorAFailedCreate()
     {
@@ -231,7 +231,7 @@ public class VolumeRepositoryStateTests
         Assert.Equal(new[] { "leaving", "lost", "ready" }, names);
     }
 
-    // The volumes a VM's delete detaches (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes): the ones Incus
+    // The volumes a VM's delete detaches (titan-ops features/volume/design.md#vm-delete-releases-volumes): the ones Incus
     // shows this VM using or that were asked to be attached to it, and never a deleted one or another VM's.
     [Fact]
     public async Task ListAttachedToVm_ReturnsThisVmsLiveVolumes_Only()

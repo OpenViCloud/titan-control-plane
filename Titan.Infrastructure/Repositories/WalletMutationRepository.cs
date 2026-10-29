@@ -6,7 +6,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Repositories;
 
 /// Shares the scope's DbContext with WalletRepository, so a mutation and its wallet commit in one SaveChanges
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 public class WalletMutationRepository(TitanDbContext db) : IWalletMutationRepository
 {
     public Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct) =>
@@ -15,7 +15,7 @@ public class WalletMutationRepository(TitanDbContext db) : IWalletMutationReposi
     public void Add(WalletMutation mutation) => db.WalletMutations.Add(mutation);
 
     /// Raw SQL because FOR UPDATE SKIP LOCKED has no LINQ spelling. It runs in autocommit, so it skips only a row
-    /// whose apply is committing at that instant (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+    /// whose apply is committing at that instant (titan-ops features/billing/wallet/design.md#wallet-debts).
     /// 'Pending' is a literal because raw SQL bypasses EF value converters; it matches the stored token
     /// (WalletMutationSchemaTests.Status_IsStoredAsString). InMemory cannot run it: WalletMutationSweeperDbTests.
     public async Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(

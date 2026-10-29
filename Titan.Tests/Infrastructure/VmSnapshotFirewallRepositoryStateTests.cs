@@ -82,7 +82,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         DeleteRequested(vm, "deleting"), Deleted(vm, "deleted"), NotFound(vm, "lost"), CreateFailed(vm, "failed"),
     ];
 
-    // Occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-counting): a snapshot whose delete was requested stops counting
+    // Occupancy (titan-ops features/vm/design.md#vm-snapshot-counting): a snapshot whose delete was requested stops counting
     // toward MaxVmSnapshotsPerVm; one Incus no longer has, or never had, does not count.
     [Fact]
     public async Task SnapshotQuota_CountsCreatingExistingAndReverting_ButNotADeleteInFlight_NotFound_NorAFailedCreate()
@@ -178,7 +178,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         return [creating, active, deleting, deleted, failedCreate];
     }
 
-    // Counted by occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-rule-status): a rule whose delete was requested
+    // Counted by occupancy (titan-ops features/network/design.md#firewall-rule-status): a rule whose delete was requested
     // stops counting toward MaxFirewallRulesPerNetwork; a failed create with nothing in the ACL does not count.
     [Fact]
     public async Task RuleQuota_CountsWhatIncusHoldsOrIsAboutTo_ButNotAFailedCreate_ADeleteInFlight_NorDeleted()

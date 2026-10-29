@@ -7,15 +7,15 @@ public class Tenant
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
     public TenantStatus Status { get; private set; }
-    /// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — read by the EnsureCan* rules below.
+    /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by the EnsureCan* rules below.
     public TenantQuota Quota { get; private set; } = TenantQuota.Default;
 
     /// Whole VND. A reference number the admin reads at month-end close; it blocks nothing
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake).
+    /// (titan-ops architecture/money-and-wallet.md#postpaid-no-brake).
     public long DebtCeiling { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    /// The tenant's Incus project, the same on every cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name).
+    /// The tenant's Incus project, the same on every cluster (titan-ops architecture/tenancy-and-admin.md#project-name).
     /// Derived from the id so a rebuilt cluster gets the same name back.
     public string ProjectName => ProjectNameFor(Id);
 
@@ -34,7 +34,7 @@ public class Tenant
     public const long DefaultDebtCeiling = 500_000;
 
     // Every signup lands here; the middleware approves one whose account has the realm role auto-approve in the same request,
-    // every other waits for an admin (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation).
+    // every other waits for an admin (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
     public static Tenant CreatePending(string name, string ownerKeycloakId, string email, int maxVms = 10, int maxNetworks = 1)
     {
         var tenant = new Tenant
@@ -69,9 +69,9 @@ public class Tenant
         Status = TenantStatus.Suspended;
     }
 
-    /// The admin's "make this tenant Active", an intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation):
+    /// The admin's "make this tenant Active", an intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation):
     /// a pending, rejected or suspended tenant becomes Active. A repeat is refused
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat); the handler recognises it first.
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat); the handler recognises it first.
     public void RequestActivation()
     {
         if (Status == TenantStatus.Active)
@@ -97,7 +97,7 @@ public class Tenant
             "INVALID_QUOTA", "Quota must be provided.");
 
     // The caller counts (a repository query, not part of this aggregate); the tenant decides
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge). `internal`, called only from the factories of the
+    // (titan-ops architecture/code-structure.md#tenant-typed-edge). `internal`, called only from the factories of the
     // things being created, so the compiler stops Titan.Application from skipping the check.
 
     internal void EnsureCanCreateVm(int activeVmCount)
@@ -138,7 +138,7 @@ public class Tenant
             $"Public IPv6 quota exceeded (max {Quota.MaxPublicIpv6}).");
 
     // `>=`: the count is what already exists, so a cap of 0 refuses the first one
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none). Reading 0 as "unlimited" would grant infinite
+    // (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none). Reading 0 as "unlimited" would grant infinite
     // resources at the moment an admin tried to cut them off.
     private static void Refuse(int current, int cap, string code, string message)
     {

@@ -19,7 +19,7 @@ public class DeleteLoadBalancerCommandHandler(
         var loadBalancer = await ComputeOwnership.RequireLoadBalancerAsync(repo, callerId, command.LoadBalancerId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete still waits, or the load
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete still waits, or the load
         // balancer is already deleted. Answer like the first request.
         bool deleteIsWaiting = loadBalancer.Transition == LoadBalancerTransition.Deleting;
         bool alreadyRequestedOrDone = deleteIsWaiting || loadBalancer.IsTerminal;
@@ -28,7 +28,7 @@ public class DeleteLoadBalancerCommandHandler(
             return;
         }
 
-        // The create failed before Incus had it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+        // The create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
         bool neverReachedIncus = loadBalancer.ExternalId is null && loadBalancer.Transition == null;
         if (neverReachedIncus)
         {

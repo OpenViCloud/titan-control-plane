@@ -15,9 +15,9 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// Two identical requests at once where the first commits before the second reads the command key
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key). The second read the resource before that commit, so
+/// (titan-ops architecture/provider-and-worker.md#provider-command-key). The second read the resource before that commit, so
 /// it took the request as new; the open row it then finds is the other request's work. Category=Integration — its own
-/// CI step; needs real Postgres; no doubles (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests).
+/// CI step; needs real Postgres; no doubles (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ProviderCommandRaceDbTests(PostgresFixture pg)

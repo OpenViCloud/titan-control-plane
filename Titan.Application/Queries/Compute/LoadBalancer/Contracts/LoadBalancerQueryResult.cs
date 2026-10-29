@@ -5,9 +5,9 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.LoadBalancer.Contracts;
 
-// The read side's own shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse). Listeners and backends are what
+// The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse). Listeners and backends are what
 // the customer last asked for; transition says whether Incus has it yet. Incus has no status word for a load
-// balancer (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-lifecycle). The failure detail is the operator's, never the
+// balancer (titan-ops features/load-balancer/design.md#lb-lifecycle). The failure detail is the operator's, never the
 // tenant's.
 public record LoadBalancerQueryResult(
     Guid Id,

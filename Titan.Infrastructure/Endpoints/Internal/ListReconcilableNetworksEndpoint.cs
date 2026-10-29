@@ -6,7 +6,7 @@ using Titan.Infrastructure.Hosting;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// A network in this list that Incus does not hold is reported not found (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle);
+// A network in this list that Incus does not hold is reported not found (titan-ops features/network/design.md#network-lifecycle);
 // CurrentState and CurrentExistence come along so an unchanged observation sends nothing.
 //
 // Each call is the reconciler's heartbeat, recorded here rather than in the handler: it is an operational

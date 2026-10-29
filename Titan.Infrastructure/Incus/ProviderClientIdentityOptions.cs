@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 
 namespace Titan.Infrastructure.Incus;
 
-// Titan's client identity toward every Incus cluster, from a Secret (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
+// Titan's client identity toward every Incus cluster, from a Secret (titan-ops features/cluster/design.md#provider-client-identity).
 public sealed class ProviderClientIdentityOptions
 {
     public const string SectionName = "ProviderClientIdentity";

@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Compute.LoadBalancer;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#vip-in-network-64: the VIP is interface id 0:0:1:n of the network's own /64.
+// titan-ops features/load-balancer/design.md#vip-in-network-64: the VIP is interface id 0:0:1:n of the network's own /64.
 // Incus takes a VIP equal to the gateway or the router as readily as a free one, so the shape is Titan's guard.
 public class LoadBalancerVipTests
 {

@@ -32,7 +32,7 @@ public class DeleteFirewallRuleCommandHandler(
         }
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // This delete was already requested, or the rule is already gone.
         // Answer like the first request: nothing recorded, nothing sent.
         bool alreadyRequestedOrDone = rule.Transition == FirewallRuleTransition.Deleting || rule.IsTerminal;
@@ -44,7 +44,7 @@ public class DeleteFirewallRuleCommandHandler(
         string label = FirewallRuleLabel.Describe(rule);
 
         // The create failed, so the provider never had this rule: there is nothing to send and
-        // nothing to wait for. The request and its outcome happen here at once (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity).
+        // nothing to wait for. The request and its outcome happen here at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
         bool neverReachedTheProvider = rule.ExternalId == null && rule.Transition == null;
         if (neverReachedTheProvider)
         {
@@ -56,7 +56,7 @@ public class DeleteFirewallRuleCommandHandler(
         }
 
         // The rule stays (delete waiting) until the worker reports the provider has removed it
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm): forgetting it here would leave a rule
+        // (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm): forgetting it here would leave a rule
         // enforced that Titan no longer lists.
         string externalRuleId = rule.RequestDelete();
         activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);

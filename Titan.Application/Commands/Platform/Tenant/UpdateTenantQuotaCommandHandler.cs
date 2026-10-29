@@ -5,7 +5,7 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Platform.Tenant;
 
-/// Platform-admin updates a tenant's resource caps. Returns nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data): the admin UI
+/// Platform-admin updates a tenant's resource caps. Returns nothing (titan-ops architecture/http-contract.md#commands-return-no-data): the admin UI
 /// reads the new quota back from the tenant list. Negative values are rejected in the domain
 /// (defense in depth behind the request validator).
 public class UpdateTenantQuotaCommandHandler(ITenantRepository repo)

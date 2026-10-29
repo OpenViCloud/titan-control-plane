@@ -1,6 +1,6 @@
 namespace Titan.Application.Commands.Platform.Tenant.Contracts;
 
-// The nine caps of TenantQuota (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota). The two the endpoint always
+// The nine caps of TenantQuota (titan-ops architecture/tenancy-and-admin.md#tenant-quota). The two the endpoint always
 // carried stay required; the other seven are optional, and an absent one keeps the tenant's current value, so an admin
 // portal that still sends two caps keeps working while the new one rolls out.
 public record UpdateTenantQuotaCommand(

@@ -3,7 +3,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation. A tenant has no provider account any more: its
+// titan-ops architecture/tenancy-and-admin.md#approval-is-activation. A tenant has no provider account any more: its
 // Incus project is created per cluster when its first resource there is, so approving it makes it Active at once.
 public class TenantActivationTests
 {
@@ -32,7 +32,7 @@ public class TenantActivationTests
         Assert.Equal(TenantStatus.Active, t.Status);
     }
 
-    [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat — the handler recognises the repeat first
+    [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat — the handler recognises the repeat first
     [InlineData(TenantStatus.Active)]
     [InlineData(TenantStatus.Suspended)]
     public void Approve_OnATenantThatIsNotPending_IsRefused(TenantStatus from)

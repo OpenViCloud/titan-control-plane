@@ -20,7 +20,7 @@ public class PaymentGatewayTransactionConfiguration : IEntityTypeConfiguration<P
         builder.Property(t => t.Amount).HasColumnName("amount").HasColumnType("bigint").IsRequired();
         builder.Property(t => t.Gateway).HasColumnName("gateway").IsRequired();
         builder.Property(t => t.RawContent).HasColumnName("raw_content");
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage
+        // titan-ops architecture/code-structure.md#enum-storage
         builder.Property(t => t.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.Property(t => t.ReceivedAt).HasColumnName("received_at").IsRequired();
         builder.Property(t => t.TransactionDate).HasColumnName("transaction_date").IsRequired();

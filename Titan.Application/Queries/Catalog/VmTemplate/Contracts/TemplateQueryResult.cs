@@ -4,7 +4,7 @@ namespace Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 
 // Customer-facing — the internal sync state and ExternalTemplateId are NOT exposed.
 //
-// No sizing and no VmOfferingId (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-borrows-sizing): the template's tier is
+// No sizing and no VmOfferingId (titan-ops features/catalog/design.md#template-borrows-sizing): the template's tier is
 // only the provider-side base, and the offering the customer picks overrides it at
 // instantiate, so publishing it would describe no customer's VM.
 public record TemplateQueryResult(

@@ -204,7 +204,7 @@ public class RefreshBackupStatusCommandTests
         Assert.Equal(2, after.Count);
     }
 
-    // After a restore the new cluster archives under another serverName (titan-ops docs/infra/oci/runbook.md#disaster-recovery);
+    // After a restore the new cluster archives under another serverName (titan-ops infra/oci/runbook.md#disaster-recovery);
     // the old name gets nothing new. The pair below swaps which name wrote last, so a fixed prefix cannot pass both.
     [Fact]
     public async Task AfterARestore_TheServerThatWroteLast_IsRead_AndTheOldServersBasesAreGone()

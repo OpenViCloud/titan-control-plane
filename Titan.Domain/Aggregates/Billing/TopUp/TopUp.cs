@@ -3,8 +3,8 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Domain.Aggregates.Billing.TopUp;
 
-/// Any credit into the wallet (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/topup/design.md#topup-lifecycle). A Confirmed TopUp is the
-/// customer's receipt (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#confirmed-topup-is-receipt).
+/// Any credit into the wallet (titan-ops features/billing/topup/design.md#topup-lifecycle). A Confirmed TopUp is the
+/// customer's receipt (titan-ops architecture/money-and-wallet.md#confirmed-topup-is-receipt).
 public class TopUp
 {
     public Guid Id { get; private set; }
@@ -52,7 +52,7 @@ public class TopUp
 
     /// Born Confirmed: there is no payment to wait for, so nothing for the SePay webhook or Confirm() to act on
     /// later. PaymentRef is still generated as Titan's id for the movement, not a claim that a bank transfer
-    /// exists (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/topup/design.md#promo-grant).
+    /// exists (titan-ops features/billing/topup/design.md#promo-grant).
     public static TopUp GrantPromo(Guid tenantId, long amount, string currency, string? reason, string grantedBy)
     {
         if (amount <= 0) throw new ArgumentException("amount must be > 0", nameof(amount));

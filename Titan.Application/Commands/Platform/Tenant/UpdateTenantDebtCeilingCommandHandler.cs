@@ -4,7 +4,7 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Platform.Tenant;
 
-/// A reference number the admin reads at month-end close (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake):
+/// A reference number the admin reads at month-end close (titan-ops architecture/money-and-wallet.md#postpaid-no-brake):
 /// it gates nothing, not even creation.
 public class UpdateTenantDebtCeilingCommandHandler(ITenantRepository repo)
 {

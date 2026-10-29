@@ -15,7 +15,7 @@ public class VolumeOfferingConfiguration : IEntityTypeConfiguration<VolumeOfferi
         builder.Property(o => o.Name).HasColumnName("name").HasColumnType("text").IsRequired();
         builder.Property(o => o.SizeGb).HasColumnName("size_gb").IsRequired();
         builder.Property(o => o.IsCustomized).HasColumnName("is_customized").IsRequired();
-        // The Rate <-> decimal conversion is a convention in TitanDbContext (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
+        // The Rate <-> decimal conversion is a convention in TitanDbContext (titan-ops architecture/money-and-wallet.md#rate-value-object).
         builder.Property(o => o.PricePerGbPerHour)
             .HasColumnName("price_per_gb_per_hour").HasColumnType("decimal(18,10)").IsRequired();
 

@@ -14,7 +14,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // One item per VM and volume on Incus, from the backup cache: what the page shows for tenants' disks
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+// (titan-ops features/backup/design.md#incus-backup).
 public class ListDiskBackupsQueryTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);

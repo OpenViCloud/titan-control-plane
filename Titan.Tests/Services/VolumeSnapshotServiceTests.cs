@@ -19,7 +19,7 @@ namespace Titan.Tests.Services;
 public class VolumeSnapshotServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
-    // The tenant's Incus project, as https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name spells it.
+    // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
 
     private readonly Mock<IVolumeSnapshotRepository> _snapshotRepo = new();
@@ -29,7 +29,7 @@ public class VolumeSnapshotServiceTests
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<IActivityRecorder> _activity = new();
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
+    // titan-ops architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
     // quota; Tenant.Create's default caps are what the quota assertions in this file count against.
     private readonly Tenant _tenant = TestTenant.Active("t", "kc", "t@x.io");
 
@@ -90,7 +90,7 @@ public class VolumeSnapshotServiceTests
 
         var result = await CreateService().CreateAsync(volume.Id, new CreateVolumeSnapshotBody("snap-01"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so status
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so status
         // is asserted on the persisted snapshot.
         Assert.NotEqual(Guid.Empty, result.SnapshotId);
         _snapshotRepo.Verify(r => r.SaveAsync(
@@ -122,7 +122,7 @@ public class VolumeSnapshotServiceTests
 
         var result = await CreateService().CreateAsync(volume.Id, new CreateVolumeSnapshotBody("snap-attached"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: status is asserted on the persisted snapshot, not on the response.
+        // titan-ops architecture/http-contract.md#create-returns-id: status is asserted on the persisted snapshot, not on the response.
         _snapshotRepo.Verify(r => r.SaveAsync(
             It.Is<VolumeSnapshot>(x => x.Id == result.SnapshotId
                                     && x.Transition == VolumeSnapshotTransition.Creating), default), Times.Once);
@@ -235,7 +235,7 @@ public class VolumeSnapshotServiceTests
             snapshot.Id, volume.Id, "cs-snap-9", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    [Theory] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
+    [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
     [InlineData(SnapSeed.Deleting)]
     [InlineData(SnapSeed.Deleted)]
     public async Task Delete_RepeatedOrDone_IsANoOp_EnqueuesNoCommand(SnapSeed from)
@@ -341,7 +341,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal("VOLUME_QUOTA_EXCEEDED", ex.Code);
     }
 
-    // ── Callbacks (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-reports) ──────────────
+    // ── Callbacks (titan-ops features/volume/design.md#volume-reports) ──────────────
 
     [Fact] // Incus made the snapshot before the create command answered: its id is the create done
     public async Task UpdateStatus_Created_StoresTheId_AndEndsTheCreate()
@@ -490,7 +490,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal("INVALID_STATUS", ex.Code);
     }
 
-    // ── Activity: one request, one outcome (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#request-and-outcome-names) ─────
+    // ── Activity: one request, one outcome (titan-ops features/activity/design.md#request-and-outcome-names) ─────
 
     [Fact]
     public async Task Create_RecordsTheRequest_AndTheCallbackRecordsTheOutcomeOnce()
@@ -565,7 +565,7 @@ public class VolumeSnapshotServiceTests
     }
 
     // A create that failed before Incus had the snapshot leaves the list at once, with no command
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    // (titan-ops architecture/desired-and-current.md#delete-locally).
     [Fact]
     public async Task Delete_OfACreateThatFailedBeforeIncusHadIt_DeletesLocally_AndSendsNothing()
     {
@@ -639,7 +639,7 @@ public class VolumeSnapshotServiceTests
         return snap;
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure: the raw error is admin-only.
+    // titan-ops architecture/desired-and-current.md#request-failure: the raw error is admin-only.
     [Fact]
     public void TenantVolumeSnapshotQueryResult_HasNoFailureDetailField_NorAStateWord()
     {

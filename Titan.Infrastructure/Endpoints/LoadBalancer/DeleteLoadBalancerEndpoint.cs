@@ -17,6 +17,6 @@ public class DeleteLoadBalancerEndpoint(DeleteLoadBalancerCommandHandler handler
     {
         var loadBalancerId = Route<Guid>("loadBalancerId");
         await handler.HandleAsync(new DeleteLoadBalancerCommand(loadBalancerId), ct);
-        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202: no body
+        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // titan-ops architecture/http-contract.md#async-actions-return-202: no body
     }
 }

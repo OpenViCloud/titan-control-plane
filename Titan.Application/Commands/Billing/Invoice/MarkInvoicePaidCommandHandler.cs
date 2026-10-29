@@ -8,7 +8,7 @@ using Titan.Domain.Repositories.Billing;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 
-/// Records money that arrived OUTSIDE Titan (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit) — the single allowed mutation on an invoice
+/// Records money that arrived OUTSIDE Titan (titan-ops architecture/money-and-wallet.md#human-confirmed-debit) — the single allowed mutation on an invoice
 /// besides settlement. NOT the same as SettleInvoiceFromWallet, which spends the wallet.
 public class MarkInvoicePaidCommandHandler(
     IInvoiceRepository invoiceRepo, IWalletMutationRepository mutationRepo, ICurrentUser currentUser)
@@ -19,7 +19,7 @@ public class MarkInvoicePaidCommandHandler(
         var invoice = await invoiceRepo.GetForUpdateAsync(id, ct)
             ?? throw new NotFoundException("INVOICE_NOT_FOUND", $"Invoice {id} not found.");
 
-        // A second "Mark paid" is a repeat (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat):
+        // A second "Mark paid" is a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat):
         // nothing changes, not even who is recorded as having marked it. Invoice.MarkPaid refuses an invoice
         // the wallet paid (INVOICE_ALREADY_PAID): recording outside money on it would count it twice.
         bool alreadyMarkedPaid = invoice.Status == InvoiceStatus.Paid;
@@ -42,7 +42,7 @@ public class MarkInvoicePaidCommandHandler(
         invoice.MarkPaid(DateTimeOffset.UtcNow, currentUser.KeycloakUserId);
         await invoiceRepo.SaveChangesAsync(ct);
 
-        // Nothing goes back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data), and PaymentState reads null:
+        // Nothing goes back (titan-ops architecture/http-contract.md#commands-return-no-data), and PaymentState reads null:
         // the wallet is never touched, so no mutation exists. Do not "fix" it for symmetry with
         // SettleFromWallet; the audit log must tell whose money moved.
     }

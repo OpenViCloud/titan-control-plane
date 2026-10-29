@@ -2,7 +2,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Domain.Aggregates.Platform.ProviderCommand;
 
-/// One row of the provider command table (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table): a handler
+/// One row of the provider command table (titan-ops architecture/provider-and-worker.md#provider-command-table): a handler
 /// writes it in the same SaveChanges as the aggregate it changed, and a worker leases it over /internal.
 public class ProviderCommand
 {

@@ -6,14 +6,14 @@ using Titan.Domain.Repositories.Compute;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 
-// Worker callback — an observation of Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation:
+// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
 // observation converges). Authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the aggregate
-// says whether a report fulfilled the waiting request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+// says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
 public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshotRepo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateVmSnapshotStatusCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the callback payload (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
 
         // Parsed before the snapshot is loaded: a malformed report is the worker's bug, whatever the snapshot.
         switch (req.Report)
@@ -76,7 +76,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
                     outcome = CreatedOutcome(snapshot.MarkCreated(req.ExternalId!));
                 }
                 // A revert or delete Incus refused ends with the snapshot kept
-                // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+                // (titan-ops architecture/desired-and-current.md#abandoned-request).
                 bool revertOrDeleteWasWaiting = snapshot.Transition == VmSnapshotTransition.Reverting
                                                 || snapshot.Transition == VmSnapshotTransition.Deleting;
                 if (revertOrDeleteWasWaiting)

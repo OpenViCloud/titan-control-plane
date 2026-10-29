@@ -7,7 +7,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// One public /64 per live network of a cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan). Two creates that picked
+/// One public /64 per live network of a cluster (titan-ops infra/incus/design.md#ipv6-address-plan). Two creates that picked
 /// the same free /64 at once both pass the handler; only the unique index stops the second, and ErrorStatus turns
 /// that into 409 IPV6_ALLOCATION_CONFLICT by the index name. InMemory enforces no index, so only Postgres shows it.
 /// Category=Integration — its own CI step; needs real Postgres.

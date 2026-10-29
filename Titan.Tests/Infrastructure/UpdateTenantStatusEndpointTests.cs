@@ -15,7 +15,7 @@ namespace Titan.Tests.Infrastructure;
 
 // The admin's Active is where a tenant is activated by hand, and it orchestrates two modules: it opens the tenant's
 // wallet (Billing) and activates it (Platform) — in the endpoint, since Platform depending on Billing would be a module
-// cycle (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation). Pinned:
+// cycle (titan-ops architecture/tenancy-and-admin.md#approval-is-activation). Pinned:
 //   • the wallet is opened BEFORE the tenant is saved Active, so "an Active tenant has a wallet" is never false;
 //   • no wallet for a tenant id that is not a tenant (nothing ties wallets to tenants in the database);
 //   • Suspended, or a status the handler refuses, opens no wallet.

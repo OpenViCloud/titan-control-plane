@@ -4,7 +4,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the outbox idempotency guard, on real
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the outbox idempotency guard, on real
 // Postgres. UNIQUE(ref_type, ref_id) means one source document has EXACTLY ONE mutation row: two
 // enqueues of the same (ref_type, ref_id) racing (two confirms of the same top-up) leave one survivor,
 // the loser hitting 23505. Paying an invoice again reopens its row: InvoiceDebitRetryDbTests.

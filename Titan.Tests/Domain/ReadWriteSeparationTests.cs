@@ -3,7 +3,7 @@ using Titan.Application.Abstractions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#query-handlers-cannot-write: a read path cannot write. These tests make that a
+// titan-ops architecture/code-structure.md#query-handlers-cannot-write: a read path cannot write. These tests make that a
 // MECHANISM instead of a naming convention: a handler under Queries/ that takes IProviderCommandQueue or
 // IActivityRecorder fails here, and a developer who never reads this file still cannot write from a query,
 // because the constructor has nowhere to put the tool.
@@ -24,10 +24,10 @@ public class ReadWriteSeparationTests
     private const string Commands = "Commands";
     private const string Services = "Services";
 
-    // Commands/ and Queries/ are the FIRST level under Titan.Application (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#application-tree),
+    // Commands/ and Queries/ are the FIRST level under Titan.Application (titan-ops architecture/code-structure.md#application-tree),
     // so the marker is the leading segment (Titan.Application.Queries.Compute.Vm), not a suffix. Every test below
     // asserts NotEmpty before its property, so a matcher that finds nothing fails loudly instead of passing.
-    // The suffix says which side a handler is on (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#side-suffix): a type under
+    // The suffix says which side a handler is on (titan-ops architecture/code-structure.md#side-suffix): a type under
     // Commands/ that carries the query-side suffix is a naming error the compiler cannot see, and HandlerNames_CarryTheirSideSuffix fails on it.
     private static string SuffixFor(string branch) =>
         branch == Commands ? "CommandHandler" : "QueryHandler";
@@ -104,7 +104,7 @@ public class ReadWriteSeparationTests
     }
 
     // A shared `internal static` on one handler is how command handlers end up depending on a query handler;
-    // shared behaviour goes to Services/<Module>/ instead (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#handlers-do-not-call-handlers).
+    // shared behaviour goes to Services/<Module>/ instead (titan-ops architecture/code-structure.md#handlers-do-not-call-handlers).
     [Fact]
     public void Handlers_DoNotReferenceOtherHandlers()
     {
@@ -136,7 +136,7 @@ public class ReadWriteSeparationTests
             + "grows back (docs/architecture/code-structure.md#handlers-do-not-call-handlers): " + string.Join(" | ", offenders));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts — the suffix is the convention, and a convention with no guard is a comment.
+    // titan-ops architecture/code-structure.md#contracts — the suffix is the convention, and a convention with no guard is a comment.
     [Fact]
     public void HandlerNames_CarryTheirSideSuffix()
     {
@@ -156,7 +156,7 @@ public class ReadWriteSeparationTests
         }
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse — neither side may return or accept the other's contracts.
+    // titan-ops architecture/code-structure.md#no-contract-reuse — neither side may return or accept the other's contracts.
     [Fact]
     public void NeitherSide_TouchesTheOthersContracts()
     {
@@ -241,7 +241,7 @@ public class ReadWriteSeparationTests
         var offenders = new List<string>();
 
         // Services/ follows the same folder-is-namespace rule as the two handler branches
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch), so it is read here too rather than trusted.
+        // (titan-ops architecture/code-structure.md#services-branch), so it is read here too rather than trusted.
         var branches = new[] { Commands, Queries, Services };
         foreach (var b in branches)
             Assert.True(Directory.Exists(Path.Combine(root, b)), $"Branch {b}/ is not where this guard looks.");
@@ -269,11 +269,11 @@ public class ReadWriteSeparationTests
             "Namespace does not match folder path under Commands/Queries/Services: " + string.Join(" | ", offenders));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch: keeps a sixth kind of folder from growing back at the
+    // titan-ops architecture/code-structure.md#services-branch: keeps a sixth kind of folder from growing back at the
     // root unnoticed; a new module-level service belongs in Services/<Module>/.
     //
     // Silent about: what sits INSIDE the five allowed folders. A service dropped into Abstractions/
-    // passes here; that folder is a named non-module (QuotaOwnershipTests.NonModuleDirs, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#debt-and-accepted-risks).
+    // passes here; that folder is a named non-module (QuotaOwnershipTests.NonModuleDirs, titan-ops architecture/code-structure.md#debt-and-accepted-risks).
     private static readonly string[] AllowedApplicationRootDirs =
         [Commands, Queries, Services, "Abstractions", "Options", "bin", "obj"];
 

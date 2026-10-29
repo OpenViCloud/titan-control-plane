@@ -12,6 +12,6 @@ public class GetWalletQueryHandler(IWalletRepository walletRepo, ICurrentUser cu
     {
         var tenantId = currentUser.RequireTenantId();
         var balance = await walletRepo.GetBalanceAsync(tenantId, ct);
-        return new WalletQueryResult(balance, options.Currency); // the DTO keeps decimal (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd)
+        return new WalletQueryResult(balance, options.Currency); // the DTO keeps decimal (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
     }
 }

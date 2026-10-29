@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// {volumeId} rides the route (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// {volumeId} rides the route (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record UpdateVolumeStatusBody(
     string Report,
     bool? Exists = null,

@@ -65,7 +65,7 @@ public class NetworkServiceTests
                     req.Cidr, req.Gateway, req.Reason, req.Detail), ct);
     }
 
-    // The worker's four reports (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-reconciler).
+    // The worker's four reports (titan-ops features/network/design.md#network-reconciler).
     private static UpdateNetworkStatusRequest Observed(string status) => new("Observed", Exists: true, Status: status);
     private static readonly UpdateNetworkStatusRequest NotFoundReport = new("Observed", Exists: false);
     private static UpdateNetworkStatusRequest CreatedReport(string id, string? cidr, string? gateway) =>
@@ -83,7 +83,7 @@ public class NetworkServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the created network's own fields are
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the created network's own fields are
         // asserted on the instance that was added — the layer that still owns them.
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
@@ -117,7 +117,7 @@ public class NetworkServiceTests
     }
 
     // A cluster Titan does not have must not fall through to a default cluster
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
+    // (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
     public async Task Create_UnknownCluster_ThrowsNotFound_AndEnqueuesNoCommand()
     {
@@ -214,7 +214,7 @@ public class NetworkServiceTests
         Assert.Equal("net-1", result[0].Name);
     }
 
-    // The raw error of a give-up is admin-only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure).
+    // The raw error of a give-up is admin-only (titan-ops architecture/desired-and-current.md#request-failure).
     [Fact]
     public void TenantNetworkQueryResult_HasNoFailureDetailField()
     {
@@ -300,7 +300,7 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // A load balancer lives on the network on Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-and-vm-network).
+    // A load balancer lives on the network on Incus (titan-ops features/load-balancer/design.md#lb-and-vm-network).
     [Fact]
     public async Task Delete_WithALoadBalancerNotYetDeleted_IsNotEmpty()
     {
@@ -485,7 +485,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Exactly(2));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim
+    // titan-ops architecture/desired-and-current.md#provider-state-is-verbatim
     [Theory]
     [InlineData("Pending", NetworkStatus.Pending)]
     [InlineData("Created", NetworkStatus.Created)]
@@ -589,7 +589,7 @@ public class NetworkServiceTests
 
     // ── Reconciler observations ─────────────────────
 
-    // The reconciler never reports the delete done (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis): the
+    // The reconciler never reports the delete done (titan-ops architecture/desired-and-current.md#existence-axis): the
     // network not found keeps its delete waiting for the delete command.
     [Fact]
     public async Task UpdateStatus_NotFound_WhenADeleteWasAsked_IsNotFound_AndTheDeleteKeepsWaiting()
@@ -685,7 +685,7 @@ public class NetworkServiceTests
     // ── Helpers ───────────────────────────────────────────────────────────
 
     // The tenant SetupTenant built; every provider call carries its Incus project
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name).
+    // (titan-ops architecture/tenancy-and-admin.md#project-name).
     private Tenant? _tenant;
     private string TenantProject => _tenant!.ProjectName;
 
@@ -720,7 +720,7 @@ public class NetworkServiceTests
         Assert.Equal("network.delete_requested", Assert.Single(_activity.Events).Action);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source: outcomes are recorded from the fulfilled request ──────────
+    // ── titan-ops features/activity/design.md#outcome-source: outcomes are recorded from the fulfilled request ──────────
 
     [Fact]
     public async Task UpdateStatus_FirstCreated_RecordsNetworkCreated_ForTheNetworksTenant_Once()
@@ -885,7 +885,7 @@ public class NetworkServiceTests
     }
 
     // A repeated delete is the same request, so it answers like the first
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat) and records and sends nothing.
+    // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat) and records and sends nothing.
     [Fact]
     public async Task Delete_Repeated_IsANoOp_RecordsNoActivity_EnqueuesNoCommand()
     {
@@ -904,7 +904,7 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Public IPv6: one /64 of the cluster per network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan) ──
+    // ── Public IPv6: one /64 of the cluster per network (titan-ops infra/incus/design.md#ipv6-address-plan) ──
 
     private void SetupCluster(string? uplink, string? block)
     {
@@ -927,7 +927,7 @@ public class NetworkServiceTests
     }
 
     // A /64 given back minutes ago would put the new network's router where OVH still sees the old one
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#ipv6-public): the handler hands the releases to the allocator.
+    // (titan-ops features/network/design.md#ipv6-public): the handler hands the releases to the allocator.
     [Fact]
     public async Task Create_WithPublicIpv6_SkipsASlash64JustGivenBack_WhileOneWasNeverUsed()
     {

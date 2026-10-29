@@ -15,7 +15,7 @@ public class GetLegalDocumentEndpoint(GetLegalDocumentQueryHandler getDocument) 
 
     public override async Task HandleAsync(CancellationToken ct)
     {
-        // ?lang=vi gives the Vietnamese text; anything else, missing included, gives English (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#legal-endpoints).
+        // ?lang=vi gives the Vietnamese text; anything else, missing included, gives English (titan-ops features/legal/design.md#legal-endpoints).
         string? lang = Query<string>("lang", isRequired: false);
         await SendAsync(await getDocument.HandleAsync(new GetLegalDocumentQuery(lang), ct), cancellation: ct);
     }

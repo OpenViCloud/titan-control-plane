@@ -11,7 +11,7 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Tests.Services;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping — another tenant's resource answers 404, never 403:
+// titan-ops architecture/http-contract.md#tenant-scoping — another tenant's resource answers 404, never 403:
 // a 403 confirms the resource exists and only the permission is missing. Every ownership check in
 // Compute has to agree, because the same volume is reachable through more than one path.
 public class ComputeOwnershipTests

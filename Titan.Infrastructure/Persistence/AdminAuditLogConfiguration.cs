@@ -21,7 +21,7 @@ public class AdminAuditLogConfiguration : IEntityTypeConfiguration<AdminAuditLog
         builder.Property(a => a.ResourceKey).HasColumnName("resource_key").HasMaxLength(64);
         builder.Property(a => a.Detail).HasColumnName("detail").HasMaxLength(512);
 
-        // Query axes for "who deleted what for whom, when" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write).
+        // Query axes for "who deleted what for whom, when" (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write).
         builder.HasIndex(a => a.CreatedAt);
         builder.HasIndex(a => a.OwnerTenantId);
     }

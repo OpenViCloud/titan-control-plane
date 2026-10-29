@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
-/// A listener row (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model). IsDesired: the customer's last request
+/// A listener row (titan-ops features/load-balancer/design.md#lb-resource-model). IsDesired: the customer's last request
 /// has it. IsApplied: Incus took it. A row is either or both; LoadBalancer drops the one neither once a request ends.
 public class LoadBalancerListener
 {

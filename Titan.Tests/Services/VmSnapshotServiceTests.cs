@@ -18,7 +18,7 @@ namespace Titan.Tests.Services;
 public class VmSnapshotServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
-    // The tenant's Incus project, as https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#project-name spells it.
+    // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
     private static readonly Guid VmId = Guid.NewGuid();
 
@@ -29,7 +29,7 @@ public class VmSnapshotServiceTests
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<IActivityRecorder> _activity = new();
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
+    // titan-ops architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
     // quota; Tenant.Create's default caps are what the quota assertions in this file count against.
     public VmSnapshotServiceTests()
         => _tenantRepo
@@ -89,7 +89,7 @@ public class VmSnapshotServiceTests
         var result = await CreateService().CreateAsync(VmId,
             new CreateSnapshotBody("before-upgrade"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the
         // status and name are asserted on the snapshot that was actually persisted.
         Assert.NotEqual(Guid.Empty, result.SnapshotId);
         _snapshotRepo.Verify(r => r.SaveAsync(
@@ -149,7 +149,7 @@ public class VmSnapshotServiceTests
         var result = await CreateService().CreateAsync(VmId,
             new CreateSnapshotBody("test"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: status is asserted on the persisted snapshot, not on the response.
+        // titan-ops architecture/http-contract.md#create-returns-id: status is asserted on the persisted snapshot, not on the response.
         _snapshotRepo.Verify(r => r.SaveAsync(
             It.Is<VmSnapshot>(x => x.Id == result.SnapshotId
                                 && x.Transition == VmSnapshotTransition.Creating), default), Times.Once);
@@ -336,7 +336,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_SNAPSHOT_INVALID_STATE", ex.Code);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly ──
+    // ── titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly ──
 
     [Fact]
     public async Task Revert_WhileReverting_IsANoOp_SavesNothing_EnqueuesNoCommand()
@@ -387,7 +387,7 @@ public class VmSnapshotServiceTests
             () => CreateService().DeleteAsync(VmId, Guid.NewGuid(), default));
     }
 
-    // ── Callbacks (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-reports) ───────────
+    // ── Callbacks (titan-ops features/vm/design.md#vm-snapshot-reports) ───────────
 
     [Fact]
     public async Task UpdateStatus_Created_StoresTheId_AndEndsTheCreate()
@@ -505,7 +505,7 @@ public class VmSnapshotServiceTests
                 new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-abc"), default));
     }
 
-    // ── Activity: one request, one outcome (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#request-and-outcome-names) ──
+    // ── Activity: one request, one outcome (titan-ops features/activity/design.md#request-and-outcome-names) ──
 
     [Fact]
     public async Task Create_RecordsTheRequest_AndTheCallbackRecordsTheOutcomeOnce()
@@ -527,7 +527,7 @@ public class VmSnapshotServiceTests
         await CreateService().UpdateStatusAsync(snapshotVmId, result.SnapshotId, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
         await CreateService().UpdateStatusAsync(snapshotVmId, result.SnapshotId, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#actor-and-tenant: the outcome carries the tenant OF THE RESOURCE (the callback has no caller).
+        // titan-ops features/activity/design.md#actor-and-tenant: the outcome carries the tenant OF THE RESOURCE (the callback has no caller).
         _activity.Verify(a => a.StageOutcome(saved.TenantId, "vm_snapshot.created", "vm_snapshot", result.SnapshotId, "before-upgrade"), Times.Once);
     }
 
@@ -571,7 +571,7 @@ public class VmSnapshotServiceTests
     }
 
     // A create that failed before Incus had the snapshot leaves the list at once, with no command
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    // (titan-ops architecture/desired-and-current.md#delete-locally).
     [Fact]
     public async Task Delete_OfACreateThatFailedBeforeIncusHadIt_DeletesLocally_AndSendsNothing()
     {
@@ -743,7 +743,7 @@ public class VmSnapshotServiceTests
         return $"{s.CurrentExistence}/{s.DesiredExistence}/{transition}";
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure: the raw error is admin-only.
+    // titan-ops architecture/desired-and-current.md#request-failure: the raw error is admin-only.
     [Fact]
     public void TenantVmSnapshotQueryResult_HasNoFailureDetailField_NorAStateWord()
     {

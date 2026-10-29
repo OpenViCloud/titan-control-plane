@@ -4,7 +4,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// wallets.version catches a lost update at commit (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance): two
+// wallets.version catches a lost update at commit (titan-ops architecture/money-and-wallet.md#wallet-one-balance): two
 // writers read the same version, the second UPDATE ... AND version = N matches no row. WalletSchemaTests pins that the
 // token is declared; this shows Postgres enforcing it. Category=Integration — its own CI step.
 [Trait("Category", "Integration")]

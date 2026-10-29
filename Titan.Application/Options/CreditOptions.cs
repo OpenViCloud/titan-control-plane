@@ -10,6 +10,6 @@ public class CreditOptions
     /// grant with GRANT_AMOUNT_EXCEEDS_MAX.
     public decimal MaxGrantAmount { get; set; } = 100_000_000m;
 
-    /// Currency of the grant — must match the billing default (VND, https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd) so credit and usage are comparable.
+    /// Currency of the grant — must match the billing default (VND, titan-ops architecture/money-and-wallet.md#money-is-long-vnd) so credit and usage are comparable.
     public string Currency { get; set; } = "VND";
 }

@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
 
-/// Stored by member name (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage), so reconciliation queries by
+/// Stored by member name (titan-ops architecture/code-structure.md#enum-storage), so reconciliation queries by
 /// status stay legible.
 public enum PaymentGatewayTransactionStatus
 {

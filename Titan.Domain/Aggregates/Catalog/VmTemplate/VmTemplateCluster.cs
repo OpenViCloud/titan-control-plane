@@ -2,15 +2,15 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.Catalog.VmTemplate;
 
-/// One template in ONE cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster): whether that cluster holds
-/// the image alias. Incus has no status word for an alias (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-state-is-existence).
+/// One template in ONE cluster (titan-ops features/catalog/design.md#template-per-cluster): whether that cluster holds
+/// the image alias. Incus has no status word for an alias (titan-ops features/catalog/design.md#template-state-is-existence).
 /// A child of VmTemplate: "one provider id per cluster" is the template's invariant, so only the root reaches these methods.
 public class VmTemplateCluster
 {
     public Guid TemplateId { get; private set; }
     public string ClusterId { get; private set; } = default!;
 
-    /// Only observations write it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Never Deleted: a
+    /// Only observations write it (titan-ops architecture/desired-and-current.md#existence-axis). Never Deleted: a
     /// template is never removed from a cluster.
     public CurrentExistence CurrentExistence { get; private set; }
     /// Always Exists (add-only sync).
@@ -19,7 +19,7 @@ public class VmTemplateCluster
     public Guid? PendingIntentId { get; private set; }
     /// The image alias tpl-<templateId> on this cluster.
     public string? ExternalTemplateId { get; private set; }
-    /// Why the last sync gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure); Detail is the operator's.
+    /// Why the last sync gave up (titan-ops architecture/desired-and-current.md#request-failure); Detail is the operator's.
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -51,7 +51,7 @@ public class VmTemplateCluster
     };
 
     /// Refused when the alias is there or a sync is waiting: the handler recognises the repeat first and re-sends
-    /// the command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// the command (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     internal void RequestSync()
     {
         bool syncIsWaiting = PendingIntentId != null;

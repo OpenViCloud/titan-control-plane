@@ -4,7 +4,7 @@ using Titan.Application.Queries.Platform.ActivityEvent.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Activity;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#activity-data-and-route
+// titan-ops features/activity/design.md#activity-data-and-route
 public class GetActivityEndpoint(ListActivityEventsQueryHandler listActivity) : EndpointWithoutRequest<List<ActivityEventQueryResult>>
 {
     public override void Configure()

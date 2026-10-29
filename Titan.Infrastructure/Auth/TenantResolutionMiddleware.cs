@@ -50,7 +50,7 @@ public class TenantResolutionMiddleware(
 
         // A PendingApproval tenant of an account the realm declares (role auto-approve), a new one included, is approved
         // on the spot; every other signup waits for an admin
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation). Wallet before approval: if the process dies
+        // (titan-ops architecture/tenancy-and-admin.md#approval-is-activation). Wallet before approval: if the process dies
         // between the two commits, the next request approves a tenant that already has a wallet; never an Active
         // tenant without one. Both steps are idempotent. Fires at most once, since approval leaves PendingApproval.
         if (result.Value.Status == TenantStatus.PendingApproval && context.User.IsInRole(AutoApproveRole))
@@ -68,7 +68,7 @@ public class TenantResolutionMiddleware(
 
         context.Items["TenantId"] = result.Value.TenantId;
 
-        // A websocket upgrade is a GET that opens a shell inside a VM (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): it
+        // A websocket upgrade is a GET that opens a shell inside a VM (titan-ops features/vm/design.md#ssh-session): it
         // writes as much as any POST.
         bool isWrite = !HttpMethods.IsGet(context.Request.Method) || context.WebSockets.IsWebSocketRequest;
 

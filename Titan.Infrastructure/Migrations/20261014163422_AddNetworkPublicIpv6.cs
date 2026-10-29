@@ -11,7 +11,7 @@ namespace Titan.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             // Kept for the pods still running the old model during the rollout; a default lets the new model insert
-            // without it. A later migration drops it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-design-debts).
+            // without it. A later migration drops it (titan-ops features/vm/design.md#vm-design-debts).
             migrationBuilder.AlterColumn<bool>(
                 name: "enable_public_ipv6",
                 schema: "core",

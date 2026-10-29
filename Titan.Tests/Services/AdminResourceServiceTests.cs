@@ -21,8 +21,8 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
-// Cross-tenant read (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read) and cross-tenant
-// delete (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write): reads forward the (nullable)
+// Cross-tenant read (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read) and cross-tenant
+// delete (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write): reads forward the (nullable)
 // tenant filter untouched; delete bypasses tenant scope but keeps the tenant path's lifecycle guards.
 // Read filtering lives in the repo (AdminResourceRepositoryTests); isolation of the tenant path is
 // pinned by VmServiceTests/NetworkServiceTests.
@@ -178,7 +178,7 @@ public class AdminResourceServiceTests
         Assert.NotNull(dto.RequestFailedAt);
     }
 
-    // ── DeleteVmAsync (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write) ────────────────────────────────────
+    // ── DeleteVmAsync (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write) ────────────────────────────────────
 
     [Fact]
     public async Task DeleteVm_RunningVmWithExternalId_EnqueuesTheDeleteCommand_AcrossTenant()
@@ -193,7 +193,7 @@ public class AdminResourceServiceTests
         // admin path resolves the owner, not the caller.
         wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write — the audit row is flushed by the VM
+        // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write — the audit row is flushed by the VM
         // repo's SaveAsync together with the pending delete intent and the provider command (same DbContext).
         audit.Verify(a => a.Add(It.Is<AdminAuditLog>(e =>
             e.Action == "vm.delete.cross_tenant" && e.ActorKeycloakUserId == "admin-1"
@@ -202,7 +202,7 @@ public class AdminResourceServiceTests
         Assert.Equal(VmIntent.Delete, vm.PendingIntent);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes — the admin path detaches the VM's volumes like the
+    // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path detaches the VM's volumes like the
     // tenant path, or the owner's volume would be stuck attached to a VM that no longer exists.
     [Fact]
     public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
@@ -219,7 +219,7 @@ public class AdminResourceServiceTests
         Assert.Equal(Titan.Domain.Aggregates.Compute.Volume.VolumeTransition.Detaching, volume.Transition);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#admin-delete-audit — a repeated admin delete enqueues the same command again but writes
+    // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete enqueues the same command again but writes
     // the audit row once: the second press destroyed nothing.
     [Fact]
     public async Task DeleteVm_Repeated_AuditsOnce_AndResendsTheCommand()
@@ -313,7 +313,7 @@ public class AdminResourceServiceTests
 }
 
 // Members the admin handlers do not use throw, to catch an accidental route through tenant-scoped
-// code (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).
+// code (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read).
 file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
 {
     private readonly List<Vm> _vms = [.. seed];

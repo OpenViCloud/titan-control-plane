@@ -7,7 +7,7 @@ using Titan.Application.Commands.Platform.ProviderCommand.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The worker takes work under a lease id it minted, then GETs the same route to read what it got
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-lease). PUT: a repeat with the same lease id is a no-op.
+// (titan-ops architecture/provider-and-worker.md#provider-command-lease). PUT: a repeat with the same lease id is a no-op.
 public class LeaseProviderCommandEndpoint(LeaseProviderCommandCommandHandler handler, IConfiguration config)
     : Endpoint<LeaseProviderCommandBody>
 {

@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Platform.BackupRecord;
 namespace Titan.Application.Commands.Platform.Backup;
 
 /// One VM or volume backup, read from its object key: incus/<clusterId>/<tenantId>/<vms|volumes>/<id>/<yyyyMMddTHHmmssZ>.tar.gz,
-/// the key the worker gives it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+/// the key the worker gives it (titan-ops features/backup/design.md#incus-backup).
 /// No manifest: an object under such a key is a whole backup, since the bucket shows an upload only once it is complete.
 public record IncusBackupKey(string Kind, Guid ResourceId, Guid TenantId, string BackupKey, DateTimeOffset TakenAt)
 {

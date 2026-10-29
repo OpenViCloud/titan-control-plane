@@ -4,11 +4,11 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// The two folder-layout invariants of Titan.Domain (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#domain-tree), checked
+// The two folder-layout invariants of Titan.Domain (titan-ops architecture/code-structure.md#domain-tree), checked
 // against the source tree: a doc cannot fail, this can.
 public class DomainFolderConventionTests
 {
-    [Fact] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#folder-name-collision
+    [Fact] // titan-ops architecture/code-structure.md#folder-name-collision
     public void NoFolderName_CollidesWithATypeItDoesNotOwn()
     {
         // Compute/Vm/ holding class Vm is fine: every shape it breaks (e.g. a partially-qualified reference)

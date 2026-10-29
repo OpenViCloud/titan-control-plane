@@ -20,7 +20,7 @@ namespace Titan.Tests.Domain;
 //
 // The cap value is set EXPLICITLY on the tenant instead of relying on TenantQuota.Default: a test
 // that happens to match the default is measuring the default, not the rule. `0` means "none allowed"
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none), so these use small non-zero caps to keep both halves meaningful.
+// (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none), so these use small non-zero caps to keep both halves meaningful.
 public class QuotaInFactoryTests
 {
     private static Tenant TenantWith(
@@ -159,7 +159,7 @@ public class QuotaInFactoryTests
         Assert.NotNull(SshKey.Create(t, 3, "laptop", SshPublicKeyTests.Ed25519));
     }
 
-    // A cap of 0 means "none allowed", not "unlimited" (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-zero-means-none). Pinned
+    // A cap of 0 means "none allowed", not "unlimited" (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none). Pinned
     // here because the factory is the place that reads it, and reading 0 as unlimited would hand out infinite resources at
     // exactly the moment an admin tried to cut a tenant off.
     [Fact]

@@ -8,8 +8,8 @@ using Titan.Domain.Repositories.Platform;
 
 namespace Titan.Application.Commands.Catalog.VmOffering;
 
-/// Admin price change (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering), recorded in the append-only
-/// admin audit trail. Returns nothing (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+/// Admin price change (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering), recorded in the append-only
+/// admin audit trail. Returns nothing (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class UpdateVmOfferingPriceCommandHandler(
     IVmOfferingRepository repo,
     IAdminAuditLogRepository auditLog,

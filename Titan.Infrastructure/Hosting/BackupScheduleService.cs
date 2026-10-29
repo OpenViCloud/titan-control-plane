@@ -9,7 +9,7 @@ namespace Titan.Infrastructure.Hosting;
 /// <summary>
 /// Asks for the day's backup of every VM and volume (ScheduleBackupsCommandHandler) every hour. A CP-side BackgroundService
 /// that only writes the control plane's own command table; the worker does the backups
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+/// (titan-ops features/backup/design.md#incus-backup).
 /// </summary>
 public class BackupScheduleService(
     IServiceScopeFactory scopeFactory,

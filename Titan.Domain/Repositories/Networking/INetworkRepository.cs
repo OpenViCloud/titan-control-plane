@@ -19,7 +19,7 @@ public interface INetworkRepository
     /// A load balancer of the network is not yet Deleted: it lives on the network on Incus.
     Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default);
     Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default);
-    /// Admin cross-tenant read (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read): every non-Deleted
+    /// Admin cross-tenant read (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read): every non-Deleted
     /// network, or one tenant's when tenantId is given. Not scoped to a caller.
     Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);
     /// Reached the provider (ExternalId set) and not yet confirmed gone, whatever Incus last said: an Errored network

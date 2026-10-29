@@ -5,7 +5,7 @@ using Titan.Application.Services.Billing.Metering;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// One wiring path for the meters (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#append-only-metering): MeterRegistrationTests
+/// One wiring path for the meters (titan-ops architecture/money-and-wallet.md#append-only-metering): MeterRegistrationTests
 /// calls this exact method, so a dropped or extra meter is caught by test, not found as a hole in the invoice.
 /// </summary>
 public static class MeterRegistration

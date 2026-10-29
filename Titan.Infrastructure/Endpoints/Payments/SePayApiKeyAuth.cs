@@ -4,7 +4,7 @@ using System.Text;
 namespace Titan.Infrastructure.Endpoints.Payments;
 
 // Constant-time, to avoid a timing side-channel on the secret. Separate from X-Internal-Token: SePay is an
-// Internet-facing caller with its own key (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#sepay-writer).
+// Internet-facing caller with its own key (titan-ops architecture/money-and-wallet.md#sepay-writer).
 internal static class SePayApiKeyAuth
 {
     private const string Scheme = "Apikey ";

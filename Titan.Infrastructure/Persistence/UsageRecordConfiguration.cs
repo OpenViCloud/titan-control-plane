@@ -26,7 +26,7 @@ public class UsageRecordConfiguration : IEntityTypeConfiguration<UsageRecord>
         builder.Property(r => r.UsageType).HasColumnName("usage_type").IsRequired();
         // decimal(18,10): a flat disk rate like 0.00008773/GB/h needs 8 fractional digits; decimal(10,6)
         // truncates it to 0.000088 (UsageRecordSchemaTests.UnitPricePerHour_HasWidePrecisionToAvoidTruncatingFlatDiskRate).
-        // The Rate <-> decimal conversion is a convention in TitanDbContext (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object).
+        // The Rate <-> decimal conversion is a convention in TitanDbContext (titan-ops architecture/money-and-wallet.md#rate-value-object).
         builder.Property(r => r.UnitPricePerHour).HasColumnName("unit_price_per_hour").HasColumnType("decimal(18,10)").IsRequired();
         builder.Property(r => r.Cost).HasColumnName("cost").HasColumnType("decimal(18,10)").IsRequired();
         builder.Property(r => r.Currency).HasColumnName("currency").IsRequired();

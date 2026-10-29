@@ -20,7 +20,7 @@ public class DeleteVolumeCommandHandler(
         var volume = await ComputeOwnership.RequireVolumeAsync(repo, callerId, command.VolumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // This delete is still waiting, or the volume is already deleted. A delete that failed is not a repeat: it
         // falls through and the aggregate decides. Answer like the first request: nothing recorded, nothing sent.
         bool deleteIsWaiting = volume.Transition == VolumeTransition.Deleting;
@@ -31,7 +31,7 @@ public class DeleteVolumeCommandHandler(
         }
 
         // The create failed before Incus had it: nothing to delete on Incus
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally). The request and its outcome happen here at once.
+        // (titan-ops architecture/desired-and-current.md#delete-locally). The request and its outcome happen here at once.
         bool neverReachedIncus = volume.ExternalId is null && volume.Transition == null;
         if (neverReachedIncus)
         {

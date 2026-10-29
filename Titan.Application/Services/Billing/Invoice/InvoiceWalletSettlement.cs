@@ -10,10 +10,10 @@ namespace Titan.Application.Services.Billing.Invoice;
 
 // The tenant pay button and the admin settle button follow one rule, and handlers may not call each
 // other (ReadWriteSeparationTests.Handlers_DoNotReferenceOtherHandlers), so the rule lives here
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#services-branch).
+// (titan-ops architecture/code-structure.md#services-branch).
 public static class InvoiceWalletSettlement
 {
-    /// Is this press a repeat (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat)? Yes when
+    /// Is this press a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat)? Yes when
     /// the wallet already paid the invoice or a debit for it is waiting. Not a repeat: an invoice paid
     /// outside Titan (MarkPaid, a different money route, still refused by SettleAsync) or a failed debit,
     /// which SettleAsync reopens.
@@ -44,9 +44,9 @@ public static class InvoiceWalletSettlement
             throw new BusinessException("INVOICE_INVALID_STATE",
                 $"Invoice {invoice.Id} is already settled (was {invoice.Status}).");
 
-        // All or nothing, answered at the button (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit), so
+        // All or nothing, answered at the button (titan-ops architecture/money-and-wallet.md#human-confirmed-debit), so
         // the customer learns how much is missing. Not the guard: two payments can both pass this read, and
-        // the consumer decides which is honoured (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+        // the consumer decides which is honoured (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
         var balance = await walletRepo.GetBalanceAsync(invoice.TenantId, ct);
         if (balance < invoice.Total)
             throw new BusinessException("INVOICE_WALLET_INSUFFICIENT",
@@ -59,7 +59,7 @@ public static class InvoiceWalletSettlement
 
         // The request only writes the mutation. Balance, ledger row and invoice status change together in
         // the consumer's transaction, so the invoice never reads "paid" while the money is still in the wallet.
-        // An invoice has one debit row, ever (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit):
+        // An invoice has one debit row, ever (titan-ops features/billing/invoice/design.md#retry-after-failed-debit):
         // the first press adds it, a press after it failed reopens it.
         WalletMutation? debit = await mutationRepo.GetForRefForUpdateAsync(
             WalletMutationConsumer.InvoiceRefType, invoice.Id, ct);
@@ -120,7 +120,7 @@ public static class InvoiceWalletSettlement
         // anything the bus loses, so a failed publish costs latency, never money.
         await PublishQuietlyAsync(walletBus, debit, ct);
 
-        // Nothing goes back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data). A caller reading the
+        // Nothing goes back (titan-ops architecture/http-contract.md#commands-return-no-data). A caller reading the
         // invoice back sees it still New with PaymentState=Processing: payment accepted, money moving.
     }
 
@@ -133,7 +133,7 @@ public static class InvoiceWalletSettlement
         }
         catch
         {
-            // Deliberately silent: the sweeper is the safety net (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+            // Deliberately silent: the sweeper is the safety net (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
         }
     }
 }

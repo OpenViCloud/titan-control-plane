@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Platform.BackupRecord;
 
 namespace Titan.Application.Queries.Platform.Backup;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket. Postgres is Stale by the age of its newest complete base backup only; the age of the
+// titan-ops features/backup/design.md#backup-status-reads-the-bucket. Postgres is Stale by the age of its newest complete base backup only; the age of the
 // newest log is shown but never alarms, because an idle database writes no log and cannot be told from a broken archiver.
 public static class BackupHealthPolicy
 {
@@ -23,7 +23,7 @@ public static class BackupHealthPolicy
     public const string BaseTooOld = "BaseTooOld";
     public const string BackupTooOld = "BackupTooOld";
 
-    /// A VM or volume is backed up once a day (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup), plus two hours of slack.
+    /// A VM or volume is backed up once a day (titan-ops features/backup/design.md#incus-backup), plus two hours of slack.
     public static readonly TimeSpan DiskStaleAfter = TimeSpan.FromHours(26);
 
     public static (BackupHealth Health, string? Reason) ForPostgres(

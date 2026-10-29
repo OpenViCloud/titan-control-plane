@@ -11,7 +11,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // One backup a day of every VM and volume Incus holds, every tenant
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+// (titan-ops features/backup/design.md#incus-backup).
 public class ScheduleBackupsCommandTests
 {
     private readonly Mock<IVmRepository> _vms = new();

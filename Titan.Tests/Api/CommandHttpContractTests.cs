@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Titan.Tests.Api;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: PUT/PATCH answer 204 with an empty body; the named
-// async POST actions answer 202 with an empty body (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202).
+// titan-ops architecture/http-contract.md#commands-return-no-data: PUT/PATCH answer 204 with an empty body; the named
+// async POST actions answer 202 with an empty body (titan-ops architecture/http-contract.md#async-actions-return-202).
 // WHICH endpoints are PUT/PATCH comes from the running host's EndpointDataSource; the status-code half is textual
 // (it reads the endpoint's own file). Silent about an endpoint that sets Response.StatusCode by hand or writes the
 // body stream directly, and about a NEW async POST action: no scan here finds one.
@@ -53,7 +53,7 @@ public class CommandHttpContractTests(OpenApiSpecTests.ApiFactory factory)
         return File.ReadAllText(files[0]);
     }
 
-    [Fact] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data
+    [Fact] // titan-ops architecture/http-contract.md#commands-return-no-data
     public void EveryPutAndPatch_DeclaresNoResponseType_AndSendsNoContent()
     {
         var routes = CommandRoutes(HttpMethods.Put, HttpMethods.Patch);
@@ -80,7 +80,7 @@ public class CommandHttpContractTests(OpenApiSpecTests.ApiFactory factory)
             + "Stop and ask before adding an exception (T-1): " + string.Join(" | ", offenders));
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202 — named routes, because "async POST action" is not something a scan can recognise.
+    // titan-ops architecture/http-contract.md#async-actions-return-202 — named routes, because "async POST action" is not something a scan can recognise.
     public static TheoryData<string> AsyncPostActions => new()
     {
         "v1/tenant/billing/invoices/{invoiceId:guid}/pay",
@@ -91,7 +91,7 @@ public class CommandHttpContractTests(OpenApiSpecTests.ApiFactory factory)
     };
 
     // Async requests that enqueue a provider command: `202 {}` still carries a body, and
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202 says a command returns none.
+    // titan-ops architecture/http-contract.md#async-actions-return-202 says a command returns none.
     public static TheoryData<string, string> AsyncProviderRequests => new()
     {
         { HttpMethods.Delete, "v1/tenant/vms/{vmId:guid}" },

@@ -19,7 +19,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
 
     // Counted by occupancy: what Incus holds or is about to hold. A network being deleted stops counting against
     // the quota; its name and CIDR stay taken until the delete command confirms it gone
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-name-reuse).
+    // (titan-ops features/network/design.md#network-name-reuse).
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks.CountAsync(
             n => n.TenantId == tenantId &&
@@ -70,7 +70,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                   || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingIntentId != null)), ct);
 
     // Read here, not through a Compute repository: Networking -> Compute in Titan.Application would close a module
-    // cycle (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above reads the VM table.
+    // cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above reads the VM table.
     public async Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.Compute.LoadBalancer.LoadBalancer>().AnyAsync(
             lb => lb.NetworkId == networkId && lb.CurrentExistence != CurrentExistence.Deleted, ct);
@@ -109,7 +109,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         return s1 <= e2 && s2 <= e1;
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read. tenantId == null spans all tenants.
+    // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read. tenantId == null spans all tenants.
     public async Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Networks
             .Where(n => n.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || n.TenantId == tenantId))

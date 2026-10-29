@@ -9,7 +9,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // The tenant command handlers. None of them takes an IProviderCommandQueue: approval is activation and no provider is
-// asked for anything (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation) — the compiler holds that, not a
+// asked for anything (titan-ops architecture/tenancy-and-admin.md#approval-is-activation) — the compiler holds that, not a
 // Verify(Times.Never). Opening the wallet before approval is the adapters' job: TenantResolutionMiddlewareTests and
 // UpdateTenantStatusEndpointTests.
 public class TenantServiceTests
@@ -54,7 +54,7 @@ public class TenantServiceTests
 
     [Fact]
     // A second press after the result is already there is a repeat
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): the aggregate still refuses it
+    // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): the aggregate still refuses it
     // (Tenant.Suspend/RequestActivation throw); the handler recognises it first and answers 204.
     public async Task UpdateStatus_SuspendAlreadySuspended_ChangesNothing()
     {
@@ -190,7 +190,7 @@ public class TenantServiceTests
 
         await CreateService().UpdateQuotaAsync(tenant.Id, 25, 5);
 
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: nothing comes back; the admin UI re-reads the tenant list, which reads the aggregate.
+        // titan-ops architecture/http-contract.md#commands-return-no-data: nothing comes back; the admin UI re-reads the tenant list, which reads the aggregate.
         Assert.Equal(25, tenant.Quota.MaxVms);
         Assert.Equal(5, tenant.Quota.MaxNetworks);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
@@ -231,7 +231,7 @@ public class TenantServiceTests
         Assert.Equal(0, tenant.Quota.MaxNetworks);
     }
 
-    [Fact] // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota — a client that sends two caps must not reset the other seven.
+    [Fact] // titan-ops architecture/tenancy-and-admin.md#tenant-quota — a client that sends two caps must not reset the other seven.
     // Rebuilding the whole value object from what the request carries silently zeroes volumes, snapshots, firewall
     // rules, IPv6, SSH keys and load balancers — no error, no log, and the tenant stops being able to create anything.
     public async Task UpdateQuota_PreservesTheCapsTheEndpointDoesNotCarry()
@@ -319,7 +319,7 @@ public class TenantServiceTests
     // ── UpdateDebtCeilingAsync ──────
     //
     // The ceiling is a REFERENCE number for the admin at month-end close
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake): it blocks nothing, and it is shaped like
+    // (titan-ops architecture/money-and-wallet.md#postpaid-no-brake): it blocks nothing, and it is shaped like
     // MaxVms — non-null, seeded at creation — not like a config override with a nullable escape hatch.
 
     [Fact]

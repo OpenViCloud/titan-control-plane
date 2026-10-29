@@ -6,7 +6,7 @@ using Titan.Infrastructure.Auth;
 namespace Titan.Tests.Infrastructure.Integration;
 
 // The production CurrentUser over a request carrying the caller, as TenantResolutionMiddleware leaves it.
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests
+// titan-ops architecture/testing.md#doubles-only-in-unit-tests
 internal static class Callers
 {
     public static ICurrentUser Admin(string keycloakUserId)

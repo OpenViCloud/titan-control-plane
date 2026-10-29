@@ -3,9 +3,9 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// A template is synced to every cluster on its own (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster): each cluster holds
+// A template is synced to every cluster on its own (titan-ops features/catalog/design.md#template-per-cluster): each cluster holds
 // whether that cluster has the image alias (existence — Incus has no status word for an alias,
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-state-is-existence) and a sync request (PendingIntentId). Sync is
+// titan-ops features/catalog/design.md#template-state-is-existence) and a sync request (PendingIntentId). Sync is
 // add-only, so Exists is the only thing anybody can want.
 public class VmTemplateTests
 {
@@ -51,7 +51,7 @@ public class VmTemplateTests
         Assert.Equal("m", t.VmOfferingId);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-borrows-sizing — the template holds a POINTER to a tier, and the aggregate must not accept a
+    // titan-ops features/catalog/design.md#template-borrows-sizing — the template holds a POINTER to a tier, and the aggregate must not accept a
     // pointer to nothing. The FK covers ids that do not exist; it accepts "" and "   " happily,
     // and those only fail later, at sync time, far from the row that caused them.
     [Theory]

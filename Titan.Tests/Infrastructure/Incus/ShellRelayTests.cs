@@ -6,7 +6,7 @@ using Titan.Infrastructure.Sessions;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// The relay between the customer's websocket and the exec's (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session), against an
+// The relay between the customer's websocket and the exec's (titan-ops features/vm/design.md#ssh-session), against an
 // Incus that ends a command the way Incus does: an empty message, then sockets dropped without a close handshake.
 public class ShellRelayTests
 {
@@ -263,7 +263,7 @@ public class ShellRelayTests
         Assert.Contains("{\"command\":\"signal\",\"signal\":15}", rig.Incus.ControlMessages);
     }
 
-    // A pair: bytes in either direction alone keep the session open (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session).
+    // A pair: bytes in either direction alone keep the session open (titan-ops features/vm/design.md#ssh-session).
     [Fact]
     public async Task BytesFromTheCustomerOnly_KeepTheSessionOpen()
     {

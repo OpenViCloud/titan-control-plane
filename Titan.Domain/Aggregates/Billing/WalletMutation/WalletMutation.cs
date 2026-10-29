@@ -1,9 +1,9 @@
 namespace Titan.Domain.Aggregates.Billing.WalletMutation;
 
-/// One row of the wallet outbox (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox): a request
+/// One row of the wallet outbox (titan-ops architecture/money-and-wallet.md#single-writer-outbox): a request
 /// writes it next to the business fact, and the single-writer consumer applies it to the wallet later.
 /// UNIQUE(ref_type, ref_id) gives one source document exactly one row, whatever its status; paying an invoice
-/// again reopens its failed debit row (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit).
+/// again reopens its failed debit row (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
 public class WalletMutation
 {
     public Guid Id { get; private set; }
@@ -71,11 +71,11 @@ public class WalletMutation
         };
     }
 
-    /// Terminal absorbs every later Mark* on this instance (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
-    /// It does not guard the money: the consumer moves it before MarkApplied (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+    /// Terminal absorbs every later Mark* on this instance (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// It does not guard the money: the consumer moves it before MarkApplied (titan-ops features/billing/wallet/design.md#wallet-debts).
     public bool IsTerminal => Status is WalletMutationStatus.Applied or WalletMutationStatus.Failed;
 
-    /// An observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): never throws.
+    /// An observation (titan-ops architecture/intent-and-observation.md#observation-converges): never throws.
     public void MarkApplied()
     {
         if (IsTerminal) return;
@@ -92,8 +92,8 @@ public class WalletMutation
         LastError = reason;
     }
 
-    /// An intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): the payer pressed pay again
-    /// after the debit failed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit). Throws on
+    /// An intent (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): the payer pressed pay again
+    /// after the debit failed (titan-ops features/billing/invoice/design.md#retry-after-failed-debit). Throws on
     /// anything but a failed debit; a credit comes from a top-up confirmed once and is never applied again.
     /// The attempt count starts over so a row the sweeper gave up on gets its full retries; LastError stays as
     /// the only trace of why the previous try failed.

@@ -2,7 +2,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Domain.Aggregates.Platform.Tenant;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-value-object. `{ get; private init; }`, not a positional record: a
+// titan-ops architecture/tenancy-and-admin.md#quota-value-object. `{ get; private init; }`, not a positional record: a
 // positional record hands out a public `with`, and `quota with { MaxVms = -1 }` would skip Create's
 // validation (TenantQuotaTests.NoPropertySetter_IsPubliclyWritable).
 public sealed record TenantQuota
@@ -25,13 +25,13 @@ public sealed record TenantQuota
     /// Per tenant: SSH public keys saved to pick at VM create.
     public int MaxSshKeys { get; private init; }
 
-    /// Per tenant: network load balancers (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-quota-and-billing).
+    /// Per tenant: network load balancers (titan-ops features/load-balancer/design.md#lb-quota-and-billing).
     public int MaxLoadBalancers { get; private init; }
 
     private TenantQuota() { }
 
     // The migration backfilled existing tenants with exactly these
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#quota-migration-backfill).
+    // (titan-ops architecture/tenancy-and-admin.md#quota-migration-backfill).
     public const int DefaultMaxVms = 10;
     public const int DefaultMaxNetworks = 1;
     public const int DefaultMaxVolumes = 10;

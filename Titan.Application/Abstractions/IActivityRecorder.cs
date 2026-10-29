@@ -11,7 +11,7 @@ public interface IActivityRecorder
     // Stage + flush immediately, for a path with no sibling DB write of its own.
     Task RecordAsync(string action, string resourceType, Guid resourceId, string resourceName, CancellationToken ct = default);
 
-    // An outcome event (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#request-and-outcome-names), observed by a callback or
+    // An outcome event (titan-ops features/activity/design.md#request-and-outcome-names), observed by a callback or
     // the reconciler. Those callers act for no tenant and no user, so the tenant is the resource's own and
     // the actor is "system". Flushed by the caller's SaveChanges.
     void StageOutcome(Guid tenantId, string action, string resourceType, Guid resourceId, string resourceName);

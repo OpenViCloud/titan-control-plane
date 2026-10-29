@@ -3,7 +3,7 @@ using Titan.Domain.Repositories.Compute;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot;
 
-// Read side of the VM snapshot reconciler (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current). No
+// Read side of the VM snapshot reconciler (titan-ops architecture/desired-and-current.md#desired-and-current). No
 // ICurrentUser: the reconciler acts for no tenant; the endpoint authenticates it by X-Internal-Token.
 public class ListReconcilableVmSnapshotsQueryHandler(IVmSnapshotRepository snapshots)
 {

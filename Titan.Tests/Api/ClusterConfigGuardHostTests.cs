@@ -3,7 +3,7 @@ using Titan.Tests.Infrastructure.Incus;
 namespace Titan.Tests.Api;
 
 // FullHost — cluster and identity are checked at startup, so only a real host start shows the checks are wired in
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config). The control case starts the same host with a
+// (titan-ops features/cluster/design.md#cluster-from-config). The control case starts the same host with a
 // valid configuration, so a failure of the others can only come from the value each one spoils.
 [Trait("Category", "FullHost")]
 [Collection("Http")]

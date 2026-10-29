@@ -5,7 +5,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Tests.Domain;
 
 // Invoice is a frozen snapshot of the UsageRecord ledger at generation time
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#invoice-frozen-snapshot).
+// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot).
 public class InvoiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -114,7 +114,7 @@ public class InvoiceTests
         Assert.Equal(invoice.Id, invoice.Items.Single().InvoiceId);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit — settled by wallet (only ever by an explicit human action) ──
+    // ── titan-ops architecture/money-and-wallet.md#human-confirmed-debit — settled by wallet (only ever by an explicit human action) ──
 
     // A wallet-settled invoice displays "Settled" and NEVER falls into Overdue, even long past its due
     // date — the customer owes nothing more, so there is nothing left to remind them about.
@@ -172,7 +172,7 @@ public class InvoiceTests
             Assert.Throws<BusinessException>(() => settled.SettleFromWallet(DateTimeOffset.UtcNow)).Code);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit — a zero-total invoice settles itself ───────────────
+    // ── titan-ops architecture/money-and-wallet.md#human-confirmed-debit — a zero-total invoice settles itself ───────────────
 
     [Fact]
     public void AutoSettleZeroTotal_FromNew_StampsPaidBySystem_AtIssueTime()
@@ -251,7 +251,7 @@ public class InvoiceTests
         Assert.False(Enum.IsDefined(typeof(InvoiceDisplayStatus), "SettledByWallet" as object));
     }
 
-    // Usage is never negative, so neither is a line built from it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd:
+    // Usage is never negative, so neither is a line built from it (titan-ops architecture/money-and-wallet.md#money-is-long-vnd:
     // non-negative is each aggregate's invariant, not the column's). Zero is real usage of nothing.
     [Fact]
     public void Item_WithANegativeAmount_IsRefused()

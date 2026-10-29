@@ -7,8 +7,8 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure.ProviderCommands;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
-// the shape https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity describes.
+// titan-ops architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
+// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes.
 public class ProviderCommandQueueTests
 {
     private readonly FakeProviderCommandRepository _repo = new();
@@ -65,7 +65,7 @@ public class ProviderCommandQueueTests
     }
 
     // A request the handler took as new, on a resource key whose row is open: another request committed it first
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
+    // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
     // handler saves nothing of this request.
     [Theory]
     [InlineData("vm-delete")]
@@ -212,7 +212,7 @@ public class ProviderCommandQueueTests
     }
 
     // The worker merges the two policies into the network's default action
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-default-policy): it needs both.
+    // (titan-ops features/network/design.md#firewall-default-policy): it needs both.
     [Fact]
     public async Task NetworkCreate_CarriesBothPolicies()
     {
@@ -225,7 +225,7 @@ public class ProviderCommandQueueTests
     }
 
     // The worker reads both as strings, empty meaning "no public IPv6" (OpenViCloud/titan-incus-worker:resource/network/create.go),
-    // and builds the network on the uplink with the router at that address (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan).
+    // and builds the network on the uplink with the router at that address (titan-ops infra/incus/design.md#ipv6-address-plan).
     [Theory]
     [InlineData("2001:41d0:d00:d470::/64", "2001:41d0:d00:d400::170", "2001:41d0:d00:d470::/64", "2001:41d0:d00:d400::170")]
     [InlineData(null, null, "", "")]
@@ -249,7 +249,7 @@ public class ProviderCommandQueueTests
         Assert.False(payload.RootElement.TryGetProperty("enablePublicIpv6", out _));
     }
 
-    // A rule lives in its network's ACL, inside the tenant's project (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-on-incus).
+    // A rule lives in its network's ACL, inside the tenant's project (titan-ops features/network/design.md#firewall-on-incus).
     [Fact]
     public async Task FirewallRuleCreateAndDelete_CarryTheProject()
     {
@@ -283,7 +283,7 @@ public class ProviderCommandQueueTests
         Assert.Equal($"volume-snapshot-restore-{secondVolume}", _repo.Rows[1].Key);
     }
 
-    // An Incus image carries no CPU/RAM: sizing travels with the VM (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-is-an-image-alias).
+    // An Incus image carries no CPU/RAM: sizing travels with the VM (titan-ops features/catalog/design.md#template-is-an-image-alias).
     [Fact]
     public async Task TemplateSync_CarriesTheImageAlias_AndNoSizing()
     {
@@ -298,7 +298,7 @@ public class ProviderCommandQueueTests
     }
 
     // The worker imports the distro's own image when the template names one; none ⇒ "" and it pulls osImageName
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-is-an-image-alias).
+    // (titan-ops features/catalog/design.md#template-is-an-image-alias).
     [Fact]
     public async Task TemplateSync_CarriesTheImageUrl_OrAnEmptyOne()
     {
@@ -327,7 +327,7 @@ public class ProviderCommandQueueTests
             _repo.Rows.Select(r => r.Key).ToArray());
     }
 
-    // One backup a day per resource (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup):
+    // One backup a day per resource (titan-ops features/backup/design.md#incus-backup):
     // the UTC day is in the key, and the payload carries what the worker needs to name the object in the bucket.
     [Fact]
     public async Task VmBackup_KeyIsTheVmAndTheDay_PayloadCarriesTenantAndProject()
@@ -431,7 +431,7 @@ public class ProviderCommandQueueTests
     }
 
     // Incus keeps volumes and snapshots inside the tenant's project: a storage or snapshot command that does not say
-    // which project cannot be carried out (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#translate-titan-ids).
+    // which project cannot be carried out (titan-ops architecture/provider-and-worker.md#translate-titan-ids).
     public static TheoryData<string> StorageAndSnapshotKinds() => new()
     {
         ProviderCommandKinds.VolumeCreate, ProviderCommandKinds.VolumeAttach, ProviderCommandKinds.VolumeDetach,

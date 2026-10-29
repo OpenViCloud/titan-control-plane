@@ -18,7 +18,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Occupancy against MaxVmSnapshotsPerVm (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-counting): what Incus holds or is
+    // Occupancy against MaxVmSnapshotsPerVm (titan-ops features/vm/design.md#vm-snapshot-counting): what Incus holds or is
     // about to, unless its delete was pressed.
     public async Task<int> CountActiveByVmIdAsync(Guid vmId, CancellationToken ct = default) =>
         await db.VmSnapshots.CountAsync(
@@ -29,7 +29,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
 
     // A waiting create or revert touches the VM on the provider. A snapshot at rest does not block VM deletion:
     // MarkAllDeletedByVmIdAsync sweeps it when the VM is reported Deleted. A waiting delete does not either: the worker's
-    // delete no-ops once the VM is gone (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#provider-delete-idempotency).
+    // delete no-ops once the VM is gone (titan-ops architecture/intent-and-observation.md#provider-delete-idempotency).
     public async Task<bool> AnyInProgressByVmIdAsync(Guid vmId, CancellationToken ct = default) =>
         await db.VmSnapshots.AnyAsync(
             s => s.VmId == vmId

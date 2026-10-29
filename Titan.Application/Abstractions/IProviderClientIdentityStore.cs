@@ -1,7 +1,7 @@
 namespace Titan.Application.Abstractions;
 
 // The public half of Titan's client identity: what an admin adds to a cluster's trust store
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity). The private key never leaves Infrastructure.
+// (titan-ops features/cluster/design.md#provider-client-identity). The private key never leaves Infrastructure.
 public record ProviderClientCertificate(string CertificatePem, string Fingerprint);
 
 public interface IProviderClientIdentityStore

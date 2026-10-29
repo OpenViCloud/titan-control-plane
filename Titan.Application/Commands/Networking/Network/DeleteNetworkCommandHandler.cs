@@ -21,7 +21,7 @@ public class DeleteNetworkCommandHandler(
         var network = await NetworkOwnership.RequireNetworkAsync(repo, currentUser.RequireTenantId(), networkId, ct);
 
         // The aggregate refuses a repeat, so it is recognised here first
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete was already requested, or
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete was already requested, or
         // the network is already deleted. A repeat answers like the first request: nothing recorded, nothing sent.
         bool deleteIsWaiting = network.Transition == NetworkTransition.Deleting;
         bool alreadyRequestedOrDone = deleteIsWaiting || network.IsTerminal;
@@ -41,7 +41,7 @@ public class DeleteNetworkCommandHandler(
         if (neverReachedTheProvider)
         {
             network.DeleteLocally();
-            // Never provisioned: the request and its outcome happen here at once (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity).
+            // Never provisioned: the request and its outcome happen here at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
             activity.Stage("network.delete_requested", "network", network.Id, network.Name); // atomic with DeleteLocally
             activity.StageOutcome(network.TenantId, "network.deleted", "network", network.Id, network.Name);
             await repo.SaveAsync(ct);
@@ -55,7 +55,7 @@ public class DeleteNetworkCommandHandler(
         await commands.EnqueueNetworkDeleteAsync(
             network.Id, externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Deleted
-        // report marks them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle).
+        // report marks them (titan-ops features/network/design.md#network-lifecycle).
         await repo.SaveAsync(ct);
     }
 }

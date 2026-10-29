@@ -4,8 +4,8 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// Money is a bare `long` VND (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd); Rate stays a value object
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object) because a price is fractional. The risk is a Rate
+// Money is a bare `long` VND (titan-ops architecture/money-and-wallet.md#money-is-long-vnd); Rate stays a value object
+// (titan-ops architecture/money-and-wallet.md#rate-value-object) because a price is fractional. The risk is a Rate
 // leaking into integer money arithmetic, so Rate refuses a negative, multiplies by hours to a RAW decimal (the
 // meter rounds, not Rate), and offers no conversion and no additive operator.
 public class MoneyAndRateTests
@@ -42,7 +42,7 @@ public class MoneyAndRateTests
         Assert.Equal(0.5999999999999999999999999994m, amount);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd: the two must not mix ────────────────────────────────────────────────────
+    // ── titan-ops architecture/money-and-wallet.md#money-is-long-vnd: the two must not mix ────────────────────────────────────────────────────
     //
     // These are COMPILE-time facts, pinned by reflection: if someone adds an implicit/explicit conversion on
     // Rate, or a `Rate + x` operator, one of these goes red.

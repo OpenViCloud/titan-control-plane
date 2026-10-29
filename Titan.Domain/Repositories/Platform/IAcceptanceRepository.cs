@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Platform.Acceptance;
 
 namespace Titan.Domain.Repositories.Platform;
 
-/// Append-only click-wrap consent proof (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/legal/design.md#consent-gate-per-user): Acceptance is
+/// Append-only click-wrap consent proof (titan-ops features/legal/design.md#consent-gate-per-user): Acceptance is
 /// immutable because there is no update or delete path, not because of a runtime check.
 public interface IAcceptanceRepository
 {

@@ -11,7 +11,7 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
     public async Task<FirewallRule?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         await db.FirewallRules.FirstOrDefaultAsync(r => r.Id == id, ct);
 
-    // A Deleted row is kept (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-rule-soft-delete) but not listed. A rule
+    // A Deleted row is kept (titan-ops features/network/design.md#firewall-rule-soft-delete) but not listed. A rule
     // whose delete is waiting is still listed: Incus still enforces it.
     public async Task<List<FirewallRule>> ListByNetworkAsync(Guid networkId, CancellationToken ct = default) =>
         await db.FirewallRules
@@ -19,7 +19,7 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Counted by occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#firewall-rule-status): what Incus holds or is about to
+    // Counted by occupancy (titan-ops features/network/design.md#firewall-rule-status): what Incus holds or is about to
     // hold. A delete asked for stops counting at once; a failed create with nothing on Incus does not count.
     public async Task<int> CountByNetworkAsync(Guid networkId, CancellationToken ct = default) =>
         await db.FirewallRules.CountAsync(

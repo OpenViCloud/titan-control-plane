@@ -22,7 +22,7 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
         When(x => x.Protocol is "TCP" or "UDP", () =>
         {
             // A predicate, not NotNull(): the spec copies NotNull() as `required` without the When, and ICMP/All
-            // must send no port (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#nullable-request-fields).
+            // must send no port (titan-ops features/public-api/design.md#nullable-request-fields).
             RuleFor(x => x.StartPort).Must(p => p.HasValue).WithMessage("'StartPort' is required for TCP/UDP.")
                 .InclusiveBetween(1, 65535).WithMessage("'StartPort' must be between 1 and 65535.");
             RuleFor(x => x.EndPort).Must(p => p.HasValue).WithMessage("'EndPort' is required for TCP/UDP.")

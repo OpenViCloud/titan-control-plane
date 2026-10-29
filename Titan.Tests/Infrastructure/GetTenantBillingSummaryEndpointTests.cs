@@ -12,7 +12,7 @@ namespace Titan.Tests.Infrastructure;
 
 // The name on a bill is UsageRecord.ResourceName, captured when the usage was metered: billing reports the
 // name as of the billing period and does not reach into the Vm aggregate
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary). Re-fetching each VM name from the vms table inside
+// (titan-ops architecture/code-structure.md#module-boundary). Re-fetching each VM name from the vms table inside
 // Task.WhenAll means N concurrent EF queries on one scoped DbContext, which EF's ConcurrencyDetector rejects:
 // a 500 for any tenant with two or more billed VMs. If the endpoint never consults IVmRepository, that
 // cannot happen.

@@ -16,7 +16,7 @@ public enum TemplateSyncOutcome { AllSynced, TimedOut, HasFailures, NoClusters }
 // runs it any more. The command only enqueues and the worker reconciles asynchronously, so completion is observed by
 // polling. The verdict covers the whole catalog: one cluster whose sync gave up makes the run HasFailures even when the other
 // clusters synced — their sync goes on regardless, the exit code only reports it
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+// (titan-ops features/catalog/design.md#template-per-cluster).
 //
 // A job, not a handler: it injects the command handler the way TenantResolutionMiddleware injects Platform's.
 public class TemplateSyncRunner(
@@ -34,7 +34,7 @@ public class TemplateSyncRunner(
         CancellationToken ct = default)
     {
         // No cluster means nothing to sync and nothing left pending — a count that reads as done. The Job gets its cluster
-        // list from the same config as the API (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster); without it, fail.
+        // list from the same config as the API (titan-ops features/catalog/design.md#template-per-cluster); without it, fail.
         bool noClusterConfigured = clusters.Clusters.Count == 0;
         if (noClusterConfigured)
         {

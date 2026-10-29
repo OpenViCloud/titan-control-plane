@@ -6,9 +6,9 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-lifecycle: existence only, one request waiting at a time, observations
-// converge. Desired and applied listeners/backends share rows (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model):
-// a give-up of an update needs what Incus last took (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+// titan-ops features/load-balancer/design.md#lb-lifecycle: existence only, one request waiting at a time, observations
+// converge. Desired and applied listeners/backends share rows (titan-ops features/load-balancer/design.md#lb-resource-model):
+// a give-up of an update needs what Incus last took (titan-ops architecture/desired-and-current.md#abandoned-request).
 public class LoadBalancerStateMachineTests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
@@ -272,7 +272,7 @@ public class LoadBalancerStateMachineTests
             Assert.Throws<BusinessException>(() => updating.RequestUpdate([Http], [VmOnIncus()])).Code);
     }
 
-    // The handler answers a repeat itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    // The handler answers a repeat itself (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     [Fact]
     public void Update_ToWhatIsAlreadyAsked_IsRefusedByTheAggregate_AndSeenByHasDesiredSpec()
     {
@@ -387,7 +387,7 @@ public class LoadBalancerStateMachineTests
     // ---- reconciler
 
     // Absent is NotFound, never Deleted: only Titan's own delete command says that
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis).
+    // (titan-ops architecture/desired-and-current.md#existence-axis).
     [Fact]
     public void Observed_AfterNotFound_IsBackOnIncus()
     {
@@ -430,7 +430,7 @@ public class LoadBalancerStateMachineTests
         Assert.Equal(LoadBalancerTransition.Updating, updating.Transition);
     }
 
-    // ---- rename (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-rename)
+    // ---- rename (titan-ops features/load-balancer/design.md#lb-rename)
 
     [Fact]
     public void Rename_OnIncusOrWhileItsCreateOrUpdateWaits_ChangesOnlyTheName()

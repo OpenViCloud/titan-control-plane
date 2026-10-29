@@ -7,7 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Titan.Tests.Api;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#success-codes: every operation of the public spec declares the one 2xx its
+// titan-ops features/public-api/design.md#success-codes: every operation of the public spec declares the one 2xx its
 // endpoint sends, with a body exactly when the endpoint sends one. WHICH operations comes from the running host's
 // EndpointDataSource (filtered like the spec); the "sends" half is textual — it reads the endpoint's own file, so it
 // is silent about a status set by hand on Response.StatusCode.

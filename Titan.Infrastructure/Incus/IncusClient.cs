@@ -24,7 +24,7 @@ public sealed class IncusClientFactory(ProviderClientIdentityStore identity)
     }
 }
 
-// Reads the Incus REST API over mutual TLS (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-incus). The server is
+// Reads the Incus REST API over mutual TLS (titan-ops features/cluster/design.md#cluster-incus). The server is
 // accepted by its pinned SHA-256 fingerprint alone — chain and host name are not checked, because an Incus server
 // certificate is self-signed and names the host, not the address Titan dials. Every failure is a ServiceUnavailableException
 // whose code tells the admin what to fix.
@@ -119,7 +119,7 @@ public sealed class IncusClient : IDisposable
 
     /// POST /1.0/instances/{name}/exec, non-interactive and waiting for its websockets: the command starts once all
     /// four are connected. "Instance is not running" is the VM's state; any other refusal is the cluster's
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session).
+    /// (titan-ops features/vm/design.md#ssh-session).
     public async Task<IncusExecOperation> StartExecAsync(
         string project, string instance, IReadOnlyList<string> command, CancellationToken ct)
     {

@@ -6,7 +6,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// The catalog's templates exist only as seed rows (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-seed-in-migration), so
+// The catalog's templates exist only as seed rows (titan-ops features/catalog/design.md#template-seed-in-migration), so
 // which image a template comes from and whether customers see it is decided here, and pinned here.
 public class VmTemplateSeedTests
 {
@@ -28,7 +28,7 @@ public class VmTemplateSeedTests
         TemplateType().GetSeedData().Single(row => (Guid)row[nameof(VmTemplate.Id)]! == Guid.Parse(id));
 
     // The distro's own image: it ships sshd and cloud-init, which the image server's ubuntu/22.04 does not
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-is-an-image-alias).
+    // (titan-ops features/catalog/design.md#template-is-an-image-alias).
     [Fact]
     public void Ubuntu_ComesFromTheDistrosOwnImage_PerArchitecture_AndIsListed()
     {
@@ -39,7 +39,7 @@ public class VmTemplateSeedTests
         Assert.Equal(true, row[nameof(VmTemplate.IsListed)]);
     }
 
-    // Nobody can log in to them yet (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed); the rows stay, VMs point at them.
+    // Nobody can log in to them yet (titan-ops features/catalog/design.md#template-listed); the rows stay, VMs point at them.
     [Theory]
     [InlineData(Alma)]
     [InlineData(Rocky)]

@@ -57,7 +57,7 @@ public class TenantQueryHandlerTests
         Assert.Equal(4, result.MaxPublicIpv6);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation: a tenant has no provider account, so the API
+    // titan-ops architecture/tenancy-and-admin.md#approval-is-activation: a tenant has no provider account, so the API
     // carries none — the Incus project is per cluster and named from the id.
     [Fact]
     public async Task GetTenant_CarriesNoProviderAccount()

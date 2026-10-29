@@ -70,7 +70,7 @@ public class ExceptionLoggingHostTests
 
     public record CapturedLog(string Category, LogLevel Level, string Message, Exception? Exception);
 
-    // What https://github.com/OpenViCloud/titan-ops/blob/main/gitops/control-plane/overlays/staging/patch-env.yaml sets on dev and staging.
+    // What gitops/control-plane/overlays/staging/patch-env.yaml of titan-ops sets on dev and staging.
     private static readonly Dictionary<string, string?> HostConfiguration = new()
     {
         ["Internal:Token"] = InternalToken,

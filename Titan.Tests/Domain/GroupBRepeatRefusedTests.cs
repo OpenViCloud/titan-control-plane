@@ -7,7 +7,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat. The aggregate refuses every request it cannot accept — a repeat and an already-done
+// titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat. The aggregate refuses every request it cannot accept — a repeat and an already-done
 // request included — and the refusal leaves the state exactly as it was. Answering a repeat like the
 // first request is the HANDLER's job; those tests sit with the handlers (*ServiceTests).
 public class GroupBRepeatRefusedTests

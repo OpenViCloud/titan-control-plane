@@ -2,7 +2,7 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#aggregate-is-a-folder. Without this guard a child (InvoiceItem) sitting
+// titan-ops architecture/code-structure.md#aggregate-is-a-folder. Without this guard a child (InvoiceItem) sitting
 // flat in a module is indistinguishable from a root (Wallet); a prose table of roots rots, this does not.
 public class AggregateBoundaryTests
 {

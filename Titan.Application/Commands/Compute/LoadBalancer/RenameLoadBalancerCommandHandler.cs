@@ -6,7 +6,7 @@ using Titan.Domain.Repositories.Compute;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
-// Rename in place, Titan-side only: no provider command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-rename).
+// Rename in place, Titan-side only: no provider command (titan-ops features/load-balancer/design.md#lb-rename).
 public class RenameLoadBalancerCommandHandler(ILoadBalancerRepository repo, ICurrentUser currentUser)
 {
     public async Task HandleAsync(RenameLoadBalancerCommand command, CancellationToken ct = default)

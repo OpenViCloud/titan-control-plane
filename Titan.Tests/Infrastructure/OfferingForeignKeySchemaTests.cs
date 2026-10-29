@@ -8,7 +8,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#resources-reference-their-offering — a VM or volume always has a price on file: the
+// titan-ops features/catalog/design.md#resources-reference-their-offering — a VM or volume always has a price on file: the
 // database refuses a row that names an offering the catalog does not have, and refuses to delete an
 // offering something still points at. InMemory enforces no foreign key, so this pins the model metadata
 // the migration is generated from.

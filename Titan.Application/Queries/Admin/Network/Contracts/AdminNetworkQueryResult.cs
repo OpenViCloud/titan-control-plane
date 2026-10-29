@@ -3,9 +3,9 @@ using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
 
 namespace Titan.Application.Queries.Admin.Network.Contracts;
 
-// Admin-facing — carries TenantId (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read) and the raw
-// failure detail the tenant never sees (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure). States follow
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim.
+// Admin-facing — carries TenantId (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read) and the raw
+// failure detail the tenant never sees (titan-ops architecture/desired-and-current.md#request-failure). States follow
+// titan-ops architecture/desired-and-current.md#provider-state-is-verbatim.
 public record AdminNetworkQueryResult(
     Guid Id,
     Guid TenantId,

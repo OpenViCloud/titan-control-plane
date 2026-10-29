@@ -27,18 +27,18 @@ public class CreateVmCommandHandler(
 {
     public async Task<CreateVmCommandResult> HandleAsync(CreateVmCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the request shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the request shape (titan-ops architecture/code-structure.md#contracts)
         var callerId = currentUser.RequireTenantId();
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
         // The handler counts; the tenant decides inside Vm.Create, so the check cannot be skipped
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#tenant-quota).
+        // (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
         var activeVmCount = await repo.CountActiveByTenantAsync(callerId, ct);
 
         // No money gate here, on purpose: neither DebtCeiling nor an overdue invoice stops creation
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake). Quota is the only create-time brake.
+        // (titan-ops architecture/money-and-wallet.md#postpaid-no-brake). Quota is the only create-time brake.
 
         // Constructed before the name/network/offering/template lookups on purpose: the quota refusal
         // lives in the factory, so calling it late would report VM_NAME_TAKEN or NETWORK_NOT_FOUND to a
@@ -68,16 +68,16 @@ public class CreateVmCommandHandler(
         // `network.ExternalId!` at the enqueue below.
         var externalNetworkId = network.BeginVmDeployment(req.ClusterId);
 
-        // Resolve the sizing tier here (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
+        // Resolve the sizing tier here (titan-ops features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
         // the control plane passes the concrete CPU/vCPU/memory it sets on the instance.
         var offering = await offeringRepo.FindByIdAsync(req.VmOfferingId, ct)
             ?? throw new NotFoundException("VM_OFFERING_NOT_FOUND",
                 $"VM offering '{req.VmOfferingId}' not found.");
 
-        // Same translation for the template: customers address it by Titan GUID (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-desired-state), but
+        // Same translation for the template: customers address it by Titan GUID (titan-ops features/catalog/design.md#template-desired-state), but
         // the provider knows it by its own id. The template hands out the provider template id of the VM's cluster — each cluster has its own
-        // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster) — and refuses a cluster it is not synced in.
-        // A template customers are not offered does not exist for them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-listed).
+        // (titan-ops features/catalog/design.md#template-per-cluster) — and refuses a cluster it is not synced in.
+        // A template customers are not offered does not exist for them (titan-ops features/catalog/design.md#template-listed).
         VmTemplateAggregate? template = null;
         if (Guid.TryParse(req.TemplateId, out var templateId))
         {
@@ -92,10 +92,10 @@ public class CreateVmCommandHandler(
         string? vendorData = await VendorDataForKeysAsync(callerId, req.SshKeyIds, ct);
 
         repo.Add(vm);
-        activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity)
+        activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (titan-ops architecture/intent-and-observation.md#intent-has-identity)
 
         // Enqueued before the save, so the VM row and its provider command commit in one transaction: no VM
-        // that the worker never hears of (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
+        // that the worker never hears of (titan-ops architecture/provider-and-worker.md#provider-command-table).
         await commands.EnqueueVmCreateAsync(
             vm.Id,
             vm.Name,

@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Domain.Aggregates.Compute.SshKey;
 
 /// A public key line as ssh-keygen writes it, read from the binary blob rather than trusted from its text
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-key). Only the type and the blob survive: the comment never reaches a VM.
+/// (titan-ops features/vm/design.md#ssh-key). Only the type and the blob survive: the comment never reaches a VM.
 public sealed class SshPublicKey
 {
     public const int MinRsaBits = 2048;

@@ -6,7 +6,7 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// Opening an SSH session's exec on the cluster's Incus over mutual TLS (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session): the
+// Opening an SSH session's exec on the cluster's Incus over mutual TLS (titan-ops features/vm/design.md#ssh-session): the
 // same client certificate and pinned server fingerprint as every other call, then the four websockets of the
 // operation. Each Incus refusal becomes the code the customer can act on.
 public class IncusExecSessionTests

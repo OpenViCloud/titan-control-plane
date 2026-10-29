@@ -2,7 +2,7 @@ namespace Titan.Application.Queries.Billing.Invoice.Contracts;
 
 /// DebtCeiling/OverCeiling let the admin closing invoices at month-end see, on one line, what a tenant
 /// owes and what it was expected to owe. Nothing acts on OverCeiling
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#postpaid-no-brake): it is a number for a person to read.
+/// (titan-ops architecture/money-and-wallet.md#postpaid-no-brake): it is a number for a person to read.
 ///
 /// DebtCeiling is 0 for a tenant whose row is gone (same fallback as TenantName → guid): the report
 /// must still show the debt rather than 500 an ops question.

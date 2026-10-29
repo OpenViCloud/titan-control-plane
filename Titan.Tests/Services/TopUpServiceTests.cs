@@ -17,7 +17,7 @@ namespace Titan.Tests.Services;
 // The TopUp lifecycle: Request (tenant, Pending), Confirm (real money in), Grant (admin promo, born
 // Confirmed), and the list reads.
 //
-// Confirm does not credit the wallet in the request (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox):
+// Confirm does not credit the wallet in the request (titan-ops architecture/money-and-wallet.md#single-writer-outbox):
 // it writes ONE credit WalletMutation in the same save as the Confirmed status, then publishes a
 // post-commit notify; the single-writer consumer credits the wallet later. Grant credits synchronously.
 //
@@ -95,7 +95,7 @@ public class TopUpServiceTests
         Assert.Equal(Tenant, added!.TenantId);
         Assert.Equal(100L, added.Amount);
         Assert.Equal("VND", added.Currency);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so status
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so status
         // and the payment reference the customer transfers against are asserted on the persisted TopUp.
         Assert.Equal(added.Id, dto.TopUpId);
         Assert.Equal(TopUpStatus.Pending, added.Status);            // no credit until confirmed
@@ -140,11 +140,11 @@ public class TopUpServiceTests
         _bus.Verify(b => b.PublishAsync(
             It.Is<WalletMutationNotification>(n => n.MutationId == mutation.Id && n.WalletId == wallet.Id),
             It.IsAny<CancellationToken>()), Times.Once);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data: confirm returns nothing; the confirmation lives on the aggregate a read-back reports.
+        // titan-ops architecture/http-contract.md#commands-return-no-data: confirm returns nothing; the confirmation lives on the aggregate a read-back reports.
         Assert.NotNull(topUp.ConfirmedAt);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — a bus publish failure must NOT fail the
+    // titan-ops architecture/money-and-wallet.md#single-writer-outbox — a bus publish failure must NOT fail the
     // confirm: the credit mutation is already committed, and the sweeper re-drives it.
     [Fact]
     public async Task Confirm_BusPublishThrows_StillConfirms_MutationAlreadyDurable()
@@ -308,7 +308,7 @@ public class TopUpServiceTests
         Assert.NotNull(ledger);
         Assert.Equal(WalletTransactionType.Promo, ledger!.Type);       // free money → Promo ledger
         Assert.Equal(added.Id, ledger.RefId);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only the id, so the
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the
         // grant's own fields are asserted on the persisted TopUp.
         Assert.Equal(added.Id, dto.TopUpId);
         Assert.Equal(TopUpSource.PromotionalCredit, added.Source);
@@ -348,7 +348,7 @@ public class TopUpServiceTests
     {
         var wallet = Wallet.Open(Tenant, "VND");
         _walletRepo.Setup(r => r.GetByTenantForUpdateAsync(Tenant, default)).ReturnsAsync(wallet);
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id: the response carries only an id, so the amount
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only an id, so the amount
         // actually granted is captured here. Asserting only "it did not throw" would let a grant of the
         // wrong size pass at exactly the boundary this test exists to pin.
         TopUp? added = null;

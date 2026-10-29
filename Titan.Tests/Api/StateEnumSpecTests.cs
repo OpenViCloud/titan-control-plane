@@ -13,7 +13,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Api;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#state-enums: each state field of the public spec is an enum whose words are the
+// titan-ops features/public-api/design.md#state-enums: each state field of the public spec is an enum whose words are the
 // Domain enum's member names, a nullable one is `nullable` + `allOf` (oapi-codegen turns `oneOf` into a wrapper
 // type), and label fields stay plain strings. Reads the spec the running host serves.
 // FullHost — WebApplicationFactory test; own CI process (see CatalogContractTests for why).

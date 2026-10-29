@@ -3,7 +3,7 @@ using Titan.Application.Options;
 
 namespace Titan.Infrastructure.Incus;
 
-// The configuration is the whole list (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
+// The configuration is the whole list (titan-ops features/cluster/design.md#cluster-from-config).
 public class AdminClusterService(ClusterOptions clusters) : IAdminClusterService
 {
     public Task<List<AdminClusterDto>> ListForAdminAsync(CancellationToken ct)

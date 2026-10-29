@@ -4,7 +4,7 @@ namespace Titan.Tests.Domain;
 
 /// <summary>
 /// The retired lot model (WalletEntry) must be DEAD in production code
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance). "The balance still matches" passes even if the
+/// (titan-ops architecture/money-and-wallet.md#wallet-one-balance). "The balance still matches" passes even if the
 /// one-balance wallet is never consulted, as long as the old model is still there answering.
 ///
 /// They scan the SOURCE TREE, not the loaded assembly, on purpose: a method nobody calls still exists

@@ -55,7 +55,7 @@ public class CatalogContractTests : IClassFixture<OpenApiSpecTests.ApiFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    // The public site shows prices before sign-up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-site/design.md#live-pricing).
+    // The public site shows prices before sign-up (titan-ops features/public-site/design.md#live-pricing).
     // Rows come from the HasData seed, so an empty list can't pass as "anonymous and priced".
     [Theory]
     [InlineData("/v1/vm-offerings", "pricePerHour")]

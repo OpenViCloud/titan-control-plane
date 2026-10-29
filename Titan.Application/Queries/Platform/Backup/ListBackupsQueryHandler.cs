@@ -6,7 +6,7 @@ using Titan.Domain.Repositories.Platform;
 namespace Titan.Application.Queries.Platform.Backup;
 
 /// The newest backup of each protected resource and its health, from the cache the refresh keeps
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#backup-status-reads-the-bucket).
+/// (titan-ops features/backup/design.md#backup-status-reads-the-bucket).
 public class ListBackupsQueryHandler(
     IBackupRecordRepository records, IBackupObservationRepository observations, TimeProvider clock)
 {

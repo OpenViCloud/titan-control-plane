@@ -9,8 +9,8 @@ using Titan.Infrastructure.Endpoints;
 
 namespace Titan.Infrastructure.ProviderCommands;
 
-/// Stages provider commands in the scope's DbContext (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-table).
-/// Keys are the former workflow ids, so the repeat rules of https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity
+/// Stages provider commands in the scope's DbContext (titan-ops architecture/provider-and-worker.md#provider-command-table).
+/// Keys are the former workflow ids, so the repeat rules of titan-ops architecture/intent-and-observation.md#intent-has-identity
 /// keep their shape; payload property names are what the worker reads.
 public class ProviderCommandQueue(IProviderCommandRepository repository, TimeProvider clock) : IProviderCommandQueue
 {
@@ -40,7 +40,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
             new { ruleId, networkId, direction, protocol, startPort, endPort, cidr, externalNetworkId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // networkId: the worker needs it for the callback URL that reports the delete (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm).
+    // networkId: the worker needs it for the callback URL that reports the delete (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     public Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid networkId, string externalRuleId, string projectName,
         string clusterId, CancellationToken ct = default) =>
         EnqueueRequestAsync($"firewall-delete-{ruleId}", ProviderCommandKinds.FirewallRuleDelete, clusterId,
@@ -72,7 +72,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
             new { vmId, externalVmId, projectName, clusterId },
             ProviderCommandRerun.AfterFailureOnly, ct);
 
-    // The key carries the intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-has-identity): a repeat of an open
+    // The key carries the intent (titan-ops architecture/intent-and-observation.md#intent-has-identity): a repeat of an open
     // or finished intent is absorbed, a failed one runs again, and stop→start→stop gets a new key.
     public Task EnqueueVmStopAsync(Guid vmId, Guid intentId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
@@ -184,7 +184,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
             new { loadBalancerId, externalNetworkId, vip, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // The asked configuration (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model); protocol in Incus's spelling.
+    // The asked configuration (titan-ops features/load-balancer/design.md#lb-resource-model); protocol in Incus's spelling.
     private static object LoadBalancerPayload(LoadBalancer lb, Guid? intentId, string projectName) =>
         new
         {
@@ -206,7 +206,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         };
 
     // One key per template per cluster: keyed on the template alone, the second cluster's sync would be absorbed by the
-    // first cluster's open row (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+    // first cluster's open row (titan-ops features/catalog/design.md#template-per-cluster).
     public Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, string name, string? description,
         string osImageName, string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default) =>
         EnqueueAsync($"template-sync-{templateId}-{clusterId}", ProviderCommandKinds.TemplateSync, clusterId,
@@ -215,7 +215,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
 
     // A new request on a key of a resource that already exists. The handler read the resource with no such request
     // waiting, so an open row under the key is another request's, committed in between: this one stops with 409
-    // before anything of it is saved (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/provider-and-worker.md#provider-command-key).
+    // before anything of it is saved (titan-ops architecture/provider-and-worker.md#provider-command-key).
     private Task EnqueueRequestAsync(string key, string kind, string clusterId, object payload, ProviderCommandRerun rerun,
         CancellationToken ct) =>
         EnqueueAsync(key, kind, clusterId, payload, rerun, refuseOpenRow: true, ct);

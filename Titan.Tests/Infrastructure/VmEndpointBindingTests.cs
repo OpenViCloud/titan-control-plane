@@ -30,7 +30,7 @@ public class VmEndpointBindingTests
     private static readonly Guid VmId = Guid.Parse("11111111-2222-3333-4444-555555555555");
     private static readonly Guid TenantId = Guid.Parse("99999999-8888-7777-6666-555555555555");
 
-    // Handlers are concrete classes with no interface (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-mediatr), so the recording happens one
+    // Handlers are concrete classes with no interface (titan-ops architecture/code-structure.md#no-mediatr), so the recording happens one
     // layer down, at the repository. That is a better place for it anyway: it proves the endpoint
     // reached a handler that really did the work, not merely that some object was invoked.
     private readonly Mock<IVmRepository> _repo = new();
@@ -129,7 +129,7 @@ public class VmEndpointBindingTests
     }
 
     // PATCH /v1/tenant/vms/{vmId} — rename carries BOTH the route id and the body, and answers 204
-    // with no body (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data). The command side owns no read
+    // with no body (titan-ops architecture/http-contract.md#commands-return-no-data). The command side owns no read
     // shape, so a caller that wants the renamed VM reads it back from the query side.
     [Fact]
     public async Task UpdateVmEndpoint_ReachesRenameCommand_WithRouteVmIdAndBody_And204()
@@ -209,7 +209,7 @@ public class VmEndpointBindingTests
     }
 
     // PATCH /internal/vms/{vmId}/status — the worker callback. An OBSERVATION, not an intent
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation), and it WRITES, which is why its
+    // (titan-ops architecture/intent-and-observation.md#intent-versus-observation), and it WRITES, which is why its
     // handler lives in Commands/.
     [Fact]
     public async Task UpdateVmStatusEndpoint_WithValidToken_ReachesUpdateStatusCommand()

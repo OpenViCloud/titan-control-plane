@@ -7,8 +7,8 @@ namespace Titan.Infrastructure.Endpoints.Billing;
 
 /// A different route from MarkInvoicePaidEndpoint on purpose: that one records money that arrived outside
 /// Titan, this one debits the wallet, and an audit log must tell them apart
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit). 202: the debit is queued, not done
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202).
+/// (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). 202: the debit is queued, not done
+/// (titan-ops architecture/http-contract.md#async-actions-return-202).
 public class SettleInvoiceFromWalletAdminEndpoint(SettleInvoiceFromWalletCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()

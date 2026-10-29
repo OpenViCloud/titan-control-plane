@@ -4,10 +4,10 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
-/// A layer 4 load balancer on one network with public IPv6 (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md). Incus has no
-/// status word for it: existence only, one request waiting at a time (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-lifecycle).
+/// A layer 4 load balancer on one network with public IPv6 (titan-ops features/load-balancer/design.md). Incus has no
+/// status word for it: existence only, one request waiting at a time (titan-ops features/load-balancer/design.md#lb-lifecycle).
 /// Listeners and backends carry both what was asked (IsDesired) and what Incus took (IsApplied), so an update that
-/// gives up can go back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+/// gives up can go back (titan-ops architecture/desired-and-current.md#abandoned-request).
 public class LoadBalancer
 {
     public const int MaxListeners = 10;
@@ -28,7 +28,7 @@ public class LoadBalancer
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     public Guid? PendingIntentId { get; private set; }
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure
+    // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -76,12 +76,12 @@ public class LoadBalancer
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    /// Deleted absorbs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge). The network is
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The network is
     /// checked by the caller through Network.BeginLoadBalancer: this aggregate holds no Networking type
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#module-boundary).
+    /// (titan-ops architecture/code-structure.md#module-boundary).
     public static LoadBalancer Create(
         Tenant tenant, int activeLoadBalancerCount, string name, Guid networkId, string externalNetworkId,
         string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
@@ -108,10 +108,10 @@ public class LoadBalancer
         return loadBalancer;
     }
 
-    // ---- Intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation).
+    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Whether the last request already asks for exactly this; the handler answers such a PUT itself
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool HasDesiredSpec(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Guid> backendVmIds)
     {
         var desiredListeners = DesiredListeners.ToList();
@@ -140,7 +140,7 @@ public class LoadBalancer
     }
 
     /// Titan-side only: Incus knows a load balancer by its VIP, never by its name
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-rename).
+    /// (titan-ops features/load-balancer/design.md#lb-rename).
     public void Rename(string name)
     {
         bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsTerminal;
@@ -151,7 +151,7 @@ public class LoadBalancer
 
     /// A delete replaces a waiting update (the update's report is then stale). A load balancer with a provider id is
     /// deleted through Incus, even one Incus no longer has
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm).
+    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     public string RequestDelete()
     {
         if (DeleteIsWaiting)
@@ -165,7 +165,7 @@ public class LoadBalancer
         return ExternalId;
     }
 
-    /// An update or a delete command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request): the desired
+    /// An update or a delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the desired
     /// side moves back to what Incus took. Not a Mark*: it changes what was asked for.
     public void AbandonRequest(string? reason, string? detail)
     {
@@ -186,7 +186,7 @@ public class LoadBalancer
     }
 
     /// Intent: a load balancer that never reached Incus has no command and no observation coming, so this writes the
-    /// existence itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// existence itself (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
@@ -200,7 +200,7 @@ public class LoadBalancer
         PendingIntentId = null;
     }
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
 
     /// The create command: Incus has the VIP and took the asked configuration. A repeat keeps the first id. Returns
     /// true when it fulfilled the waiting create.
@@ -251,7 +251,7 @@ public class LoadBalancer
     }
 
     /// The reconciler did not find it. Never Deleted: only Titan's own delete command confirms that
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Ends a waiting create; a delete or update keeps
+    /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a delete or update keeps
     /// waiting for its command.
     public void MarkNotFound()
     {
@@ -280,7 +280,7 @@ public class LoadBalancer
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure). Stale with no create
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure). Stale with no create
     /// waiting; the other give-ups are AbandonRequest.
     public void MarkRequestFailed(string? reason, string? detail)
     {
@@ -294,7 +294,7 @@ public class LoadBalancer
 
     // ---- desired and applied rows
 
-    /// The configuration rules (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-resource-model) and each backend's own check;
+    /// The configuration rules (titan-ops features/load-balancer/design.md#lb-resource-model) and each backend's own check;
     /// the validator refuses the same first, so INVALID_LOAD_BALANCER_SPEC does not reach HTTP.
     private void Ask(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
     {

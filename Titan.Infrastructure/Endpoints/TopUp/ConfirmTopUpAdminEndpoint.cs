@@ -8,8 +8,8 @@ namespace Titan.Infrastructure.Endpoints.TopUp;
 // The manual fallback for a real-money top-up an admin reconciled by hand.
 //
 // 202: the credit is queued in the outbox, not applied, when this returns
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202); the confirmed TopUp is read back from
-// GET /v1/admin/topups (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#confirmed-topup-is-receipt).
+// (titan-ops architecture/http-contract.md#async-actions-return-202); the confirmed TopUp is read back from
+// GET /v1/admin/topups (titan-ops architecture/money-and-wallet.md#confirmed-topup-is-receipt).
 public class ConfirmTopUpAdminEndpoint(ConfirmTopUpCommandHandler handler) : Endpoint<ConfirmTopUpBody>
 {
     public override void Configure()
@@ -26,5 +26,5 @@ public class ConfirmTopUpAdminEndpoint(ConfirmTopUpCommandHandler handler) : End
     }
 }
 
-// The JSON body alone; ConfirmTopUpCommand additionally carries the route id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// The JSON body alone; ConfirmTopUpCommand additionally carries the route id (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record ConfirmTopUpBody(string? PaymentTxnRef);

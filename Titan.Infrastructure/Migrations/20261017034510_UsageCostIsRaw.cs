@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Titan.Infrastructure.Migrations
 {
     // usage_records.cost keeps the raw product of one record; whole VND happens once, on the invoice line
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#round-once). Up widens bigint to numeric: existing rows keep the rounded value
+    // (titan-ops architecture/money-and-wallet.md#round-once). Up widens bigint to numeric: existing rows keep the rounded value
     // they were written with, nothing is recomputed. Down narrows back and rounds every fractional cost away.
     /// <inheritdoc />
     public partial class UsageCostIsRaw : Migration

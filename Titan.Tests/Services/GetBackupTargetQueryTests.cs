@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Tests.Services;
 
 // GET /v1/admin/backup-target shows the configured target and never the secret
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/user-stories.md#bak-01).
+// (titan-ops features/backup/user-stories.md#bak-01).
 public class GetBackupTargetQueryTests
 {
     [Fact]

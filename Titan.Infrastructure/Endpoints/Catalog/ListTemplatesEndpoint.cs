@@ -7,7 +7,7 @@ namespace Titan.Infrastructure.Endpoints.Catalog;
 // A bound request, not a read of the raw query string, so the spec declares clusterId and generated clients carry it.
 public record ListTemplatesRequest([property: QueryParam] string? ClusterId);
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-customer-read
+// titan-ops features/catalog/design.md#template-customer-read
 public class ListTemplatesEndpoint(ListTemplatesQueryHandler handler) : Endpoint<ListTemplatesRequest, List<TemplateQueryResult>>
 {
     public override void Configure()

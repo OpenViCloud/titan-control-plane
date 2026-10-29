@@ -4,7 +4,7 @@ using Titan.Application.Queries.Platform.AdminAuditLog.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Admin;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-audit. ?limit= is clamped in the handler; covered by AuditLogServiceTests.
+// titan-ops architecture/tenancy-and-admin.md#admin-audit. ?limit= is clamped in the handler; covered by AuditLogServiceTests.
 public class ListAuditLogEndpoint(ListAdminAuditLogQueryHandler listAuditLog) : EndpointWithoutRequest<List<AdminAuditLogQueryResult>>
 {
     public override void Configure()

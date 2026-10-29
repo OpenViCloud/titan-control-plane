@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 
 public class NetworkTests
 {
-    // ── Provider id is handed out, never asserted by the caller (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
+    // ── Provider id is handed out, never asserted by the caller (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
 
     [Fact]
     public void RequestDelete_YieldsTheProviderId()
@@ -39,7 +39,7 @@ public class NetworkTests
         Assert.Equal("NETWORK_NOT_ACTIVE", Assert.Throws<BusinessException>(() => network.BeginVmDeployment("cluster-1")).Code);
     }
 
-    // A VM lands on its network's cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#cluster-is-a-real-choice).
+    // A VM lands on its network's cluster (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
     public void BeginVmDeployment_ForAVmOfAnotherCluster_IsRefused()
     {
@@ -141,7 +141,7 @@ public class NetworkTests
         Assert.Null(network.Transition);
     }
 
-    // Every word Incus reports is recorded as it is (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+    // Every word Incus reports is recorded as it is (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     [Theory]
     [InlineData(NetworkStatus.Pending)]
     [InlineData(NetworkStatus.Created)]
@@ -199,7 +199,7 @@ public class NetworkTests
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
     }
 
-    // ── Not found: the reconciler never reports Deleted (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis) ──
+    // ── Not found: the reconciler never reports Deleted (titan-ops architecture/desired-and-current.md#existence-axis) ──
 
     [Fact]
     public void NotFound_ClearsTheStatus_KeepsTheIdAndAddress()
@@ -250,7 +250,7 @@ public class NetworkTests
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
     }
 
-    // ── Request failure is a field, not a state (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure) ──
+    // ── Request failure is a field, not a state (titan-ops architecture/desired-and-current.md#request-failure) ──
 
     [Fact]
     public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItNotCreated()
@@ -278,7 +278,7 @@ public class NetworkTests
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
     }
 
-    // A delete Incus refused gives the network back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request),
+    // A delete Incus refused gives the network back (titan-ops architecture/desired-and-current.md#abandoned-request),
     // with the reason, and a second press is a new request.
     [Fact]
     public void AFailedDelete_GivesTheNetworkBack_WithTheReason_AndAnotherPressIsANewRequest()
@@ -403,7 +403,7 @@ public class NetworkTests
         Assert.Null(network.Transition);
     }
 
-    // ── Terminal state absorbs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs) ──
+    // ── Terminal state absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs) ──
 
     [Fact]
     public void Deleted_IsAbsorbing_ForEveryLaterObservation()

@@ -4,7 +4,7 @@ using Titan.Application.Queries.Admin.Network.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Admin;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read. Optional ?tenantId= narrows to one owner.
+// titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read. Optional ?tenantId= narrows to one owner.
 public class ListAdminNetworksEndpoint(ListAdminNetworksQueryHandler handler) : EndpointWithoutRequest<List<AdminNetworkQueryResult>>
 {
     public override void Configure()

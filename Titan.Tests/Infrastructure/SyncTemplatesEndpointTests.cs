@@ -33,7 +33,7 @@ public class SyncTemplatesEndpointTests
         Assert.Null(ep.Definition.AnonymousVerbs);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202 — the sync is enqueued, not done, when the
+    // titan-ops architecture/http-contract.md#async-actions-return-202 — the sync is enqueued, not done, when the
     // response leaves: 202 and nothing attached.
     [Fact]
     public async Task HandleAsync_Answers202_WithAnEmptyBody()

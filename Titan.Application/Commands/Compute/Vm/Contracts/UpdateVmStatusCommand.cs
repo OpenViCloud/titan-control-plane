@@ -1,9 +1,9 @@
 namespace Titan.Application.Commands.Compute.Vm.Contracts;
 
 // The worker's callback payload. An OBSERVATION of what the provider already did rather than an intent
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation) — but it WRITES, so it is a command. VmId comes from the route, the rest from the body.
+// (titan-ops architecture/intent-and-observation.md#intent-versus-observation) — but it WRITES, so it is a command. VmId comes from the route, the rest from the body.
 //
-// Report says which of four reports this is (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#status-mapping): Observed (the
+// Report says which of four reports this is (titan-ops features/vm/design.md#status-mapping): Observed (the
 // reconciler: Exists, and Status — the Incus status word for word — when it exists), Created and Deleted (the
 // create and delete commands), and the create command's give-up (Reason/Detail).
 public record UpdateVmStatusCommand(

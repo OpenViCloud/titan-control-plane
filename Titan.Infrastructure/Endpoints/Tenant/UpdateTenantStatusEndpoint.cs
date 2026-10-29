@@ -27,7 +27,7 @@ public class UpdateTenantStatusEndpoint(
     {
         var tenantId = Route<Guid>("tenantId");
 
-        // Wallet before activation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/tenancy-and-admin.md#approval-is-activation): if the process dies
+        // Wallet before activation (titan-ops architecture/tenancy-and-admin.md#approval-is-activation): if the process dies
         // between the two commits, a repeat activates a tenant that already has one. Only for a tenant that exists,
         // since nothing ties wallets to tenants in the database and an orphan wallet would stay behind.
         bool asksForActive = UpdateTenantStatusCommandHandler.ParseTarget(req.Status) == TenantStatus.Active;

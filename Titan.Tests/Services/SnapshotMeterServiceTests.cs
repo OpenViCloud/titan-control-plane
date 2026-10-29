@@ -20,7 +20,7 @@ public class SnapshotMeterServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 16, 9, 10, 0, TimeSpan.Zero);
-    private const decimal Rate = 6000m;   // VND/h — whole-đồng so rounded Cost is exact (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd)
+    private const decimal Rate = 6000m;   // VND/h — whole-đồng so rounded Cost is exact (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
 
     private readonly Mock<IVmSnapshotRepository> _vmSnaps = new();
     private readonly Mock<IVolumeSnapshotRepository> _volSnaps = new();
@@ -42,7 +42,7 @@ public class SnapshotMeterServiceTests
         _volSnaps.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(snaps.ToList());
 
-    // The factories require the parent in a state that permits a snapshot (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation), so the
+    // The factories require the parent in a state that permits a snapshot (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation), so the
     // seed builds one. That is the invariant doing its job: there is no way to make a snapshot of a
     // VM that was never running, in production or in a test.
     private static VmSnapshot ReadyVmSnapshot(string name = "vm-snap")
@@ -79,7 +79,7 @@ public class SnapshotMeterServiceTests
         Assert.Equal(snap.Id, record.ResourceId);
         Assert.Equal(1, record.Quantity);                       // flat per-snapshot, not per-GB
         Assert.Equal(1000m, record.Cost);                       // 6000 VND/h × 10min = 1000 VND
-        Assert.Equal(Rate, record.UnitPricePerHour.PerUnit);            // from the snapshot offering (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering)
+        Assert.Equal(Rate, record.UnitPricePerHour.PerUnit);            // from the snapshot offering (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering)
         Assert.Equal(BillingConstants.DefaultCurrency, record.Currency);
     }
 

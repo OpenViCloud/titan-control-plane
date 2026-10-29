@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Billing.WalletMutation;
 
 namespace Titan.Tests.Domain;
 
-// The outbox mutation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). What is worth testing without a
+// The outbox mutation (titan-ops architecture/money-and-wallet.md#single-writer-outbox). What is worth testing without a
 // database: the factory sets a Pending mutation with a POSITIVE amount whose SIGN is Type's job, not the caller's.
 // The idempotency GUARD itself is a DB UNIQUE(ref_type, ref_id), not tested here (InMemory does not enforce
 // indexes — see WalletMutationSchemaTests for the metadata pin).
@@ -67,7 +67,7 @@ public class WalletMutationTests
             WalletMutation.ForCredit(Wallet, 1_000L, bad, Guid.NewGuid()));
     }
 
-    // ── the consumer's transition (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges) ──────────────────────────
+    // ── the consumer's transition (titan-ops architecture/intent-and-observation.md#observation-converges) ──────────────────────────
     // MarkApplied is an observation, so it never throws a transition error; IsTerminal is the defense-in-depth
     // beneath the consumer's own status check. The absorb's behavioural teeth are proven at the integration layer
     // (WalletMutationConsumerDbTests: a redelivered mutation credits the wallet once) — NOT by comparing two
@@ -95,9 +95,9 @@ public class WalletMutationTests
         Assert.NotNull(cmd.AppliedAt);   // the moment the single writer applied it
     }
 
-    // ---- MarkFailed + RecordAttempt (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox) ----
+    // ---- MarkFailed + RecordAttempt (titan-ops architecture/money-and-wallet.md#single-writer-outbox) ----
     // Failed is reached by the consumer's insufficient-funds re-check and by the sweeper giving up on a poison
-    // mutation. Both are OBSERVATIONS (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges) — they never throw a transition error.
+    // mutation. Both are OBSERVATIONS (titan-ops architecture/intent-and-observation.md#observation-converges) — they never throw a transition error.
 
     [Fact]
     public void MarkFailed_RecordsTheReason_AndIsTerminal()
@@ -177,7 +177,7 @@ public class WalletMutationTests
         Assert.Equal(WalletMutationStatus.Applied, cmd.Status);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/invoice/design.md#retry-after-failed-debit — paying again reopens the same row.
+    // titan-ops features/billing/invoice/design.md#retry-after-failed-debit — paying again reopens the same row.
     [Fact]
     public void ReopenFailedDebit_MakesItPendingAgain_WithAFreshQueueTime_AndNoAttemptsSpent()
     {

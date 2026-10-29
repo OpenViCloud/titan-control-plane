@@ -7,8 +7,8 @@ using Titan.Domain.Repositories.Billing;
 namespace Titan.Application.Commands.Billing.TopUp;
 
 /// The manual fallback: a platform admin records a payment reconciled by hand. The credit is queued,
-/// not applied (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox), so the endpoint answers 202
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202).
+/// not applied (titan-ops architecture/money-and-wallet.md#single-writer-outbox), so the endpoint answers 202
+/// (titan-ops architecture/http-contract.md#async-actions-return-202).
 public class ConfirmTopUpCommandHandler(
     ICreditRepository repo,
     IWalletRepository walletRepo,

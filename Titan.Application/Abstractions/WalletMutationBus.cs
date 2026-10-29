@@ -1,6 +1,6 @@
 namespace Titan.Application.Abstractions;
 
-/// Published after a wallet mutation is durably enqueued (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// Published after a wallet mutation is durably enqueued (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 /// It carries no money and no authority: the consumer re-loads the mutation from the DB, so a lost
 /// notify is a delayed apply and the bus may be non-persistent.
 ///
@@ -12,7 +12,7 @@ namespace Titan.Application.Abstractions;
 /// (WalletMutationSubscriberTests.Notification_WireFormat_UsesMutationId pins the current one).
 public record WalletMutationNotification(Guid MutationId, Guid WalletId);
 
-/// Publishes after the mutation's transaction commits (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox).
+/// Publishes after the mutation's transaction commits (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 /// A no-op implementation runs when NATS is not configured, which is safe because the mutation is
 /// already durable and the sweeper covers a missing notify.
 public interface IWalletMutationPublisher

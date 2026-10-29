@@ -9,7 +9,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // VM and volume backups in the bucket become cache rows, and each resource keeps its seven newest
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/backup/design.md#incus-backup).
+// (titan-ops features/backup/design.md#incus-backup).
 public class RefreshIncusBackupsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);

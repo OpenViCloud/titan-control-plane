@@ -1,7 +1,7 @@
 namespace Titan.Domain.Aggregates.Platform.ActivityEvent;
 
 // The customer's activity feed: the request a member made (actor = the member) and the outcome the provider
-// delivered (actor = "system") — https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#request-and-outcome. Kept
+// delivered (actor = "system") — titan-ops architecture/intent-and-observation.md#request-and-outcome. Kept
 // separate from AdminAuditLog, the cross-tenant admin compliance log.
 public class ActivityEvent
 {

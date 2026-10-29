@@ -6,7 +6,7 @@ namespace Titan.Infrastructure.Endpoints.Internal;
 
 public record InternalClusterResponse(string Id, string Name);
 
-// The clusters the worker reconciles, from the configuration (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config).
+// The clusters the worker reconciles, from the configuration (titan-ops features/cluster/design.md#cluster-from-config).
 // Behind X-Internal-Token: the worker does not depend on a public route for its own work.
 public class ListInternalClustersEndpoint(ClusterOptions clusters, IConfiguration config)
     : EndpointWithoutRequest<List<InternalClusterResponse>>

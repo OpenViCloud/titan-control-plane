@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Titan.Application.Services.Compute;
 
 /// Titan's cloud-init vendor-data for a new VM: a shell script that appends the picked SSH keys to the `ubuntu`
-/// user's authorized_keys (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-key). Vendor-data, not user-data: cloud-config keys in
+/// user's authorized_keys (titan-ops features/vm/design.md#ssh-key). Vendor-data, not user-data: cloud-config keys in
 /// vendor-data are dropped when the customer's user-data sets keys too, and a script appends instead.
 public static class VmVendorData
 {

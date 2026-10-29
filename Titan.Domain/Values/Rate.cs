@@ -3,7 +3,7 @@ using Titan.Domain.Exceptions;
 namespace Titan.Domain.Values;
 
 /// A price per unit of time: VND per hour, or VND per GB per hour
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#rate-value-object). A price is not a whole number of đồng, so it
+/// (titan-ops architecture/money-and-wallet.md#rate-value-object). A price is not a whole number of đồng, so it
 /// stays a decimal; there is no conversion to long and no Rate + Rate, so a price cannot be mistaken for a
 /// balance (MoneyAndRateTests).
 public readonly struct Rate : IEquatable<Rate>

@@ -24,7 +24,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .OrderByDescending(v => v.CreatedAt)
             .ToListAsync(ct);
 
-    // Occupancy (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#counting-and-billing): what Incus holds or is about to, unless its
+    // Occupancy (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to, unless its
     // delete was pressed. A create that failed before Incus had it, or a volume Incus no longer has, does not count.
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes.CountAsync(

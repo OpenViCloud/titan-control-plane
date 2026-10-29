@@ -19,8 +19,8 @@ public class DiskMeterServiceTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = new(2026, 8, 9, 9, 10, 0, TimeSpan.Zero);
     private const string OfferingId = "vo-std";
-    // The tier's own price column (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering).
-    private const decimal Rate = 150m;   // VND/GB/h — whole-đồng so the rounded Cost is exact (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd)
+    // The tier's own price column (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
+    private const decimal Rate = 150m;   // VND/GB/h — whole-đồng so the rounded Cost is exact (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
 
     private readonly Mock<IVolumeRepository> _volumeRepo = new();
     private readonly FakeVolumeOfferingRepository _offerings = new();
@@ -99,7 +99,7 @@ public class DiskMeterServiceTests
         Assert.Single(_usageRepo.All);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering — same rule as the compute meter: a volume pointing at a tier that is not in the
+    // titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — same rule as the compute meter: a volume pointing at a tier that is not in the
     // catalog is damaged data, not a zero price. Refuse to bill rather than write a silent 0.
     [Fact]
     public async Task RunTick_OfferingMissing_ThrowsAndWritesNothing()
@@ -116,7 +116,7 @@ public class DiskMeterServiceTests
     }
 
     // One volume without a price refuses the whole tick, wherever the repository happens to return it
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/metering/design.md#missing-offering): a half-billed tick bills some tenants and not others.
+    // (titan-ops features/billing/metering/design.md#missing-offering): a half-billed tick bills some tenants and not others.
     [Fact]
     public async Task RunTick_MissingOfferingBeforeAGoodVolume_WritesNothing()
     {

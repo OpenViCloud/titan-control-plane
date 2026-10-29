@@ -1,5 +1,5 @@
 // Test setup for a resource the provider already holds. The create command reports the id and the reconciler reports
-// the Incus state (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current); these replay both reports in order,
+// the Incus state (titan-ops architecture/desired-and-current.md#desired-and-current); these replay both reports in order,
 // under the one-call names the setups used before the two were split. A volume or a snapshot needs no helper: Incus
 // has no state word for it, so its create command's report is the whole of it.
 //

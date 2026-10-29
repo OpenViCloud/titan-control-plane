@@ -15,19 +15,19 @@ public class FirewallRule
     public int? EndPort { get; private set; }
     public string Cidr { get; private set; } = default!;
     public string? ExternalId { get; private set; }
-    // Same split as Network (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current): CurrentState is the Incus
+    // Same split as Network (titan-ops architecture/desired-and-current.md#desired-and-current): CurrentState is the Incus
     // ACL rule state, null while the rule is not in the ACL.
     public FirewallRuleState? CurrentState { get; private set; }
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     public Guid? PendingIntentId { get; private set; }
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure
+    // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    /// Deleted absorbs every later observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation):
+    /// Deleted absorbs every later observation (titan-ops architecture/intent-and-observation.md#intent-versus-observation):
     /// a late observation must not bring back a rule Incus has already removed.
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
@@ -54,7 +54,7 @@ public class FirewallRule
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge). The cap is per
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The cap is per
     /// network, so ruleCount is the count on THIS network.
     public static FirewallRule Create(
         Guid networkId, Tenant tenant, int ruleCount,
@@ -89,7 +89,7 @@ public class FirewallRule
         };
     }
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
 
     /// The create command wrote the rule into its network's ACL. The first id heard is kept; the state is left to
     /// the reconciler.
@@ -128,7 +128,7 @@ public class FirewallRule
     }
 
     /// The reconciler did not find the rule in its ACL. Never Deleted: only a delete command confirms that
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps waiting.
+    /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps waiting.
     public void MarkNotFound()
     {
         if (IsTerminal)
@@ -160,7 +160,7 @@ public class FirewallRule
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure): records why and ends
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale; a delete's give-up is AbandonRequest.
     public void MarkRequestFailed(string? reason, string? detail)
     {
@@ -176,9 +176,9 @@ public class FirewallRule
     }
 
     /// Intent: remove a rule Incus may hold — whatever its state, even not found; Incus answers. The current pair
-    /// waits for the delete command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a
+    /// waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a
     /// repeat and a rule already deleted; the handler answers those
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public string RequestDelete()
     {
         if (CreateIsWaiting)
@@ -204,9 +204,9 @@ public class FirewallRule
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("FIREWALL_RULE_INVALID_STATE", "Firewall rule has no provider resource yet.");
 
-    /// The delete command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request): DesiredExistence
+    /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): DesiredExistence
     /// returns to Exists, so it counts against the quota again (it is still enforced on Incus), the reason is kept
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure) and the next delete is a new request.
+    /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request.
     public void AbandonRequest(string? reason, string? detail)
     {
         if (!DeleteIsWaiting)
@@ -223,7 +223,7 @@ public class FirewallRule
 
     /// Intent: remove a rule whose create failed before Incus had it. Nothing to send and nothing to wait for — the
     /// control plane is the only witness, which is why this request writes the current pair too
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId == null && !CreateIsWaiting && !IsTerminal;

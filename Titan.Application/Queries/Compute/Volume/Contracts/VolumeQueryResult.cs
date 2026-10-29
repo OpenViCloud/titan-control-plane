@@ -5,8 +5,8 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;
 
-// The read side's own shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse): never reused by a command, even
-// where fields would match. Incus has no status word for a volume (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-state-is-existence):
+// The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse): never reused by a command, even
+// where fields would match. Incus has no status word for a volume (titan-ops features/volume/design.md#volume-state-is-existence):
 // the current pair (existence, attachment) is what Incus was last seen to hold, the desired pair what was asked, and
 // transition the request still waiting, derived. The failure detail is the operator's, never the tenant's.
 public record VolumeQueryResult(

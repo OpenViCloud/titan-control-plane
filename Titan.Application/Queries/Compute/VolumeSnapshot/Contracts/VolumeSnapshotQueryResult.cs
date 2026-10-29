@@ -5,7 +5,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.VolumeSnapshot.Contracts;
 
-// The read side's own shape (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#no-contract-reuse). Existence and transition, like
+// The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse). Existence and transition, like
 // VolumeQueryResult; the failure detail is the operator's, never the tenant's.
 public record VolumeSnapshotQueryResult(
     Guid Id,

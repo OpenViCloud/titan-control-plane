@@ -3,7 +3,7 @@ using Titan.Infrastructure.Incus;
 
 namespace Titan.Tests.Services;
 
-// The admin list is the configuration, nothing else (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#cluster-from-config):
+// The admin list is the configuration, nothing else (titan-ops features/cluster/design.md#cluster-from-config):
 // every configured cluster shows with its connection and provider settings, in config order, and nothing secret.
 public class AdminClusterServiceTests
 {

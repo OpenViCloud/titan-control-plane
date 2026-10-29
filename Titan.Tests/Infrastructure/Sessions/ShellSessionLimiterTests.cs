@@ -2,7 +2,7 @@ using Titan.Infrastructure.Sessions;
 
 namespace Titan.Tests.Infrastructure.Sessions;
 
-// At most five shell sessions per tenant at once (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#ssh-session).
+// At most five shell sessions per tenant at once (titan-ops features/vm/design.md#ssh-session).
 public class ShellSessionLimiterTests
 {
     [Fact]

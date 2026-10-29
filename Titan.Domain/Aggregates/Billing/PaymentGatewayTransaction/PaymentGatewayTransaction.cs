@@ -1,7 +1,7 @@
 namespace Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
 
 /// One row per SePay transaction id (the PK), so the DB dedupes a retried webhook, and every payment —
-/// matched or not — leaves a durable trail for reconciliation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#sepay-writer).
+/// matched or not — leaves a durable trail for reconciliation (titan-ops architecture/money-and-wallet.md#sepay-writer).
 public class PaymentGatewayTransaction
 {
     /// SePay's own transaction id.

@@ -8,7 +8,7 @@ public interface IVolumeRepository
     Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     /// All tenants: Incus holds it — including while a delete waits, until Incus has deleted it
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#counting-and-billing). Independent of any VM's state, by design.
+    /// (titan-ops features/volume/design.md#counting-and-billing). Independent of any VM's state, by design.
     Task<List<Volume>> ListBillableAsync(CancellationToken ct = default);
     /// Volumes in a cluster the storage reconciler should observe: they have a provider id and are not Deleted.
     Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);

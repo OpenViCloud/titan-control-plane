@@ -57,7 +57,7 @@ public class InvoiceSchemaTests
         Assert.Equal(3, index.Properties.Count);
     }
 
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd — money is whole VND (long → bigint).
+    // titan-ops architecture/money-and-wallet.md#money-is-long-vnd — money is whole VND (long → bigint).
     [Fact]
     public void Invoice_Total_Is_Bigint()
     {
@@ -123,7 +123,7 @@ public class InvoiceSchemaTests
         Assert.Equal(typeof(string), property.GetProviderClrType());
     }
 
-    // Status is the optimistic-concurrency token (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#double-pay-guard):
+    // Status is the optimistic-concurrency token (titan-ops architecture/money-and-wallet.md#double-pay-guard):
     // EF's UPDATE must carry `WHERE ... AND status = @loaded` so two payers racing the same invoice can't
     // both settle it. Dropping IsConcurrencyToken() turns this red.
     [Fact]

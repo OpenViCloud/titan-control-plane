@@ -5,7 +5,7 @@ using Titan.Application.Commands.Catalog.VmOffering.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Catalog;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#price-belongs-to-offering
+// titan-ops architecture/money-and-wallet.md#price-belongs-to-offering
 public class UpdateVmOfferingPriceEndpoint(UpdateVmOfferingPriceCommandHandler handler)
     : Endpoint<UpdateVmOfferingPriceRequest>
 {
@@ -23,7 +23,7 @@ public class UpdateVmOfferingPriceEndpoint(UpdateVmOfferingPriceCommandHandler h
     }
 }
 
-// The JSON body; UpdateVmOfferingPriceCommand additionally carries the route's offering id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// The JSON body; UpdateVmOfferingPriceCommand additionally carries the route's offering id (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record UpdateVmOfferingPriceRequest(decimal PricePerHour);
 
 public class UpdateVmOfferingPriceValidator : Validator<UpdateVmOfferingPriceRequest>

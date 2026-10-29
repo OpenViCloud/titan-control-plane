@@ -4,7 +4,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Fakes;
 
-// In-memory ILoadBalancerRepository for unit tests (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests). The
+// In-memory ILoadBalancerRepository for unit tests (titan-ops architecture/testing.md#doubles-only-in-unit-tests). The
 // queries mirror LoadBalancerRepository's conditions; Postgres-only behaviour (unique indexes) is
 // LoadBalancerDbTests'.
 public class FakeLoadBalancerRepository : ILoadBalancerRepository

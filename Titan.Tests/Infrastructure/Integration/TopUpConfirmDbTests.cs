@@ -12,7 +12,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — confirm DEFERS the credit: ConfirmAsync writes
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — confirm DEFERS the credit: ConfirmAsync writes
 // ONE credit mutation in the same transaction as the Confirmed status and publishes a post-commit notify; the
 // single-writer consumer applies it. These tests assert on real Postgres: a confirm enqueues exactly one
 // mutation and credits nothing yet; the consumer then credits exactly once; two concurrent confirms leave
@@ -24,7 +24,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class TopUpConfirmDbTests(PostgresFixture pg)
 {
     // The confirm rule both channels share (TopUpConfirmation), over real repositories. It returns nothing
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data), so these tests read the stored row back
+    // (titan-ops architecture/http-contract.md#commands-return-no-data), so these tests read the stored row back
     // through a fresh context — the way the admin list sees it.
     private static ConfirmRule NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);
 
@@ -136,7 +136,7 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
         Assert.Equal(1, movements2);
     }
 
-    // Money in is not money spent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#human-confirmed-debit): a top-up that lands
+    // Money in is not money spent (titan-ops architecture/money-and-wallet.md#human-confirmed-debit): a top-up that lands
     // while the tenant owes an invoice credits the wallet in full and leaves the invoice owed, until someone
     // presses pay for it.
     [Fact]

@@ -12,7 +12,7 @@ namespace Titan.Infrastructure.Hosting;
 /// <summary>
 /// The polling relay that makes a non-persistent NATS bus safe on a money path: the mutation is a durable
 /// row, and this re-drives the rows the bus did not get through
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox). Without it a lost notify loses money silently.
+/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Without it a lost notify loses money silently.
 /// It calls the same IWalletMutationConsumer.ApplyAsync as the bus, so there is one apply path.
 /// </summary>
 public class WalletMutationSweeper(

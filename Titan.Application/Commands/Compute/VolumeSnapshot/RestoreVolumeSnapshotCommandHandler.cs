@@ -45,7 +45,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         var externalSnapshotId = snapshot.BeginRestore(); // same rule, and hands over the id
         volumeRepo.Add(newVolume);
         // The restore's result is a new volume, so the request is recorded against it; its outcome is
-        // the "volume.created" the volume callback records on Allocating → Allocated (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+        // the "volume.created" the volume callback records on Allocating → Allocated (titan-ops features/activity/design.md#outcome-source).
         activity.Stage("volume_snapshot.restore_requested", "volume", newVolume.Id, newVolume.Name); // atomic with Add
         string projectName = TenantAggregate.ProjectNameFor(newVolume.TenantId);
         await commands.EnqueueVolumeSnapshotRestoreAsync(

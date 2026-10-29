@@ -11,12 +11,12 @@ public class VmSnapshot
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
     // Incus has no status word for an instance snapshot, only whether it is there
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/vm/design.md#vm-snapshot-is-existence). Same split as VolumeSnapshot.
+    // (titan-ops features/vm/design.md#vm-snapshot-is-existence). Same split as VolumeSnapshot.
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     public Guid? PendingIntentId { get; private set; }
     public string? ExternalId { get; private set; }
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure
+    // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -52,8 +52,8 @@ public class VmSnapshot
     private bool DeleteIsWaiting => Transition == VmSnapshotTransition.Deleting;
 
     /// Takes the Vm, not its id, so the VM rule is checked here
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation); quota too
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge). The cap is per VM: the count is on THIS vm.
+    /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation); quota too
+    /// (titan-ops architecture/code-structure.md#tenant-typed-edge). The cap is per VM: the count is on THIS vm.
     public static VmSnapshot Create(Vm.Vm vm, Tenant tenant, int activeSnapshotCount, string name)
     {
         vm.EnsureSnapshottable();
@@ -62,7 +62,7 @@ public class VmSnapshot
     }
 
     /// Test seam: seeding needs a known parent id, which the checked factory takes from the Vm it validates.
-    /// `internal`, so only Titan.Tests reaches it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    /// `internal`, so only Titan.Tests reaches it (titan-ops architecture/code-structure.md#tenant-typed-edge).
     internal static VmSnapshot CreateUnchecked(Guid vmId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),
@@ -75,10 +75,10 @@ public class VmSnapshot
         CreatedAt = DateTime.UtcNow
     };
 
-    /// Deleted absorbs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    // ---- Intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation).
+    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Checks the snapshot and the VM in one call. The revert is the waiting request; existence stays.
     public string Revert(Vm.Vm vm)
@@ -94,8 +94,8 @@ public class VmSnapshot
     }
 
     /// Follows Incus: a snapshot with a provider id is deleted through Incus, even one Incus no longer has; the
-    /// existence waits for the delete command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm).
-    /// Refuses a repeat (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
+    /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public string RequestDelete()
     {
         if (DeleteIsWaiting)
@@ -109,7 +109,7 @@ public class VmSnapshot
         return ExternalId;
     }
 
-    /// A revert or a delete command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request): the
+    /// A revert or a delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the
     /// snapshot is still on Incus, so a delete returns DesiredExistence to Exists; a revert just ends. The reason is
     /// kept and the next request is a new one.
     public void AbandonRequest(string? reason, string? detail)
@@ -123,7 +123,7 @@ public class VmSnapshot
     }
 
     /// Intent: a snapshot that never reached Incus has no command and no observation coming, so this writes the
-    /// existence itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// existence itself (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
@@ -138,11 +138,11 @@ public class VmSnapshot
     }
 
     /// Throws rather than let a caller assert the id
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the reconciler's read model.
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the reconciler's read model.
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
     // Each returns true when the report fulfilled the waiting request, so the callback records its outcome once.
 
     /// The create command: Incus made the snapshot before answering, so this is the create done. A repeat keeps the
@@ -196,7 +196,7 @@ public class VmSnapshot
     }
 
     /// The reconciler did not find the snapshot on its VM. Never Deleted: only Titan's own delete command confirms
-    /// that (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Ends a waiting create; a revert or delete keeps
+    /// that (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a revert or delete keeps
     /// waiting for its command.
     public void MarkNotFound()
     {
@@ -225,7 +225,7 @@ public class VmSnapshot
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure): records why and ends the
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends the
     /// waiting create. Stale with no create waiting; a revert's or delete's give-up is AbandonRequest.
     public void MarkRequestFailed(string? reason, string? detail)
     {

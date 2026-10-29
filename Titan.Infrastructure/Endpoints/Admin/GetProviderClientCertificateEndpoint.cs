@@ -4,7 +4,7 @@ using Titan.Application.Abstractions;
 namespace Titan.Infrastructure.Endpoints.Admin;
 
 // What an admin adds to an Incus cluster's trust store (`incus config trust add-certificate`): Titan's public
-// certificate and its fingerprint, never the key (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/cluster/design.md#provider-client-identity).
+// certificate and its fingerprint, never the key (titan-ops features/cluster/design.md#provider-client-identity).
 public class GetProviderClientCertificateEndpoint(IProviderClientIdentityStore identity)
     : EndpointWithoutRequest<ProviderClientCertificate>
 {

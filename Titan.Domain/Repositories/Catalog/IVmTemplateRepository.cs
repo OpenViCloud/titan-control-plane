@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.Catalog.VmTemplate;
 
 namespace Titan.Domain.Repositories.Catalog;
 
-// Every read loads the cluster rows: a template's state lives in them (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+// Every read loads the cluster rows: a template's state lives in them (titan-ops features/catalog/design.md#template-per-cluster).
 public interface IVmTemplateRepository
 {
     Task<VmTemplate?> FindByIdAsync(Guid id, CancellationToken ct = default);

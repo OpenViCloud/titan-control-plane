@@ -9,7 +9,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Api;
 
 /// `GET /v1/templates?clusterId=` is declared in the spec, so a client generated from it (CLI, Terraform provider) has
-/// the parameter, and the host still reads it (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-per-cluster).
+/// the parameter, and the host still reads it (titan-ops features/catalog/design.md#template-per-cluster).
 [Trait("Category", "FullHost")]
 [Collection("Http")]
 public class TemplatesClusterQueryTests(RealHostFactory factory) : IClassFixture<RealHostFactory>

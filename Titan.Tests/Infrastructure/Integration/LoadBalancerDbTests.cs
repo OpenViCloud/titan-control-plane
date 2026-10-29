@@ -8,10 +8,10 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// What only Postgres shows for load balancers (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/load-balancer/design.md#lb-data-model): the VIP index
+/// What only Postgres shows for load balancers (titan-ops features/load-balancer/design.md#lb-data-model): the VIP index
 /// between two creates, the child rows a request leaves and an observation drops, and the queries the VM and network
 /// deletes read. Category=Integration — its own CI step; needs real Postgres; no doubles
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/testing.md#doubles-only-in-unit-tests).
+/// (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class LoadBalancerDbTests(PostgresFixture pg)

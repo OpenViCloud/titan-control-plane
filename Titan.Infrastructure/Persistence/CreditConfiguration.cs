@@ -16,7 +16,7 @@ public class TopUpConfiguration : IEntityTypeConfiguration<TopUp>
         builder.Property(t => t.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(t => t.Amount).HasColumnName("amount").HasColumnType("bigint").IsRequired();
         builder.Property(t => t.Currency).HasColumnName("currency").IsRequired();
-        // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#enum-storage (WalletSchemaTests.TopUpStatus_IsStoredAsString)
+        // titan-ops architecture/code-structure.md#enum-storage (WalletSchemaTests.TopUpStatus_IsStoredAsString)
         builder.Property(t => t.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.Property(t => t.PaymentRef).HasColumnName("payment_ref").IsRequired();
         builder.Property(t => t.Source).HasColumnName("source").HasConversion<string>();

@@ -7,8 +7,8 @@ namespace Titan.Application.Queries.Networking.Network.Contracts;
 
 // CurrentState is the Incus network status word for word, null while Incus has no network; CurrentExistence says
 // whether Incus holds it, DesiredExistence what the customer asked for, Transition the request still waiting
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim). A command's give-up is the request
-// failure; its raw detail is admin-only (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure).
+// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim). A command's give-up is the request
+// failure; its raw detail is admin-only (titan-ops architecture/desired-and-current.md#request-failure).
 public record NetworkQueryResult(
     Guid Id,
     string Name,
@@ -25,7 +25,7 @@ public record NetworkQueryResult(
     string DefaultIngressPolicy,
     string DefaultEgressPolicy,
     DateTimeOffset CreatedAt,
-    // The network's public /64, null = no public IPv6 (https://github.com/OpenViCloud/titan-ops/blob/main/docs/infra/incus/design.md#ipv6-address-plan).
+    // The network's public /64, null = no public IPv6 (titan-ops infra/incus/design.md#ipv6-address-plan).
     string? PublicIpv6Subnet)
 {
     public static NetworkQueryResult From(NetworkAggregate n) =>

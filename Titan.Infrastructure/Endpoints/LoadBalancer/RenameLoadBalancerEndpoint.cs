@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.LoadBalancer;
 
-// Titan-side only, no provider command. 204 with no body (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#commands-return-no-data).
+// Titan-side only, no provider command. 204 with no body (titan-ops architecture/http-contract.md#commands-return-no-data).
 public class RenameLoadBalancerEndpoint(RenameLoadBalancerCommandHandler handler) : Endpoint<RenameLoadBalancerBody>
 {
     public override void Configure()
@@ -22,5 +22,5 @@ public class RenameLoadBalancerEndpoint(RenameLoadBalancerCommandHandler handler
     }
 }
 
-// The JSON body; RenameLoadBalancerCommand also carries the route's id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// The JSON body; RenameLoadBalancerCommand also carries the route's id (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record RenameLoadBalancerBody(string Name);

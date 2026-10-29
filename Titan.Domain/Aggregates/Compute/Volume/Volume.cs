@@ -13,8 +13,8 @@ public class Volume
     public string VolumeOfferingId { get; private set; } = default!;
     public int SizeGb { get; private set; }
     // Incus has no status word for a custom volume: it is there or not, and used by instances or not
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-state-is-existence). Only Mark* writes the current pair (existence and
-    // attachment); only a request writes the desired pair (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#desired-and-current).
+    // (titan-ops features/volume/design.md#volume-state-is-existence). Only Mark* writes the current pair (existence and
+    // attachment); only a request writes the desired pair (titan-ops architecture/desired-and-current.md#desired-and-current).
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     /// The Titan VM Incus reports using this volume, or null.
@@ -25,7 +25,7 @@ public class Volume
     public Guid? DesiredAttachedVmId { get; private set; }
     public Guid? PendingIntentId { get; private set; }
     public string? ExternalId { get; private set; }
-    // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure
+    // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
     public DateTimeOffset? RequestFailedAt { get; private set; }
@@ -73,7 +73,7 @@ public class Volume
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    /// Quota is checked inside the factory (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#tenant-typed-edge).
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge).
     public static Volume Create(
         Tenant tenant, int activeVolumeCount,
         string name, string clusterId, string volumeOfferingId, int sizeGb)
@@ -98,13 +98,13 @@ public class Volume
             CreatedAt = DateTimeOffset.UtcNow
         };
 
-    /// Deleted absorbs (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    // ---- Intent (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation).
+    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// The snapshot's readiness is an invariant of this creation
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#volume-restore-is-a-new-volume). Sizing and cluster come from the source
+    /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume). Sizing and cluster come from the source
     /// volume, which the caller resolves.
     public static Volume CreateFromSnapshot(
         VolumeSnapshot.VolumeSnapshot snapshot, Tenant tenant, int activeVolumeCount, string name,
@@ -117,7 +117,7 @@ public class Volume
     }
 
     /// Checks the volume, the VM (Vm.BeginVolumeAttach) and the cluster; the provider ids come out only past all
-    /// three (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
+    /// three (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
     /// waits for Incus to be seen using the volume.
     public VolumeAttachProviderIds Attach(Vm.Vm vm)
     {
@@ -146,7 +146,7 @@ public class Volume
     }
 
     /// The VM holding this volume is being deleted, and the attachment goes with it: Incus keeps the volume and
-    /// detaches it when it deletes the VM (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes). The VM's
+    /// detaches it when it deletes the VM (titan-ops features/volume/design.md#vm-delete-releases-volumes). The VM's
     /// Deleted report completes it through MarkDetachedByVmDelete.
     public void DetachWithDeletedVm()
     {
@@ -158,8 +158,8 @@ public class Volume
     }
 
     /// Follows Incus: a volume with a provider id is deleted through Incus, even one Incus no longer has; the
-    /// existence waits for the delete command (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#forget-on-provider-confirm).
-    /// Refuses a repeat (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#domain-refuses-a-repeat). liveSnapshotCount is the
+    /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
+    /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). liveSnapshotCount is the
     /// caller's count of this volume's snapshots that exist or are being made.
     public string RequestDelete(int liveSnapshotCount)
     {
@@ -171,7 +171,7 @@ public class Volume
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, with nothing waiting, to delete.");
         if (IsInUse)
             throw new BusinessException("VOLUME_INVALID_STATE", "Detach the volume before deleting it.");
-        // Deleting a volume deletes its snapshots too (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#delete-refused-with-snapshots).
+        // Deleting a volume deletes its snapshots too (titan-ops features/volume/design.md#delete-refused-with-snapshots).
         bool hasLiveSnapshots = liveSnapshotCount > 0;
         if (hasLiveSnapshots)
             throw new BusinessException("VOLUME_HAS_SNAPSHOTS", "Delete the volume's snapshots before the volume.");
@@ -180,7 +180,7 @@ public class Volume
         return ExternalId;
     }
 
-    /// An attach, a detach or a delete command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request):
+    /// An attach, a detach or a delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request):
     /// the desired pair moves back to what Incus was last seen to hold, the reason is kept, and the next press is a
     /// new request. Not a Mark*: it changes what was asked for.
     public void AbandonRequest(string? reason, string? detail)
@@ -202,7 +202,7 @@ public class Volume
     }
 
     /// Intent: a volume that never reached Incus has no command and no observation coming, so this writes the
-    /// existence itself (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#delete-locally).
+    /// existence itself (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
@@ -225,20 +225,20 @@ public class Volume
     }
 
     /// Throws rather than let a caller assert the id
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the storage
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the storage
     /// reconciler's read model.
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VOLUME_INVALID_STATE", "Volume has no provider resource yet.");
 
     /// A cross-aggregate precondition for VolumeSnapshot.Create, never called by a handler
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#validate-inside-the-mutation).
+    /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     internal void EnsureSnapshottable()
     {
         if (!RestsOnIncus)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, with nothing waiting, to create a snapshot.");
     }
 
-    // ---- Observation (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
 
     /// The create (or restore) command: Incus made the volume before answering, so this is the create done. A repeat
     /// keeps the first id. Returns true when it fulfilled the waiting create.
@@ -299,7 +299,7 @@ public class Volume
     }
 
     /// The delete command of the VM using this volume confirmed the instance gone: Incus keeps the volume and drops
-    /// the attachment (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#vm-delete-releases-volumes). Fulfils the detach that VM's delete
+    /// the attachment (titan-ops features/volume/design.md#vm-delete-releases-volumes). Fulfils the detach that VM's delete
     /// asked for.
     public void MarkDetachedByVmDelete(Guid vmId)
     {
@@ -319,7 +319,7 @@ public class Volume
     }
 
     /// The reconciler did not find the volume. Never Deleted: only Titan's own delete command confirms that
-    /// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#existence-axis). Ends a waiting create; every other request keeps
+    /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; every other request keeps
     /// waiting for its command.
     public void MarkNotFound()
     {
@@ -353,7 +353,7 @@ public class Volume
         return fulfilled;
     }
 
-    /// The create command gave up (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#request-failure): records why and ends the
+    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends the
     /// waiting create. Stale with no create waiting; the other give-ups are AbandonRequest.
     public void MarkRequestFailed(string? reason, string? detail)
     {

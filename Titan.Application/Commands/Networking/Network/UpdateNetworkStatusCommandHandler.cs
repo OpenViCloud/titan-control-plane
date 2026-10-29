@@ -8,10 +8,10 @@ using FirewallRuleAggregate = Titan.Domain.Aggregates.Networking.FirewallRule.Fi
 
 namespace Titan.Application.Commands.Networking.Network;
 
-// Worker callback — an observation of Incus (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#intent-versus-observation:
+// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
 // observation converges). The create and delete commands report here when they finish, the network reconciler every
 // cycle. Outcomes are recorded once: the aggregate says whether a report fulfilled the waiting request
-// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/activity/design.md#outcome-source).
+// (titan-ops features/activity/design.md#outcome-source).
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
     IFirewallRuleRepository firewallRepo,
@@ -19,7 +19,7 @@ public class UpdateNetworkStatusCommandHandler(
 {
     public async Task HandleAsync(UpdateNetworkStatusCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the callback payload (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
 
         // Parsed before the network is loaded: a malformed report is the worker's bug, whatever the network.
         NetworkStatus? observedStatus = null;
@@ -78,7 +78,7 @@ public class UpdateNetworkStatusCommandHandler(
                 {
                     network.MarkCreated(req.ExternalId!, req.Cidr ?? "", req.Gateway ?? "");
                 }
-                // A delete Incus refused gives the network back (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#abandoned-request).
+                // A delete Incus refused gives the network back (titan-ops architecture/desired-and-current.md#abandoned-request).
                 bool deleteWasWaiting = network.Transition == NetworkTransition.Deleting;
                 if (deleteWasWaiting)
                 {
@@ -96,7 +96,7 @@ public class UpdateNetworkStatusCommandHandler(
                     outcome = "network.deleted";
                 }
                 // The delete command removed the network's ACL, and every rule in it
-                // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/network/design.md#network-lifecycle). A rule whose own delete was waiting is done
+                // (titan-ops features/network/design.md#network-lifecycle). A rule whose own delete was waiting is done
                 // here: its own delete command will only find it already Deleted, so its outcome is recorded now.
                 List<FirewallRuleAggregate> rules = await firewallRepo.ListLiveOfNetworkForUpdateAsync(network.Id, ct);
                 foreach (FirewallRuleAggregate rule in rules)
@@ -119,7 +119,7 @@ public class UpdateNetworkStatusCommandHandler(
         await repo.SaveAsync(ct);
     }
 
-    // The worker sends the Incus status word for word (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/desired-and-current.md#provider-state-is-verbatim).
+    // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     // Matched by name, exactly: Enum.TryParse would also take "1" or "created".
     private static NetworkStatus ParseIncusStatus(string? status)
     {

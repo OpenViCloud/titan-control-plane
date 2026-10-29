@@ -7,7 +7,7 @@ using Titan.Domain.Repositories.Billing;
 
 namespace Titan.Tests.Services;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox — the single-writer consumer's branches,
+// titan-ops architecture/money-and-wallet.md#single-writer-outbox — the single-writer consumer's branches,
 // against stub repositories so they run without Docker.
 //
 // Silent about atomicity (one SaveChanges = one transaction), the ledger UNIQUE(type, ref_id) that
@@ -158,7 +158,7 @@ public class WalletMutationConsumerTests
         Assert.Equal(0, walletRepo.SaveCount);
     }
 
-    // ---- The authoritative debit re-check (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#single-writer-outbox) ----
+    // ---- The authoritative debit re-check (titan-ops architecture/money-and-wallet.md#single-writer-outbox) ----
 
     [Fact] // the balance was spent between the button and the apply
     public async Task Apply_DebitAWalletCannotCover_FailsTheMutation_LeavesBalanceUntouched()
@@ -210,7 +210,7 @@ public class WalletMutationConsumerTests
 
         var movement = Assert.Single(walletRepo.Staged);
         Assert.Equal(WalletTransactionType.InvoicePayment, movement.Type);
-        Assert.Equal(-300_000L, movement.Amount);       // negative — money out (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd)
+        Assert.Equal(-300_000L, movement.Amount);       // negative — money out (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
 
         // The invoice becomes paid HERE, beside the debit, never at the button.
         Assert.Equal(InvoiceStatus.SettledByWallet, invoice.Status);

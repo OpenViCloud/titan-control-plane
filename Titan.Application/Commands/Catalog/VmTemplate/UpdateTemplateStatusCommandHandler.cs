@@ -6,9 +6,9 @@ using Titan.Domain.Repositories.Catalog;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 
-// Worker callback — an observation of one cluster (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/intent-and-observation.md#observation-converges).
+// Worker callback — an observation of one cluster (titan-ops architecture/intent-and-observation.md#observation-converges).
 // Created and the give-up come from the sync command, Observed from that cluster's template reconciler, which never
-// reports Deleted: a template is never removed (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/catalog/design.md#template-reports).
+// reports Deleted: a template is never removed (titan-ops features/catalog/design.md#template-reports).
 public class UpdateTemplateStatusCommandHandler(
     IVmTemplateRepository repo,
     ClusterOptions clusters,
@@ -16,7 +16,7 @@ public class UpdateTemplateStatusCommandHandler(
 {
     public async Task HandleAsync(UpdateTemplateStatusCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the callback payload (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#contracts)
+        var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
 
         // Parsed before anything is loaded: a malformed report is the worker's bug, whatever the template.
         switch (req.Report)

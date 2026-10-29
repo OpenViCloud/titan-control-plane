@@ -24,7 +24,7 @@ public class CreateFirewallRuleEndpoint(CreateFirewallRuleCommandHandler handler
     }
 }
 
-// The JSON body; CreateFirewallRuleCommand additionally carries the route's network id (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/code-structure.md#command-is-wire-contract).
+// The JSON body; CreateFirewallRuleCommand additionally carries the route's network id (titan-ops architecture/code-structure.md#command-is-wire-contract).
 public record CreateFirewallRuleRequest(
     string Direction,
     string Protocol,

@@ -55,7 +55,7 @@ public partial class ReceiveSePayPaymentCommandHandler(
         }
 
         // The webhook payload carries a bare decimal; the TopUp amount is whole VND (long). Compare
-        // exactly — a fractional transfer does not match a whole-đồng purchase (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#money-is-long-vnd).
+        // exactly — a fractional transfer does not match a whole-đồng purchase (titan-ops architecture/money-and-wallet.md#money-is-long-vnd).
         if (p.TransferAmount != topUp.Amount)
         {
             // The amount does not match the purchase — do not credit; record + alert for reconciliation.

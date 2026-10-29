@@ -17,6 +17,6 @@ public class DeleteVmEndpoint(DeleteVmCommandHandler handler) : EndpointWithoutR
     {
         var vmId = Route<Guid>("vmId");
         await handler.HandleAsync(new DeleteVmCommand(vmId), ct);
-        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#async-actions-return-202: no body, not `{}`
+        await SendResultAsync(TypedResults.StatusCode(StatusCodes.Status202Accepted)); // titan-ops architecture/http-contract.md#async-actions-return-202: no body, not `{}`
     }
 }

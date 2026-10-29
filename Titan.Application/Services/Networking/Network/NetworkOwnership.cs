@@ -9,7 +9,7 @@ namespace Titan.Application.Services.Networking.Network;
 /// The one place Networking decides whether a caller may see a network.
 ///
 /// A foreign network answers <b>404</b>, exactly like a missing one — never 403, which would confirm
-/// to a caller that a resource they cannot see exists (https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#tenant-scoping).
+/// to a caller that a resource they cannot see exists (titan-ops architecture/http-contract.md#tenant-scoping).
 /// NetworkServiceTests.Get_NetworkBelongsToOtherTenant_ThrowsNotFoundException pins it.
 /// </summary>
 public static class NetworkOwnership

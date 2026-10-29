@@ -19,7 +19,7 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
             .ToListAsync(ct);
 
     // Occupancy, for the per-volume quota and VOLUME_HAS_SNAPSHOTS alike
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/volume/design.md#counting-and-billing).
+    // (titan-ops features/volume/design.md#counting-and-billing).
     public async Task<int> CountActiveByVolumeIdAsync(Guid volumeId, CancellationToken ct = default) =>
         await db.VolumeSnapshots.CountAsync(
             s => s.VolumeId == volumeId

@@ -5,7 +5,7 @@ using Titan.Infrastructure.Auth;
 
 namespace Titan.Tests.Api;
 
-// https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#idempotency-key. The middleware decides from the ROUTED endpoint's
+// titan-ops architecture/http-contract.md#idempotency-key. The middleware decides from the ROUTED endpoint's
 // FastEndpoints definition, so this reads the running host's routing table: a marker it does not expose is
 // enforced nowhere. Fails both ways (unmarked create, marked non-create); silent about a new create that is
 // neither listed here nor marked.
@@ -14,7 +14,7 @@ namespace Titan.Tests.Api;
 public class ApiIdempotencyKeyTests(OpenApiSpecTests.ApiFactory factory)
     : IClassFixture<OpenApiSpecTests.ApiFactory>
 {
-    // Every create of https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/http-contract.md#create-returns-id.
+    // Every create of titan-ops architecture/http-contract.md#create-returns-id.
     private static readonly string[] Creates =
     [
         "POST v1/tenant/vms",

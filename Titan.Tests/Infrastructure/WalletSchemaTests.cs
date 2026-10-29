@@ -47,7 +47,7 @@ public class WalletSchemaTests
         Assert.Contains("wallets", mapped);
     }
 
-    // ── https://github.com/OpenViCloud/titan-ops/blob/main/docs/architecture/money-and-wallet.md#wallet-one-balance: the single-balance wallet ────────────────────────────────────
+    // ── titan-ops architecture/money-and-wallet.md#wallet-one-balance: the single-balance wallet ────────────────────────────────────
 
     // One wallet per tenant. A check-then-insert in C# is a race, so this index is what stops a tenant
     // from ending up with two balances.
@@ -62,7 +62,7 @@ public class WalletSchemaTests
 
     // One ledger movement per source document (a mutation's apply, or a promo grant): a second row for the same
     // (type, ref_id) fails here. This pins the declaration only; no executed test reaches the index
-    // (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/billing/wallet/design.md#wallet-debts).
+    // (titan-ops features/billing/wallet/design.md#wallet-debts).
     [Fact]
     public void WalletTransactionTypeRefId_IsUnique()
     {

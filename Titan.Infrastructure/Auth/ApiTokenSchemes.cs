@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Http;
 namespace Titan.Infrastructure.Auth;
 
 /// Two ways to authenticate, one Authorization header: a bearer that starts with ovc_ is an API token
-/// (https://github.com/OpenViCloud/titan-ops/blob/main/docs/features/public-api/design.md#api-token), anything else goes to Keycloak's JWT as before. The scheme word is
+/// (titan-ops features/public-api/design.md#api-token), anything else goes to Keycloak's JWT as before. The scheme word is
 /// matched without regard to case, as JwtBearer does.
 public static class ApiTokenSchemes
 {
