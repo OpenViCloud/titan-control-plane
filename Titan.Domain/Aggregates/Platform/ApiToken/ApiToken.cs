@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Platform.ApiToken;
 
 /// A long-lived bearer a tenant member creates for Terraform, CI and the CLI
 /// (titan-ops features/public-api/design.md#api-token). It acts as the member who created it. Only a hash of the
 /// secret is kept: the portal makes the secret and shows it once. Titan-only, deleted outright when revoked.
-public partial class ApiToken
+public partial class ApiToken : AggregateRoot
 {
     public const int MaxNameLength = 64;
     public const int MaxPerTenant = 20;

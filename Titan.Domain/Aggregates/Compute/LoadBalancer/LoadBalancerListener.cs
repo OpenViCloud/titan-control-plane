@@ -1,8 +1,11 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
 /// A listener row (titan-ops features/load-balancer/design.md#lb-resource-model). IsDesired: the customer's last request
 /// has it. IsApplied: Incus took it. A row is either or both; LoadBalancer drops the one neither once a request ends.
-public class LoadBalancerListener
+public class LoadBalancerListener : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid LoadBalancerId { get; private set; }

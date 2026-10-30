@@ -1,3 +1,4 @@
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Catalog.VmOffering;
@@ -9,7 +10,7 @@ namespace Titan.Domain.Aggregates.Catalog.VmOffering;
 //
 // The price is a NOT NULL column on the tier (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering):
 // a tier with no price would bill VMs zero, silently.
-public class VmOffering
+public class VmOffering : AggregateRoot
 {
     public string Id { get; private set; } = default!;
     public string Name { get; private set; } = default!;
@@ -19,7 +20,7 @@ public class VmOffering
 
     /// VND per hour (titan-ops architecture/money-and-wallet.md#rate-value-object). The factory takes decimal because
     /// prices arrive from seed data and admin JSON as primitives.
-    public Rate PricePerHour { get; private set; }
+    public Rate PricePerHour { get; private set; } = default!;
 
     private VmOffering() { }
 

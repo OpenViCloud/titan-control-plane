@@ -1,7 +1,8 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 namespace Titan.Domain.Aggregates.Platform.Tenant;
 
-public class Tenant
+public class Tenant : AggregateRoot
 {
     public Guid Id { get; private set; }
     public string Name { get; private set; } = default!;

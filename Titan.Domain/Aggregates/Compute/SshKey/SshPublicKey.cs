@@ -2,12 +2,13 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Compute.SshKey;
 
 /// A public key line as ssh-keygen writes it, read from the binary blob rather than trusted from its text
 /// (titan-ops features/vm/design.md#ssh-key). Only the type and the blob survive: the comment never reaches a VM.
-public sealed class SshPublicKey
+public sealed record SshPublicKey : ValueObject
 {
     public const int MinRsaBits = 2048;
     // ssh-keygen refuses to make or use a larger RSA key.

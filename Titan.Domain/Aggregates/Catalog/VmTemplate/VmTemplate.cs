@@ -1,11 +1,12 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.Catalog.VmTemplate;
 
 // A template answers "which operating system", never "how big" (titan-ops features/catalog/design.md#vm-offering-sizing).
 // It points at an offering (VmOfferingId) for its base sizing instead of owning sizing numbers: a tier id cannot drift
 // (titan-ops features/catalog/design.md#template-borrows-sizing).
-public class VmTemplate
+public class VmTemplate : AggregateRoot
 {
     public Guid Id { get; private set; }
     public string Name { get; private set; } = default!;

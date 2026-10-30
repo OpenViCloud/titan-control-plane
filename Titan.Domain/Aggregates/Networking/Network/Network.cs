@@ -1,10 +1,11 @@
 using Titan.Domain.Aggregates.Platform.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Networking.Network;
 
-public class Network
+public class Network : AggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }

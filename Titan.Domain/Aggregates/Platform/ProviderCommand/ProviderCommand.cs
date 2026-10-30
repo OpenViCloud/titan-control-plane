@@ -1,10 +1,11 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Platform.ProviderCommand;
 
 /// One row of the provider command table (titan-ops architecture/provider-and-worker.md#provider-command-table): a handler
 /// writes it in the same SaveChanges as the aggregate it changed, and a worker leases it over /internal.
-public class ProviderCommand
+public class ProviderCommand : AggregateRoot
 {
     public const int MaxAttempts = 5;
     public static readonly TimeSpan LeaseLength = TimeSpan.FromSeconds(60);

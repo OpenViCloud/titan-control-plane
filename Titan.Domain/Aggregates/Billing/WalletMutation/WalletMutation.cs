@@ -1,10 +1,13 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Billing.WalletMutation;
 
 /// One row of the wallet outbox (titan-ops architecture/money-and-wallet.md#single-writer-outbox): a request
 /// writes it next to the business fact, and the single-writer consumer applies it to the wallet later.
 /// UNIQUE(ref_type, ref_id) gives one source document exactly one row, whatever its status; paying an invoice
 /// again reopens its failed debit row (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
-public class WalletMutation
+public class WalletMutation : AggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid WalletId { get; private set; }
