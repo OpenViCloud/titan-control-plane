@@ -67,14 +67,17 @@ public sealed class TestPostgres : IAsyncDisposable
             return;
         }
 
-        // Pooled connections of the tests would keep the database busy; FORCE ends whatever is still open.
+        // Clearing the pool sends each connection's Terminate, which reaches its backend about when the DROP below does.
+        // A plain DROP waits up to 5 s for those backends to leave. No FORCE: it kills a backend with its Terminate unread,
+        // the kernel resets that socket, and one reset makes kubectl port-forward exit, which ends the tunnel for every test
+        // (https://github.com/OpenViCloud/titan-local-cluster/blob/main/docs/topology.md#runbook, TEST-ALL-TUNNEL).
         await using (NpgsqlConnection testConnection = new(GetConnectionString()))
         {
             NpgsqlConnection.ClearPool(testConnection);
         }
         await using NpgsqlConnection admin = new(ForDatabase(_server!, "postgres"));
         await admin.OpenAsync();
-        await using NpgsqlCommand drop = new($"DROP DATABASE IF EXISTS \"{_databaseName}\" WITH (FORCE)", admin);
+        await using NpgsqlCommand drop = new($"DROP DATABASE IF EXISTS \"{_databaseName}\"", admin);
         await drop.ExecuteNonQueryAsync();
     }
 
