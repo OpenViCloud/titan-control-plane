@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
@@ -60,7 +59,7 @@ public class VolumeRepositoryStateTests
     private static Volume DeleteRequested(string name)
     {
         var volume = Available(name);
-        volume.RequestDelete(liveSnapshotCount: 0);
+        volume.RequestDelete();
         return volume;
     }
 
@@ -135,35 +134,17 @@ public class VolumeRepositoryStateTests
 
     // ── Volume snapshots ───────────────────────────────────────────────────
 
+    // Snapshots are seeded through their volume: they are its child entities (titan-ops architecture/code-structure.md#child-entity),
+    // and the foreign key refuses a snapshot with no volume on Postgres. The per-volume count lives on the aggregate
+    // (VolumeSnapshotChildTests), not in a query.
     private static VolumeSnapshot SnapshotOf(Volume volume, string name, bool created = true)
     {
-        var snapshot = VolumeSnapshot.CreateUnchecked(volume.Id, Tenant, name);
+        var snapshot = volume.AddSnapshotUnchecked(name);
         if (created)
         {
             snapshot.MarkCreated($"ext-{name}");
         }
         return snapshot;
-    }
-
-    // One count serves the per-volume quota and VOLUME_HAS_SNAPSHOTS (titan-ops features/volume/design.md#counting-and-billing).
-    [Fact]
-    public async Task SnapshotQuota_CountsCreatingAndExisting_ButNotADeleteInFlight_NotFound_NorAFailedCreate()
-    {
-        using var db = NewDb();
-        var volume = Available("vol");
-        var leaving = SnapshotOf(volume, "leaving");
-        leaving.RequestDelete();
-        var lost = SnapshotOf(volume, "lost");
-        lost.MarkNotFound();
-        var failed = SnapshotOf(volume, "failed", created: false);
-        failed.MarkRequestFailed("could not create", "raw");
-        db.Volumes.Add(volume);
-        db.VolumeSnapshots.AddRange(SnapshotOf(volume, "creating", created: false), SnapshotOf(volume, "ready"), leaving, lost, failed);
-        await db.SaveChangesAsync();
-
-        int count = await new VolumeSnapshotRepository(db).CountActiveByVolumeIdAsync(volume.Id);
-
-        Assert.Equal(2, count);
     }
 
     // Q-C: a snapshot whose delete is in flight still bills until Incus has deleted it.
@@ -179,8 +160,9 @@ public class VolumeRepositoryStateTests
         gone.MarkDeleted();
         var lost = SnapshotOf(volume, "lost");
         lost.MarkNotFound();
+        SnapshotOf(volume, "creating", created: false);
+        SnapshotOf(volume, "ready");
         db.Volumes.Add(volume);
-        db.VolumeSnapshots.AddRange(SnapshotOf(volume, "creating", created: false), SnapshotOf(volume, "ready"), leaving, gone, lost);
         await db.SaveChangesAsync();
 
         var billed = (await new VolumeSnapshotRepository(db).ListBillableAsync()).Select(s => s.Name).OrderBy(n => n).ToList();
@@ -198,8 +180,10 @@ public class VolumeRepositoryStateTests
         var gone = SnapshotOf(here, "gone");
         gone.RequestDelete();
         gone.MarkDeleted();
+        SnapshotOf(here, "mine");
+        SnapshotOf(here, "creating", created: false);
+        SnapshotOf(there, "theirs");
         db.Volumes.AddRange(here, there);
-        db.VolumeSnapshots.AddRange(SnapshotOf(here, "mine"), SnapshotOf(here, "creating", created: false), gone, SnapshotOf(there, "theirs"));
         await db.SaveChangesAsync();
 
         var names = (await new VolumeSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Name).ToList();
@@ -207,28 +191,28 @@ public class VolumeRepositoryStateTests
         Assert.Equal(new[] { "mine" }, names);
     }
 
-    // The volume's Deleted report marks these: Incus deleted them with the volume.
+    // The customer's list hides Deleted and keeps NotFound and a failed create (titan-ops features/volume/design.md#counting-and-billing).
     [Fact]
-    public async Task SnapshotsLiveOfVolume_AreEveryOneNotYetDeleted_OfThatVolumeOnly()
+    public async Task SnapshotList_HidesDeleted_KeepsNotFoundAndAFailedCreate()
     {
         using var db = NewDb();
         var volume = Available("vol");
         var other = Available("other");
-        var leaving = SnapshotOf(volume, "leaving");
-        leaving.RequestDelete();
         var lost = SnapshotOf(volume, "lost");
         lost.MarkNotFound();
         var gone = SnapshotOf(volume, "gone");
         gone.RequestDelete();
         gone.MarkDeleted();
+        var failed = SnapshotOf(volume, "failed", created: false);
+        failed.MarkRequestFailed("could not create", "raw");
+        SnapshotOf(volume, "ready");
+        SnapshotOf(other, "theirs");
         db.Volumes.AddRange(volume, other);
-        db.VolumeSnapshots.AddRange(SnapshotOf(volume, "ready"), leaving, lost, gone, SnapshotOf(other, "theirs"));
         await db.SaveChangesAsync();
 
-        var names = (await new VolumeSnapshotRepository(db).ListLiveOfVolumeForUpdateAsync(volume.Id))
-            .Select(s => s.Name).OrderBy(n => n).ToList();
+        var names = (await new VolumeSnapshotRepository(db).FindByVolumeIdAsync(volume.Id)).Select(s => s.Name).OrderBy(n => n).ToList();
 
-        Assert.Equal(new[] { "leaving", "lost", "ready" }, names);
+        Assert.Equal(new[] { "failed", "lost", "ready" }, names);
     }
 
     // The volumes a VM's delete detaches (titan-ops features/volume/design.md#vm-delete-releases-volumes): the ones Incus

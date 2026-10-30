@@ -2,7 +2,6 @@ using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 
@@ -62,18 +61,6 @@ public static class ComputeOwnership
 
         if (snapshot.VmId != vmId)
             throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        return snapshot;
-    }
-
-    public static async Task<VolumeSnapshot> RequireVolumeSnapshotAsync(
-        IVolumeSnapshotRepository snapshotRepo, Guid snapshotId, Guid volumeId, CancellationToken ct)
-    {
-        var snapshot = await snapshotRepo.FindByIdAsync(snapshotId, ct)
-            ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        if (snapshot.VolumeId != volumeId)
-            throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
 
         return snapshot;
     }

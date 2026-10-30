@@ -584,7 +584,6 @@ namespace Titan.Infrastructure.Migrations
             modelBuilder.Entity("Titan.Domain.Aggregates.Network.FirewallRule", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1716,48 +1715,9 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("volumes", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.VolumeOffering.VolumeOffering", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text")
-                        .HasColumnName("id");
-
-                    b.Property<bool>("IsCustomized")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_customized");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("PricePerGbPerHour")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("price_per_gb_per_hour");
-
-                    b.Property<int>("SizeGb")
-                        .HasColumnType("integer")
-                        .HasColumnName("size_gb");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("volume_offerings", "core");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "standard",
-                            IsCustomized = true,
-                            Name = "Standard",
-                            PricePerGbPerHour = 1.57914m,
-                            SizeGb = 0
-                        });
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Volume.VolumeSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -1816,6 +1776,44 @@ namespace Titan.Infrastructure.Migrations
                     b.HasIndex("VolumeId");
 
                     b.ToTable("volume_snapshots", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VolumeOffering.VolumeOffering", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsCustomized")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_customized");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PricePerGbPerHour")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("price_per_gb_per_hour");
+
+                    b.Property<int>("SizeGb")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_gb");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("volume_offerings", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "standard",
+                            IsCustomized = true,
+                            Name = "Standard",
+                            PricePerGbPerHour = 1.57914m,
+                            SizeGb = 0
+                        });
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Wallet.Wallet", b =>
@@ -2112,6 +2110,15 @@ namespace Titan.Infrastructure.Migrations
                         .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Volume.VolumeSnapshot", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.Volume.Volume", null)
+                        .WithMany("Snapshots")
+                        .HasForeignKey("VolumeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
                 {
                     b.Navigation("Items");
@@ -2137,6 +2144,11 @@ namespace Titan.Infrastructure.Migrations
             modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplate", b =>
                 {
                     b.Navigation("Clusters");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Volume.Volume", b =>
+                {
+                    b.Navigation("Snapshots");
                 });
 #pragma warning restore 612, 618
         }

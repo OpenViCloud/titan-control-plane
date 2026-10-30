@@ -1,7 +1,6 @@
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 
@@ -47,9 +46,9 @@ public class GroupBRepeatRefusedTests
     public void VolumeDelete_Repeated_IsRefused_AndStaysDeleting()
     {
         var volume = AllocatedVolume();
-        volume.RequestDelete(liveSnapshotCount: 0);
+        volume.RequestDelete();
 
-        Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.RequestDelete(liveSnapshotCount: 0)).Code);
+        Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.RequestDelete()).Code);
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
     }
 

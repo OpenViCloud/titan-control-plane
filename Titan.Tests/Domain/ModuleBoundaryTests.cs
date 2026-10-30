@@ -110,7 +110,7 @@ public class ModuleBoundaryTests
         ["Volume.Create(tenant) -> Tenant"] = "volume quota",
         ["Volume.CreateFromSnapshot(tenant) -> Tenant"] = "a restore creates a volume, so it spends VOLUME quota",
         ["VmSnapshot.Create(tenant) -> Tenant"] = "per-VM snapshot quota",
-        ["VolumeSnapshot.Create(tenant) -> Tenant"] = "per-volume snapshot quota",
+        ["Volume.AddSnapshot(tenant) -> Tenant"] = "per-volume snapshot quota, counted on the snapshots the volume holds (its child entities)",
         ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",
         ["Network.AddFirewallRule(tenant) -> Tenant"] = "per-network rule quota, counted on the rules the network holds (its child entities)",
         ["SshKey.Create(tenant) -> Tenant"] = "per-tenant SSH key quota",
@@ -125,9 +125,6 @@ public class ModuleBoundaryTests
         ["VmSnapshot.Revert(vm) -> Vm"] = "a revert checks the snapshot and the VM in one call",
         ["Volume.Attach(vm) -> Vm"] =
             "the VM's side of an attach (Vm.BeginVolumeAttach) is checked before the provider ids are handed out",
-        ["Volume.CreateFromSnapshot(snapshot) -> VolumeSnapshot"] = "a restore needs the snapshot to be ready",
-        ["VolumeSnapshot.Create(volume) -> Volume"] =
-            "the volume must accept a snapshot (Volume.EnsureSnapshottable), checked in the factory",
 
         // Not a rule on another aggregate's state: an enum another aggregate owns, used as a value.
         ["InvoiceItem.Create(resourceType) -> UsageResourceType"] =

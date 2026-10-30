@@ -9,7 +9,6 @@ namespace Titan.Application.Commands.Compute.Volume;
 
 public class DeleteVolumeCommandHandler(
     IVolumeRepository repo,
-    IVolumeSnapshotRepository snapshotRepo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
     IActivityRecorder activity)
@@ -42,8 +41,8 @@ public class DeleteVolumeCommandHandler(
             return;
         }
 
-        int liveSnapshotCount = await snapshotRepo.CountActiveByVolumeIdAsync(volume.Id, ct);
-        string externalVolumeId = volume.RequestDelete(liveSnapshotCount);
+        // The volume refuses while a snapshot it holds still counts (titan-ops features/volume/design.md#delete-refused-with-snapshots).
+        string externalVolumeId = volume.RequestDelete();
 
         activity.Stage("volume.delete_requested", "volume", volume.Id, volume.Name); // atomic with RequestDelete
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);

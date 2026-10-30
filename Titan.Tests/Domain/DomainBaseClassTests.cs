@@ -19,6 +19,7 @@ public class DomainBaseClassTests
         ["VmIntentTicket"] = "result of a Vm intent call, read by the handler that enqueues the command",
         ["VolumeAttachProviderIds"] = "result of Volume attach, the provider ids the attach command carries",
         ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
+        ["VolumeDeletionOutcome"] = "result of Volume.MarkDeleted: the volume's own outcome and the snapshots whose delete it finished",
     };
 
     [Fact]

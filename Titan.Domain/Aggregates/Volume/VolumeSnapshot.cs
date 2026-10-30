@@ -1,11 +1,15 @@
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
-namespace Titan.Domain.Aggregates.VolumeSnapshot;
+namespace Titan.Domain.Aggregates.Volume;
 
-public class VolumeSnapshot : AggregateRoot
+/// One snapshot of a volume: a copy on Incus named under the volume
+/// (titan-ops features/volume/design.md#volume-snapshot). A child of Volume (titan-ops architecture/code-structure.md#child-entity):
+/// the per-volume cap, "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
+/// are the volume's invariants, so only the root reaches the methods below, and handlers go through
+/// Volume.AddSnapshot, RequestSnapshotDelete, BeginSnapshotRestore and MarkSnapshot*.
+public class VolumeSnapshot : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid VolumeId { get; private set; }
@@ -47,18 +51,16 @@ public class VolumeSnapshot : AggregateRoot
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Takes the Volume, not its id, so the volume rule is checked here
-    /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation); quota too
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge). The cap is per volume: the count is on THIS volume.
-    public static VolumeSnapshot Create(Volume.Volume volume, TenantAggregate tenant, int activeSnapshotCount, string name)
-    {
-        volume.EnsureSnapshottable();
-        tenant.EnsureCanCreateVolumeSnapshot(activeSnapshotCount);
-        return CreateUnchecked(volume.Id, tenant.Id, name);
-    }
+    /// Counted by occupancy toward MaxVolumeSnapshotsPerVolume, and the same count says whether the volume may be
+    /// deleted (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to hold. A delete
+    /// asked for stops counting at once; a failed create with nothing on Incus, and a snapshot Incus lost, do not count.
+    public bool CountsTowardQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Test seam: seeding needs a known parent id, which the checked factory takes from the Volume it validates.
-    /// `internal`, so only Titan.Tests reaches it (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Called by Volume.AddSnapshot after the volume checked itself and the tenant's cap. Also the test seam:
+    /// `internal`, reachable only from Titan.Tests (titan-ops architecture/code-structure.md#tenant-typed-edge).
     internal static VolumeSnapshot CreateUnchecked(Guid volumeId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),
@@ -83,7 +85,7 @@ public class VolumeSnapshot : AggregateRoot
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Restore creates a new volume and leaves this snapshot alone, so the check is called from
-    /// Volume.CreateFromSnapshot and BeginRestore, never from a handler.
+    /// Volume.CreateFromSnapshot and Volume.BeginSnapshotRestore, never from a handler.
     internal void EnsureRestorable()
     {
         if (!RestsOnIncus)
@@ -93,7 +95,7 @@ public class VolumeSnapshot : AggregateRoot
     /// Follows Incus: a snapshot with a provider id is deleted through Incus, even one Incus no longer has; the
     /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public string RequestDelete()
+    internal string RequestDelete()
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "A delete is already in progress for this snapshot.");
@@ -108,7 +110,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the snapshot is still
     /// on Incus, so DesiredExistence returns to Exists, the reason is kept, and the next delete is a new request.
-    public void AbandonRequest(string? reason, string? detail)
+    internal void AbandonRequest(string? reason, string? detail)
     {
         if (!DeleteIsWaiting)
         {
@@ -122,7 +124,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// Intent: a snapshot that never reached Incus has no command and no observation coming, so this writes the
     /// existence itself (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteLocally()
+    internal void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
         if (!neverReachedIncus)
@@ -136,8 +138,8 @@ public class VolumeSnapshot : AggregateRoot
     }
 
     /// Volume.CreateFromSnapshot checks the same rule; this hands out the id, and the caller needs both,
-    /// so neither can be skipped.
-    public string BeginRestore()
+    /// so neither can be skipped. Reached through Volume.BeginSnapshotRestore.
+    internal string BeginRestore()
     {
         EnsureRestorable();
         return RequireExternalId();
@@ -154,7 +156,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// The create command: Incus made the snapshot before answering, so this is the create done. A repeat keeps the
     /// first id.
-    public bool MarkCreated(string externalId)
+    internal bool MarkCreated(string externalId)
     {
         if (IsTerminal)
         {
@@ -169,7 +171,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// The reconciler found the snapshot on Incus. Ends a waiting create whose Created report was lost; no
     /// observation withdraws a waiting delete.
-    public bool MarkObserved()
+    internal bool MarkObserved()
     {
         if (IsTerminal)
         {
@@ -187,7 +189,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// The reconciler did not find the snapshot. Never Deleted: only Titan's own delete command confirms that
     /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps waiting.
-    public void MarkNotFound()
+    internal void MarkNotFound()
     {
         if (IsTerminal)
         {
@@ -201,7 +203,7 @@ public class VolumeSnapshot : AggregateRoot
     }
 
     /// The delete command (or the parent volume's) confirmed it gone. Idempotent, never refuses.
-    public bool MarkDeleted()
+    internal bool MarkDeleted()
     {
         if (IsTerminal)
         {
@@ -215,7 +217,7 @@ public class VolumeSnapshot : AggregateRoot
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends the
     /// waiting create. Stale with no create waiting; a delete's give-up is AbandonRequest.
-    public void MarkRequestFailed(string? reason, string? detail)
+    internal void MarkRequestFailed(string? reason, string? detail)
     {
         if (IsTerminal || !CreateIsWaiting)
         {

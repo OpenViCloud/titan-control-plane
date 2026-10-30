@@ -5,7 +5,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
-using VolumeSnapshotAggregate = Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot;
+using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Commands.Compute.Volume;
 
@@ -16,7 +16,6 @@ namespace Titan.Application.Commands.Compute.Volume;
 // (titan-ops features/activity/design.md#outcome-source).
 public class UpdateVolumeStatusCommandHandler(
     IVolumeRepository repo,
-    IVolumeSnapshotRepository snapshotRepo,
     IVmRepository vmRepo,
     IActivityRecorder activity)
 {
@@ -90,23 +89,18 @@ public class UpdateVolumeStatusCommandHandler(
                 }
                 break;
             case "Deleted":
-                bool deletedNow = volume.MarkDeleted();
-                if (deletedNow)
+                // The volume takes its snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots)
+                // and names the ones whose own delete was waiting: their delete command will only find them already
+                // Deleted, so their outcome is recorded now.
+                VolumeDeletionOutcome deletion = volume.MarkDeleted();
+                if (deletion.FulfilledVolumeDelete)
                 {
                     outcome = "volume.deleted";
                 }
-                // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots).
-                // A snapshot whose own delete was waiting is done here: its delete command will only find it already
-                // Deleted, so its outcome is recorded now.
-                List<VolumeSnapshotAggregate> snapshots = await snapshotRepo.ListLiveOfVolumeForUpdateAsync(volume.Id, ct);
-                foreach (VolumeSnapshotAggregate snapshot in snapshots)
+                foreach (VolumeSnapshotEntity snapshot in deletion.SnapshotsWhoseDeleteWasFulfilled)
                 {
-                    bool snapshotDeleteFulfilled = snapshot.MarkDeleted();
-                    if (snapshotDeleteFulfilled)
-                    {
-                        activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot",
-                            snapshot.Id, snapshot.Name);
-                    }
+                    activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot",
+                        snapshot.Id, snapshot.Name);
                 }
                 break;
         }

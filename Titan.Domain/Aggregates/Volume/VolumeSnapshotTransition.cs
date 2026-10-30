@@ -1,4 +1,4 @@
-namespace Titan.Domain.Aggregates.VolumeSnapshot;
+namespace Titan.Domain.Aggregates.Volume;
 
 /// The request still waiting for the provider, derived — never stored.
 public enum VolumeSnapshotTransition

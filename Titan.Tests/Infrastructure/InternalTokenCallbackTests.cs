@@ -82,7 +82,7 @@ public class InternalTokenCallbackTests
     public async Task UpdateVolumeStatus_WithoutTheToken_Returns401(string? token)
     {
         var handler = new UpdateVolumeStatusCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object,
-            new Mock<IVolumeSnapshotRepository>(MockBehavior.Strict).Object, new Mock<IVmRepository>(MockBehavior.Strict).Object,
+            new Mock<IVmRepository>(MockBehavior.Strict).Object,
             StrictActivity());
         var ep = Factory.Create<UpdateVolumeStatusEndpoint>(
             ctx =>
@@ -102,7 +102,7 @@ public class InternalTokenCallbackTests
     [InlineData("wrong")]
     public async Task UpdateVolumeSnapshotStatus_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateVolumeSnapshotStatusCommandHandler(new Mock<IVolumeSnapshotRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var handler = new UpdateVolumeSnapshotStatusCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object, StrictActivity());
         var ep = Factory.Create<UpdateVolumeSnapshotStatusEndpoint>(
             ctx =>
             {
