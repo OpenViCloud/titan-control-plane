@@ -4,8 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Internal;
 
 namespace Titan.Tests.Infrastructure;

@@ -1,8 +1,8 @@
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
+using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
+using Titan.Domain.Repositories;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 
 namespace Titan.Application.Services.Compute.LoadBalancer;
 

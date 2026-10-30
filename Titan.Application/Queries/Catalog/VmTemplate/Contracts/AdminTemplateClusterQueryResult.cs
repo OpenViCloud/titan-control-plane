@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
+using Titan.Domain.Aggregates.VmTemplate;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 

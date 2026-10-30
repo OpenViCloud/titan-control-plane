@@ -2,8 +2,8 @@ using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Titan.Application.Queries.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;
@@ -74,7 +74,7 @@ public class StorageReconcilerTests
     public async Task Endpoint_NamesTheAttachedVm_ByItsIncusInstance()
     {
         using var db = NewDb();
-        var vm = Titan.Domain.Aggregates.Compute.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkCreated("vm0123456789abcdefghijklmnop");
         var volume = Volume.CreateUnchecked(vm.TenantId, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");

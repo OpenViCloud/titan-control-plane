@@ -2,9 +2,9 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Queries.Platform.ActivityEvent.Contracts;
 using ActivityService = Titan.Application.Queries.Platform.ActivityEvent.ListActivityEventsQueryHandler;
-using Titan.Domain.Aggregates.Platform.ActivityEvent;
+using Titan.Domain.Aggregates.ActivityEvent;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

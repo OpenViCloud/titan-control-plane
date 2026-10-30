@@ -8,16 +8,14 @@ using Titan.Application.Commands.Billing.Invoice.Contracts;
 using Titan.Application.Queries.Billing.Invoice;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
 
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
@@ -1012,14 +1010,14 @@ public class InvoiceServiceTests
         return Invoice.Generate(tenantId, issuedAt.Year, issuedAt.Month, issuedAt, items, "VND");
     }
 
-    private static Titan.Domain.Aggregates.Platform.Tenant.Tenant MakeTenant(
+    private static Titan.Domain.Aggregates.Tenant.Tenant MakeTenant(
         Guid id, string name, long? debtCeiling = null)
     {
         var tenant = TestTenant.Active(name, $"owner-{name}", $"{name}@x.com");
         if (debtCeiling.HasValue)
             tenant.UpdateDebtCeiling(debtCeiling.Value);
-        typeof(Titan.Domain.Aggregates.Platform.Tenant.Tenant)
-            .GetProperty(nameof(Titan.Domain.Aggregates.Platform.Tenant.Tenant.Id))!.SetValue(tenant, id);
+        typeof(Titan.Domain.Aggregates.Tenant.Tenant)
+            .GetProperty(nameof(Titan.Domain.Aggregates.Tenant.Tenant.Id))!.SetValue(tenant, id);
         return tenant;
     }
 

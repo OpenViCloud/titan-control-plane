@@ -1,9 +1,9 @@
 using Moq;
 using Titan.Application.Commands.Platform.Tenant.Contracts;
 using TenantCmd = Titan.Application.Commands.Platform.Tenant;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
+using Titan.Domain.Aggregates.LoadBalancer;
 
 namespace Titan.Infrastructure.Persistence;
 

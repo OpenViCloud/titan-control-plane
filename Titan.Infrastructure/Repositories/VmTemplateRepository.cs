@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.Networking.FirewallRule.FirewallRule;
+using Titan.Domain.Aggregates.FirewallRule;
+using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;

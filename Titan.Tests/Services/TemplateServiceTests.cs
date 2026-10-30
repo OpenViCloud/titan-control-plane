@@ -9,9 +9,9 @@ using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Queries.Catalog.VmTemplate;
 using Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 using Titan.Infrastructure.Endpoints.Internal;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 
 namespace Titan.Tests.Services;

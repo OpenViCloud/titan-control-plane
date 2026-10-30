@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
@@ -64,7 +64,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     }
 
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
-        await db.Set<Domain.Aggregates.Compute.Vm.Vm>().AnyAsync(
+        await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
             v => v.NetworkId == networkId &&
                  (v.CurrentExistence == CurrentExistence.Exists
                   || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingIntentId != null)), ct);
@@ -72,7 +72,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     // Read here, not through a Compute repository: Networking -> Compute in Titan.Application would close a module
     // cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above reads the VM table.
     public async Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) =>
-        await db.Set<Domain.Aggregates.Compute.LoadBalancer.LoadBalancer>().AnyAsync(
+        await db.Set<Domain.Aggregates.LoadBalancer.LoadBalancer>().AnyAsync(
             lb => lb.NetworkId == networkId && lb.CurrentExistence != CurrentExistence.Deleted, ct);
 
     public async Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default)

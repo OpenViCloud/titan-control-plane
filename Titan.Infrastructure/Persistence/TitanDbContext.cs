@@ -1,28 +1,28 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using Titan.Domain.Aggregates.Platform.Acceptance;
-using Titan.Domain.Aggregates.Platform.ActivityEvent;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Compute.SshKey;
-using Titan.Domain.Aggregates.Platform.ApiToken;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Catalog.SnapshotOffering;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
+using Titan.Domain.Aggregates.Acceptance;
+using Titan.Domain.Aggregates.ActivityEvent;
+using Titan.Domain.Aggregates.AdminAuditLog;
+using Titan.Domain.Aggregates.ProviderCommand;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Aggregates.ApiToken;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.SnapshotOffering;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Aggregates.VolumeOffering;
 using Titan.Domain.Values;
 
 namespace Titan.Infrastructure.Persistence;
@@ -46,18 +46,18 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions => Set<PaymentGatewayTransaction>();
     public DbSet<VmSnapshot> VmSnapshots => Set<VmSnapshot>();
     public DbSet<Volume> Volumes => Set<Volume>();
-    public DbSet<Domain.Aggregates.Compute.LoadBalancer.LoadBalancer> LoadBalancers =>
-        Set<Domain.Aggregates.Compute.LoadBalancer.LoadBalancer>();
+    public DbSet<Domain.Aggregates.LoadBalancer.LoadBalancer> LoadBalancers =>
+        Set<Domain.Aggregates.LoadBalancer.LoadBalancer>();
     public DbSet<VolumeSnapshot> VolumeSnapshots => Set<VolumeSnapshot>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<VmTemplate> VmTemplates => Set<VmTemplate>();
     public DbSet<VmOffering> VmOfferings => Set<VmOffering>();
     public DbSet<VolumeOffering> VolumeOfferings => Set<VolumeOffering>();
     public DbSet<SnapshotOffering> SnapshotOfferings => Set<SnapshotOffering>();
-    public DbSet<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord> Backups =>
-        Set<Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord>();
-    public DbSet<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation> BackupObservations =>
-        Set<Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation>();
+    public DbSet<Titan.Domain.Aggregates.BackupRecord.BackupRecord> Backups =>
+        Set<Titan.Domain.Aggregates.BackupRecord.BackupRecord>();
+    public DbSet<Titan.Domain.Aggregates.BackupObservation.BackupObservation> BackupObservations =>
+        Set<Titan.Domain.Aggregates.BackupObservation.BackupObservation>();
     public DbSet<ProviderCommand> ProviderCommands => Set<ProviderCommand>();
     public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
     public DbSet<ActivityEvent> ActivityEvents => Set<ActivityEvent>();

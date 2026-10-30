@@ -6,8 +6,8 @@ using Titan.Application.Commands.Platform.Backup.Contracts;
 using Titan.Application.Options;
 using Titan.Application.Queries.Platform.Backup;
 using Titan.Application.Queries.Platform.Backup.Contracts;
-using Titan.Domain.Aggregates.Platform.BackupObservation;
-using Titan.Domain.Aggregates.Platform.BackupRecord;
+using Titan.Domain.Aggregates.BackupObservation;
+using Titan.Domain.Aggregates.BackupRecord;
 using Titan.Infrastructure.Backup;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -187,11 +187,11 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
     {
         await using (TitanDbContext before = pg.NewDbContext())
         {
-            var wallet = Titan.Domain.Aggregates.Billing.Wallet.Wallet.Open(Guid.NewGuid(), "VND");
+            var wallet = Titan.Domain.Aggregates.Wallet.Wallet.Open(Guid.NewGuid(), "VND");
             before.Wallets.Add(wallet);
             await before.SaveChangesAsync();
             before.WalletTransactions.Add(
-                Titan.Domain.Aggregates.Billing.Wallet.WalletTransaction.ForTopUp(wallet.Id, 1000, Guid.NewGuid(), 1000));
+                Titan.Domain.Aggregates.Wallet.WalletTransaction.ForTopUp(wallet.Id, 1000, Guid.NewGuid(), 1000));
             await before.SaveChangesAsync();
         }
         (int wallets, int transactions, int mutations) = await WalletCountsAsync();

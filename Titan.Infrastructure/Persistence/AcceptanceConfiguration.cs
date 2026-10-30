@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Platform.Acceptance;
+using Titan.Domain.Aggregates.Acceptance;
 
 namespace Titan.Infrastructure.Persistence;
 

@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Repositories;
 

@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Compute.Vm;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
+using Titan.Domain.Aggregates.Vm;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 
 namespace Titan.Application.Queries.Compute.Vm.Contracts;
 

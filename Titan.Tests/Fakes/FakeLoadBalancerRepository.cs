@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.LoadBalancer;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 
 namespace Titan.Tests.Fakes;

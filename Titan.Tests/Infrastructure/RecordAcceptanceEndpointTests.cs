@@ -4,8 +4,8 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.Legal;
 using Titan.Application.Services.Platform.Legal;
-using Titan.Domain.Aggregates.Platform.Acceptance;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Acceptance;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Legal;
 
 namespace Titan.Tests.Infrastructure;

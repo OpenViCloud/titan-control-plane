@@ -230,7 +230,7 @@ public class ReadWriteSeparationTests
 
         // Named, not counted: "2" alone would still pass if someone swapped one dependency for another.
         Assert.Equal(
-            [typeof(Titan.Domain.Repositories.Compute.IVmRepository), typeof(ICurrentUser)],
+            [typeof(Titan.Domain.Repositories.IVmRepository), typeof(ICurrentUser)],
             parameterTypes);
     }
 

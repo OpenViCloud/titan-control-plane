@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
-using Titan.Domain.Aggregates.Billing.TopUp;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.TopUp;
 
 namespace Titan.Infrastructure.Persistence;
 

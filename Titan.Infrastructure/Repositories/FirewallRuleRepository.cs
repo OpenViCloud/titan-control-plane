@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 

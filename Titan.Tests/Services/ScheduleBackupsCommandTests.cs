@@ -1,10 +1,10 @@
 using Moq;
 using Titan.Application.Commands.Admin.Backup;
 using Titan.Application.Commands.Admin.Backup.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.ProviderCommand;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.ProviderCommands;
 using Titan.Tests.Fakes;
 

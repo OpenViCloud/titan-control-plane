@@ -3,8 +3,8 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Titan.Domain.Aggregates.Platform.ApiToken;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.ApiToken;
+using Titan.Domain.Repositories;
 
 namespace Titan.Infrastructure.Auth;
 

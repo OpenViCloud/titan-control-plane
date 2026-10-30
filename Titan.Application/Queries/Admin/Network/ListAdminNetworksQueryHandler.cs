@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Admin.Network.Contracts;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Admin.Network;
 

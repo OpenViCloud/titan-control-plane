@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

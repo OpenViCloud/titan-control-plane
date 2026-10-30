@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;

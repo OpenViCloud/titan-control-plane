@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.Networking.FirewallRule.FirewallRule;
+using Titan.Domain.Aggregates.FirewallRule;
+using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
 
 namespace Titan.Application.Services.Networking.FirewallRule;
 

@@ -1,5 +1,5 @@
 using System.Reflection;
-using Titan.Domain.Aggregates.Platform.Acceptance;
+using Titan.Domain.Aggregates.Acceptance;
 
 namespace Titan.Tests.Domain;
 

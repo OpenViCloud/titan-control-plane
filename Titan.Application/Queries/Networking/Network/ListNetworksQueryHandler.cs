@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Queries.Networking.Network.Contracts;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Networking.Network;
 

@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

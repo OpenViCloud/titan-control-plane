@@ -2,8 +2,8 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
-using Titan.Domain.Aggregates.Platform.ApiToken;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.ApiToken;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Api;

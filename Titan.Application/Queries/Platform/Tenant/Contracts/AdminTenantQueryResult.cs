@@ -1,4 +1,4 @@
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Queries.Platform.Tenant.Contracts;
 

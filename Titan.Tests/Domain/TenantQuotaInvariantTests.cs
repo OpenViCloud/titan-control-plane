@@ -1,5 +1,5 @@
 using Titan.Domain.Exceptions;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
@@ -59,7 +59,7 @@ public class TenantQuotaInvariantTests
     public void ZeroCap_RefusesTheFirstOne()
     {
         var tenant = NewTenant();
-        tenant.UpdateQuota(Titan.Domain.Aggregates.Platform.Tenant.TenantQuota.Create(0, 0, 0, 0, 0, 0, 0, 0, 0));
+        tenant.UpdateQuota(Titan.Domain.Aggregates.Tenant.TenantQuota.Create(0, 0, 0, 0, 0, 0, 0, 0, 0));
 
         Assert.Equal("VM_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureCanCreateVm(0)).Code);
         Assert.Equal("VOLUME_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureCanCreateVolume(0)).Code);

@@ -4,10 +4,9 @@ using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing;
 using Titan.Application.Queries.Billing.UsageRecord;
 using Titan.Application.Queries.Billing.UsageRecord.Contracts;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 
@@ -319,15 +318,15 @@ public class FakeUsageRecordRepository : IUsageRecordRepository
 /// catalog read.
 public class FakeVmOfferingRepository : IVmOfferingRepository
 {
-    public List<Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering> All { get; } = [];
+    public List<Titan.Domain.Aggregates.VmOffering.VmOffering> All { get; } = [];
     public int SaveCount { get; private set; }
 
-    public void Seed(params Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering[] offerings) => All.AddRange(offerings);
+    public void Seed(params Titan.Domain.Aggregates.VmOffering.VmOffering[] offerings) => All.AddRange(offerings);
 
-    public Task<Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
+    public Task<Titan.Domain.Aggregates.VmOffering.VmOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
         Task.FromResult(All.FirstOrDefault(o => o.Id == id));
 
-    public Task<List<Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering>> ListAllAsync(CancellationToken ct = default) =>
+    public Task<List<Titan.Domain.Aggregates.VmOffering.VmOffering>> ListAllAsync(CancellationToken ct = default) =>
         Task.FromResult(All.ToList());
 
     public Task SaveAsync(CancellationToken ct = default)
@@ -339,26 +338,26 @@ public class FakeVmOfferingRepository : IVmOfferingRepository
 
 public class FakeVolumeOfferingRepository : IVolumeOfferingRepository
 {
-    public List<Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering> All { get; } = [];
+    public List<Titan.Domain.Aggregates.VolumeOffering.VolumeOffering> All { get; } = [];
 
-    public void Seed(params Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering[] offerings) => All.AddRange(offerings);
+    public void Seed(params Titan.Domain.Aggregates.VolumeOffering.VolumeOffering[] offerings) => All.AddRange(offerings);
 
-    public Task<Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
+    public Task<Titan.Domain.Aggregates.VolumeOffering.VolumeOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
         Task.FromResult(All.FirstOrDefault(o => o.Id == id));
 
-    public Task<List<Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering>> ListAllAsync(CancellationToken ct = default) =>
+    public Task<List<Titan.Domain.Aggregates.VolumeOffering.VolumeOffering>> ListAllAsync(CancellationToken ct = default) =>
         Task.FromResult(All.ToList());
 }
 
 public class FakeSnapshotOfferingRepository : ISnapshotOfferingRepository
 {
-    public List<Titan.Domain.Aggregates.Catalog.SnapshotOffering.SnapshotOffering> All { get; } = [];
+    public List<Titan.Domain.Aggregates.SnapshotOffering.SnapshotOffering> All { get; } = [];
 
-    public void Seed(params Titan.Domain.Aggregates.Catalog.SnapshotOffering.SnapshotOffering[] offerings) => All.AddRange(offerings);
+    public void Seed(params Titan.Domain.Aggregates.SnapshotOffering.SnapshotOffering[] offerings) => All.AddRange(offerings);
 
-    public Task<Titan.Domain.Aggregates.Catalog.SnapshotOffering.SnapshotOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
+    public Task<Titan.Domain.Aggregates.SnapshotOffering.SnapshotOffering?> FindByIdAsync(string id, CancellationToken ct = default) =>
         Task.FromResult(All.FirstOrDefault(o => o.Id == id));
 
-    public Task<List<Titan.Domain.Aggregates.Catalog.SnapshotOffering.SnapshotOffering>> ListAllAsync(CancellationToken ct = default) =>
+    public Task<List<Titan.Domain.Aggregates.SnapshotOffering.SnapshotOffering>> ListAllAsync(CancellationToken ct = default) =>
         Task.FromResult(All.ToList());
 }

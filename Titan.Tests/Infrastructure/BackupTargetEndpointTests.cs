@@ -3,9 +3,9 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.BackupTarget;
 using Titan.Application.Queries.Platform.BackupTarget;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Infrastructure.Endpoints.Admin;
 
 namespace Titan.Tests.Infrastructure;
@@ -49,11 +49,11 @@ public class BackupTargetEndpointTests
         new(records, new FakeBackupObservationRepository(), TimeProvider.System);
 
     private static Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler DiskHandler(
-        List<Titan.Domain.Aggregates.Compute.Vm.Vm> vms, List<Titan.Domain.Aggregates.Compute.Volume.Volume> volumes)
+        List<Titan.Domain.Aggregates.Vm.Vm> vms, List<Titan.Domain.Aggregates.Volume.Volume> volumes)
     {
-        var vmRepository = new Mock<Titan.Domain.Repositories.Compute.IVmRepository>();
+        var vmRepository = new Mock<Titan.Domain.Repositories.IVmRepository>();
         vmRepository.Setup(r => r.ListAllAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(vms);
-        var volumeRepository = new Mock<Titan.Domain.Repositories.Compute.IVolumeRepository>();
+        var volumeRepository = new Mock<Titan.Domain.Repositories.IVolumeRepository>();
         volumeRepository.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
         return new(vmRepository.Object, volumeRepository.Object, new FakeBackupRecordRepository(),
             new FakeBackupObservationRepository(), TimeProvider.System);
@@ -63,9 +63,9 @@ public class BackupTargetEndpointTests
     [Fact]
     public async Task ListBackups_ReturnsPostgres_ThenTheVmsAndVolumes()
     {
-        var vm = Titan.Domain.Aggregates.Compute.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
         vm.MarkRunning("vm-a", "10.0.0.2");
-        var volume = Titan.Domain.Aggregates.Compute.Volume.Volume.CreateUnchecked(Guid.NewGuid(), "data-1", "mock", "std", 10);
+        var volume = Titan.Domain.Aggregates.Volume.Volume.CreateUnchecked(Guid.NewGuid(), "data-1", "mock", "std", 10);
         volume.MarkCreated("vol-a");
         var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler([vm], [volume]));
 

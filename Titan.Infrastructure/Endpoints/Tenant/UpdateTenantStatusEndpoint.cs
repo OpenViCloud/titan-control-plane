@@ -3,8 +3,8 @@ using Titan.Application.Commands.Billing.Wallet;
 using Titan.Application.Commands.Billing.Wallet.Contracts;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Commands.Platform.Tenant.Contracts;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Repositories;
 
 namespace Titan.Infrastructure.Endpoints.Tenant;
 

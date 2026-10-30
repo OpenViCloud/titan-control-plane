@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 
 namespace Titan.Application.Queries.Platform.Tenant.Contracts;
 

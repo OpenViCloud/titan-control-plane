@@ -1,8 +1,8 @@
 using Moq;
 using Titan.Application.Queries.Platform.AdminAuditLog.Contracts;
 using AuditLogService = Titan.Application.Queries.Platform.AdminAuditLog.ListAdminAuditLogQueryHandler;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.AdminAuditLog;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

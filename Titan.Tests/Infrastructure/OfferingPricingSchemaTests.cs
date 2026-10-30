@@ -2,9 +2,9 @@ using Titan.Domain.Values;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Titan.Domain.Aggregates.Catalog.SnapshotOffering;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
+using Titan.Domain.Aggregates.SnapshotOffering;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VolumeOffering;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
@@ -70,7 +70,7 @@ public class OfferingPricingSchemaTests
     [Fact]
     public void UsageRecord_NoLongerCarriesAPricingRuleId()
     {
-        var properties = EntityType(typeof(Titan.Domain.Aggregates.Billing.UsageRecord.UsageRecord))
+        var properties = EntityType(typeof(Titan.Domain.Aggregates.UsageRecord.UsageRecord))
             .GetProperties().Select(p => p.Name).ToArray();
 
         Assert.DoesNotContain("PricingRuleId", properties);
@@ -115,7 +115,7 @@ public class OfferingPricingSchemaTests
     [InlineData(typeof(SnapshotOffering), "PricePerHour")]
     public void PriceColumn_HasTheSamePrecisionAsThePriceItWasBilledAt(Type offeringType, string propertyName)
     {
-        var billed = ColumnTypeOf(typeof(Titan.Domain.Aggregates.Billing.UsageRecord.UsageRecord),
+        var billed = ColumnTypeOf(typeof(Titan.Domain.Aggregates.UsageRecord.UsageRecord),
                                   "UnitPricePerHour");
         var listed = ColumnTypeOf(offeringType, propertyName);
 

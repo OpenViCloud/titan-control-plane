@@ -1,7 +1,7 @@
 using Titan.Application.Queries.Catalog.VolumeOffering;
 using Titan.Application.Queries.Catalog.VolumeOffering.Contracts;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Aggregates.VolumeOffering;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

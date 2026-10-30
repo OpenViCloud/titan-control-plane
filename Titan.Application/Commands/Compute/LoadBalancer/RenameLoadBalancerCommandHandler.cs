@@ -2,7 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 

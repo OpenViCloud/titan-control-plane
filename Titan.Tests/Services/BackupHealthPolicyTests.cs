@@ -1,7 +1,7 @@
 using Titan.Application.Queries.Platform.Backup;
 using Titan.Application.Queries.Platform.Backup.Contracts;
-using Titan.Domain.Aggregates.Platform.BackupObservation;
-using Titan.Domain.Aggregates.Platform.BackupRecord;
+using Titan.Domain.Aggregates.BackupObservation;
+using Titan.Domain.Aggregates.BackupRecord;
 
 namespace Titan.Tests.Services;
 

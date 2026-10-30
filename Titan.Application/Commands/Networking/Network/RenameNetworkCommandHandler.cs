@@ -2,7 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Networking.Network;
 

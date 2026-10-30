@@ -2,7 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.Invoice;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Billing.Invoice;
 

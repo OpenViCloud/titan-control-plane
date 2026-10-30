@@ -1,10 +1,10 @@
-using Titan.Domain.Aggregates.Billing.Invoice;
+using Titan.Domain.Aggregates.Invoice;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.Invoice.Contracts;
 using Titan.Application.Services.Billing.WalletMutations;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 

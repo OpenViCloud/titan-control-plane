@@ -1,4 +1,4 @@
-using VolumeOfferingAggregate = Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering;
+using VolumeOfferingAggregate = Titan.Domain.Aggregates.VolumeOffering.VolumeOffering;
 
 namespace Titan.Application.Queries.Catalog.VolumeOffering.Contracts;
 

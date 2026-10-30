@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
+using Titan.Domain.Aggregates.FirewallRule;
 
 namespace Titan.Infrastructure.Persistence;
 

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
@@ -22,7 +22,7 @@ public class MarkVmIntentFailedCommandHandler(IVmRepository repo, IActivityRecor
 
     public async Task HandleAsync(MarkVmIntentFailedCommand command, CancellationToken ct = default)
     {
-        Domain.Aggregates.Compute.Vm.Vm? vm = await repo.FindByIdAsync(command.VmId, ct);
+        Domain.Aggregates.Vm.Vm? vm = await repo.FindByIdAsync(command.VmId, ct);
         if (vm == null)
         {
             throw new NotFoundException("VM_NOT_FOUND", "VM not found.");

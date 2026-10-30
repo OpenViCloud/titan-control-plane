@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Billing.TopUp;
 

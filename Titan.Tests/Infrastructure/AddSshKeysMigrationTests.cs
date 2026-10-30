@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Infrastructure.Migrations;
 
 namespace Titan.Tests.Infrastructure;

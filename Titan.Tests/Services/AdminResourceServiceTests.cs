@@ -2,15 +2,13 @@ using Titan.Domain.Values;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.AdminAuditLog;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Application.Commands.Admin.Vm;
 using Titan.Application.Commands.Admin.Vm.Contracts;
 using Titan.Application.Queries.Admin.Network;
@@ -47,7 +45,7 @@ public class AdminResourceServiceTests
 
     private static (AdminFacade svc, Mock<IProviderCommandQueue> wf, Mock<IVmSnapshotRepository> snaps, Mock<IAdminAuditLogRepository> audit)
         Build(IVmRepository vmRepo, INetworkRepository? netRepo = null,
-            List<Titan.Domain.Aggregates.Compute.Volume.Volume>? attachedVolumes = null)
+            List<Titan.Domain.Aggregates.Volume.Volume>? attachedVolumes = null)
     {
         var wf = new Mock<IProviderCommandQueue>();
         wf.SetReturnsDefault(Task.CompletedTask);
@@ -56,7 +54,7 @@ public class AdminResourceServiceTests
         var audit = new Mock<IAdminAuditLogRepository>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(attachedVolumes ?? new List<Titan.Domain.Aggregates.Compute.Volume.Volume>());
+            .ReturnsAsync(attachedVolumes ?? new List<Titan.Domain.Aggregates.Volume.Volume>());
         var user = Mock.Of<ICurrentUser>(u => u.KeycloakUserId == "admin-1");
         var svc = new AdminFacade(
             new ListAdminVmsQueryHandler(vmRepo),
@@ -208,7 +206,7 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
     {
         var vm = RunningVm(TenantB, "victim");
-        var volume = Titan.Domain.Aggregates.Compute.Volume.Volume.CreateUnchecked(TenantB, "data-1", vm.ClusterId, "std", 20);
+        var volume = Titan.Domain.Aggregates.Volume.Volume.CreateUnchecked(TenantB, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -216,7 +214,7 @@ public class AdminResourceServiceTests
 
         await svc.DeleteVmAsync(vm.Id);
 
-        Assert.Equal(Titan.Domain.Aggregates.Compute.Volume.VolumeTransition.Detaching, volume.Transition);
+        Assert.Equal(Titan.Domain.Aggregates.Volume.VolumeTransition.Detaching, volume.Transition);
     }
 
     // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete enqueues the same command again but writes

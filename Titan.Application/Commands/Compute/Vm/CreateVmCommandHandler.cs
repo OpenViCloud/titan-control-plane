@@ -2,12 +2,9 @@ using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
-using VmTemplateAggregate = Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate;
+using Titan.Domain.Repositories;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Application.Commands.Compute.Vm;

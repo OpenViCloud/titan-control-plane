@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.TopUp;
+using Titan.Domain.Aggregates.TopUp;
 
 namespace Titan.Application.Queries.Billing.TopUp.Contracts;
 

@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Networking.FirewallRule.Contracts;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Networking.FirewallRule;
 

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Billing.Wallet;
 

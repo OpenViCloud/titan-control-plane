@@ -1,6 +1,6 @@
 using Titan.Application.Commands.Platform.Tenant.Contracts;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Platform.Tenant;
 
@@ -11,7 +11,7 @@ public class ApproveDeclaredAccountCommandHandler(ITenantRepository repo)
 {
     public async Task HandleAsync(ApproveDeclaredAccountCommand command, CancellationToken ct = default)
     {
-        Domain.Aggregates.Platform.Tenant.Tenant? tenant = await repo.FindByIdAsync(command.TenantId, ct);
+        Domain.Aggregates.Tenant.Tenant? tenant = await repo.FindByIdAsync(command.TenantId, ct);
         if (tenant == null)
         {
             return; // gone — the middleware asked for a tenant that no longer exists

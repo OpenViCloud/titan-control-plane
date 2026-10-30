@@ -1,9 +1,9 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Repositories;
 using Titan.Application.Commands.Compute.Vm.Contracts;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.Vm;
 

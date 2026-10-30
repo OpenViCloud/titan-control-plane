@@ -3,10 +3,10 @@ using Moq;
 using Titan.Application.Options;
 using Titan.Application.Services.Billing;
 using Titan.Application.Services.Billing.Metering;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

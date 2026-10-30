@@ -2,13 +2,11 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 using Titan.Application.Services.Compute.LoadBalancer;
 using Titan.Application.Services.Networking.Network;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
+using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
-using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Repositories;
+using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 

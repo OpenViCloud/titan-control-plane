@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Repositories;
 

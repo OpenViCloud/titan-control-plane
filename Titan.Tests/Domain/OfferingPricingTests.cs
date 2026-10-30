@@ -1,6 +1,6 @@
-using Titan.Domain.Aggregates.Catalog.SnapshotOffering;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
+using Titan.Domain.Aggregates.SnapshotOffering;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VolumeOffering;
 
 namespace Titan.Tests.Domain;
 

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Compute.Vm;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
+using Titan.Domain.Aggregates.Vm;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.Vm.Contracts;

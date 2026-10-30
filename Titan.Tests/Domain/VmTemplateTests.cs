@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

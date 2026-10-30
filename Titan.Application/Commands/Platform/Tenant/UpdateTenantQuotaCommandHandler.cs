@@ -1,7 +1,7 @@
 using Titan.Application.Commands.Platform.Tenant.Contracts;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Platform.Tenant;
 

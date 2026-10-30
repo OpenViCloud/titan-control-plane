@@ -1,9 +1,9 @@
 using Titan.Application.Services.Billing;
 using Titan.Application.Commands.Billing.Invoice.Contracts;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Repositories.Billing;
-using InvoiceAggregate = Titan.Domain.Aggregates.Billing.Invoice.Invoice;
-using UsageRecordAggregate = Titan.Domain.Aggregates.Billing.UsageRecord.UsageRecord;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Repositories;
+using InvoiceAggregate = Titan.Domain.Aggregates.Invoice.Invoice;
+using UsageRecordAggregate = Titan.Domain.Aggregates.UsageRecord.UsageRecord;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 

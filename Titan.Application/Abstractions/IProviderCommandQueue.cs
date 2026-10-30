@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
+using Titan.Domain.Aggregates.LoadBalancer;
 
 namespace Titan.Application.Abstractions;
 

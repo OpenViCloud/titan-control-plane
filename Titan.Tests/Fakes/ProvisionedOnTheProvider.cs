@@ -5,7 +5,7 @@
 //
 // Each class lives in its aggregate's namespace so a test that uses the aggregate sees the extension without a using.
 
-namespace Titan.Domain.Aggregates.Networking.Network
+namespace Titan.Domain.Aggregates.Network
 {
     public static class NetworkProvisionedOnTheProvider
     {
@@ -17,7 +17,7 @@ namespace Titan.Domain.Aggregates.Networking.Network
     }
 }
 
-namespace Titan.Domain.Aggregates.Networking.FirewallRule
+namespace Titan.Domain.Aggregates.FirewallRule
 {
     public static class FirewallRuleProvisionedOnTheProvider
     {
@@ -30,7 +30,7 @@ namespace Titan.Domain.Aggregates.Networking.FirewallRule
     }
 }
 
-namespace Titan.Domain.Aggregates.Compute.Vm
+namespace Titan.Domain.Aggregates.Vm
 {
     public static class VmProvisionedOnTheProvider
     {

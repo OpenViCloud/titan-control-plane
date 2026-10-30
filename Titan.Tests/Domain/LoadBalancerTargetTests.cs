@@ -1,6 +1,6 @@
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

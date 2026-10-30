@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

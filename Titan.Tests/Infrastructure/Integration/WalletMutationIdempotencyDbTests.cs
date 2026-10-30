@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure.Integration;

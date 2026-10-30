@@ -1,6 +1,6 @@
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
-using ProviderCommandAggregate = Titan.Domain.Aggregates.Platform.ProviderCommand.ProviderCommand;
+using Titan.Domain.Repositories;
+using ProviderCommandAggregate = Titan.Domain.Aggregates.ProviderCommand.ProviderCommand;
 
 namespace Titan.Application.Services.Platform.ProviderCommand;
 

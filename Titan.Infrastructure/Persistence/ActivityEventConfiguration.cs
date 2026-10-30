@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Platform.ActivityEvent;
+using Titan.Domain.Aggregates.ActivityEvent;
 
 namespace Titan.Infrastructure.Persistence;
 

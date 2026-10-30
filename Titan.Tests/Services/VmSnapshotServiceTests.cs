@@ -4,13 +4,12 @@ using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 using VmSnapCmd = Titan.Application.Commands.Compute.VmSnapshot;
 using VmSnapQry = Titan.Application.Queries.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
-using Titan.Domain.Repositories.Platform;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

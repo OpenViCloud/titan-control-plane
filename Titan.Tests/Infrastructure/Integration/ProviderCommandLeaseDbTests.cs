@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Application.Commands.Platform.ProviderCommand;
 using Titan.Application.Commands.Platform.ProviderCommand.Contracts;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.Persistence;

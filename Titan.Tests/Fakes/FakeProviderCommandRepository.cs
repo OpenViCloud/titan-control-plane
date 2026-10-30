@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.ProviderCommand;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

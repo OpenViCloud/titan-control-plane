@@ -2,7 +2,7 @@ using Titan.Application.Commands.Platform.ProviderCommand;
 using Titan.Application.Commands.Platform.ProviderCommand.Contracts;
 using Titan.Application.Queries.Platform.ProviderCommand;
 using Titan.Application.Queries.Platform.ProviderCommand.Contracts;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
 

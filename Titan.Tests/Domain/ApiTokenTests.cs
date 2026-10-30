@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using Titan.Domain.Aggregates.Platform.ApiToken;
+using Titan.Domain.Aggregates.ApiToken;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.TopUp;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Billing.TopUp;
 

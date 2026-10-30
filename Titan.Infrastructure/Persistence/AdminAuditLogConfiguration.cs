@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
+using Titan.Domain.Aggregates.AdminAuditLog;
 
 namespace Titan.Infrastructure.Persistence;
 

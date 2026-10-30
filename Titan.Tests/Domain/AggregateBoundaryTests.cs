@@ -2,47 +2,38 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/code-structure.md#aggregate-is-a-folder. Without this guard a child (InvoiceItem) sitting
-// flat in a module is indistinguishable from a root (Wallet); a prose table of roots rots, this does not.
+// titan-ops architecture/code-structure.md#aggregate-is-a-folder. Without this guard a type sitting outside an aggregate
+// folder has no owner anyone had to decide; a prose table of owners rots, this does not.
 public class AggregateBoundaryTests
 {
-    private static readonly string[] Modules = ["Billing", "Catalog", "Compute", "Networking", "Platform"];
     private const string Root = "Titan.Domain.Aggregates";
 
     [Fact]
     public void EveryAggregateType_LivesInAnAggregateFolder()
     {
         var offenders = AggregateTypes()
-            .Where(t => Segments(t).Length != 2)
+            .Where(t => Segments(t).Length != 1)
             .Select(t => $"{t.Name} in {t.Namespace}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
 
+        Assert.NotEmpty(AggregateTypes());
         Assert.True(offenders.Count == 0,
-            "Type(s) not inside an aggregate folder. The namespace must be "
-            + "Titan.Domain.Aggregates.<Module>.<Aggregate> — a type sitting loose in the module is a "
-            + "type nobody had to assign an owner to: " + string.Join(", ", offenders));
-    }
-
-    [Fact]
-    public void EveryAggregate_SitsUnderAKnownModule()
-    {
-        var offenders = AggregateTypes()
-            .Where(t => Segments(t).Length == 2 && !Modules.Contains(Segments(t)[0]))
-            .Select(t => t.Namespace!)
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(x => x, StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(offenders.Count == 0, "Unknown module segment: " + string.Join(", ", offenders));
+            "Type(s) not directly inside an aggregate folder. The namespace must be "
+            + "Titan.Domain.Aggregates.<Aggregate>: no module layer above it, no folder below it: "
+            + string.Join(", ", offenders));
     }
 
     [Fact]
     public void EveryAggregateFolder_ContainsItsRoot()
     {
         var byNamespace = AggregateTypes()
-            .Where(t => Segments(t).Length == 2)
-            .GroupBy(t => t.Namespace!, StringComparer.Ordinal);
+            .Where(t => Segments(t).Length == 1)
+            .GroupBy(t => t.Namespace!, StringComparer.Ordinal)
+            .ToList();
+
+        // No folder found reads identical to every folder holding its root.
+        Assert.True(byNamespace.Count >= 20, $"Only {byNamespace.Count} aggregate folders found.");
 
         var rootless = new List<string>();
         foreach (var group in byNamespace)

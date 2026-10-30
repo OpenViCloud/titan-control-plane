@@ -1,9 +1,9 @@
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.ActivityEvent;
-using Titan.Domain.Aggregates.Platform.ActivityEvent;
+using Titan.Domain.Aggregates.ActivityEvent;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

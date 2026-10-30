@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Infrastructure.Persistence;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Tests.Infrastructure;
 

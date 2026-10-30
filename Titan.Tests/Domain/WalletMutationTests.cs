@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.WalletMutation;
 
 namespace Titan.Tests.Domain;
 

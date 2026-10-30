@@ -3,10 +3,10 @@ using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.Backup.Contracts;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Platform.BackupObservation;
-using Titan.Domain.Aggregates.Platform.BackupRecord;
+using Titan.Domain.Aggregates.BackupObservation;
+using Titan.Domain.Aggregates.BackupRecord;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Platform.Backup;
 

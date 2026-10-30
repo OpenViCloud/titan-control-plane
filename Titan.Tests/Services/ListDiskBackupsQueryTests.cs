@@ -4,11 +4,11 @@ using Titan.Application.Queries.Admin.Backup;
 using Titan.Application.Queries.Admin.Backup.Contracts;
 using Titan.Application.Queries.Platform.Backup;
 using Titan.Application.Queries.Platform.Backup.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Platform.BackupObservation;
-using Titan.Domain.Aggregates.Platform.BackupRecord;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.BackupObservation;
+using Titan.Domain.Aggregates.BackupRecord;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

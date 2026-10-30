@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing;
 using Titan.Application.Queries.Billing.UsageRecord.Contracts;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Billing.UsageRecord;
 

@@ -1,4 +1,4 @@
-using ActivityEventAggregate = Titan.Domain.Aggregates.Platform.ActivityEvent.ActivityEvent;
+using ActivityEventAggregate = Titan.Domain.Aggregates.ActivityEvent.ActivityEvent;
 
 namespace Titan.Application.Queries.Platform.ActivityEvent.Contracts;
 

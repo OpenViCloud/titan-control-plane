@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

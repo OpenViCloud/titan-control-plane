@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 
 namespace Titan.Infrastructure.Persistence;
 

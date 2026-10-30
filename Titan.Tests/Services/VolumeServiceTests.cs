@@ -4,13 +4,12 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Application.Queries.Compute.Volume.Contracts;
 using VolumeCmd = Titan.Application.Commands.Compute.Volume;
 using VolumeQry = Titan.Application.Queries.Compute.Volume;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
@@ -35,7 +34,7 @@ public class VolumeServiceTests
     private static FakeVolumeOfferingRepository SeededOfferings()
     {
         var offerings = new FakeVolumeOfferingRepository();
-        offerings.Seed(Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering.Create(
+        offerings.Seed(Titan.Domain.Aggregates.VolumeOffering.VolumeOffering.Create(
             "offering-1", "Standard", 50, false, 1.5m));
         return offerings;
     }
@@ -49,7 +48,7 @@ public class VolumeServiceTests
 
     private sealed class VolumeFacade(
         IVolumeRepository repo,
-        Titan.Domain.Repositories.Catalog.IVolumeOfferingRepository offeringRepo,
+        Titan.Domain.Repositories.IVolumeOfferingRepository offeringRepo,
         IVolumeSnapshotRepository snapshotRepo,
         IVmRepository vmRepo,
         ITenantRepository tenantRepo,

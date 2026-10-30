@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using Titan.Application.Abstractions;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.LoadBalancer;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints;
 
 namespace Titan.Infrastructure.ProviderCommands;

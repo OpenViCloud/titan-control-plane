@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Catalog.VmTemplate.Contracts;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate;
 

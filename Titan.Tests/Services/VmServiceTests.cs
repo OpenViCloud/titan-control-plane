@@ -4,19 +4,16 @@ using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Application.Queries.Compute.Vm;
 using Titan.Application.Queries.Compute.Vm.Contracts;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
-using Titan.Domain.Aggregates.Platform.Tenant;
-using Titan.Domain.Aggregates.Compute.SshKey;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Application.Queries.Admin.Vm.Contracts;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;
@@ -470,7 +467,7 @@ public class VmServiceTests
         var network = MakeActiveNetwork();
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _offeringRepo.Setup(r => r.FindByIdAsync("ghost", default))
-            .ReturnsAsync((Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering?)null);
+            .ReturnsAsync((Titan.Domain.Aggregates.VmOffering.VmOffering?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "ghost", _templateId, "cluster-1", null), default));
 

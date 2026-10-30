@@ -1,14 +1,14 @@
 using System.Text.Json;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.LoadBalancer;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Values;
 
 namespace Titan.Tests.Api;

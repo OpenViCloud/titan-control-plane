@@ -62,11 +62,7 @@ using AdminVmQry = Titan.Application.Queries.Admin.Vm;
 using AdminNetworkQry = Titan.Application.Queries.Admin.Network;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Auth;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Messaging;
@@ -316,9 +312,9 @@ builder.Services.AddOptions<Titan.Application.Options.BackupTargetOptions>()
     .BindConfiguration(Titan.Application.Options.BackupTargetOptions.SectionName);
 builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.BackupTarget.TestBackupTargetCommandHandler>();
-builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupRecordRepository,
+builder.Services.AddScoped<Titan.Domain.Repositories.IBackupRecordRepository,
     Titan.Infrastructure.Repositories.BackupRecordRepository>();
-builder.Services.AddScoped<Titan.Domain.Repositories.Platform.IBackupObservationRepository,
+builder.Services.AddScoped<Titan.Domain.Repositories.IBackupObservationRepository,
     Titan.Infrastructure.Repositories.BackupObservationRepository>();
 builder.Services.AddScoped<Titan.Application.Commands.Platform.Backup.RefreshBackupStatusCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler>();

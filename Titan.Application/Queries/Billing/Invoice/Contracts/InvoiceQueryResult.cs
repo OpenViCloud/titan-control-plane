@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using InvoiceAggregate = Titan.Domain.Aggregates.Billing.Invoice.Invoice;
-using Titan.Domain.Aggregates.Billing.Invoice;
+using InvoiceAggregate = Titan.Domain.Aggregates.Invoice.Invoice;
+using Titan.Domain.Aggregates.Invoice;
 
 namespace Titan.Application.Queries.Billing.Invoice.Contracts;
 

@@ -1,7 +1,7 @@
 using Titan.Domain.Values;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Catalog.SnapshotOffering;
+using Titan.Domain.Aggregates.SnapshotOffering;
 
 namespace Titan.Infrastructure.Persistence;
 

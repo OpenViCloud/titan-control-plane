@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
@@ -24,7 +24,7 @@ public class AdminResourceRepositoryTests
 
     private static Vm Vm(Guid tenantId, string name, Action<Vm>? mutate = null)
     {
-        var vm = Titan.Domain.Aggregates.Compute.Vm.Vm.CreateUnchecked(tenantId, Guid.NewGuid(), name, "s", "t", "vn-hcm-1", 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.CreateUnchecked(tenantId, Guid.NewGuid(), name, "s", "t", "vn-hcm-1", 20);
         mutate?.Invoke(vm);
         return vm;
     }

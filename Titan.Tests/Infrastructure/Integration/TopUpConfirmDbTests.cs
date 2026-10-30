@@ -2,11 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.TopUp;
 using Titan.Application.Services.Billing.WalletMutations;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

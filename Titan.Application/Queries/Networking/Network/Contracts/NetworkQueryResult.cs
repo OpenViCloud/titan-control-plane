@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Networking.Network;
-using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
+using Titan.Domain.Aggregates.Network;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Networking.Network.Contracts;

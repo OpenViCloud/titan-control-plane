@@ -1,4 +1,4 @@
-using VmTemplateAggregate = Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate;
+using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate.Contracts;
 

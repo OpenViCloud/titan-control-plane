@@ -1,7 +1,7 @@
 using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Billing.Invoice;
 

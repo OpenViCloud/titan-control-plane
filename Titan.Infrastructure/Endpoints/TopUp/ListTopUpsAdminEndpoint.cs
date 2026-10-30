@@ -1,7 +1,7 @@
 using FastEndpoints;
 using Titan.Application.Queries.Billing.TopUp;
 using Titan.Application.Queries.Billing.TopUp.Contracts;
-using Titan.Domain.Aggregates.Billing.TopUp;
+using Titan.Domain.Aggregates.TopUp;
 
 namespace Titan.Infrastructure.Endpoints.TopUp;
 

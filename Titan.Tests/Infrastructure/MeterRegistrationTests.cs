@@ -2,9 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Titan.Application.Services.Billing.Metering;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Hosting;
 
 namespace Titan.Tests.Infrastructure;

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 
 namespace Titan.Tests.Infrastructure.Integration;
 

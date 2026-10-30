@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.SshKey.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using SshKeyAggregate = Titan.Domain.Aggregates.Compute.SshKey.SshKey;
+using Titan.Domain.Repositories;
+using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 
 namespace Titan.Application.Commands.Compute.SshKey;
 

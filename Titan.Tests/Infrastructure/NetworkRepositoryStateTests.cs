@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

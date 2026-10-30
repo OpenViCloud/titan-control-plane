@@ -1,9 +1,9 @@
 using Titan.Application.Services.Billing.WalletMutations;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 
@@ -43,25 +43,25 @@ public class WalletMutationConsumerTests
     // The consumer settles the invoice a debit was raised for, in the same transaction as the debit.
     // These tests care about WHETHER it did, so the stub just holds one invoice and lets the real
     // aggregate transition run.
-    private sealed class StubInvoiceRepo(Titan.Domain.Aggregates.Billing.Invoice.Invoice? invoice)
+    private sealed class StubInvoiceRepo(Titan.Domain.Aggregates.Invoice.Invoice? invoice)
         : IInvoiceRepository
     {
-        public Task<Titan.Domain.Aggregates.Billing.Invoice.Invoice?> GetForUpdateAsync(Guid id, CancellationToken ct) =>
+        public Task<Titan.Domain.Aggregates.Invoice.Invoice?> GetForUpdateAsync(Guid id, CancellationToken ct) =>
             Task.FromResult(invoice);
 
-        public Task<bool> TryAddAsync(Titan.Domain.Aggregates.Billing.Invoice.Invoice i, CancellationToken ct) =>
+        public Task<bool> TryAddAsync(Titan.Domain.Aggregates.Invoice.Invoice i, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task<Titan.Domain.Aggregates.Billing.Invoice.Invoice?> GetByIdAsync(Guid id, CancellationToken ct) =>
+        public Task<Titan.Domain.Aggregates.Invoice.Invoice?> GetByIdAsync(Guid id, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<Titan.Domain.Aggregates.Billing.Invoice.Invoice>> ListByTenantAsync(
+        public Task<IReadOnlyList<Titan.Domain.Aggregates.Invoice.Invoice>> ListByTenantAsync(
             Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Titan.Domain.Aggregates.Billing.Invoice.Invoice>> ListOutstandingByTenantAsync(
+        public Task<IReadOnlyList<Titan.Domain.Aggregates.Invoice.Invoice>> ListOutstandingByTenantAsync(
             Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Titan.Domain.Aggregates.Billing.Invoice.Invoice>> ListAllAsync(CancellationToken ct) =>
+        public Task<IReadOnlyList<Titan.Domain.Aggregates.Invoice.Invoice>> ListAllAsync(CancellationToken ct) =>
             throw new NotSupportedException();
         public Task<bool> ExistsForPeriodAsync(Guid tenantId, int year, int month, CancellationToken ct) =>
             throw new NotSupportedException();
-        public Task<IReadOnlyList<Titan.Domain.Aggregates.Billing.Invoice.Invoice>> ListOutstandingAllAsync(
+        public Task<IReadOnlyList<Titan.Domain.Aggregates.Invoice.Invoice>> ListOutstandingAllAsync(
             CancellationToken ct) => throw new NotSupportedException();
         public Task SaveChangesAsync(CancellationToken ct) => throw new NotSupportedException();
     }
@@ -261,16 +261,16 @@ public class WalletMutationConsumerTests
         Assert.Empty(walletRepo.Staged);
     }
 
-    private static Titan.Domain.Aggregates.Billing.Invoice.Invoice TestInvoice(long total)
+    private static Titan.Domain.Aggregates.Invoice.Invoice TestInvoice(long total)
     {
-        var items = new List<Titan.Domain.Aggregates.Billing.Invoice.InvoiceItem>
+        var items = new List<Titan.Domain.Aggregates.Invoice.InvoiceItem>
         {
-            Titan.Domain.Aggregates.Billing.Invoice.InvoiceItem.Create(
-                Titan.Domain.Aggregates.Billing.UsageRecord.UsageResourceType.Compute,
+            Titan.Domain.Aggregates.Invoice.InvoiceItem.Create(
+                Titan.Domain.Aggregates.UsageRecord.UsageResourceType.Compute,
                 Guid.NewGuid(), "vm-1", total, "VND")
         };
 
-        return Titan.Domain.Aggregates.Billing.Invoice.Invoice.Generate(
+        return Titan.Domain.Aggregates.Invoice.Invoice.Generate(
             Guid.NewGuid(), 2026, 9, DateTimeOffset.UtcNow.AddDays(-1), items, "VND");
     }
 }

@@ -1,10 +1,9 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.Invoice;
 using Titan.Application.Commands.Billing.Invoice.Contracts;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
+using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 

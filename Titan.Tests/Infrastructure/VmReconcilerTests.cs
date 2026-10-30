@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Application.Queries.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;

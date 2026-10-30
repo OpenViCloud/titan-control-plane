@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Titan.Domain.Aggregates.Platform.ApiToken;
+using Titan.Domain.Aggregates.ApiToken;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 using Titan.Tests.Domain;

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
-using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer;
+using Titan.Domain.Aggregates.LoadBalancer;
+using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.LoadBalancer.Contracts;

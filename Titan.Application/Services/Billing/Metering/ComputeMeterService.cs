@@ -1,9 +1,7 @@
 using Microsoft.Extensions.Options;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Billing.Metering;
 

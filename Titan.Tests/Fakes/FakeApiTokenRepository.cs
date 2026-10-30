@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Platform.ApiToken;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.ApiToken;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

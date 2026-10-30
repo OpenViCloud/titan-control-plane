@@ -5,9 +5,9 @@ using Titan.Application.Commands.Billing.Wallet;
 using Titan.Application.Commands.Billing.Wallet.Contracts;
 using Titan.Application.Queries.Billing.Wallet;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 
