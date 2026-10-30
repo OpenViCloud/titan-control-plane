@@ -1,6 +1,5 @@
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -13,7 +12,8 @@ namespace Titan.Application.Services.Compute;
 /// Every lookup here answers <b>404</b> when the resource belongs to another tenant — never 403, which
 /// would tell a caller about resources they cannot see (titan-ops architecture/http-contract.md#tenant-scoping).
 /// A missing resource and a foreign one are indistinguishable, down to the error code and the message.
-/// ComputeOwnershipTests pins it.
+/// ComputeOwnershipTests pins it. A VM's or a volume's snapshot is reached through its parent
+/// (Vm.RequireSnapshot, Volume.RequireSnapshot): a child entity, not a lookup of its own.
 /// </summary>
 public static class ComputeOwnership
 {
@@ -21,6 +21,20 @@ public static class ComputeOwnership
         IVmRepository vmRepo, Guid tenantId, Guid vmId, CancellationToken ct)
     {
         var vm = await vmRepo.FindByIdAsync(vmId, ct)
+            ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
+
+        if (vm.TenantId != tenantId)
+            throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
+
+        return vm;
+    }
+
+    /// The same answer with the VM's row locked (IVmRepository.FindByIdForUpdateAsync): for a request that adds to the
+    /// VM and must count what it already holds (titan-ops architecture/code-structure.md#child-entity).
+    public static async Task<VmAggregate> RequireVmForUpdateAsync(
+        IVmRepository vmRepo, Guid tenantId, Guid vmId, CancellationToken ct)
+    {
+        var vm = await vmRepo.FindByIdForUpdateAsync(vmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
         if (vm.TenantId != tenantId)
@@ -51,17 +65,5 @@ public static class ComputeOwnership
             throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         return volume;
-    }
-
-    public static async Task<VmSnapshot> RequireVmSnapshotAsync(
-        IVmSnapshotRepository snapshotRepo, Guid snapshotId, Guid vmId, CancellationToken ct)
-    {
-        var snapshot = await snapshotRepo.FindByIdAsync(snapshotId, ct)
-            ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        if (snapshot.VmId != vmId)
-            throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        return snapshot;
     }
 }

@@ -150,14 +150,13 @@ public class VmEndpointBindingTests
         var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
         tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
             .ReturnsAsync(ProvisionedTenant());
-        var snapshots = new Mock<IVmSnapshotRepository>();
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
             _repo.Object, tenantRepo.Object, _currentUser.Object, commands.Object,
-            snapshots.Object, volumes.Object, new Mock<ILoadBalancerRepository>().Object,
+            volumes.Object, new Mock<ILoadBalancerRepository>().Object,
             new Titan.Tests.Fakes.FakeActivityRecorder());
         var ep = Factory.Create<DeleteVmEndpoint>(WithVmIdRoute, handler);
 
@@ -214,7 +213,7 @@ public class VmEndpointBindingTests
     [Fact]
     public async Task UpdateVmStatusEndpoint_WithValidToken_ReachesUpdateStatusCommand()
     {
-        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVmSnapshotRepository>().Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
+        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
         var ep = Factory.Create<UpdateVmStatusEndpoint>(
             ctx =>
             {
@@ -233,7 +232,7 @@ public class VmEndpointBindingTests
     [Fact] // the callback must refuse an unauthenticated caller and never reach the write path
     public async Task UpdateVmStatusEndpoint_WrongToken_Returns401_AndNeverReachesHandler()
     {
-        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVmSnapshotRepository>().Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
+        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
         var ep = Factory.Create<UpdateVmStatusEndpoint>(
             ctx =>
             {

@@ -19,7 +19,6 @@ namespace Titan.Application.Commands.Admin.Vm;
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.
 public class DeleteAdminVmCommandHandler(
     IVmRepository vms,
-    IVmSnapshotRepository snapshots,
     IVolumeRepository volumeRepo,
     IAdminAuditLogRepository auditLog,
     IProviderCommandQueue commands,
@@ -53,12 +52,9 @@ public class DeleteAdminVmCommandHandler(
             return;
         }
 
+        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), for an
+        // admin as for the tenant (titan-ops architecture/code-structure.md#child-entity).
         VmIntentTicket ticket = vm.RequestDelete();
-
-        if (await snapshots.AnyInProgressByVmIdAsync(vmId, ct))
-        {
-            throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
-        }
 
         // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.

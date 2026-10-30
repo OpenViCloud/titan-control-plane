@@ -15,7 +15,6 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.SshKey;
 using Titan.Domain.Aggregates.ApiToken;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.SnapshotOffering;
 using Titan.Domain.Aggregates.VmOffering;

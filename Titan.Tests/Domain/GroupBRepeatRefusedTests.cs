@@ -1,5 +1,4 @@
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
@@ -92,11 +91,11 @@ public class GroupBRepeatRefusedTests
     public void VmSnapshotRevert_WhileReverting_IsRefused()
     {
         var vm = RunningVm();
-        var snapshot = VmSnapshot.CreateUnchecked(vm.Id, vm.TenantId, "snap-1");
+        var snapshot = vm.AddSnapshotUnchecked("snap-1");
         snapshot.MarkCreated("snap-ext");
-        snapshot.Revert(vm);
+        vm.RevertSnapshot(snapshot.Id);
 
-        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => snapshot.Revert(vm)).Code);
+        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => vm.RevertSnapshot(snapshot.Id)).Code);
         Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
     }
 
@@ -104,12 +103,12 @@ public class GroupBRepeatRefusedTests
     public void VmSnapshotRevert_AfterItFinished_IsANewRequest()
     {
         var vm = RunningVm();
-        var snapshot = VmSnapshot.CreateUnchecked(vm.Id, vm.TenantId, "snap-1");
+        var snapshot = vm.AddSnapshotUnchecked("snap-1");
         snapshot.MarkCreated("snap-ext");
-        snapshot.Revert(vm);
+        vm.RevertSnapshot(snapshot.Id);
         snapshot.MarkReverted();
 
-        Assert.Equal("snap-ext", snapshot.Revert(vm));
+        Assert.Equal("snap-ext", vm.RevertSnapshot(snapshot.Id));
     }
 
     [Fact]

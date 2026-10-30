@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -9,7 +8,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// Desired/current state and the existence pair as Postgres stores them: what InMemory cannot show — filtered unique
-/// indexes, the column spelling, and ExecuteUpdate (titan-ops architecture/desired-and-current.md#desired-and-current).
+/// indexes and the column spelling (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -18,16 +17,6 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     // A rule is the network's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through it.
     private static FirewallRule NewRule(Network network) =>
         network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
-
-    private static string Shape(VmSnapshot s)
-    {
-        string transition = "-";
-        if (s.Transition != null)
-        {
-            transition = s.Transition.Value.ToString();
-        }
-        return $"{s.CurrentExistence}/{s.DesiredExistence}/{transition}";
-    }
 
     [Fact]
     public async Task WaitingStop_SurvivesAReload_AndResendsTheSameId()
@@ -132,39 +121,6 @@ public class StateRoundTripDbTests(PostgresFixture pg)
             Assert.Equal(3, await db.FirewallRules.CountAsync(r => r.NetworkId == networkId));
             Assert.Equal(new[] { creating.Id, deleting.Id }.OrderBy(x => x), listed.Select(r => r.Id).OrderBy(x => x));
             Assert.Equal(1, counted); // the waiting delete stopped counting when it was asked for
-        }
-    }
-
-    // The VM's delete command confirmed it gone: every snapshot it had is gone with it, and whatever request was waiting on
-    // them is over.
-    [Fact]
-    public async Task MarkAllDeletedByVmId_WritesDeletedAndEndsTheWait_OnPostgres()
-    {
-        var vmId = Guid.NewGuid();
-        var otherVmId = Guid.NewGuid();
-        var ready = VmSnapshot.CreateUnchecked(vmId, Guid.NewGuid(), "ready");
-        ready.MarkCreated("1:1");
-        var waitingDelete = VmSnapshot.CreateUnchecked(vmId, Guid.NewGuid(), "leaving");
-        waitingDelete.MarkCreated("1:2");
-        waitingDelete.RequestDelete();
-        var otherVm = VmSnapshot.CreateUnchecked(otherVmId, Guid.NewGuid(), "other");
-        otherVm.MarkCreated("2:1");
-
-        await using (TitanDbContext db = pg.NewDbContext())
-        {
-            db.VmSnapshots.AddRange(ready, waitingDelete, otherVm);
-            await db.SaveChangesAsync();
-            await new VmSnapshotRepository(db).MarkAllDeletedByVmIdAsync(vmId);
-        }
-
-        await using (TitanDbContext db = pg.NewDbContext())
-        {
-            var snapshots = await db.VmSnapshots.AsNoTracking()
-                .Where(s => s.VmId == vmId || s.VmId == otherVmId)
-                .ToDictionaryAsync(s => s.Name);
-            Assert.Equal("Deleted/Exists/-", Shape(snapshots["ready"]));
-            Assert.Equal("Deleted/Deleted/-", Shape(snapshots["leaving"]));
-            Assert.Equal("Exists/Exists/-", Shape(snapshots["other"]));
         }
     }
 }

@@ -20,7 +20,6 @@ public class ComputeOwnershipTests
 
     private readonly Mock<IVolumeRepository> _volumeRepo = new();
     private readonly Mock<IVmRepository> _vmRepo = new();
-    private readonly Mock<IVmSnapshotRepository> _vmSnapshotRepo = new();
     private readonly Mock<IVolumeSnapshotRepository> _volumeSnapshotRepo = new();
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();

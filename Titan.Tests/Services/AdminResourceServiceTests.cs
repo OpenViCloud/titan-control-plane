@@ -43,14 +43,12 @@ public class AdminResourceServiceTests
         return net;
     }
 
-    private static (AdminFacade svc, Mock<IProviderCommandQueue> wf, Mock<IVmSnapshotRepository> snaps, Mock<IAdminAuditLogRepository> audit)
+    private static (AdminFacade svc, Mock<IProviderCommandQueue> wf, Mock<IAdminAuditLogRepository> audit)
         Build(IVmRepository vmRepo, INetworkRepository? netRepo = null,
             List<Titan.Domain.Aggregates.Volume.Volume>? attachedVolumes = null)
     {
         var wf = new Mock<IProviderCommandQueue>();
         wf.SetReturnsDefault(Task.CompletedTask);
-        var snaps = new Mock<IVmSnapshotRepository>();
-        snaps.Setup(s => s.AnyInProgressByVmIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync(false);
         var audit = new Mock<IAdminAuditLogRepository>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
@@ -60,8 +58,8 @@ public class AdminResourceServiceTests
             new ListAdminVmsQueryHandler(vmRepo),
             new ListAdminNetworksQueryHandler(netRepo ?? new StubNetworkRepo()),
             new DeleteAdminVmCommandHandler(
-                vmRepo, snaps.Object, volumes.Object, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance));
-        return (svc, wf, snaps, audit);
+                vmRepo, volumes.Object, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance));
+        return (svc, wf, audit);
     }
 
     // Facade over the two query handlers and the command handler so the tests keep one call shape.
@@ -86,7 +84,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListVms_ReturnsEveryTenantsVms_EachCarryingTenantId()
     {
-        var (svc, _, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web"), RunningVm(TenantB, "b-db")));
+        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web"), RunningVm(TenantB, "b-db")));
 
         var dtos = await svc.ListVmsAsync(null);
 
@@ -100,7 +98,7 @@ public class AdminResourceServiceTests
     public async Task ListVms_ForwardsTenantFilterToRepo_Untouched()
     {
         var repo = new StubVmRepo(RunningVm(TenantA, "a-web"));
-        var (svc, _, _, _) = Build(repo);
+        var (svc, _, _) = Build(repo);
 
         await svc.ListVmsAsync(TenantA);
         Assert.Equal(TenantA, repo.LastTenantFilter);
@@ -111,7 +109,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListVms_MapsDomainFieldsOntoDto()
     {
-        var (svc, _, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web")));
+        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web")));
 
         var dto = Assert.Single(await svc.ListVmsAsync(null));
 
@@ -125,7 +123,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_ReturnsEveryTenantsNetworks_EachCarryingTenantId()
     {
-        var (svc, _, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net"), NetFor(TenantB, "b-net")));
+        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net"), NetFor(TenantB, "b-net")));
 
         var dtos = await svc.ListNetworksAsync(null);
 
@@ -138,7 +136,7 @@ public class AdminResourceServiceTests
     public async Task ListNetworks_ForwardsTenantFilterToRepo_Untouched()
     {
         var repo = new StubNetworkRepo(NetFor(TenantA, "a-net"));
-        var (svc, _, _, _) = Build(new StubVmRepo(), repo);
+        var (svc, _, _) = Build(new StubVmRepo(), repo);
 
         await svc.ListNetworksAsync(TenantB);
         Assert.Equal(TenantB, repo.LastTenantFilter);
@@ -149,7 +147,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_MapsDomainFieldsOntoDto()
     {
-        var (svc, _, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net")));
+        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net")));
 
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
 
@@ -165,7 +163,7 @@ public class AdminResourceServiceTests
     {
         var failed = Network.CreateUnchecked(TenantA, "failed-net", "vn-hcm-1");
         failed.MarkRequestFailed("Network creation failed.", "create network: project t-1 not found");
-        var (svc, _, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(failed));
+        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(failed));
 
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
 
@@ -183,7 +181,7 @@ public class AdminResourceServiceTests
     {
         var vm = RunningVm(TenantB, "victim");                       // owned by a DIFFERENT tenant
         var repo = new StubVmRepo(vm);
-        var (svc, wf, _, audit) = Build(repo);
+        var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
 
@@ -210,7 +208,7 @@ public class AdminResourceServiceTests
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
-        var (svc, _, _, _) = Build(new StubVmRepo(vm), attachedVolumes: new() { volume });
+        var (svc, _, _) = Build(new StubVmRepo(vm), attachedVolumes: new() { volume });
 
         await svc.DeleteVmAsync(vm.Id);
 
@@ -224,7 +222,7 @@ public class AdminResourceServiceTests
     {
         var vm = RunningVm(TenantB, "victim");
         var repo = new StubVmRepo(vm);
-        var (svc, wf, _, audit) = Build(repo);
+        var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
         await svc.DeleteVmAsync(vm.Id);
@@ -241,7 +239,7 @@ public class AdminResourceServiceTests
         vm.RequestDelete();
         vm.MarkDeleted();
         var repo = new StubVmRepo(vm);
-        var (svc, wf, _, audit) = Build(repo);
+        var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
 
@@ -253,7 +251,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_NotFound_ThrowsNotFound_NoCommand()
     {
-        var (svc, wf, _, audit) = Build(new StubVmRepo());
+        var (svc, wf, audit) = Build(new StubVmRepo());
 
         await Assert.ThrowsAsync<NotFoundException>(() => svc.DeleteVmAsync(Guid.NewGuid()));
         wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
@@ -266,7 +264,7 @@ public class AdminResourceServiceTests
     {
         var vm = Vm.CreateUnchecked(TenantB, Guid.NewGuid(), "starting", "s", "t", "z", 10); // Starting — not deletable
         var repo = new StubVmRepo(vm);
-        var (svc, wf, _, audit) = Build(repo);
+        var (svc, wf, audit) = Build(repo);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
@@ -279,9 +277,9 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_SnapshotInProgress_Throws_NoCommand()
     {
         var vm = RunningVm(TenantB, "busy");
+        vm.AddSnapshotUnchecked("creating"); // a snapshot command still touching the instance: the VM's own child
         var repo = new StubVmRepo(vm);
-        var (svc, wf, snaps, audit) = Build(repo);
-        snaps.Setup(s => s.AnyInProgressByVmIdAsync(vm.Id, default)).ReturnsAsync(true);
+        var (svc, wf, audit) = Build(repo);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
@@ -296,7 +294,7 @@ public class AdminResourceServiceTests
         var vm = Vm.CreateUnchecked(TenantB, Guid.NewGuid(), "orphan", "s", "t", "z", 10);
         vm.MarkRequestFailed("never provisioned", null);            // the create gave up, no ExternalId
         var repo = new StubVmRepo(vm);
-        var (svc, wf, _, audit) = Build(repo);
+        var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
 
@@ -329,6 +327,9 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
         Task.FromResult(_vms.FirstOrDefault(v => v.Id == id));
 
     public Task SaveAsync(CancellationToken ct = default) { SaveCalled = true; return Task.CompletedTask; }
+
+    public Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) => throw new NotSupportedException();
 
     public Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();

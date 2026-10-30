@@ -52,5 +52,14 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.HasIndex(v => new { v.TenantId, v.Name })
             .IsUnique()
             .HasFilter("current_existence <> 'Deleted'");
+
+        // The snapshots are the VM's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
+        // through the backing field. Restrict, not cascade: no row of either table is ever deleted.
+        builder.HasMany(v => v.Snapshots)
+            .WithOne()
+            .HasForeignKey(s => s.VmId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(v => v.Snapshots).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Ignore(v => v.SnapshotQuotaUsage);
     }
 }

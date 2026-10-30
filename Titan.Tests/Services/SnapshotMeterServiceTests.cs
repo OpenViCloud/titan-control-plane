@@ -8,7 +8,6 @@ using Titan.Application.Services.Billing;
 using Titan.Application.Services.Billing.Metering;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.SnapshotOffering;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
@@ -48,7 +47,7 @@ public class SnapshotMeterServiceTests
     {
         var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
-        var snap = VmSnapshot.CreateUnchecked(vm.Id, TenantId, name);
+        var snap = vm.AddSnapshotUnchecked(name);
         snap.MarkCreated("ext-vm-snap");
         return snap;
     }
