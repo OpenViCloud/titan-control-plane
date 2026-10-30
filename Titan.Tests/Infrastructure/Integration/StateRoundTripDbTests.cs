@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -16,11 +15,9 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Collection(PostgresCollection.Name)]
 public class StateRoundTripDbTests(PostgresFixture pg)
 {
-    private static FirewallRule NewRule(Guid networkId)
-    {
-        return FirewallRule.CreateUnchecked(networkId, Guid.NewGuid(),
-            FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
-    }
+    // A rule is the network's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through it.
+    private static FirewallRule NewRule(Network network) =>
+        network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
     private static string Shape(VmSnapshot s)
     {
@@ -94,19 +91,21 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     [Fact]
     public async Task FirewallRuleState_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
     {
-        Guid networkId = Guid.NewGuid();
-        FirewallRule creating = NewRule(networkId);
-        FirewallRule deleting = NewRule(networkId);
+        Network network = Network.CreateUnchecked(Guid.NewGuid(), $"rt-net-{Guid.NewGuid():N}"[..12], "cluster-a");
+        network.MarkActive("net-1", "10.0.0.0/24", "10.0.0.1");
+        Guid networkId = network.Id;
+        FirewallRule creating = NewRule(network);
+        FirewallRule deleting = NewRule(network);
         deleting.MarkActive("rule-2");
         deleting.RequestDelete();
-        FirewallRule deleted = NewRule(networkId);
+        FirewallRule deleted = NewRule(network);
         deleted.MarkActive("rule-3");
         deleted.RequestDelete();
         deleted.MarkDeleted();
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
-            db.FirewallRules.AddRange(creating, deleting, deleted);
+            db.Networks.Add(network);
             await db.SaveChangesAsync();
         }
 
@@ -125,7 +124,9 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
             FirewallRuleRepository repo = new(db);
             List<FirewallRule> listed = await repo.ListByNetworkAsync(networkId);
-            int counted = await repo.CountByNetworkAsync(networkId);
+            // The cap is counted on the aggregate as the repository loads it back, rules included.
+            Network reloaded = (await new NetworkRepository(db).FindByIdAsync(networkId))!;
+            int counted = reloaded.FirewallRuleQuotaUsage;
 
             // The Deleted row is still in the table — it is the filter, not a missing row, that hides it.
             Assert.Equal(3, await db.FirewallRules.CountAsync(r => r.NetworkId == networkId));

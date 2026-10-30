@@ -2,17 +2,16 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
-using Titan.Domain.Aggregates.FirewallRule;
-using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
 public class DeleteFirewallRuleCommandHandler(
-    IFirewallRuleRepository repo,
     INetworkRepository networkRepo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
@@ -25,8 +24,9 @@ public class DeleteFirewallRuleCommandHandler(
 
         NetworkAggregate network = await NetworkOwnership.RequireNetworkAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
 
-        FirewallRuleAggregate? rule = await repo.FindByIdAsync(ruleId, ct);
-        if (rule == null || rule.NetworkId != networkId)
+        // A rule of another network answers like a missing one (titan-ops features/network/design.md#firewall-rule-soft-delete).
+        FirewallRuleEntity? rule = network.FirewallRuleOrNull(ruleId);
+        if (rule == null)
         {
             throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         }
@@ -48,20 +48,20 @@ public class DeleteFirewallRuleCommandHandler(
         bool neverReachedTheProvider = rule.ExternalId == null && rule.Transition == null;
         if (neverReachedTheProvider)
         {
-            rule.DeleteLocally();
+            network.DeleteFirewallRuleLocally(ruleId);
             activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);
             activity.StageOutcome(rule.TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, label);
-            await repo.SaveAsync(ct);
+            await networkRepo.SaveAsync(ct);
             return;
         }
 
         // The rule stays (delete waiting) until the worker reports the provider has removed it
         // (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm): forgetting it here would leave a rule
         // enforced that Titan no longer lists.
-        string externalRuleId = rule.RequestDelete();
+        string externalRuleId = network.RequestFirewallRuleDelete(ruleId);
         activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);
         await commands.EnqueueFirewallRuleDeleteAsync(
             rule.Id, networkId, externalRuleId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
-        await repo.SaveAsync(ct);
+        await networkRepo.SaveAsync(ct);
     }
 }

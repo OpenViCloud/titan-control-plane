@@ -2,7 +2,6 @@ using Titan.Domain.Aggregates.SshKey;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.VolumeSnapshot;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -127,7 +126,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxFwRules: 5);
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => FirewallRule.Create(Guid.NewGuid(), t, 5, FirewallDirection.Ingress,
+            () => UsableNetworkWithRules(t.Id, 5).AddFirewallRule(t, FirewallDirection.Ingress,
                 FirewallProtocol.TCP, 80, 80, "0.0.0.0/0")).Code);
     }
 
@@ -154,7 +153,7 @@ public class QuotaInFactoryTests
         Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
         Assert.NotNull(VmSnapshotAggregate.Create(RunningVm(t.Id), t, 2, "snap-1"));
         Assert.NotNull(VolumeSnapshot.Create(AllocatedVolume(t.Id), t, 1, "snap-1"));
-        Assert.NotNull(FirewallRule.Create(Guid.NewGuid(), t, 4, FirewallDirection.Ingress,
+        Assert.NotNull(UsableNetworkWithRules(t.Id, 4).AddFirewallRule(t, FirewallDirection.Ingress,
             FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));
         Assert.NotNull(SshKey.Create(t, 3, "laptop", SshPublicKeyTests.Ed25519));
     }
@@ -175,5 +174,19 @@ public class QuotaInFactoryTests
         var t = TenantWith(maxSshKeys: 0);
         Assert.Equal("SSH_KEY_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
             () => SshKey.Create(t, 0, "laptop", SshPublicKeyTests.Ed25519)).Code);
+    }
+
+    // A network Incus has created, holding `counting` rules that count toward the cap: the network counts its own
+    // rules (titan-ops architecture/code-structure.md#child-entity), so the test shapes the network, not a number.
+    private static Network UsableNetworkWithRules(Guid tenantId, int counting)
+    {
+        var network = Network.CreateUnchecked(tenantId, "net", "cluster-a");
+        network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
+        for (int i = 0; i < counting; i++)
+        {
+            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+                .MarkActive($"acl/rule-{i}");
+        }
+        return network;
     }
 }

@@ -45,6 +45,16 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.PublicIpv6RouterAddress).HasColumnName("public_ipv6_router_address");
         builder.Property(n => n.PublicIpv6ReleasedAt).HasColumnName("public_ipv6_released_at");
 
+        // The rules are the network's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
+        // through the backing field so EF never needs a setter on the collection. Restrict, not cascade: no row of
+        // either table is ever deleted (titan-ops features/network/design.md#firewall-rule-soft-delete).
+        builder.HasMany(n => n.FirewallRules)
+            .WithOne()
+            .HasForeignKey(r => r.NetworkId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(n => n.FirewallRules).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Ignore(n => n.FirewallRuleQuotaUsage);
+
         builder.HasIndex(n => new { n.TenantId, n.Name })
             .IsUnique()
             // The name stays taken until the delete command confirms the network gone: a delete in flight still

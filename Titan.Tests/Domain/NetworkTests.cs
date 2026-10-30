@@ -224,7 +224,7 @@ public class NetworkTests
 
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         Assert.False(network.IsTerminal);
-        Assert.True(network.MarkDeleted());
+        Assert.True(network.MarkDeleted().FulfilledNetworkDelete);
     }
 
     [Fact]
@@ -392,8 +392,8 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
 
-        bool first = network.MarkDeleted();
-        bool repeat = network.MarkDeleted();
+        bool first = network.MarkDeleted().FulfilledNetworkDelete;
+        bool repeat = network.MarkDeleted().FulfilledNetworkDelete;
 
         Assert.True(first);
         Assert.False(repeat);

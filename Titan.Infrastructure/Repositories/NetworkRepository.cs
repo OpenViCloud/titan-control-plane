@@ -9,7 +9,20 @@ namespace Titan.Infrastructure.Repositories;
 public class NetworkRepository(TitanDbContext db) : INetworkRepository
 {
     public async Task<Network?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
-        await db.Networks.FirstOrDefaultAsync(n => n.Id == id, ct);
+        await db.Networks.Include(n => n.FirewallRules).FirstOrDefaultAsync(n => n.Id == id, ct);
+
+    // Lock first, load second: one statement joining the rules under READ COMMITTED would read the locked row at its
+    // latest version but the rules at the statement's snapshot, so a rule the other writer just committed could be
+    // missed. The second statement starts after the lock is held and sees it (titan-ops architecture/code-structure.md#child-entity).
+    public async Task<Network?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.networks WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
+    public async Task<Network?> FindByFirewallRuleIdAsync(Guid ruleId, CancellationToken ct = default) =>
+        await db.Networks.Include(n => n.FirewallRules)
+            .FirstOrDefaultAsync(n => n.FirewallRules.Any(r => r.Id == ruleId), ct);
 
     public async Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks

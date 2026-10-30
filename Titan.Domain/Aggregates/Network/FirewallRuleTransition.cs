@@ -1,4 +1,4 @@
-namespace Titan.Domain.Aggregates.FirewallRule;
+namespace Titan.Domain.Aggregates.Network;
 
 /// The request still waiting for the provider, derived — never stored.
 public enum FirewallRuleTransition

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.FirewallRule;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
@@ -24,7 +24,7 @@ public record FirewallRuleQueryResult(
     DateTimeOffset? RequestFailedAt,
     DateTimeOffset CreatedAt)
 {
-    public static FirewallRuleQueryResult From(FirewallRuleAggregate r) =>
+    public static FirewallRuleQueryResult From(FirewallRuleEntity r) =>
         new(r.Id, r.Direction.ToString(), r.Protocol.ToString(),
             r.StartPort, r.EndPort, r.Cidr, r.ExternalId,
             r.CurrentState, r.CurrentExistence, r.DesiredExistence,

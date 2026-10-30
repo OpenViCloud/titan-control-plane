@@ -6,7 +6,6 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.VolumeSnapshot;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Values;

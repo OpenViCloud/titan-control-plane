@@ -1,3 +1,3 @@
-namespace Titan.Domain.Aggregates.FirewallRule;
+namespace Titan.Domain.Aggregates.Network;
 
 public enum FirewallDirection { Ingress, Egress }

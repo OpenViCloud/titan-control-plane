@@ -42,8 +42,7 @@ public class InternalTokenCallbackTests
     [InlineData("wrong")]
     public async Task UpdateNetworkStatus_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object,
-            new Mock<IFirewallRuleRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object, StrictActivity());
         var ep = Factory.Create<UpdateNetworkStatusEndpoint>(
             ctx =>
             {
@@ -123,7 +122,7 @@ public class InternalTokenCallbackTests
     [InlineData("wrong")]
     public async Task UpdateFirewallRuleStatus_WithoutTheToken_Returns401(string? token)
     {
-        var repo = new Mock<IFirewallRuleRepository>(MockBehavior.Strict).Object;
+        var repo = new Mock<INetworkRepository>(MockBehavior.Strict).Object;
         IActivityRecorder activity = StrictActivity();
         var ep = Factory.Create<UpdateFirewallRuleStatusEndpoint>(
             ctx =>

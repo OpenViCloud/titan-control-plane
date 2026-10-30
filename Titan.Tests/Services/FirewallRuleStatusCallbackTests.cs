@@ -2,7 +2,7 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
-using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
@@ -10,30 +10,38 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Services;
 
 // The firewall rule callback (titan-ops features/network/design.md#firewall-rule-soft-delete): four reports, the Incus
-// ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
+// ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim). The rule is
+// reached through its network (titan-ops architecture/code-structure.md#child-entity), so the repository the handler
+// asks is the network's, by rule id.
 public class FirewallRuleStatusCallbackTests
 {
-    private static readonly Guid NetworkId = Guid.NewGuid();
+    private readonly Network _network = ActiveNetwork();
 
-    private static UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule, IActivityRecorder activity)
+    private static Network ActiveNetwork()
     {
-        Mock<IFirewallRuleRepository> repo = new();
-        repo.Setup(r => r.FindByIdAsync(rule.Id, It.IsAny<CancellationToken>())).ReturnsAsync(rule);
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
+        network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
+        return network;
+    }
+
+    private UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule, IActivityRecorder activity)
+    {
+        Mock<INetworkRepository> repo = new();
+        repo.Setup(r => r.FindByFirewallRuleIdAsync(rule.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_network);
         return new UpdateFirewallRuleStatusCommandHandler(repo.Object, activity);
     }
 
-    private static UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule) =>
+    private UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule) =>
         HandlerFor(rule, Mock.Of<IActivityRecorder>());
 
-    private static UpdateFirewallRuleStatusCommand Report(FirewallRule rule, string report, bool? exists = null,
+    private UpdateFirewallRuleStatusCommand Report(FirewallRule rule, string report, bool? exists = null,
         string? state = null, string? externalRuleId = null, string? reason = null, string? detail = null) =>
-        new(NetworkId, rule.Id, report, exists, state, externalRuleId, reason, detail);
+        new(_network.Id, rule.Id, report, exists, state, externalRuleId, reason, detail);
 
-    private static FirewallRule CreatingRule() =>
-        FirewallRule.CreateUnchecked(NetworkId, Guid.NewGuid(),
-            FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+    private FirewallRule CreatingRule() =>
+        _network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
-    private static FirewallRule DeletingRule()
+    private FirewallRule DeletingRule()
     {
         FirewallRule rule = CreatingRule();
         rule.MarkActive("rule-7");
@@ -194,11 +202,14 @@ public class FirewallRuleStatusCallbackTests
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
     }
 
+    // A rule no network has: the repository answers null, and the caller gets the same 404 as before the rule
+    // became the network's child.
     [Fact]
     public async Task AnUnknownRule_IsNotFound()
     {
         FirewallRule rule = CreatingRule();
-        Mock<IFirewallRuleRepository> repo = new();
+        Mock<INetworkRepository> repo = new();
+        repo.Setup(r => r.FindByFirewallRuleIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Network?)null);
         UpdateFirewallRuleStatusCommandHandler handler = new(repo.Object, Mock.Of<IActivityRecorder>());
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(

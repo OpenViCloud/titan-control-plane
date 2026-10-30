@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -158,50 +157,45 @@ public class VmSnapshotFirewallRepositoryStateTests
 
     // ── Firewall rules ─────────────────────────────────────────────────────
 
-    private static FirewallRule Rule(Guid networkId, string cidr) =>
-        FirewallRule.CreateUnchecked(networkId, Tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, cidr);
+    // Rules are seeded through their network: they are its child entities (titan-ops architecture/code-structure.md#child-entity),
+    // and the foreign key refuses a rule with no network on Postgres.
+    private static FirewallRule Rule(Network network, string cidr) =>
+        network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, cidr);
 
-    private static FirewallRule[] EveryRuleSituation(Guid networkId)
+    private static Network UsableNetwork(string name, string cluster)
     {
-        var creating = Rule(networkId, "10.0.0.1/32");
-        var active = Rule(networkId, "10.0.0.2/32");
+        var network = Network.CreateUnchecked(Tenant, name, cluster);
+        network.MarkActive($"ext-{name}", "10.0.0.0/24", "10.0.0.1");
+        return network;
+    }
+
+    private static Network NetworkWithEveryRuleSituation(string cluster = "vn-hcm-1")
+    {
+        var network = UsableNetwork("here", cluster);
+        Rule(network, "10.0.0.1/32"); // creating
+        var active = Rule(network, "10.0.0.2/32");
         active.MarkActive("sg-2");
-        var deleting = Rule(networkId, "10.0.0.3/32");
+        var deleting = Rule(network, "10.0.0.3/32");
         deleting.MarkActive("sg-3");
         deleting.RequestDelete();
-        var deleted = Rule(networkId, "10.0.0.4/32");
+        var deleted = Rule(network, "10.0.0.4/32");
         deleted.MarkActive("sg-4");
         deleted.RequestDelete();
         deleted.MarkDeleted();
-        var failedCreate = Rule(networkId, "10.0.0.5/32");
+        var failedCreate = Rule(network, "10.0.0.5/32");
         failedCreate.MarkRequestFailed("reason", "detail");
-        return [creating, active, deleting, deleted, failedCreate];
-    }
-
-    // Counted by occupancy (titan-ops features/network/design.md#firewall-rule-status): a rule whose delete was requested
-    // stops counting toward MaxFirewallRulesPerNetwork; a failed create with nothing in the ACL does not count.
-    [Fact]
-    public async Task RuleQuota_CountsWhatIncusHoldsOrIsAboutTo_ButNotAFailedCreate_ADeleteInFlight_NorDeleted()
-    {
-        using var db = NewDb();
-        Guid networkId = Guid.NewGuid();
-        db.FirewallRules.AddRange(EveryRuleSituation(networkId));
-        await db.SaveChangesAsync();
-
-        int count = await new FirewallRuleRepository(db).CountByNetworkAsync(networkId);
-
-        Assert.Equal(2, count);
+        return network;
     }
 
     [Fact] // the provider still enforces a rule whose delete is waiting, so it is still listed
     public async Task RuleList_ShowsEverythingButDeleted()
     {
         using var db = NewDb();
-        Guid networkId = Guid.NewGuid();
-        db.FirewallRules.AddRange(EveryRuleSituation(networkId));
+        var network = NetworkWithEveryRuleSituation();
+        db.Networks.Add(network);
         await db.SaveChangesAsync();
 
-        var cidrs = (await new FirewallRuleRepository(db).ListByNetworkAsync(networkId)).Select(r => r.Cidr).OrderBy(c => c).ToList();
+        var cidrs = (await new FirewallRuleRepository(db).ListByNetworkAsync(network.Id)).Select(r => r.Cidr).OrderBy(c => c).ToList();
 
         Assert.Equal(new[] { "10.0.0.1/32", "10.0.0.2/32", "10.0.0.3/32", "10.0.0.5/32" }, cidrs);
     }
@@ -210,13 +204,10 @@ public class VmSnapshotFirewallRepositoryStateTests
     public async Task RuleReconcilable_FollowsItsNetworksCluster_AndIsWhatReachedTheProvider()
     {
         using var db = NewDb();
-        var here = Network.CreateUnchecked(Tenant, "here", "vn-hcm-1");
-        var there = Network.CreateUnchecked(Tenant, "there", "vn-han-1");
-        var elsewhere = Rule(there.Id, "10.9.9.9/32");
-        elsewhere.MarkActive("sg-9");
+        var here = NetworkWithEveryRuleSituation("vn-hcm-1");
+        var there = UsableNetwork("there", "vn-han-1");
+        Rule(there, "10.9.9.9/32").MarkActive("sg-9");
         db.Networks.AddRange(here, there);
-        db.FirewallRules.AddRange(EveryRuleSituation(here.Id));
-        db.FirewallRules.Add(elsewhere);
         await db.SaveChangesAsync();
 
         var ids = (await new FirewallRuleRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(r => r.ExternalId).OrderBy(x => x).ToList();
@@ -230,13 +221,10 @@ public class VmSnapshotFirewallRepositoryStateTests
     public async Task RuleReconcilable_LeavesOutTheRulesOfANetworkBeingDeleted()
     {
         using var db = NewDb();
-        var leaving = Network.CreateUnchecked(Tenant, "leaving", "vn-hcm-1");
-        leaving.MarkActive("ext-leaving", "10.0.0.0/24", "10.0.0.1");
+        var leaving = UsableNetwork("leaving", "vn-hcm-1");
+        Rule(leaving, "10.0.0.9/32").MarkActive("sg-9");
         leaving.RequestDelete();
-        var rule = Rule(leaving.Id, "10.0.0.9/32");
-        rule.MarkActive("sg-9");
         db.Networks.Add(leaving);
-        db.FirewallRules.Add(rule);
         await db.SaveChangesAsync();
 
         Assert.Empty(await new FirewallRuleRepository(db).ListReconcilableAsync("vn-hcm-1"));

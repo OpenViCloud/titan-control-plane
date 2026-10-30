@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.FirewallRule;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 
 namespace Titan.Application.Services.Networking.FirewallRule;
 
@@ -8,7 +8,7 @@ namespace Titan.Application.Services.Networking.FirewallRule;
 /// which must name the rule the same way for a request and its outcome to read as a pair.
 public static class FirewallRuleLabel
 {
-    public static string Describe(FirewallRuleAggregate rule)
+    public static string Describe(FirewallRuleEntity rule)
     {
         string ports = DescribePorts(rule.StartPort, rule.EndPort);
         string preposition = "from";

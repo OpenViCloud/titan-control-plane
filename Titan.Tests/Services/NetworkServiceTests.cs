@@ -6,7 +6,6 @@ using Titan.Application.Queries.Networking.Network;
 using Titan.Application.Queries.Networking.Network.Contracts;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.Network;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -21,7 +20,6 @@ public class NetworkServiceTests
     private static readonly Guid TenantId = Guid.NewGuid();
 
     private readonly Mock<INetworkRepository> _repo = new();
-    private readonly Mock<IFirewallRuleRepository> _firewallRepo = new();
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
@@ -30,7 +28,7 @@ public class NetworkServiceTests
     // Facade over the network command and query handlers so the tests keep one call shape; it proves
     // nothing on its own — the handlers underneath are the real ones.
     private NetworkFacade CreateService() =>
-        new(_repo.Object, _firewallRepo.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
+        new(_repo.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
 
     private readonly Titan.Application.Options.ClusterOptions _clusters = new()
     {
@@ -38,7 +36,7 @@ public class NetworkServiceTests
     };
 
     private sealed class NetworkFacade(
-        INetworkRepository repo, IFirewallRuleRepository firewallRepo, ITenantRepository tenantRepo,
+        INetworkRepository repo, ITenantRepository tenantRepo,
         Titan.Application.Options.ClusterOptions clusters,
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
@@ -59,7 +57,7 @@ public class NetworkServiceTests
                 .HandleAsync(new DeleteNetworkCommand(networkId), ct);
 
         public Task UpdateStatusAsync(Guid networkId, UpdateNetworkStatusRequest req, CancellationToken ct = default)
-            => new UpdateNetworkStatusCommandHandler(repo, firewallRepo, activity)
+            => new UpdateNetworkStatusCommandHandler(repo, activity)
                 .HandleAsync(new UpdateNetworkStatusCommand(networkId, req.Report, req.Exists, req.Status, req.ExternalId,
                     req.Cidr, req.Gateway, req.Reason, req.Detail), ct);
     }
@@ -275,12 +273,16 @@ public class NetworkServiceTests
     {
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork();
+        var rule = Rule(network);
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
         await CreateService().DeleteAsync(network.Id, default);
 
-        _firewallRepo.VerifyNoOtherCalls();
+        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
+        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
+        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
+        Assert.Null(rule.Transition);
     }
 
     [Fact]
@@ -537,7 +539,6 @@ public class NetworkServiceTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        _firewallRepo.Setup(f => f.ListLiveOfNetworkForUpdateAsync(network.Id, default)).ReturnsAsync([]);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -553,10 +554,9 @@ public class NetworkServiceTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        var enabled = Rule(network.Id);
-        var deleting = Rule(network.Id);
+        var enabled = Rule(network);
+        var deleting = Rule(network);
         deleting.RequestDelete();
-        _firewallRepo.Setup(f => f.ListLiveOfNetworkForUpdateAsync(network.Id, default)).ReturnsAsync([enabled, deleting]);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -574,10 +574,9 @@ public class NetworkServiceTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        var enabled = Rule(network.Id);
-        var deleting = Rule(network.Id);
+        var enabled = Rule(network);
+        var deleting = Rule(network);
         deleting.RequestDelete();
-        _firewallRepo.Setup(f => f.ListLiveOfNetworkForUpdateAsync(network.Id, default)).ReturnsAsync([enabled, deleting]);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -743,7 +742,6 @@ public class NetworkServiceTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        _firewallRepo.Setup(f => f.ListLiveOfNetworkForUpdateAsync(network.Id, default)).ReturnsAsync([]);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
 
@@ -1040,9 +1038,10 @@ public class NetworkServiceTests
         _tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default)).ReturnsAsync(tenant);
     }
 
-    private static FirewallRule Rule(Guid networkId)
+    // A rule of the network, as Incus holds it (titan-ops architecture/code-structure.md#child-entity).
+    private static FirewallRule Rule(Network network)
     {
-        var rule = FirewallRule.CreateUnchecked(networkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
+        var rule = network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
         rule.MarkActive($"acl/{Guid.NewGuid()}");
         return rule;
     }
