@@ -1,9 +1,12 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Platform.BackupRecord;
 
 // One backup seen in the bucket: a Postgres base backup, or a VM's or a volume's archive
 // (titan-ops features/backup/design.md#backup-status-reads-the-bucket).
 // A cache for the admin page: the bucket is the truth, and a refresh rebuilds every row from it.
-public class BackupRecord
+public class BackupRecord : AggregateRoot
 {
     public const string PostgresKind = "postgres";
     public const string VmKind = "vm";

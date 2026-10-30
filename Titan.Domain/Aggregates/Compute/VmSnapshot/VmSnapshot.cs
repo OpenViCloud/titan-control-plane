@@ -1,10 +1,11 @@
 using Titan.Domain.Aggregates.Platform.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Compute.VmSnapshot;
 
-public class VmSnapshot
+public class VmSnapshot : AggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid VmId { get; private set; }

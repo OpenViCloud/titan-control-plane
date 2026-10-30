@@ -1,6 +1,9 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Platform.Tenant;
 
-public class Member
+public class Member : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }

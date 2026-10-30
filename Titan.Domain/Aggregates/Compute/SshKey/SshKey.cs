@@ -1,11 +1,12 @@
 using Titan.Domain.Exceptions;
 using Tenant = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Compute.SshKey;
 
 /// A public key a tenant saved to put into VMs at create (titan-ops features/vm/design.md#ssh-key). Titan-only: no
 /// provider object, so no desired/current state; deleting it removes the row and leaves VMs that already have it.
-public class SshKey
+public class SshKey : AggregateRoot
 {
     public const int MaxNameLength = 64;
 

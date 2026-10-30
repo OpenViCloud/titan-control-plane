@@ -1,10 +1,11 @@
 using Titan.Domain.Aggregates.Platform.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Networking.FirewallRule;
 
-public class FirewallRule
+public class FirewallRule : AggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid NetworkId { get; private set; }

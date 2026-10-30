@@ -1,10 +1,11 @@
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Billing.UsageRecord;
 
 /// One bucket of one resource, never updated (titan-ops architecture/money-and-wallet.md#append-only-metering). A missed
 /// tick under-bills and never over-bills; that approximation is intended.
-public class UsageRecord
+public class UsageRecord : AggregateRoot
 {
     public Guid Id { get; private set; }
     public UsageResourceType ResourceType { get; private set; }
@@ -17,7 +18,7 @@ public class UsageRecord
     public string UsageType { get; private set; } = default!;    // "RUNNING_VM" | "ALLOCATED_STORAGE" | "SNAPSHOT_STORAGE"
     /// Copied at collect time: this is where price history lives, so changing an offering's price never
     /// reaches back (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
-    public Rate UnitPricePerHour { get; private set; }
+    public Rate UnitPricePerHour { get; private set; } = default!;
     /// The raw product for this one interval (rate × hours × quantity), not rounded: VND becomes whole once, on an invoice
     /// line (TotalVnd, titan-ops architecture/money-and-wallet.md#round-once).
     public decimal Cost { get; private set; }

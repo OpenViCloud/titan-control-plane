@@ -1,8 +1,11 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 
 /// A backend row: one VM of the load balancer's network (titan-ops features/load-balancer/design.md#backend-address).
 /// ExternalVmId is the instance name the worker reads the MAC from; IsDesired/IsApplied as on LoadBalancerListener.
-public class LoadBalancerBackend
+public class LoadBalancerBackend : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid LoadBalancerId { get; private set; }

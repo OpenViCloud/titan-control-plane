@@ -1,3 +1,4 @@
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Catalog.SnapshotOffering;
@@ -5,7 +6,7 @@ namespace Titan.Domain.Aggregates.Catalog.SnapshotOffering;
 // Not a choice a customer makes — a snapshot carries no offering id — but it exists so that price lives on
 // an offering with no exception (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering). One row,
 // well-known id. Per snapshot per hour, not per GB: Titan tracks no snapshot size.
-public class SnapshotOffering
+public class SnapshotOffering : AggregateRoot
 {
     /// The meter resolves this constant; a missing row is a system fault, not a zero price.
     public const string DefaultId = "standard";
@@ -14,7 +15,7 @@ public class SnapshotOffering
     public string Name { get; private set; } = default!;
 
     /// VND per snapshot per hour (titan-ops architecture/money-and-wallet.md#rate-value-object).
-    public Rate PricePerHour { get; private set; }
+    public Rate PricePerHour { get; private set; } = default!;
 
     private SnapshotOffering() { }
 

@@ -1,11 +1,12 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Platform.Tenant;
 
 // titan-ops architecture/tenancy-and-admin.md#quota-value-object. `{ get; private init; }`, not a positional record: a
 // positional record hands out a public `with`, and `quota with { MaxVms = -1 }` would skip Create's
 // validation (TenantQuotaTests.NoPropertySetter_IsPubliclyWritable).
-public sealed record TenantQuota
+public sealed record TenantQuota : ValueObject
 {
     public int MaxVms { get; private init; }
     public int MaxNetworks { get; private init; }

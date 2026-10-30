@@ -1,11 +1,12 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.Catalog.VmTemplate;
 
 /// One template in ONE cluster (titan-ops features/catalog/design.md#template-per-cluster): whether that cluster holds
 /// the image alias. Incus has no status word for an alias (titan-ops features/catalog/design.md#template-state-is-existence).
 /// A child of VmTemplate: "one provider id per cluster" is the template's invariant, so only the root reaches these methods.
-public class VmTemplateCluster
+public class VmTemplateCluster : ChildEntity
 {
     public Guid TemplateId { get; private set; }
     public string ClusterId { get; private set; } = default!;

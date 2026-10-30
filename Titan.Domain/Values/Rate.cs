@@ -1,4 +1,5 @@
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Values;
 
@@ -6,9 +7,11 @@ namespace Titan.Domain.Values;
 /// (titan-ops architecture/money-and-wallet.md#rate-value-object). A price is not a whole number of đồng, so it
 /// stays a decimal; there is no conversion to long and no Rate + Rate, so a price cannot be mistaken for a
 /// balance (MoneyAndRateTests).
-public readonly struct Rate : IEquatable<Rate>
+public sealed record Rate : ValueObject
 {
     public decimal PerUnit { get; private init; }
+
+    private Rate() { }
 
     /// Zero is a valid price (a free offering). Also runs when EF materialises a row, so a negative price in
     /// the database fails loudly at load instead of being served.
@@ -23,11 +26,5 @@ public readonly struct Rate : IEquatable<Rate>
     /// price is not rounded away before it is scaled and summed.
     public static decimal operator *(Rate rate, decimal hours) => rate.PerUnit * hours;
 
-    public static bool operator ==(Rate a, Rate b) => a.PerUnit == b.PerUnit;
-    public static bool operator !=(Rate a, Rate b) => a.PerUnit != b.PerUnit;
-
-    public bool Equals(Rate other) => PerUnit == other.PerUnit;
-    public override bool Equals(object? obj) => obj is Rate r && Equals(r);
-    public override int GetHashCode() => PerUnit.GetHashCode();
     public override string ToString() => PerUnit.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }

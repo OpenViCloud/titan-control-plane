@@ -1,5 +1,6 @@
 using Titan.Domain.Aggregates.Platform.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
@@ -8,7 +9,7 @@ namespace Titan.Domain.Aggregates.Compute.LoadBalancer;
 /// status word for it: existence only, one request waiting at a time (titan-ops features/load-balancer/design.md#lb-lifecycle).
 /// Listeners and backends carry both what was asked (IsDesired) and what Incus took (IsApplied), so an update that
 /// gives up can go back (titan-ops architecture/desired-and-current.md#abandoned-request).
-public class LoadBalancer
+public class LoadBalancer : AggregateRoot
 {
     public const int MaxListeners = 10;
     public const int MaxBackends = 20;

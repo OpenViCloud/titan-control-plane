@@ -1,10 +1,11 @@
 using System.Net;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Networking.Network;
 
 /// A network's public IPv6 (titan-ops infra/incus/design.md#ipv6-address-plan): /64 number Index of the cluster's /56 and
 /// the router address ::(0x100 + Index) of the first /64, the next hop of the static OVH route for that /64.
-public sealed record NetworkPublicIpv6
+public sealed record NetworkPublicIpv6 : ValueObject
 {
     public const int FirstIndex = 1;
     public const int LastIndex = 255;

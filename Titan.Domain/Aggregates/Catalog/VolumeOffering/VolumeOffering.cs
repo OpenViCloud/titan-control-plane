@@ -1,3 +1,4 @@
+using Titan.Domain.Model;
 using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Catalog.VolumeOffering;
@@ -7,7 +8,7 @@ namespace Titan.Domain.Aggregates.Catalog.VolumeOffering;
 // (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 //
 // IsCustomized = true means the customer supplies the size at create time; SizeGb is then unused.
-public class VolumeOffering
+public class VolumeOffering : AggregateRoot
 {
     public string Id { get; private set; } = default!;
     public string Name { get; private set; } = default!;
@@ -15,7 +16,7 @@ public class VolumeOffering
     public bool IsCustomized { get; private set; }
 
     /// VND per GB per hour (titan-ops architecture/money-and-wallet.md#rate-value-object).
-    public Rate PricePerGbPerHour { get; private set; }
+    public Rate PricePerGbPerHour { get; private set; } = default!;
 
     private VolumeOffering() { }
 

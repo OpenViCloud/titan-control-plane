@@ -1,11 +1,12 @@
 using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Billing.Invoice;
 
 /// One resource for the billed period. Amount is frozen at generation and never recomputed
 /// (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot). Every line is usage: wallet credit is spent
 /// when a person pays (titan-ops architecture/money-and-wallet.md#human-confirmed-debit), not netted into the invoice.
-public class InvoiceItem
+public class InvoiceItem : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid InvoiceId { get; private set; }

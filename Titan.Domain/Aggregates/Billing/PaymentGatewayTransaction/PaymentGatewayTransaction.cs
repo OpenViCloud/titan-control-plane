@@ -1,8 +1,11 @@
+
+using Titan.Domain.Model;
+
 namespace Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
 
 /// One row per SePay transaction id (the PK), so the DB dedupes a retried webhook, and every payment —
 /// matched or not — leaves a durable trail for reconciliation (titan-ops architecture/money-and-wallet.md#sepay-writer).
-public class PaymentGatewayTransaction
+public class PaymentGatewayTransaction : AggregateRoot
 {
     /// SePay's own transaction id.
     public string Id { get; private set; } = default!;
