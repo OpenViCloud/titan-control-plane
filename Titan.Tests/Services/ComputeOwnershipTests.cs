@@ -33,7 +33,7 @@ public class ComputeOwnershipTests
         _currentUser.Setup(c => c.TenantId).Returns(CallerTenant);
 
     private VolumeCmd.DeleteVolumeCommandHandler DeleteVolume() =>
-        new(_volumeRepo.Object, _volumeSnapshotRepo.Object, _currentUser.Object, _commands.Object, _activity);
+        new(_volumeRepo.Object, _currentUser.Object, _commands.Object, _activity);
 
     private VolumeCmd.DetachVolumeCommandHandler DetachVolume() =>
         new(_volumeRepo.Object, _currentUser.Object, _commands.Object, _activity);

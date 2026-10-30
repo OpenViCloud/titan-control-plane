@@ -1,7 +1,6 @@
 using Titan.Tests.Fakes;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 
@@ -37,9 +36,9 @@ public class VolumeStateMachineTests
             case Seed.AttachedElsewhere: v.MarkCreated("vol11"); v.MarkObserved(null, true); break;
             case Seed.DetachRequested:
                 v.MarkCreated("vol11"); v.Attach(AttachedVm); v.MarkObserved(AttachedVm.Id, false); v.Detach(); break;
-            case Seed.DeleteRequested: v.MarkCreated("vol11"); v.RequestDelete(liveSnapshotCount: 0); break;
+            case Seed.DeleteRequested: v.MarkCreated("vol11"); v.RequestDelete(); break;
             case Seed.NotFound: v.MarkCreated("vol11"); v.MarkNotFound(); break;
-            case Seed.Deleted: v.MarkCreated("vol11"); v.RequestDelete(liveSnapshotCount: 0); v.MarkDeleted(); break;
+            case Seed.Deleted: v.MarkCreated("vol11"); v.RequestDelete(); v.MarkDeleted(); break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
         return v;
@@ -348,7 +347,7 @@ public class VolumeStateMachineTests
         v.MarkDetachedByVmDelete(AttachedVm.Id);
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(v));
-        Assert.Equal("vol11", v.RequestDelete(liveSnapshotCount: 0));
+        Assert.Equal("vol11", v.RequestDelete());
     }
 
     [Theory]
@@ -377,7 +376,7 @@ public class VolumeStateMachineTests
     public void RequestDelete_WithAnId_NotAttached_IsAccepted_AndYieldsTheId(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Equal("vol11", v.RequestDelete(liveSnapshotCount: 0));
+        Assert.Equal("vol11", v.RequestDelete());
         Assert.Equal(DesiredExistence.Deleted, v.DesiredExistence);
         Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
@@ -395,7 +394,7 @@ public class VolumeStateMachineTests
     {
         var v = VolumeIn(seed);
         string before = Shape(v);
-        var ex = Assert.Throws<BusinessException>(() => v.RequestDelete(liveSnapshotCount: 0));
+        var ex = Assert.Throws<BusinessException>(() => v.RequestDelete());
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
         Assert.Equal(before, Shape(v));
     }
@@ -404,17 +403,36 @@ public class VolumeStateMachineTests
     public void RequestDelete_WithALiveSnapshot_Throws_AndLeavesTheVolumeAlone()
     {
         var v = VolumeIn(Seed.Available);
-        var ex = Assert.Throws<BusinessException>(() => v.RequestDelete(liveSnapshotCount: 1));
+        v.AddSnapshotUnchecked("live").MarkCreated("vol11/s1");
+        var ex = Assert.Throws<BusinessException>(() => v.RequestDelete());
         Assert.Equal("VOLUME_HAS_SNAPSHOTS", ex.Code);
         Assert.Equal("Exists/Exists/-/-/-", Shape(v));
+    }
+
+    // A snapshot that no longer counts (delete asked for, lost on Incus, create failed) does not hold the volume
+    // (titan-ops features/volume/design.md#delete-refused-with-snapshots).
+    [Fact]
+    public void RequestDelete_WithOnlySnapshotsThatDoNotCount_IsAccepted()
+    {
+        var v = VolumeIn(Seed.Available);
+        var leaving = v.AddSnapshotUnchecked("leaving");
+        leaving.MarkCreated("vol11/s1");
+        leaving.RequestDelete();
+        var lost = v.AddSnapshotUnchecked("lost");
+        lost.MarkCreated("vol11/s2");
+        lost.MarkNotFound();
+        v.AddSnapshotUnchecked("failed").MarkRequestFailed("could not create", "raw");
+
+        Assert.Equal("vol11", v.RequestDelete());
+        Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
 
     [Fact]
     public void MarkDeleted_FulfilsTheDeleteOnce()
     {
         var v = VolumeIn(Seed.DeleteRequested);
-        Assert.True(v.MarkDeleted());
-        Assert.False(v.MarkDeleted());
+        Assert.True(v.MarkDeleted().FulfilledVolumeDelete);
+        Assert.False(v.MarkDeleted().FulfilledVolumeDelete);
         Assert.Equal(CurrentExistence.Deleted, v.CurrentExistence);
         Assert.True(v.IsTerminal);
     }
@@ -439,7 +457,7 @@ public class VolumeStateMachineTests
         Assert.Equal("Exists/Exists/-/-/-", Shape(v));
         Assert.Equal("delete failed", v.RequestFailureReason);
 
-        v.RequestDelete(liveSnapshotCount: 0);
+        v.RequestDelete();
         Assert.NotEqual(firstIntent, v.PendingIntentId);
     }
 
@@ -509,7 +527,7 @@ public class VolumeStateMachineTests
         v.MarkNotFound();
         v.MarkRequestFailed("late", "late");
         v.MarkDetachedByVmDelete(AttachedVm.Id);
-        Assert.False(v.MarkDeleted());
+        Assert.False(v.MarkDeleted().FulfilledVolumeDelete);
         Assert.Equal("Deleted/Deleted/-/-/-", Shape(v));
         Assert.Equal("vol11", v.ExternalId);
     }
@@ -530,7 +548,7 @@ public class VolumeStateMachineTests
 
     private static VolumeSnapshot SnapshotIn(SnapSeed seed)
     {
-        var s = VolumeSnapshot.Create(VolumeIn(Seed.Available), TestTenant.WithRoomToSpare(), 0, "snap-1");
+        var s = VolumeIn(Seed.Available).AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1");
         switch (seed)
         {
             case SnapSeed.Creating: break;
@@ -694,7 +712,7 @@ public class VolumeStateMachineTests
     public void Snapshot_Create_OfAVolumeNotResting_Throws(Seed seed)
     {
         var ex = Assert.Throws<BusinessException>(
-            () => VolumeSnapshot.Create(VolumeIn(seed), TestTenant.WithRoomToSpare(), 0, "snap-1"));
+            () => VolumeIn(seed).AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1"));
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 }

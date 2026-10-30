@@ -1133,7 +1133,7 @@ public class VmServiceTests
         Assert.Null(volume.Transition);
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
-        volume.RequestDelete(liveSnapshotCount: 0);
+        volume.RequestDelete();
     }
 
     // Seen detached by the VM's Deleted whether or not a delete asked (a repeat that found it detaching, say). The

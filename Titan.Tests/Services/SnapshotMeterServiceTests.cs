@@ -9,7 +9,6 @@ using Titan.Application.Services.Billing.Metering;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.SnapshotOffering;
 using Titan.Domain.Aggregates.VmSnapshot;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;

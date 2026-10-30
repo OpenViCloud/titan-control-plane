@@ -1,7 +1,6 @@
 using Titan.Domain.Aggregates.SshKey;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -48,9 +47,21 @@ public class QuotaInFactoryTests
 
     private static VolumeSnapshot BackedUpSnapshot(Tenant t)
     {
-        var s = VolumeSnapshot.Create(AllocatedVolume(t.Id), t, 0, "snap-1");
+        var s = AllocatedVolume(t.Id).AddSnapshot(t, "snap-1");
         s.MarkCreated("5");
         return s;
+    }
+
+    // A volume Incus has created holding `counting` snapshots that count toward the cap: the volume counts its own
+    // snapshots (titan-ops architecture/code-structure.md#child-entity).
+    private static Volume AllocatedVolumeWithSnapshots(Guid tenantId, int counting)
+    {
+        var v = AllocatedVolume(tenantId);
+        for (int i = 0; i < counting; i++)
+        {
+            v.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"11/s{i}");
+        }
+        return v;
     }
 
     private static Vm NewVm(Tenant t, int activeVms) =>
@@ -118,7 +129,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxVolSnaps: 2);
         Assert.Equal("VOLUME_SNAPSHOT_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => VolumeSnapshot.Create(AllocatedVolume(t.Id), t, 2, "snap-1")).Code);
+            () => AllocatedVolumeWithSnapshots(t.Id, 2).AddSnapshot(t, "snap-1")).Code);
     }
 
     [Fact]
@@ -152,7 +163,7 @@ public class QuotaInFactoryTests
         Assert.NotNull(Volume.Create(t, 3, "vol-1", "cluster-a", "std", 20));
         Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
         Assert.NotNull(VmSnapshotAggregate.Create(RunningVm(t.Id), t, 2, "snap-1"));
-        Assert.NotNull(VolumeSnapshot.Create(AllocatedVolume(t.Id), t, 1, "snap-1"));
+        Assert.NotNull(AllocatedVolumeWithSnapshots(t.Id, 1).AddSnapshot(t, "snap-1"));
         Assert.NotNull(UsableNetworkWithRules(t.Id, 4).AddFirewallRule(t, FirewallDirection.Ingress,
             FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));
         Assert.NotNull(SshKey.Create(t, 3, "laptop", SshPublicKeyTests.Ed25519));

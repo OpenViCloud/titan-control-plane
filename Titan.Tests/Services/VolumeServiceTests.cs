@@ -7,7 +7,6 @@ using VolumeQry = Titan.Application.Queries.Compute.Volume;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
@@ -23,7 +22,6 @@ public class VolumeServiceTests
     private readonly Mock<IVolumeRepository> _repo = new();
     private readonly Mock<IVmRepository> _vmRepo = new();
     // Moq answers 0 to an unset count: no live snapshot unless a test says so.
-    private readonly Mock<IVolumeSnapshotRepository> _snapshotRepo = new();
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
@@ -42,14 +40,13 @@ public class VolumeServiceTests
     // Facade over the six volume handlers so the tests keep one call shape; every method forwards to
     // exactly one handler and adds nothing.
     private VolumeFacade CreateService() => new(
-        _repo.Object, _offerings, _snapshotRepo.Object, _vmRepo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object, _activity);
+        _repo.Object, _offerings, _vmRepo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object, _activity);
 
     private static readonly Titan.Application.Options.ClusterOptions Clusters = new Titan.Application.Options.ClusterOptions { Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }] };
 
     private sealed class VolumeFacade(
         IVolumeRepository repo,
         Titan.Domain.Repositories.IVolumeOfferingRepository offeringRepo,
-        IVolumeSnapshotRepository snapshotRepo,
         IVmRepository vmRepo,
         ITenantRepository tenantRepo,
         ICurrentUser currentUser,
@@ -69,14 +66,14 @@ public class VolumeServiceTests
                 .HandleAsync(new DetachVolumeCommand(volumeId), ct);
 
         public Task DeleteAsync(Guid volumeId, CancellationToken ct = default)
-            => new VolumeCmd.DeleteVolumeCommandHandler(repo, snapshotRepo, currentUser, commands, activity)
+            => new VolumeCmd.DeleteVolumeCommandHandler(repo, currentUser, commands, activity)
                 .HandleAsync(new DeleteVolumeCommand(volumeId), ct);
 
         public Task<List<VolumeQueryResult>> ListAsync(CancellationToken ct = default)
             => new VolumeQry.ListVolumesQueryHandler(repo, currentUser).HandleAsync(new ListVolumesQuery(), ct);
 
         public Task UpdateStatusAsync(Guid volumeId, UpdateVolumeStatusBody body, CancellationToken ct = default)
-            => new VolumeCmd.UpdateVolumeStatusCommandHandler(repo, snapshotRepo, vmRepo, activity)
+            => new VolumeCmd.UpdateVolumeStatusCommandHandler(repo, vmRepo, activity)
                 .HandleAsync(new UpdateVolumeStatusCommand(volumeId, body.Report, body.Exists, body.AttachedTo,
                     body.ExternalId, body.Reason, body.Detail), ct);
     }
@@ -386,8 +383,8 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-3");
         string before = Shape(volume);
+        volume.AddSnapshotUnchecked("live").MarkCreated("cs-vol-3/s1");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
-        _snapshotRepo.Setup(r => r.CountActiveByVolumeIdAsync(volume.Id, It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateService().DeleteAsync(volume.Id, default));
 
@@ -520,12 +517,10 @@ public class VolumeServiceTests
 
     // ── Callbacks (titan-ops features/volume/design.md#volume-reports) ─────────────
 
-    // No snapshot of the volume is live unless a test says so: a Deleted report reads them.
+    // The volume carries its snapshots (titan-ops architecture/code-structure.md#child-entity): none unless a test adds one.
     private void SetupVolume(Volume volume)
     {
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
-        _snapshotRepo.Setup(r => r.ListLiveOfVolumeForUpdateAsync(volume.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<VolumeSnapshot>());
     }
 
     // The tenant's VMs the callback resolves instance names against (titan-ops features/volume/design.md#attachment-from-used-by).
@@ -764,14 +759,12 @@ public class VolumeServiceTests
     {
         var volume = MakeVolume(VolumeSeed.Deleting);
         SetupVolume(volume);
-        var lost = VolumeSnapshot.CreateUnchecked(volume.Id, TenantId, "lost");
+        var lost = volume.AddSnapshotUnchecked("lost");
         lost.MarkCreated("vol/s1");
         lost.MarkNotFound();
-        var leaving = VolumeSnapshot.CreateUnchecked(volume.Id, TenantId, "leaving");
+        var leaving = volume.AddSnapshotUnchecked("leaving");
         leaving.MarkCreated("vol/s2");
         leaving.RequestDelete();
-        _snapshotRepo.Setup(r => r.ListLiveOfVolumeForUpdateAsync(volume.Id, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<VolumeSnapshot> { lost, leaving });
 
         await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Deleted"));
 
@@ -958,11 +951,11 @@ public class VolumeServiceTests
                 break;
             case VolumeSeed.Deleting:
                 vol.MarkCreated(externalId);
-                vol.RequestDelete(liveSnapshotCount: 0);
+                vol.RequestDelete();
                 break;
             case VolumeSeed.Deleted:
                 vol.MarkCreated(externalId);
-                vol.RequestDelete(liveSnapshotCount: 0);
+                vol.RequestDelete();
                 vol.MarkDeleted();
                 break;
         }

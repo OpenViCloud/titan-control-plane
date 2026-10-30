@@ -17,7 +17,6 @@ using Titan.Domain.Aggregates.ApiToken;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Aggregates.SnapshotOffering;
 using Titan.Domain.Aggregates.VmOffering;
 using Titan.Domain.Aggregates.VmTemplate;

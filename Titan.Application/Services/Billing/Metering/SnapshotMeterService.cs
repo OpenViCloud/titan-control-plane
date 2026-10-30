@@ -3,7 +3,6 @@ using Titan.Application.Options;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.SnapshotOffering;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Billing.Metering;

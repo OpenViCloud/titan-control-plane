@@ -9,10 +9,22 @@ namespace Titan.Infrastructure.Repositories;
 public class VolumeRepository(TitanDbContext db) : IVolumeRepository
 {
     public async Task<Volume?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
-        await db.Volumes.FirstOrDefaultAsync(v => v.Id == id, ct);
+        await db.Volumes.Include(v => v.Snapshots).FirstOrDefaultAsync(v => v.Id == id, ct);
+
+    // Lock first, load second, as NetworkRepository.FindByIdForUpdateAsync (titan-ops architecture/code-structure.md#child-entity).
+    public async Task<Volume?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.volumes WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
+    public async Task<Volume?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) =>
+        await db.Volumes.Include(v => v.Snapshots)
+            .FirstOrDefaultAsync(v => v.Snapshots.Any(s => s.Id == snapshotId), ct);
 
     public async Task<List<Volume>> ListAttachedToVmAsync(Guid vmId, CancellationToken ct = default) =>
         await db.Volumes
+            .Include(v => v.Snapshots)
             .Where(v => (v.CurrentAttachedVmId == vmId || v.DesiredAttachedVmId == vmId)
                         && v.CurrentExistence != CurrentExistence.Deleted)
             .ToListAsync(ct);

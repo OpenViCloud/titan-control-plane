@@ -1,4 +1,4 @@
-using VolumeSnapshotAggregate = Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot;
+using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;
 
@@ -21,6 +21,6 @@ public record ReconcilableVolumeQueryResult(
 // VolumeId is the parent volume: the snapshot's callback route needs it.
 public record ReconcilableVolumeSnapshotQueryResult(Guid Id, Guid VolumeId, string ExternalId, string CurrentExistence)
 {
-    public static ReconcilableVolumeSnapshotQueryResult From(VolumeSnapshotAggregate s) =>
+    public static ReconcilableVolumeSnapshotQueryResult From(VolumeSnapshotEntity s) =>
         new(s.Id, s.VolumeId, s.RequireExternalId(), s.CurrentExistence.ToString());
 }

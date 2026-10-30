@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.VolumeSnapshot;
-using VolumeSnapshotAggregate = Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot;
+using Titan.Domain.Aggregates.Volume;
+using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.VolumeSnapshot.Contracts;
@@ -19,7 +19,7 @@ public record VolumeSnapshotQueryResult(
     string? RequestFailureReason,
     DateTimeOffset? RequestFailedAt)
 {
-    public static VolumeSnapshotQueryResult From(VolumeSnapshotAggregate s) =>
+    public static VolumeSnapshotQueryResult From(VolumeSnapshotEntity s) =>
         new(s.Id, s.VolumeId, s.Name, s.CurrentExistence, s.DesiredExistence,
             s.Transition, s.ExternalId, s.CreatedAt, s.RequestFailureReason, s.RequestFailedAt);
 }

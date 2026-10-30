@@ -1,15 +1,17 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
-using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
 // Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
 // observation converges). Authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the aggregate
 // says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
-public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeSnapshotRepository snapshotRepo, IActivityRecorder activity)
+public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRepo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateVolumeSnapshotStatusCommand command, CancellationToken ct = default)
     {
@@ -37,11 +39,14 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeSnapshotRepository 
                 throw new BadRequestException("INVALID_STATUS", $"Unknown volume snapshot report: '{req.Report}'");
         }
 
-        var snapshot = await snapshotRepo.FindByIdAsync(command.SnapshotId, ct)
-            ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        if (snapshot.VolumeId != command.VolumeId)
+        // The snapshot is reached through its volume (titan-ops architecture/code-structure.md#child-entity); a snapshot no
+        // volume has, or one under another volume than the route names, is not found.
+        VolumeAggregate? volume = await volumeRepo.FindBySnapshotIdAsync(command.SnapshotId, ct);
+        if (volume == null || volume.Id != command.VolumeId)
+        {
             throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
+        }
+        VolumeSnapshotEntity snapshot = volume.RequireSnapshot(command.SnapshotId);
 
         string? outcome = null;
         switch (req.Report)
@@ -49,36 +54,36 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeSnapshotRepository 
             case "Observed":
                 if (req.Exists == true)
                 {
-                    outcome = CreatedOutcome(snapshot.MarkObserved());
+                    outcome = CreatedOutcome(volume.MarkSnapshotObserved(snapshot.Id));
                 }
                 else
                 {
-                    snapshot.MarkNotFound();
+                    volume.MarkSnapshotNotFound(snapshot.Id);
                 }
                 break;
             case "Created":
-                outcome = CreatedOutcome(snapshot.MarkCreated(req.ExternalId!));
+                outcome = CreatedOutcome(volume.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
                 break;
             case "RequestFailed":
                 // A give-up carrying the id found the snapshot on Incus: the create happened.
                 bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && snapshot.ExternalId == null;
                 if (carriesAnIdNotYetStored)
                 {
-                    outcome = CreatedOutcome(snapshot.MarkCreated(req.ExternalId!));
+                    outcome = CreatedOutcome(volume.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
                 }
                 // A delete Incus refused gives the snapshot back (titan-ops architecture/desired-and-current.md#abandoned-request).
                 bool deleteWasWaiting = snapshot.Transition == VolumeSnapshotTransition.Deleting;
                 if (deleteWasWaiting)
                 {
-                    snapshot.AbandonRequest(req.Reason, req.Detail);
+                    volume.AbandonSnapshotRequest(snapshot.Id, req.Reason, req.Detail);
                 }
                 else
                 {
-                    snapshot.MarkRequestFailed(req.Reason, req.Detail);
+                    volume.MarkSnapshotRequestFailed(snapshot.Id, req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
-                bool deletedNow = snapshot.MarkDeleted();
+                bool deletedNow = volume.MarkSnapshotDeleted(snapshot.Id);
                 if (deletedNow)
                 {
                     outcome = "volume_snapshot.deleted";
@@ -91,7 +96,7 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeSnapshotRepository 
             activity.StageOutcome(snapshot.TenantId, outcome, "volume_snapshot", snapshot.Id, snapshot.Name);
         }
 
-        await snapshotRepo.SaveAsync(snapshot, ct);
+        await volumeRepo.SaveAsync(ct);
     }
 
     private static string? CreatedOutcome(bool fulfilledTheCreate)

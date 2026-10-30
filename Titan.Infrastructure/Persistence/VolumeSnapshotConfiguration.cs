@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.Volume;
 
 namespace Titan.Infrastructure.Persistence;
 
@@ -10,7 +10,9 @@ public class VolumeSnapshotConfiguration : IEntityTypeConfiguration<VolumeSnapsh
     {
         builder.ToTable("volume_snapshots");
         builder.HasKey(s => s.Id);
-        builder.Property(s => s.Id).HasColumnName("id");
+        // The aggregate sets the id. Left "generated on add", EF reads a snapshot added to a tracked volume as one
+        // already saved and updates it: 0 rows (same trap as LoadBalancerListener and FirewallRule).
+        builder.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(s => s.VolumeId).HasColumnName("volume_id");
         builder.Property(s => s.TenantId).HasColumnName("tenant_id");
         builder.Property(s => s.Name).HasColumnName("name").IsRequired().HasMaxLength(100);

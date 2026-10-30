@@ -1,15 +1,14 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
-using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using VolumeSnapshotAggregate = Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
 public class CreateVolumeSnapshotCommandHandler(
-    IVolumeSnapshotRepository snapshotRepo,
     IVolumeRepository volumeRepo,
     ITenantRepository tenantRepo,
     ICurrentUser currentUser,
@@ -20,19 +19,27 @@ public class CreateVolumeSnapshotCommandHandler(
     {
         var callerId = currentUser.RequireTenantId();
         var volumeId = command.VolumeId;
-        var volume = await ComputeOwnership.RequireVolumeAsync(volumeRepo, callerId, volumeId, ct);
+
+        // Locked: the per-volume cap is counted on the snapshots loaded with the volume, so a second request at the
+        // cap waits here and then counts this one (titan-ops architecture/code-structure.md#child-entity). A foreign
+        // volume answers 404 like a missing one (titan-ops architecture/http-contract.md#tenant-scoping).
+        VolumeAggregate volume = await volumeRepo.FindByIdForUpdateAsync(volumeId, ct)
+            ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
+        if (volume.TenantId != callerId)
+            throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
-        var activeSnapshotCount = await snapshotRepo.CountActiveByVolumeIdAsync(volumeId, ct);
 
-        var snapshot = VolumeSnapshotAggregate.Create(volume, tenant, activeSnapshotCount, command.Name); // volume state AND quota
-        var externalVolumeId = volume.BeginSnapshot();                    // same rule, and hands over the id
-        activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the insert
+        // The volume checks itself (resting on Incus), checks the cap and adds the snapshot in one call; the provider
+        // id is read after, from a volume that just said it is snapshottable.
+        VolumeSnapshotEntity snapshot = volume.AddSnapshot(tenant, command.Name);
+        var externalVolumeId = volume.BeginSnapshot();
+        activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, volumeId, externalVolumeId, projectName,
             volume.ClusterId, ct);
-        await snapshotRepo.SaveAsync(snapshot, ct);
+        await volumeRepo.SaveAsync(ct);
 
         return new CreateVolumeSnapshotCommandResult(snapshot.Id);
     }

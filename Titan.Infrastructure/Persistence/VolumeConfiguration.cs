@@ -39,5 +39,14 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(v => v.TenantId);
+
+        // The snapshots are the volume's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
+        // through the backing field. Restrict, not cascade: no row of either table is ever deleted.
+        builder.HasMany(v => v.Snapshots)
+            .WithOne()
+            .HasForeignKey(s => s.VolumeId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(v => v.Snapshots).UsePropertyAccessMode(PropertyAccessMode.Field);
+        builder.Ignore(v => v.SnapshotQuotaUsage);
     }
 }
