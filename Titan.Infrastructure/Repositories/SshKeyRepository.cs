@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.SshKey;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

@@ -1,7 +1,7 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Application.Commands.Compute.Vm;
@@ -16,7 +16,7 @@ public class RenameVmCommandHandler(IVmRepository repo, ICurrentUser currentUser
     public async Task HandleAsync(RenameVmCommand command, CancellationToken ct = default)
     {
         Guid tenantId = currentUser.RequireTenantId();
-        Domain.Aggregates.Compute.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, command.VmId, ct);
+        Domain.Aggregates.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, command.VmId, ct);
 
         // The name asked for is already the name — done, nothing to write
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).

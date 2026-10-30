@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Platform.BackupObservation;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.BackupObservation;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

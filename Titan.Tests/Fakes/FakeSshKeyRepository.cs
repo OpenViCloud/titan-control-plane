@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Compute.SshKey;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

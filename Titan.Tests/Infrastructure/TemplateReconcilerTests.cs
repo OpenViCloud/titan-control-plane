@@ -2,7 +2,7 @@ using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Titan.Application.Queries.Catalog.VmTemplate;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;

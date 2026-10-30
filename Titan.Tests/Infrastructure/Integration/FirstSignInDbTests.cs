@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Titan.Application.Commands.Billing.Wallet;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Auth;
 using Titan.Infrastructure.Persistence;

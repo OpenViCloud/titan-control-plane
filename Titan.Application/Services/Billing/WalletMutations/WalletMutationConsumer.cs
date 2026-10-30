@@ -1,9 +1,9 @@
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using InvoiceAggregate = Titan.Domain.Aggregates.Billing.Invoice.Invoice;
+using Titan.Domain.Repositories;
+using InvoiceAggregate = Titan.Domain.Aggregates.Invoice.Invoice;
 
 namespace Titan.Application.Services.Billing.WalletMutations;
 

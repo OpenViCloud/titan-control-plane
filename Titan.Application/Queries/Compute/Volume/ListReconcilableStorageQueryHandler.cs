@@ -1,7 +1,7 @@
 using Titan.Application.Queries.Compute.Volume.Contracts;
-using Titan.Domain.Repositories.Compute;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
-using VolumeAggregate = Titan.Domain.Aggregates.Compute.Volume.Volume;
+using Titan.Domain.Repositories;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Queries.Compute.Volume;
 

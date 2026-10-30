@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Platform.BackupObservation;
+using Titan.Domain.Aggregates.BackupObservation;
 
 namespace Titan.Infrastructure.Persistence;
 

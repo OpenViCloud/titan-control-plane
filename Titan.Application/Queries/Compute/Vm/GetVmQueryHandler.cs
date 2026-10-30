@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 using Titan.Application.Queries.Compute.Vm.Contracts;
 
 namespace Titan.Application.Queries.Compute.Vm;

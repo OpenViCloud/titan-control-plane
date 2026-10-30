@@ -5,12 +5,11 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Queries.Networking.FirewallRule;
 using Titan.Application.Queries.Networking.FirewallRule.Contracts;
 using Titan.Infrastructure.Endpoints.Network;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
-using Titan.Domain.Repositories.Platform;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
@@ -18,7 +17,7 @@ namespace Titan.Tests.Services;
 public class FirewallServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
-    private static readonly string Project = Titan.Domain.Aggregates.Platform.Tenant.Tenant.ProjectNameFor(TenantId);
+    private static readonly string Project = Titan.Domain.Aggregates.Tenant.Tenant.ProjectNameFor(TenantId);
     private static readonly Guid NetworkId = Guid.NewGuid();
 
     private readonly Mock<IFirewallRuleRepository> _repo = new();

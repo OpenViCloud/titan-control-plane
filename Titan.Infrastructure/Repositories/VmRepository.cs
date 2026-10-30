@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 

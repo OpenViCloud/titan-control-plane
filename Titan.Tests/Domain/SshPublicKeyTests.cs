@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Compute.SshKey;
+using Titan.Domain.Aggregates.SshKey;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

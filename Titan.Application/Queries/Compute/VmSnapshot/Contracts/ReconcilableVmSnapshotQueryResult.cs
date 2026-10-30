@@ -1,4 +1,4 @@
-using VmSnapshotAggregate = Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot;
+using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 

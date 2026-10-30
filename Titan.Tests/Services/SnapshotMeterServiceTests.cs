@@ -1,16 +1,16 @@
 using Titan.Domain.Values;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.Vm;
 using Microsoft.Extensions.Options;
 using Moq;
 using Titan.Application.Options;
 using Titan.Application.Services.Billing;
 using Titan.Application.Services.Billing.Metering;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Catalog.SnapshotOffering;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.SnapshotOffering;
+using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

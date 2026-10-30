@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.LoadBalancer;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.LoadBalancer;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;

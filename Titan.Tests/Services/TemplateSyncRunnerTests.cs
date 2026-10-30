@@ -4,8 +4,8 @@ using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Services.Catalog.VmTemplate;
 using Titan.Application.Commands.Catalog.VmTemplate;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

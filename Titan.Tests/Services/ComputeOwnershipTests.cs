@@ -4,10 +4,9 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Application.Queries.Compute.VolumeSnapshot.Contracts;
 using VolumeCmd = Titan.Application.Commands.Compute.Volume;
 using VolSnapQry = Titan.Application.Queries.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

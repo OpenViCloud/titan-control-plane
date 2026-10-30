@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Compute.Volume;
-using VolumeAggregate = Titan.Domain.Aggregates.Compute.Volume.Volume;
+using Titan.Domain.Aggregates.Volume;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;

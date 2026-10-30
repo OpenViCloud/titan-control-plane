@@ -2,12 +2,12 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
+using Titan.Domain.Aggregates.FirewallRule;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.Networking.FirewallRule.FirewallRule;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Repositories;
+using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 

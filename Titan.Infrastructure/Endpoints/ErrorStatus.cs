@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Infrastructure.Endpoints;

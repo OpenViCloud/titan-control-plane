@@ -1,6 +1,6 @@
 using Titan.Tests.Fakes;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 

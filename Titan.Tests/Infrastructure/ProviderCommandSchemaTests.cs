@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;

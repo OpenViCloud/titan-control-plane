@@ -2,11 +2,9 @@ using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
-using VolumeAggregate = Titan.Domain.Aggregates.Compute.Volume.Volume;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Repositories;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.Volume;
 

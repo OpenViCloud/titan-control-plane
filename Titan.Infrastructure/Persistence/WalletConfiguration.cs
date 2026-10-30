@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.Wallet;
 
 namespace Titan.Infrastructure.Persistence;
 

@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.TopUp;
+using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

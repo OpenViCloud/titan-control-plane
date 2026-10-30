@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 
 namespace Titan.Application.Queries.Platform.Tenant.Contracts;
 

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.Legal.Contracts;
 using Titan.Application.Services.Platform.Legal;
-using Titan.Domain.Aggregates.Platform.Acceptance;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Acceptance;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Platform.Legal;
 

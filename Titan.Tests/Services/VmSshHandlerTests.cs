@@ -4,10 +4,10 @@ using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Application.Queries.Compute.Vm;
 using Titan.Application.Queries.Compute.Vm.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

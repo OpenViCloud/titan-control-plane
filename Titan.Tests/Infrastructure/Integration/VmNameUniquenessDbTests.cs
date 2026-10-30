@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

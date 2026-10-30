@@ -1,8 +1,8 @@
 using Titan.Application.Commands.Billing.Wallet.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using WalletAggregate = Titan.Domain.Aggregates.Billing.Wallet.Wallet;
+using Titan.Domain.Repositories;
+using WalletAggregate = Titan.Domain.Aggregates.Wallet.Wallet;
 
 namespace Titan.Application.Commands.Billing.Wallet;
 

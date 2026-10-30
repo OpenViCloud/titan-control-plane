@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Aggregates.UsageRecord;
 
 namespace Titan.Tests.Domain;
 

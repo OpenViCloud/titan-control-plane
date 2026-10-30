@@ -1,9 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VolumeOffering;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;

@@ -88,17 +88,17 @@ public class StateTransitionOwnershipTests
     // Aggregates with a Status but no IsTerminal, i.e. whose terminal state is not absorbing.
     private static readonly Dictionary<string, string> NoTerminalGuardAllowlist = new()
     {
-        ["Platform/Tenant"] = "no terminal state exists: a tenant is never deleted, only suspended, " +
+        ["Tenant/Tenant"] = "no terminal state exists: a tenant is never deleted, only suspended, " +
             "and Suspend()/RequestActivation()/Approve() each validate internally",
-        ["Billing/Invoice"] = "no story yet (Billing): Paid/Settled are terminal and guarded by the intent methods themselves",
-        ["Billing/TopUp"] = "no story yet (Billing): Confirmed/Failed are terminal and guarded by Confirm()/Fail()",
+        ["Invoice/Invoice"] = "no story yet (Billing): Paid/Settled are terminal and guarded by the intent methods themselves",
+        ["TopUp/TopUp"] = "no story yet (Billing): Confirmed/Failed are terminal and guarded by Confirm()/Fail()",
         // A promo TopUp is BORN Confirmed via GrantPromo() — a factory, not a transition — so it adds no
         // status mutation to guard here; Confirm()/Fail() still refuse it (already terminal).
-        ["Platform/ProviderCommand"] = "Done/Failed are not absorbing on purpose: a repeat of the key reopens a " +
+        ["ProviderCommand/ProviderCommand"] = "Done/Failed are not absorbing on purpose: a repeat of the key reopens a " +
             "finished row per its Rerun rule (docs/architecture/provider-and-worker.md#provider-command-key)",
-        ["Platform/BackupRecord"] = "a row of the cache the backup refresh keeps from the bucket, not a state machine: Complete or " +
+        ["BackupRecord/BackupRecord"] = "a row of the cache the backup refresh keeps from the bucket, not a state machine: Complete or " +
             "Incomplete only reports what barman wrote, and the next refresh rewrites it from the bucket",
-        ["Billing/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
+        ["PaymentGatewayTransaction/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
             + "mutated again — there is no observation path into this aggregate",
     };
 
@@ -228,7 +228,7 @@ public class StateTransitionOwnershipTests
 
         foreach (var (file, src) in ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates")))
         {
-            var key = $"{Directory.GetParent(file)!.Parent!.Name}/{Path.GetFileNameWithoutExtension(file)}";
+            var key = $"{Directory.GetParent(file)!.Name}/{Path.GetFileNameWithoutExtension(file)}";
             if (!src.Contains("public bool IsTerminal")) continue;
             declared.Add(key);
 
@@ -257,7 +257,7 @@ public class StateTransitionOwnershipTests
             // still has a state that must absorb; dropping it here would shrink the scan without a signal.
             .Where(t => Regex.IsMatch(t.Source, @"public (?:\w+Status|string) Status \{ get; private set; \}")
                      || Regex.IsMatch(t.Source, @"public \w+State\?? CurrentState \{ get; private set; \}"))
-            .Select(t => $"{Directory.GetParent(t.File)!.Parent!.Name}/{Path.GetFileNameWithoutExtension(t.File)}")
+            .Select(t => $"{Directory.GetParent(t.File)!.Name}/{Path.GetFileNameWithoutExtension(t.File)}")
             .ToList();
 
         var unguarded = withStatus.Except(declared).Where(k => !NoTerminalGuardAllowlist.ContainsKey(k)).OrderBy(k => k).ToList();

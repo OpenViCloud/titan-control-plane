@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;

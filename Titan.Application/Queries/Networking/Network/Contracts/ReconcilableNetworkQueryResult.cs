@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Networking.Network;
-using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
+using Titan.Domain.Aggregates.Network;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Queries.Networking.Network.Contracts;
 

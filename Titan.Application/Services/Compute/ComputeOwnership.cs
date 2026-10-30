@@ -1,10 +1,10 @@
-using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Compute;
 

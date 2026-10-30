@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

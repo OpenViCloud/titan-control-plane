@@ -2,12 +2,11 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 // Inside this namespace the bare name `VmSnapshot` binds to the namespace, not to the aggregate
 // (CS0118, titan-ops architecture/code-structure.md#aggregate-alias). Same for `Vm`. The aliases say which one is meant.
-using VmSnapshotAggregate = Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 

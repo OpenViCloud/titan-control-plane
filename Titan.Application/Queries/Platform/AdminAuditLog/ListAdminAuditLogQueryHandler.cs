@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Platform.AdminAuditLog.Contracts;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Platform.AdminAuditLog;
 

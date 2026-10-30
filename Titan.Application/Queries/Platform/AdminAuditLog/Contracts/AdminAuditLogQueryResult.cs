@@ -1,4 +1,4 @@
-using AdminAuditLogAggregate = Titan.Domain.Aggregates.Platform.AdminAuditLog.AdminAuditLog;
+using AdminAuditLogAggregate = Titan.Domain.Aggregates.AdminAuditLog.AdminAuditLog;
 
 namespace Titan.Application.Queries.Platform.AdminAuditLog.Contracts;
 

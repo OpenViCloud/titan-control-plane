@@ -5,8 +5,8 @@ using Titan.Application.Commands.Platform.Legal;
 using Titan.Application.Commands.Platform.Legal.Contracts;
 using Titan.Application.Queries.Platform.Legal;
 using Titan.Application.Queries.Platform.Legal.Contracts;
-using Titan.Domain.Aggregates.Platform.Acceptance;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Acceptance;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

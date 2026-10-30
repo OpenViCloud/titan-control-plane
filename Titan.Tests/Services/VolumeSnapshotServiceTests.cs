@@ -1,17 +1,16 @@
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Application.Queries.Compute.VolumeSnapshot.Contracts;
 using VolSnapCmd = Titan.Application.Commands.Compute.VolumeSnapshot;
 using VolSnapQry = Titan.Application.Queries.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
-using Titan.Domain.Repositories.Platform;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

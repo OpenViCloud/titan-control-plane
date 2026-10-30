@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Platform.Tenant.Contracts;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Platform.Tenant;
 

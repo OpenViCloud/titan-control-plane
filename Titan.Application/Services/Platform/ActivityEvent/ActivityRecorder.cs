@@ -1,7 +1,7 @@
 using Titan.Application.Abstractions;
-using Titan.Domain.Aggregates.Platform.ActivityEvent;
-using Titan.Domain.Repositories.Platform;
-using ActivityEventAggregate = Titan.Domain.Aggregates.Platform.ActivityEvent.ActivityEvent;
+using Titan.Domain.Aggregates.ActivityEvent;
+using Titan.Domain.Repositories;
+using ActivityEventAggregate = Titan.Domain.Aggregates.ActivityEvent.ActivityEvent;
 
 namespace Titan.Application.Services.Platform.ActivityEvent;
 

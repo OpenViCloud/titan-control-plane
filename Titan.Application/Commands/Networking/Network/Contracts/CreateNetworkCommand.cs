@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.Network;
 
 namespace Titan.Application.Commands.Networking.Network.Contracts;
 

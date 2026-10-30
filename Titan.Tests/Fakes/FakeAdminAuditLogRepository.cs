@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.AdminAuditLog;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

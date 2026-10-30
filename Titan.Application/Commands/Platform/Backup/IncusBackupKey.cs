@@ -1,5 +1,5 @@
 using System.Globalization;
-using Titan.Domain.Aggregates.Platform.BackupRecord;
+using Titan.Domain.Aggregates.BackupRecord;
 
 namespace Titan.Application.Commands.Platform.Backup;
 

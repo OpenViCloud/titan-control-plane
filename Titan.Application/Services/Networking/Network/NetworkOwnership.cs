@@ -1,7 +1,7 @@
-using Titan.Domain.Aggregates.Networking.Network;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
-using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
+using Titan.Domain.Repositories;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Services.Networking.Network;
 

@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Catalog.VmTemplate;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Services.Catalog.VmTemplate;

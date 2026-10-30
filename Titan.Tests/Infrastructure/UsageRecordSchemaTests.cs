@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-using Titan.Domain.Aggregates.Billing.UsageRecord;
+using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;

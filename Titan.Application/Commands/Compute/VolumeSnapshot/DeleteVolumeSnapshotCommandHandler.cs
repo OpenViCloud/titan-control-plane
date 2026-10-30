@@ -1,9 +1,9 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Application.Services.Compute;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Repositories.Compute;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Repositories;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 

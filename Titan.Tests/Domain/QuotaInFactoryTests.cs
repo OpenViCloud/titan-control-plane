@@ -1,12 +1,12 @@
-using Titan.Domain.Aggregates.Compute.SshKey;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Compute.Volume;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Aggregates.VolumeSnapshot;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using VmSnapshotAggregate = Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot;
+using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;

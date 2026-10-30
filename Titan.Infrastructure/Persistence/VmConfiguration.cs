@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.Vm;
 
 namespace Titan.Infrastructure.Persistence;
 

@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 

@@ -3,11 +3,11 @@ using Microsoft.Extensions.Logging;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.TopUp;
 using Titan.Application.Commands.Billing.PaymentGatewayTransaction.Contracts;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Repositories;
 using PaymentGatewayTransactionAggregate =
-    Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction.PaymentGatewayTransaction;
+    Titan.Domain.Aggregates.PaymentGatewayTransaction.PaymentGatewayTransaction;
 
 namespace Titan.Application.Commands.Billing.PaymentGatewayTransaction;
 

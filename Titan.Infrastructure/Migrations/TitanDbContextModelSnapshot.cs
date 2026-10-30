@@ -24,7 +24,380 @@ namespace Titan.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Invoice.Invoice", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Acceptance.Acceptance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<string>("DocumentKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("document_key");
+
+                    b.Property<string>("DocumentVersion")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("document_version");
+
+                    b.Property<string>("SourceIp")
+                        .HasColumnType("text")
+                        .HasColumnName("source_ip");
+
+                    b.Property<string>("SubjectId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectId", "DocumentKey", "DocumentVersion")
+                        .IsUnique();
+
+                    b.ToTable("legal_acceptances", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.ActivityEvent.ActivityEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorKeycloakUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("actor_keycloak_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("ResourceName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("resource_name");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("resource_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_activity_events_tenant_id_created_at");
+
+                    b.ToTable("activity_events", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.AdminAuditLog.AdminAuditLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("ActorKeycloakUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("actor_keycloak_user_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Detail")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("detail");
+
+                    b.Property<Guid>("OwnerTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_tenant_id");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("ResourceKey")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("resource_key");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("resource_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("OwnerTenantId");
+
+                    b.ToTable("admin_audit_log", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.ApiToken.ApiToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("KeycloakUserId")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("keycloak_user_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("prefix");
+
+                    b.Property<string>("SecretHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("secret_hash");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SecretHash")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("api_tokens", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.BackupObservation.BackupObservation", b =>
+                {
+                    b.Property<string>("Kind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("ResourceName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("resource_name");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset>("LastReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_read_at");
+
+                    b.Property<DateTimeOffset?>("LastWalAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_wal_at");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("outcome");
+
+                    b.HasKey("Kind", "ResourceName");
+
+                    b.ToTable("backup_observations", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.BackupRecord.BackupRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BackupKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("backup_key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTimeOffset>("ObservedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("observed_at");
+
+                    b.Property<string>("ResourceName")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("resource_name");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("size_bytes");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset>("TakenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "ResourceName", "BackupKey")
+                        .IsUnique();
+
+                    b.ToTable("backups", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FirewallRule.FirewallRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cidr")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cidr");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CurrentExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("current_existence");
+
+                    b.Property<string>("CurrentState")
+                        .HasColumnType("text")
+                        .HasColumnName("current_state");
+
+                    b.Property<string>("DesiredExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("desired_existence");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("direction");
+
+                    b.Property<int?>("EndPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_port");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("NetworkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("network_id");
+
+                    b.Property<Guid?>("PendingIntentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_intent_id");
+
+                    b.Property<string>("Protocol")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protocol");
+
+                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("RequestFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("RequestFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<int?>("StartPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_port");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NetworkId");
+
+                    b.ToTable("firewall_rules", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -82,7 +455,7 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("invoices", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Invoice.InvoiceItem", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -124,629 +497,7 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("invoice_items", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction.PaymentGatewayTransaction", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text")
-                        .HasColumnName("id");
-
-                    b.Property<long>("Amount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("amount");
-
-                    b.Property<string>("Gateway")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("gateway");
-
-                    b.Property<string>("RawContent")
-                        .HasColumnType("text")
-                        .HasColumnName("raw_content");
-
-                    b.Property<DateTimeOffset>("ReceivedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("received_at");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<Guid?>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<Guid?>("TopUpId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("top_up_id");
-
-                    b.Property<DateTimeOffset>("TransactionDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("transaction_date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TopUpId");
-
-                    b.ToTable("payment_transactions", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.TopUp.TopUp", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<long>("Amount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("amount");
-
-                    b.Property<DateTimeOffset?>("ConfirmedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("confirmed_at");
-
-                    b.Property<string>("ConfirmedBy")
-                        .HasColumnType("text")
-                        .HasColumnName("confirmed_by");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("currency");
-
-                    b.Property<string>("FailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("failure_reason");
-
-                    b.Property<string>("PaymentRef")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("payment_ref");
-
-                    b.Property<string>("PaymentTxnRef")
-                        .HasColumnType("text")
-                        .HasColumnName("payment_txn_ref");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("reason");
-
-                    b.Property<string>("Source")
-                        .HasColumnType("text")
-                        .HasColumnName("source");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PaymentRef")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId");
-
-                    b.ToTable("top_ups", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.UsageRecord.UsageRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("Bucket")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("bucket");
-
-                    b.Property<DateTimeOffset>("CollectedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("collected_at");
-
-                    b.Property<decimal>("Cost")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("cost");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("currency");
-
-                    b.Property<int>("IntervalMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("interval_minutes");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("quantity");
-
-                    b.Property<Guid>("ResourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceName")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("resource_name");
-
-                    b.Property<string>("ResourceType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("resource_type");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<decimal>("UnitPricePerHour")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("unit_price_per_hour");
-
-                    b.Property<string>("UsageType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("usage_type");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "Bucket");
-
-                    b.HasIndex("ResourceType", "ResourceId", "Bucket")
-                        .IsUnique();
-
-                    b.ToTable("usage_records", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Wallet.Wallet", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<long>("AvailableAmount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("available_amount");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("currency");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId")
-                        .IsUnique();
-
-                    b.ToTable("wallets", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Wallet.WalletTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<long>("Amount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("amount");
-
-                    b.Property<long>("BalanceAfter")
-                        .HasColumnType("bigint")
-                        .HasColumnName("balance_after");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("RefId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ref_id");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<Guid>("WalletId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("wallet_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Type", "RefId")
-                        .IsUnique();
-
-                    b.HasIndex("WalletId", "CreatedAt");
-
-                    b.ToTable("wallet_transactions", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.WalletMutation.WalletMutation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<long>("Amount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("amount");
-
-                    b.Property<DateTimeOffset?>("AppliedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("applied_at");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempts");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("LastError")
-                        .HasColumnType("text")
-                        .HasColumnName("last_error");
-
-                    b.Property<DateTimeOffset>("QueuedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("queued_at")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("RefId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ref_id");
-
-                    b.Property<string>("RefType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("ref_type");
-
-                    b.Property<string>("Status")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("status");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<Guid>("WalletId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("wallet_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("RefType", "RefId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "QueuedAt");
-
-                    b.HasIndex("WalletId", "Status");
-
-                    b.ToTable("wallet_mutations", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.SnapshotOffering.SnapshotOffering", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("PricePerHour")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("price_per_hour");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("snapshot_offerings", "core");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "standard",
-                            Name = "Standard",
-                            PricePerHour = 1.8m
-                        });
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("CpuUnits")
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("cpu_units");
-
-                    b.Property<int>("MemoryMb")
-                        .HasColumnType("integer")
-                        .HasColumnName("memory_mb");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("PricePerHour")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("price_per_hour");
-
-                    b.Property<int>("VcpuCount")
-                        .HasColumnType("integer")
-                        .HasColumnName("vcpu_count");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("vm_offerings", "core");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "s",
-                            CpuUnits = 0.5m,
-                            MemoryMb = 2048,
-                            Name = "Small",
-                            PricePerHour = 161.388m,
-                            VcpuCount = 1
-                        },
-                        new
-                        {
-                            Id = "m",
-                            CpuUnits = 1.0m,
-                            MemoryMb = 4096,
-                            Name = "Medium",
-                            PricePerHour = 311.256m,
-                            VcpuCount = 2
-                        },
-                        new
-                        {
-                            Id = "l",
-                            CpuUnits = 2.0m,
-                            MemoryMb = 8192,
-                            Name = "Large",
-                            PricePerHour = 634.050m,
-                            VcpuCount = 4
-                        },
-                        new
-                        {
-                            Id = "xl",
-                            CpuUnits = 4.0m,
-                            MemoryMb = 16384,
-                            Name = "Extra Large",
-                            PricePerHour = 1268.100m,
-                            VcpuCount = 8
-                        });
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text")
-                        .HasColumnName("description");
-
-                    b.Property<string>("ImageUrl")
-                        .HasColumnType("text")
-                        .HasColumnName("image_url");
-
-                    b.Property<bool>("IsListed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_listed");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<string>("OsImageName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("os_image_name");
-
-                    b.Property<int?>("RootDiskSizeGb")
-                        .HasColumnType("integer")
-                        .HasColumnName("root_disk_size_gb");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<string>("VmOfferingId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("vm_offering_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Name")
-                        .IsUnique()
-                        .HasDatabaseName("UX_vm_templates_name");
-
-                    b.HasIndex("VmOfferingId");
-
-                    b.ToTable("vm_templates", "core");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("0a5e0000-0000-4000-8000-000000000002"),
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Description = "Ubuntu 22.04 LTS general purpose",
-                            ImageUrl = "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-{arch}.img",
-                            IsListed = true,
-                            Name = "Ubuntu-22.04-Standard",
-                            OsImageName = "ubuntu/22.04",
-                            RootDiskSizeGb = 25,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            VmOfferingId = "m"
-                        },
-                        new
-                        {
-                            Id = new Guid("0a5e0000-0000-4000-8000-000000000003"),
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Description = "AlmaLinux 9 for database servers",
-                            IsListed = false,
-                            Name = "Alma-9-DB",
-                            OsImageName = "almalinux/9",
-                            RootDiskSizeGb = 40,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            VmOfferingId = "l"
-                        },
-                        new
-                        {
-                            Id = new Guid("0a5e0000-0000-4000-8000-000000000005"),
-                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Description = "Rocky Linux 9 application server",
-                            IsListed = false,
-                            Name = "Rocky-9-App",
-                            OsImageName = "rockylinux/9",
-                            RootDiskSizeGb = 30,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            VmOfferingId = "l"
-                        });
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateCluster", b =>
-                {
-                    b.Property<Guid>("TemplateId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("template_id");
-
-                    b.Property<string>("ClusterId")
-                        .HasColumnType("text")
-                        .HasColumnName("cluster_id");
-
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
-                    b.Property<string>("ExternalTemplateId")
-                        .HasColumnType("text")
-                        .HasColumnName("external_template_id");
-
-                    b.Property<Guid?>("PendingIntentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("TemplateId", "ClusterId");
-
-                    b.ToTable("vm_template_clusters", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasColumnType("text")
-                        .HasColumnName("id");
-
-                    b.Property<bool>("IsCustomized")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_customized");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("PricePerGbPerHour")
-                        .HasColumnType("decimal(18,10)")
-                        .HasColumnName("price_per_gb_per_hour");
-
-                    b.Property<int>("SizeGb")
-                        .HasColumnType("integer")
-                        .HasColumnName("size_gb");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("volume_offerings", "core");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = "standard",
-                            IsCustomized = true,
-                            Name = "Standard",
-                            PricePerGbPerHour = 1.57914m,
-                            SizeGb = 0
-                        });
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancer", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -839,7 +590,7 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("load_balancers", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancerBackend", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancerBackend", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -875,7 +626,7 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("load_balancer_backends", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancerListener", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancerListener", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -913,7 +664,283 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("load_balancer_listeners", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.SshKey.SshKey", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Network.Network", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cidr")
+                        .HasColumnType("text")
+                        .HasColumnName("cidr");
+
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CurrentExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("current_existence");
+
+                    b.Property<string>("CurrentState")
+                        .HasColumnType("text")
+                        .HasColumnName("current_state");
+
+                    b.Property<string>("DefaultEgressPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Allow")
+                        .HasColumnName("default_egress_policy");
+
+                    b.Property<string>("DefaultIngressPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("Allow")
+                        .HasColumnName("default_ingress_policy");
+
+                    b.Property<string>("DesiredExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("desired_existence");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("Gateway")
+                        .HasColumnType("text")
+                        .HasColumnName("gateway");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("PendingIntentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_intent_id");
+
+                    b.Property<int?>("PublicIpv6Index")
+                        .HasColumnType("integer")
+                        .HasColumnName("public_ipv6_index");
+
+                    b.Property<DateTimeOffset?>("PublicIpv6ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("public_ipv6_released_at");
+
+                    b.Property<string>("PublicIpv6RouterAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("public_ipv6_router_address");
+
+                    b.Property<string>("PublicIpv6Subnet")
+                        .HasColumnType("text")
+                        .HasColumnName("public_ipv6_subnet");
+
+                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("RequestFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("RequestFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClusterId", "PublicIpv6Index")
+                        .IsUnique()
+                        .HasDatabaseName("ix_networks_cluster_id_public_ipv6_index")
+                        .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique()
+                        .HasFilter("current_existence <> 'Deleted'");
+
+                    b.ToTable("networks", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.PaymentGatewayTransaction.PaymentGatewayTransaction", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Gateway")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("gateway");
+
+                    b.Property<string>("RawContent")
+                        .HasColumnType("text")
+                        .HasColumnName("raw_content");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("TopUpId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("top_up_id");
+
+                    b.Property<DateTimeOffset>("TransactionDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("transaction_date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("TopUpId");
+
+                    b.ToTable("payment_transactions", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.ProviderCommand.ProviderCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("AvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("cluster_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("lease_id");
+
+                    b.Property<DateTimeOffset?>("LeaseUntil")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lease_until");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("payload");
+
+                    b.Property<string>("Rerun")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("rerun");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.HasIndex("LeaseId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "Kind", "AvailableAt");
+
+                    b.ToTable("provider_commands", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.SnapshotOffering.SnapshotOffering", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PricePerHour")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("price_per_hour");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("snapshot_offerings", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "standard",
+                            Name = "Standard",
+                            PricePerHour = 1.8m
+                        });
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.SshKey.SshKey", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -962,7 +989,256 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("ssh_keys", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.Vm.Vm", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Member", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<string>("KeycloakUserId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("keycloak_user_id");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("KeycloakUserId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "KeycloakUserId")
+                        .IsUnique();
+
+                    b.ToTable("tenant_members", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Tenant", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("DebtCeiling")
+                        .HasColumnType("bigint")
+                        .HasColumnName("debt_ceiling");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.ComplexProperty<Dictionary<string, object>>("Quota", "Titan.Domain.Aggregates.Tenant.Tenant.Quota#TenantQuota", b1 =>
+                        {
+                            b1.IsRequired();
+
+                            b1.Property<int>("MaxFirewallRulesPerNetwork")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_firewall_rules_per_network");
+
+                            b1.Property<int>("MaxLoadBalancers")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_load_balancers");
+
+                            b1.Property<int>("MaxNetworks")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_networks");
+
+                            b1.Property<int>("MaxPublicIpv6")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_public_ipv6");
+
+                            b1.Property<int>("MaxSshKeys")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_ssh_keys");
+
+                            b1.Property<int>("MaxVmSnapshotsPerVm")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_vm_snapshots_per_vm");
+
+                            b1.Property<int>("MaxVms")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_vms");
+
+                            b1.Property<int>("MaxVolumeSnapshotsPerVolume")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_volume_snapshots_per_volume");
+
+                            b1.Property<int>("MaxVolumes")
+                                .HasColumnType("integer")
+                                .HasColumnName("max_volumes");
+                        });
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("tenants", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.TopUp.TopUp", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("confirmed_at");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasColumnType("text")
+                        .HasColumnName("confirmed_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("failure_reason");
+
+                    b.Property<string>("PaymentRef")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payment_ref");
+
+                    b.Property<string>("PaymentTxnRef")
+                        .HasColumnType("text")
+                        .HasColumnName("payment_txn_ref");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("Source")
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PaymentRef")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("top_ups", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.UsageRecord.UsageRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("Bucket")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("bucket");
+
+                    b.Property<DateTimeOffset>("CollectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("collected_at");
+
+                    b.Property<decimal>("Cost")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("cost");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency");
+
+                    b.Property<int>("IntervalMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("interval_minutes");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resource_id");
+
+                    b.Property<string>("ResourceName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("resource_name");
+
+                    b.Property<string>("ResourceType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("resource_type");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<decimal>("UnitPricePerHour")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("unit_price_per_hour");
+
+                    b.Property<string>("UsageType")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("usage_type");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Bucket");
+
+                    b.HasIndex("ResourceType", "ResourceId", "Bucket")
+                        .IsUnique();
+
+                    b.ToTable("usage_records", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Vm.Vm", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1075,7 +1351,77 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("vms", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmOffering.VmOffering", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("CpuUnits")
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("cpu_units");
+
+                    b.Property<int>("MemoryMb")
+                        .HasColumnType("integer")
+                        .HasColumnName("memory_mb");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PricePerHour")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("price_per_hour");
+
+                    b.Property<int>("VcpuCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("vcpu_count");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("vm_offerings", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "s",
+                            CpuUnits = 0.5m,
+                            MemoryMb = 2048,
+                            Name = "Small",
+                            PricePerHour = 161.388m,
+                            VcpuCount = 1
+                        },
+                        new
+                        {
+                            Id = "m",
+                            CpuUnits = 1.0m,
+                            MemoryMb = 4096,
+                            Name = "Medium",
+                            PricePerHour = 311.256m,
+                            VcpuCount = 2
+                        },
+                        new
+                        {
+                            Id = "l",
+                            CpuUnits = 2.0m,
+                            MemoryMb = 8192,
+                            Name = "Large",
+                            PricePerHour = 634.050m,
+                            VcpuCount = 4
+                        },
+                        new
+                        {
+                            Id = "xl",
+                            CpuUnits = 4.0m,
+                            MemoryMb = 16384,
+                            Name = "Extra Large",
+                            PricePerHour = 1268.100m,
+                            VcpuCount = 8
+                        });
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmSnapshot.VmSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1139,7 +1485,152 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("vm_snapshots", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.Volume.Volume", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("image_url");
+
+                    b.Property<bool>("IsListed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_listed");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("OsImageName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("os_image_name");
+
+                    b.Property<int?>("RootDiskSizeGb")
+                        .HasColumnType("integer")
+                        .HasColumnName("root_disk_size_gb");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VmOfferingId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("vm_offering_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_vm_templates_name");
+
+                    b.HasIndex("VmOfferingId");
+
+                    b.ToTable("vm_templates", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("0a5e0000-0000-4000-8000-000000000002"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Description = "Ubuntu 22.04 LTS general purpose",
+                            ImageUrl = "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-{arch}.img",
+                            IsListed = true,
+                            Name = "Ubuntu-22.04-Standard",
+                            OsImageName = "ubuntu/22.04",
+                            RootDiskSizeGb = 25,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            VmOfferingId = "m"
+                        },
+                        new
+                        {
+                            Id = new Guid("0a5e0000-0000-4000-8000-000000000003"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Description = "AlmaLinux 9 for database servers",
+                            IsListed = false,
+                            Name = "Alma-9-DB",
+                            OsImageName = "almalinux/9",
+                            RootDiskSizeGb = 40,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            VmOfferingId = "l"
+                        },
+                        new
+                        {
+                            Id = new Guid("0a5e0000-0000-4000-8000-000000000005"),
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Description = "Rocky Linux 9 application server",
+                            IsListed = false,
+                            Name = "Rocky-9-App",
+                            OsImageName = "rockylinux/9",
+                            RootDiskSizeGb = 30,
+                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            VmOfferingId = "l"
+                        });
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplateCluster", b =>
+                {
+                    b.Property<Guid>("TemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_id");
+
+                    b.Property<string>("ClusterId")
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
+                    b.Property<string>("CurrentExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("current_existence");
+
+                    b.Property<string>("DesiredExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("desired_existence");
+
+                    b.Property<string>("ExternalTemplateId")
+                        .HasColumnType("text")
+                        .HasColumnName("external_template_id");
+
+                    b.Property<Guid?>("PendingIntentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_intent_id");
+
+                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("RequestFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("RequestFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("TemplateId", "ClusterId");
+
+                    b.ToTable("vm_template_clusters", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Volume.Volume", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1225,7 +1716,45 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("volumes", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.VolumeSnapshot.VolumeSnapshot", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.VolumeOffering.VolumeOffering", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsCustomized")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_customized");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PricePerGbPerHour")
+                        .HasColumnType("decimal(18,10)")
+                        .HasColumnName("price_per_gb_per_hour");
+
+                    b.Property<int>("SizeGb")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_gb");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("volume_offerings", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "standard",
+                            IsCustomized = true,
+                            Name = "Standard",
+                            PricePerGbPerHour = 1.57914m,
+                            SizeGb = 0
+                        });
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1289,559 +1818,33 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("volume_snapshots", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Networking.FirewallRule.FirewallRule", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Wallet.Wallet", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("Cidr")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("cidr");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("direction");
-
-                    b.Property<int?>("EndPort")
-                        .HasColumnType("integer")
-                        .HasColumnName("end_port");
-
-                    b.Property<string>("ExternalId")
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<Guid>("NetworkId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("network_id");
-
-                    b.Property<Guid?>("PendingIntentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
-
-                    b.Property<string>("Protocol")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("protocol");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<int?>("StartPort")
-                        .HasColumnType("integer")
-                        .HasColumnName("start_port");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NetworkId");
-
-                    b.ToTable("firewall_rules", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Networking.Network.Network", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Cidr")
-                        .HasColumnType("text")
-                        .HasColumnName("cidr");
-
-                    b.Property<string>("ClusterId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("cluster_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
-                    b.Property<string>("DefaultEgressPolicy")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("Allow")
-                        .HasColumnName("default_egress_policy");
-
-                    b.Property<string>("DefaultIngressPolicy")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("Allow")
-                        .HasColumnName("default_ingress_policy");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
-                    b.Property<string>("ExternalId")
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<string>("Gateway")
-                        .HasColumnType("text")
-                        .HasColumnName("gateway");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<Guid?>("PendingIntentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
-
-                    b.Property<int?>("PublicIpv6Index")
-                        .HasColumnType("integer")
-                        .HasColumnName("public_ipv6_index");
-
-                    b.Property<DateTimeOffset?>("PublicIpv6ReleasedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("public_ipv6_released_at");
-
-                    b.Property<string>("PublicIpv6RouterAddress")
-                        .HasColumnType("text")
-                        .HasColumnName("public_ipv6_router_address");
-
-                    b.Property<string>("PublicIpv6Subnet")
-                        .HasColumnType("text")
-                        .HasColumnName("public_ipv6_subnet");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClusterId", "PublicIpv6Index")
-                        .IsUnique()
-                        .HasDatabaseName("ix_networks_cluster_id_public_ipv6_index")
-                        .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
-
-                    b.HasIndex("TenantId", "Name")
-                        .IsUnique()
-                        .HasFilter("current_existence <> 'Deleted'");
-
-                    b.ToTable("networks", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Acceptance.Acceptance", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("accepted_at");
-
-                    b.Property<string>("DocumentKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("document_key");
-
-                    b.Property<string>("DocumentVersion")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("document_version");
-
-                    b.Property<string>("SourceIp")
-                        .HasColumnType("text")
-                        .HasColumnName("source_ip");
-
-                    b.Property<string>("SubjectId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("subject_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SubjectId", "DocumentKey", "DocumentVersion")
-                        .IsUnique();
-
-                    b.ToTable("legal_acceptances", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.ActivityEvent.ActivityEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("action");
-
-                    b.Property<string>("ActorKeycloakUserId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("actor_keycloak_user_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("ResourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("resource_name");
-
-                    b.Property<string>("ResourceType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("resource_type");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TenantId", "CreatedAt")
-                        .IsDescending(false, true)
-                        .HasDatabaseName("IX_activity_events_tenant_id_created_at");
-
-                    b.ToTable("activity_events", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.AdminAuditLog.AdminAuditLog", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("action");
-
-                    b.Property<string>("ActorKeycloakUserId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("actor_keycloak_user_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Detail")
-                        .HasMaxLength(512)
-                        .HasColumnType("character varying(512)")
-                        .HasColumnName("detail");
-
-                    b.Property<Guid>("OwnerTenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("owner_tenant_id");
-
-                    b.Property<Guid>("ResourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceKey")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("resource_key");
-
-                    b.Property<string>("ResourceType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("resource_type");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("OwnerTenantId");
-
-                    b.ToTable("admin_audit_log", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.ApiToken.ApiToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTimeOffset?>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("expires_at");
-
-                    b.Property<string>("KeycloakUserId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("keycloak_user_id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("name");
-
-                    b.Property<string>("Prefix")
-                        .IsRequired()
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasColumnName("prefix");
-
-                    b.Property<string>("SecretHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("secret_hash");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SecretHash")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Name")
-                        .IsUnique();
-
-                    b.ToTable("api_tokens", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.BackupObservation.BackupObservation", b =>
-                {
-                    b.Property<string>("Kind")
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("ResourceName")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("resource_name");
-
-                    b.Property<string>("Error")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("error");
-
-                    b.Property<DateTimeOffset>("LastReadAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_read_at");
-
-                    b.Property<DateTimeOffset?>("LastWalAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_wal_at");
-
-                    b.Property<string>("Outcome")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("outcome");
-
-                    b.HasKey("Kind", "ResourceName");
-
-                    b.ToTable("backup_observations", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.BackupRecord.BackupRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("BackupKey")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("backup_key");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("kind");
-
-                    b.Property<DateTimeOffset>("ObservedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("observed_at");
-
-                    b.Property<string>("ResourceName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("resource_name");
-
-                    b.Property<long>("SizeBytes")
+                    b.Property<long>("AvailableAmount")
                         .HasColumnType("bigint")
-                        .HasColumnName("size_bytes");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTimeOffset>("TakenAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("taken_at");
-
-                    b.Property<Guid?>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Kind", "ResourceName", "BackupKey")
-                        .IsUnique();
-
-                    b.ToTable("backups", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.ProviderCommand.ProviderCommand", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempts");
-
-                    b.Property<DateTimeOffset>("AvailableAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("available_at");
-
-                    b.Property<string>("ClusterId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("cluster_id");
+                        .HasColumnName("available_amount");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<DateTimeOffset?>("FinishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("finished_at");
-
-                    b.Property<string>("Key")
+                    b.Property<string>("Currency")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("key");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("kind");
-
-                    b.Property<string>("LastError")
                         .HasColumnType("text")
-                        .HasColumnName("last_error");
+                        .HasColumnName("currency");
 
-                    b.Property<Guid?>("LeaseId")
+                    b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
-                        .HasColumnName("lease_id");
+                        .HasColumnName("tenant_id");
 
-                    b.Property<DateTimeOffset?>("LeaseUntil")
+                    b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
-                        .HasColumnName("lease_until");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("payload");
-
-                    b.Property<string>("Rerun")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("rerun");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasColumnName("status");
+                        .HasColumnName("updated_at");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
@@ -1850,125 +1853,122 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Key")
+                    b.HasIndex("TenantId")
                         .IsUnique();
 
-                    b.HasIndex("LeaseId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "Kind", "AvailableAt");
-
-                    b.ToTable("provider_commands", "core");
+                    b.ToTable("wallets", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Tenant.Member", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Wallet.WalletTransaction", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<DateTimeOffset>("JoinedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("joined_at");
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
 
-                    b.Property<string>("KeycloakUserId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("keycloak_user_id");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("KeycloakUserId")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "KeycloakUserId")
-                        .IsUnique();
-
-                    b.ToTable("tenant_members", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Tenant.Tenant", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
+                    b.Property<long>("BalanceAfter")
+                        .HasColumnType("bigint")
+                        .HasColumnName("balance_after");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("DebtCeiling")
+                    b.Property<Guid>("RefId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ref_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<Guid>("WalletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("wallet_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Type", "RefId")
+                        .IsUnique();
+
+                    b.HasIndex("WalletId", "CreatedAt");
+
+                    b.ToTable("wallet_transactions", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.WalletMutation.WalletMutation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("Amount")
                         .HasColumnType("bigint")
-                        .HasColumnName("debt_ceiling");
+                        .HasColumnName("amount");
 
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("email");
+                    b.Property<DateTimeOffset?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("applied_at");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LastError")
                         .HasColumnType("text")
-                        .HasColumnName("name");
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTimeOffset>("QueuedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("queued_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("RefId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ref_id");
+
+                    b.Property<string>("RefType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("ref_type");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
 
-                    b.ComplexProperty<Dictionary<string, object>>("Quota", "Titan.Domain.Aggregates.Platform.Tenant.Tenant.Quota#TenantQuota", b1 =>
-                        {
-                            b1.IsRequired();
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
 
-                            b1.Property<int>("MaxFirewallRulesPerNetwork")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_firewall_rules_per_network");
-
-                            b1.Property<int>("MaxLoadBalancers")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_load_balancers");
-
-                            b1.Property<int>("MaxNetworks")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_networks");
-
-                            b1.Property<int>("MaxPublicIpv6")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_public_ipv6");
-
-                            b1.Property<int>("MaxSshKeys")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_ssh_keys");
-
-                            b1.Property<int>("MaxVmSnapshotsPerVm")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_vm_snapshots_per_vm");
-
-                            b1.Property<int>("MaxVms")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_vms");
-
-                            b1.Property<int>("MaxVolumeSnapshotsPerVolume")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_volume_snapshots_per_volume");
-
-                            b1.Property<int>("MaxVolumes")
-                                .HasColumnType("integer")
-                                .HasColumnName("max_volumes");
-                        });
+                    b.Property<Guid>("WalletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("wallet_id");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("RefType", "RefId")
                         .IsUnique();
 
-                    b.ToTable("tenants", "core");
+                    b.HasIndex("Status", "QueuedAt");
+
+                    b.HasIndex("WalletId", "Status");
+
+                    b.ToTable("wallet_mutations", "core");
                 });
 
             modelBuilder.Entity("Titan.Infrastructure.Persistence.IdempotencyRecord", b =>
@@ -2026,75 +2026,36 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Invoice.InvoiceItem", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
-                    b.HasOne("Titan.Domain.Aggregates.Billing.Invoice.Invoice", null)
+                    b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)
                         .WithMany("Items")
                         .HasForeignKey("InvoiceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancerBackend", b =>
                 {
-                    b.HasOne("Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering", null)
-                        .WithMany()
-                        .HasForeignKey("VmOfferingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_vm_templates_vm_offerings_vm_offering_id");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplateCluster", b =>
-                {
-                    b.HasOne("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", null)
-                        .WithMany("Clusters")
-                        .HasForeignKey("TemplateId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancerBackend", b =>
-                {
-                    b.HasOne("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer", null)
+                    b.HasOne("Titan.Domain.Aggregates.LoadBalancer.LoadBalancer", null)
                         .WithMany("Backends")
                         .HasForeignKey("LoadBalancerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancerListener", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancerListener", b =>
                 {
-                    b.HasOne("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer", null)
+                    b.HasOne("Titan.Domain.Aggregates.LoadBalancer.LoadBalancer", null)
                         .WithMany("Listeners")
                         .HasForeignKey("LoadBalancerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.Vm.Vm", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Member", b =>
                 {
-                    b.HasOne("Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering", null)
-                        .WithMany()
-                        .HasForeignKey("VmOfferingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_vms_vm_offerings_vm_offering_id");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.Volume.Volume", b =>
-                {
-                    b.HasOne("Titan.Domain.Aggregates.Catalog.VolumeOffering.VolumeOffering", null)
-                        .WithMany()
-                        .HasForeignKey("VolumeOfferingId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Tenant.Member", b =>
-                {
-                    b.HasOne("Titan.Domain.Aggregates.Platform.Tenant.Tenant", "Tenant")
+                    b.HasOne("Titan.Domain.Aggregates.Tenant.Tenant", "Tenant")
                         .WithMany("Members")
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2103,26 +2064,65 @@ namespace Titan.Infrastructure.Migrations
                     b.Navigation("Tenant");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Billing.Invoice.Invoice", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Vm.Vm", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.VmOffering.VmOffering", null)
+                        .WithMany()
+                        .HasForeignKey("VmOfferingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_vms_vm_offerings_vm_offering_id");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplate", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.VmOffering.VmOffering", null)
+                        .WithMany()
+                        .HasForeignKey("VmOfferingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_vm_templates_vm_offerings_vm_offering_id");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplateCluster", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.VmTemplate.VmTemplate", null)
+                        .WithMany("Clusters")
+                        .HasForeignKey("TemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Volume.Volume", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.VolumeOffering.VolumeOffering", null)
+                        .WithMany()
+                        .HasForeignKey("VolumeOfferingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
                 {
                     b.Navigation("Items");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate", b =>
-                {
-                    b.Navigation("Clusters");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.LoadBalancer.LoadBalancer", b =>
                 {
                     b.Navigation("Backends");
 
                     b.Navigation("Listeners");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Platform.Tenant.Tenant", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Tenant", b =>
                 {
                     b.Navigation("Members");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.VmTemplate.VmTemplate", b =>
+                {
+                    b.Navigation("Clusters");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Queries.Compute.SshKey.Contracts;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Compute.SshKey;
 

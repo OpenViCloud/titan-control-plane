@@ -2,10 +2,9 @@ using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
-using Titan.Domain.Aggregates.Networking.Network;
-using NetworkAggregate = Titan.Domain.Aggregates.Networking.Network.Network;
+using Titan.Domain.Repositories;
+using Titan.Domain.Aggregates.Network;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Commands.Networking.Network;
 

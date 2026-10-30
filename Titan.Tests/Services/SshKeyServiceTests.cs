@@ -4,9 +4,9 @@ using Titan.Application.Commands.Compute.SshKey;
 using Titan.Application.Commands.Compute.SshKey.Contracts;
 using Titan.Application.Queries.Compute.SshKey;
 using Titan.Application.Queries.Compute.SshKey.Contracts;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;
 
@@ -97,7 +97,7 @@ public class SshKeyServiceTests
     {
         await AddAsync("laptop", SshPublicKeyTests.Ed25519);
         Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
-        _keys.Saved.Add(Titan.Domain.Aggregates.Compute.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048));
+        _keys.Saved.Add(Titan.Domain.Aggregates.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048));
 
         SshKeyQueryResult listed = Assert.Single(await ListAsync());
         Assert.Equal("laptop", listed.Name);
@@ -119,7 +119,7 @@ public class SshKeyServiceTests
     public async Task Delete_AnotherTenantsKey_IsNotFound_AndKeepsIt()
     {
         Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
-        var theirs = Titan.Domain.Aggregates.Compute.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048);
+        var theirs = Titan.Domain.Aggregates.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048);
         _keys.Saved.Add(theirs);
 
         NotFoundException refused = await Assert.ThrowsAsync<NotFoundException>(() => DeleteAsync(theirs.Id));

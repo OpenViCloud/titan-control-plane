@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
 
 namespace Titan.Tests.Domain;
 

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Platform.ApiToken.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
-using ApiTokenAggregate = Titan.Domain.Aggregates.Platform.ApiToken.ApiToken;
+using Titan.Domain.Repositories;
+using ApiTokenAggregate = Titan.Domain.Aggregates.ApiToken.ApiToken;
 
 namespace Titan.Application.Commands.Platform.ApiToken;
 

@@ -1,14 +1,13 @@
 using Microsoft.Extensions.Logging;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Admin.Vm.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Platform;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
-using Titan.Domain.Aggregates.Compute.Volume;
-using VolumeAggregate = Titan.Domain.Aggregates.Compute.Volume.Volume;
+using Titan.Domain.Repositories;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
+using Titan.Domain.Aggregates.Volume;
+using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Commands.Admin.Vm;
 

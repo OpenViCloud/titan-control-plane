@@ -122,7 +122,7 @@ public class QuotaOwnershipTests
     [Fact] // reflection guard: the surface is not there to be called
     public void TenantExposesNoPublicQuotaCheck()
     {
-        var tenant = typeof(Titan.Domain.Aggregates.Platform.Tenant.Tenant);
+        var tenant = typeof(Titan.Domain.Aggregates.Tenant.Tenant);
 
         var publicChecks = tenant
             .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)

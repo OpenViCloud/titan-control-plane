@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
-using VmSnapshotAggregate = Titan.Domain.Aggregates.Compute.VmSnapshot.VmSnapshot;
+using Titan.Domain.Aggregates.VmSnapshot;
+using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;

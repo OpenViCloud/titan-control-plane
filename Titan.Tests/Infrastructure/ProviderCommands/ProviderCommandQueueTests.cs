@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Titan.Domain.Aggregates.Platform.ProviderCommand;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.ProviderCommands;

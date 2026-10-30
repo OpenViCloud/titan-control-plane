@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
-using Titan.Domain.Aggregates.Compute.SshKey;
+using Titan.Domain.Aggregates.SshKey;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 using Titan.Tests.Domain;

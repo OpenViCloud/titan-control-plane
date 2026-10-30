@@ -3,9 +3,9 @@ using FastEndpoints;
 using FluentValidation;
 using Titan.Application.Commands.Compute.SshKey;
 using Titan.Application.Commands.Compute.SshKey.Contracts;
-using Titan.Domain.Aggregates.Compute.SshKey;
+using Titan.Domain.Aggregates.SshKey;
 using Titan.Infrastructure.Auth;
-using SshKeyAggregate = Titan.Domain.Aggregates.Compute.SshKey.SshKey;
+using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 
 namespace Titan.Infrastructure.Endpoints.SshKey;
 

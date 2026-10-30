@@ -1,4 +1,4 @@
-using VmOfferingAggregate = Titan.Domain.Aggregates.Catalog.VmOffering.VmOffering;
+using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 
 namespace Titan.Application.Queries.Catalog.VmOffering.Contracts;
 

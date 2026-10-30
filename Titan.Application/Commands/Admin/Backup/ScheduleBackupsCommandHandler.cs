@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Admin.Backup.Contracts;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Admin.Backup;
 

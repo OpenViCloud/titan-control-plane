@@ -1,5 +1,5 @@
 using Titan.Application.Queries.Admin.Vm.Contracts;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Admin.Vm;
 

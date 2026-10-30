@@ -3,7 +3,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Queries.Billing.UsageRecord;
 using Titan.Application.Queries.Billing.UsageRecord.Contracts;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Infrastructure.Endpoints.Billing;
 

@@ -1,7 +1,7 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Networking.Network;
 using Titan.Application.Queries.Networking.FirewallRule.Contracts;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Networking.FirewallRule;
 

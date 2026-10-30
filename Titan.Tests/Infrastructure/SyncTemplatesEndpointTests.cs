@@ -4,7 +4,7 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Options;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Catalog;
 
 namespace Titan.Tests.Infrastructure;

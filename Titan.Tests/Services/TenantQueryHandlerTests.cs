@@ -2,9 +2,9 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Queries.Platform.Tenant;
 using Titan.Application.Queries.Platform.Tenant.Contracts;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;

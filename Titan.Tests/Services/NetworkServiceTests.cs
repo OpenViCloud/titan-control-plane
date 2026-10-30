@@ -6,12 +6,11 @@ using Titan.Application.Queries.Networking.Network;
 using Titan.Application.Queries.Networking.Network.Contracts;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.Network;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.Network;
-using Titan.Domain.Aggregates.Platform.Tenant;
+using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Networking;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Tests.Fakes;
 

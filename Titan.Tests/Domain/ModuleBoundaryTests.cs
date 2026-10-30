@@ -3,8 +3,9 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// The module boundary of Titan (titan-ops architecture/code-structure.md#module-boundary). A measurement cannot tell
-// "0 by design" from "0 by luck"; these tests are the invariant.
+// The boundaries of Titan (titan-ops architecture/code-structure.md#module-boundary): in Titan.Domain between aggregates,
+// in Titan.Application between modules. A measurement cannot tell "0 by design" from "0 by luck"; these tests are the
+// invariant.
 //
 // What these guards do NOT see, stated here because a green run reads like "no coupling left":
 //   - The Application guard reads CONSTRUCTOR parameters only. A repository taken by method param, service
@@ -15,20 +16,52 @@ namespace Titan.Tests.Domain;
 //     aggregate, and that is the correct direction.
 public class ModuleBoundaryTests
 {
-    // Same five names in Domain/Aggregates and Domain/Repositories (titan-ops architecture/code-structure.md#domain-tree).
-    private static readonly string[] DomainModules =
-        ["Billing", "Catalog", "Compute", "Networking", "Platform"];
-
-    // Application has a SIXTH group, deliberately (titan-ops architecture/code-structure.md#admin-read-model): Admin is a
-    // read-model for the admin portal with no aggregate and no repository. It reads out of Compute, Networking and
-    // Platform and nothing points back at it, which keeps the dependency graph acyclic.
+    // The module groups of Titan.Application (titan-ops architecture/code-structure.md#application-tree). Titan.Domain
+    // has no module layer: its aggregates sit side by side (titan-ops architecture/code-structure.md#domain-tree).
     //
-    // Admin MUST be listed: ModuleOf returns null for a segment it does not recognise, so an unlisted group is not
-    // "outside the rules", it is INVISIBLE (Guard_Sees_TheAdminReadModel_AndItsOutboundEdges).
-    private static readonly string[] ApplicationModules = [.. DomainModules, "Admin"];
+    // Admin is a SIXTH group, deliberately (titan-ops architecture/code-structure.md#admin-read-model): a read-model for
+    // the admin portal with no aggregate and no repository. It reads out of Compute, Networking and Platform and
+    // nothing points back at it, which keeps the dependency graph acyclic. It MUST be listed: ModuleOf returns null
+    // for a segment it does not recognise, so an unlisted group is not "outside the rules", it is INVISIBLE
+    // (Guard_Sees_TheAdminReadModel_AndItsOutboundEdges).
+    private static readonly string[] ApplicationModules =
+        ["Billing", "Catalog", "Compute", "Networking", "Platform", "Admin"];
+
+    // The Application module each repository belongs to, read by the Application guard to label a handler's edge
+    // through a repository. A table, not a folder: Titan.Domain.Repositories is flat, and six repositories have no
+    // Application folder of their aggregate's name (ICreditRepository serves TopUp, for one).
+    private static readonly Dictionary<string, string> RepositoryModule = new(StringComparer.Ordinal)
+    {
+        ["ICreditRepository"] = "Billing",
+        ["IInvoiceRepository"] = "Billing",
+        ["IPaymentGatewayTransactionRepository"] = "Billing",
+        ["IUsageRecordRepository"] = "Billing",
+        ["IWalletMutationRepository"] = "Billing",
+        ["IWalletRepository"] = "Billing",
+        ["ISnapshotOfferingRepository"] = "Catalog",
+        ["IVmOfferingRepository"] = "Catalog",
+        ["IVmTemplateRepository"] = "Catalog",
+        ["IVolumeOfferingRepository"] = "Catalog",
+        ["ILoadBalancerRepository"] = "Compute",
+        ["ISshKeyRepository"] = "Compute",
+        ["IVmRepository"] = "Compute",
+        ["IVmSnapshotRepository"] = "Compute",
+        ["IVolumeRepository"] = "Compute",
+        ["IVolumeSnapshotRepository"] = "Compute",
+        ["IFirewallRuleRepository"] = "Networking",
+        ["INetworkRepository"] = "Networking",
+        ["IAcceptanceRepository"] = "Platform",
+        ["IActivityEventRepository"] = "Platform",
+        ["IAdminAuditLogRepository"] = "Platform",
+        ["IApiTokenRepository"] = "Platform",
+        ["IBackupObservationRepository"] = "Platform",
+        ["IBackupRecordRepository"] = "Platform",
+        ["IProviderCommandRepository"] = "Platform",
+        ["ITenantRepository"] = "Platform",
+    };
 
     [Fact]
-    public void EveryRepositoryInterface_LivesInAModuleNamespace()
+    public void EveryRepositoryInterface_HasAModuleRow()
     {
         var repos = DomainAssembly
             .GetExportedTypes()
@@ -39,67 +72,86 @@ public class ModuleBoundaryTests
         // Without this, deleting every repository interface would make the test pass.
         Assert.NotEmpty(repos);
 
-        var stragglers = repos
-            .Where(t => t.Namespace == "Titan.Domain.Repositories")
-            .Select(t => t.Name)
-            .OrderBy(x => x, StringComparer.Ordinal)
-            .ToList();
-
-        Assert.True(stragglers.Count == 0,
-            "Repository interface(s) still in the flat Titan.Domain.Repositories namespace — the "
-            + "namespace IS the module label the boundary guards read, so a flat one makes them blind: "
-            + string.Join(", ", stragglers));
-
-        var wrongModule = repos
+        var nested = repos
             .Where(t => t.Namespace != "Titan.Domain.Repositories")
-            .Where(t => !DomainModules.Contains(t.Namespace!["Titan.Domain.Repositories.".Length..]))
             .Select(t => $"{t.Name} in {t.Namespace}")
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();
 
-        Assert.True(wrongModule.Count == 0,
-            "Repository interface(s) in a namespace that is not one of the five DOMAIN modules. Admin "
-            + "is an Application-layer read-model (docs/architecture/tenancy-and-admin.md#tenant-quota); it owns no aggregate, so it owns no repository: "
-            + string.Join(", ", wrongModule));
+        Assert.True(nested.Count == 0,
+            "Repository interface(s) below Titan.Domain.Repositories. The namespace is flat; the module a handler "
+            + "reaches through a repository is RepositoryModule's row, not a folder: " + string.Join(", ", nested));
+
+        var names = repos.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        var missing = names.Where(n => !RepositoryModule.ContainsKey(n)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var stale = RepositoryModule.Keys.Where(n => !names.Contains(n)).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var unknown = RepositoryModule.Where(kv => !ApplicationModules.Contains(kv.Value) || kv.Value == "Admin")
+            .Select(kv => $"{kv.Key} -> {kv.Value}").OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+        Assert.True(missing.Count == 0 && stale.Count == 0 && unknown.Count == 0,
+            "RepositoryModule out of step with the repositories. Without a row the Application guard cannot see edges "
+            + "through that repository. Missing: " + string.Join(", ", missing)
+            + " | stale: " + string.Join(", ", stale)
+            + " | not a module that owns an aggregate (Admin owns none): " + string.Join(", ", unknown));
     }
 
-    // ── titan-ops architecture/code-structure.md#tenant-typed-edge: ONE typed cross-module edge is allowed, and it is Tenant ────────────────────
+    // ── titan-ops architecture/code-structure.md#tenant-typed-edge: aggregates reference each other by id ──────────────
     //
-    // A quota check must reach the tenant's caps from inside the factory of the thing being created, and a
-    // Guid cannot answer "may I". Allowed, narrowly: a factory parameter of type Platform.Tenant. Not a
-    // property, field, constructor or non-factory method, and no module other than Platform.
+    // A typed reference from one aggregate's public surface (property, field, constructor, method) to another
+    // aggregate's type needs a row here saying why an id is not enough. The Tenant rows are the quota rule: a quota
+    // check must reach the tenant's caps from inside the factory of the thing being created, and a Guid cannot
+    // answer "may I".
     //
     // Each row is one measured edge. Adding one is allowed; adding one silently is not.
-    private static readonly Dictionary<string, string> AggregateEdgeAllowlist = new()
+    private static readonly Dictionary<string, string> AggregateEdgeAllowlist = new(StringComparer.Ordinal)
     {
-        ["Compute.Vm.Create(tenant) -> Platform.Tenant"] =
-            "US-DDD-13: the VM factory asks the tenant about VM quota, so forgetting "
-            + "the check means having no VM",
-        ["Compute.Volume.Create(tenant) -> Platform.Tenant"] = "US-DDD-13: volume quota",
-        ["Compute.Volume.CreateFromSnapshot(tenant) -> Platform.Tenant"] =
-            "US-DDD-13: a restore creates a volume, so it spends VOLUME quota",
-        ["Compute.VmSnapshot.Create(tenant) -> Platform.Tenant"] = "US-DDD-13: per-VM snapshot quota",
-        ["Compute.VolumeSnapshot.Create(tenant) -> Platform.Tenant"] = "US-DDD-13: per-volume snapshot quota",
-        ["Networking.Network.Create(tenant) -> Platform.Tenant"] = "US-DDD-13: network and public-IPv6 quota",
-        ["Networking.FirewallRule.Create(tenant) -> Platform.Tenant"] = "US-DDD-13: per-network rule quota",
-        ["Compute.SshKey.Create(tenant) -> Platform.Tenant"] = "per-tenant SSH key quota",
-        ["Compute.LoadBalancer.Create(tenant) -> Platform.Tenant"] = "per-tenant load balancer quota",
+        ["Vm.Create(tenant) -> Tenant"] =
+            "the VM factory asks the tenant about VM quota, so forgetting the check means having no VM",
+        ["Volume.Create(tenant) -> Tenant"] = "volume quota",
+        ["Volume.CreateFromSnapshot(tenant) -> Tenant"] = "a restore creates a volume, so it spends VOLUME quota",
+        ["VmSnapshot.Create(tenant) -> Tenant"] = "per-VM snapshot quota",
+        ["VolumeSnapshot.Create(tenant) -> Tenant"] = "per-volume snapshot quota",
+        ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",
+        ["FirewallRule.Create(tenant) -> Tenant"] = "per-network rule quota",
+        ["SshKey.Create(tenant) -> Tenant"] = "per-tenant SSH key quota",
+        ["LoadBalancer.Create(tenant) -> Tenant"] = "per-tenant load balancer quota",
+
+        // A rule that spans two aggregates is checked by the one being changed, on the other's state.
+        ["LoadBalancer.Create(backends) -> Vm"] =
+            "each backend must be the tenant's VM and accept the network (Vm.BeginLoadBalancerBackend), checked in the factory",
+        ["LoadBalancer.RequestUpdate(backends) -> Vm"] = "the same backend rule, on an update",
+        ["VmSnapshot.Create(vm) -> Vm"] =
+            "the VM must accept a snapshot (Vm.EnsureSnapshottable), checked in the factory (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation)",
+        ["VmSnapshot.Revert(vm) -> Vm"] = "a revert checks the snapshot and the VM in one call",
+        ["Volume.Attach(vm) -> Vm"] =
+            "the VM's side of an attach (Vm.BeginVolumeAttach) is checked before the provider ids are handed out",
+        ["Volume.CreateFromSnapshot(snapshot) -> VolumeSnapshot"] = "a restore needs the snapshot to be ready",
+        ["VolumeSnapshot.Create(volume) -> Volume"] =
+            "the volume must accept a snapshot (Volume.EnsureSnapshottable), checked in the factory",
+
+        // Not a rule on another aggregate's state: an enum another aggregate owns, used as a value.
+        ["InvoiceItem.Create(resourceType) -> UsageResourceType"] =
+            "an invoice line is a usage line of one resource type, the enum UsageRecord owns",
+        ["InvoiceItem.ResourceType -> UsageResourceType"] = "the same enum, stored on the line",
+        ["InvoiceItem.get_ResourceType() -> UsageResourceType"] = "the property's getter, seen as a method",
     };
 
     [Fact]
-    public void DomainAggregates_HaveNoCrossModuleTypeReferences()
+    public void DomainAggregates_ReferenceOtherAggregatesOnlyThroughTheAllowlist()
     {
         var scanned = 0;
         var offenders = new List<string>();
 
-        foreach (var (type, module) in TypesByModule(DomainAssembly, "Titan.Domain.Aggregates", DomainModules))
+        foreach (var type in DomainAssembly.GetExportedTypes())
         {
+            var aggregate = AggregateOf(type);
+            if (aggregate is null) continue;
             scanned++;
             foreach (var (referenced, where) in ReferencedTypes(type))
             {
-                var other = ModuleOf(referenced, "Titan.Domain.Aggregates", DomainModules);
-                if (other is not null && other != module)
-                    offenders.Add($"{module}.{type.Name}.{where} -> {other}.{referenced.Name}");
+                var other = AggregateOf(referenced);
+                if (other is not null && other != aggregate)
+                    offenders.Add($"{type.Name}.{where} -> {referenced.Name}");
             }
         }
 
@@ -107,13 +159,12 @@ public class ModuleBoundaryTests
         // 0 offenders out of 41, and only one of those is a boundary being held.
         Assert.True(scanned >= 20, $"Only {scanned} aggregate types scanned — the guard is not seeing the model.");
 
-        var unlisted = offenders.Where(o => !AggregateEdgeAllowlist.ContainsKey(o))
+        var unlisted = offenders.Distinct(StringComparer.Ordinal).Where(o => !AggregateEdgeAllowlist.ContainsKey(o))
             .OrderBy(x => x, StringComparer.Ordinal).ToList();
 
         Assert.True(unlisted.Count == 0,
-            "Aggregates reference another module by type. Cross-module references go by identity "
-            + "(Guid/string id) unless there is an allowlist row saying why not — that is what keeps "
-            + "the modules separable: " + string.Join(" | ", unlisted));
+            "An aggregate references another aggregate by type. References between aggregates go by identity "
+            + "(Guid/string id) unless there is an allowlist row saying why not: " + string.Join(" | ", unlisted));
 
         // Other direction: a row for an edge that no longer exists is also a failure, or the
         // allowlist stops being a measurement (same rule as every other allowlist in this suite).
@@ -127,12 +178,11 @@ public class ModuleBoundaryTests
 
     // ── titan-ops architecture/code-structure.md#shared-value-types: Titan.Domain.Values is a DECLARED shared kernel, not a hole in the guard ────
     //
-    // Rate is used by Catalog (offering prices) and Billing (usage records). In Titan.Domain.Values it is
-    // INVISIBLE to the guard above (ModuleOf() returns null outside Titan.Domain.Aggregates.<Module>), so the
-    // namespace is declared here with the property that makes it safe: a shared value type may not know
-    // about any module.
+    // Rate is used by the offerings and by UsageRecord. In Titan.Domain.Values it is INVISIBLE to the guard above
+    // (AggregateOf() returns null outside Titan.Domain.Aggregates.<Aggregate>), so the namespace is declared here
+    // with the property that makes it safe: a shared value type may not know about any aggregate.
     [Fact]
-    public void SharedValueTypes_KnowAboutNoModule()
+    public void SharedValueTypes_KnowAboutNoAggregate()
     {
         var values = DomainAssembly.GetExportedTypes()
             .Where(t => t.Namespace == "Titan.Domain.Values")
@@ -145,15 +195,15 @@ public class ModuleBoundaryTests
         foreach (var type in values)
             foreach (var (referenced, where) in ReferencedTypes(type))
             {
-                var module = ModuleOf(referenced, "Titan.Domain.Aggregates", DomainModules);
-                if (module is not null)
-                    offenders.Add($"Values.{type.Name}.{where} -> {module}.{referenced.Name}");
+                var aggregate = AggregateOf(referenced);
+                if (aggregate is not null)
+                    offenders.Add($"Values.{type.Name}.{where} -> {aggregate}.{referenced.Name}");
             }
 
         Assert.True(offenders.Count == 0,
-            "A type in Titan.Domain.Values references a module. Shared value types are shared "
-            + "precisely because they know nothing about who uses them — a Money that knows about "
-            + "Billing is a Billing type in the wrong folder: "
+            "A type in Titan.Domain.Values references an aggregate. Shared value types are shared "
+            + "precisely because they know nothing about who uses them — a Rate that knows about "
+            + "VmOffering is a VmOffering type in the wrong folder: "
             + string.Join(" | ", offenders.OrderBy(x => x, StringComparer.Ordinal)));
     }
 
@@ -386,7 +436,7 @@ public class ModuleBoundaryTests
                 {
                     foreach (var referenced in Unwrap(param.ParameterType))
                     {
-                        var target = ModuleOf(referenced, "Titan.Domain.Repositories", DomainModules)
+                        var target = RepositoryModuleOf(referenced)
                                      ?? ModuleOf(referenced, ApplicationPrefixes, ApplicationModules);
                         if (target is not null && target != module)
                             edges.Add(new Edge(module, target, $"{type.Name}.{param.Name}"));
@@ -420,19 +470,24 @@ public class ModuleBoundaryTests
         return null;
     }
 
-    private static IEnumerable<(Type Type, string Module)> TypesByModule(
-        Assembly asm, string prefix, string[] modules)
+    // The aggregate a Domain type belongs to: the segment after Titan.Domain.Aggregates, else null.
+    private static string? AggregateOf(Type type)
     {
-        foreach (var type in asm.GetExportedTypes())
-        {
-            var module = ModuleOf(type, prefix, modules);
-            if (module is not null) yield return (type, module);
-        }
+        const string prefix = "Titan.Domain.Aggregates.";
+        var ns = type.Namespace;
+        if (ns is null || !ns.StartsWith(prefix, StringComparison.Ordinal)) return null;
+        return ns[prefix.Length..].Split('.')[0];
     }
 
-    // Returns the module segment if the type sits under "<prefix>.<Module>", else null. It matches the segment
-    // right after the prefix, because Domain aggregates nest one level deeper (Aggregates/<Module>/<Aggregate>/).
-    // Under a branch the module is the segment AFTER it (titan-ops architecture/code-structure.md#application-tree):
+    // The module of a repository interface, from RepositoryModule; null for any other type.
+    private static string? RepositoryModuleOf(Type type)
+    {
+        if (type.Namespace != "Titan.Domain.Repositories") return null;
+        return RepositoryModule.TryGetValue(type.Name, out var module) ? module : null;
+    }
+
+    // Returns the module segment if the type sits under "<prefix>.<Module>", else null. Under a branch the module
+    // is the segment AFTER it (titan-ops architecture/code-structure.md#application-tree):
     // Titan.Application.Queries.Compute.Vm is Compute, Titan.Application.Services.Billing.TopUp is Billing. The
     // shorter Titan.Application.Billing is still read, so a type dropped back at the root stays measured.
     //

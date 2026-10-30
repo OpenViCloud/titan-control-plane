@@ -1,5 +1,5 @@
 using Titan.Application.Services.Networking.FirewallRule;
-using Titan.Domain.Aggregates.Networking.FirewallRule;
+using Titan.Domain.Aggregates.FirewallRule;
 
 namespace Titan.Tests.Services;
 

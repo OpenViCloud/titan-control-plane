@@ -1,7 +1,7 @@
 using Titan.Application.Options;
 using Titan.Application.Queries.Catalog.VmTemplate.Contracts;
-using Titan.Domain.Repositories.Catalog;
-using VmTemplateAggregate = Titan.Domain.Aggregates.Catalog.VmTemplate.VmTemplate;
+using Titan.Domain.Repositories;
+using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 
 namespace Titan.Application.Queries.Catalog.VmTemplate;
 

@@ -7,11 +7,11 @@ using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Application.Queries.Compute.Vm;
 using Titan.Application.Queries.Compute.Vm.Contracts;
-using Titan.Domain.Aggregates.Compute.Vm;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Vm;
 using Titan.Infrastructure.Endpoints.Internal;
-using VmAggregate = Titan.Domain.Aggregates.Compute.Vm.Vm;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure;
@@ -43,7 +43,7 @@ public class VmEndpointBindingTests
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(() => [SampleVm()]);
     }
 
-    private static Titan.Domain.Aggregates.Platform.Tenant.Tenant ProvisionedTenant() =>
+    private static Titan.Domain.Aggregates.Tenant.Tenant ProvisionedTenant() =>
         TestTenant.Active("acme", "owner-1", "admin@acme.com");
 
     // A VM owned by TenantId and already Running, so the ownership check passes and RequestStop has a
@@ -97,16 +97,16 @@ public class VmEndpointBindingTests
     [Fact] // POST /v1/tenant/vms — 202, and the request body reaches the handler unchanged
     public async Task CreateVmEndpoint_ReachesCreateCommand_WithBody_And202()
     {
-        var tenantRepo = new Mock<Titan.Domain.Repositories.Platform.ITenantRepository>();
+        var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
         tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
             .ReturnsAsync(ProvisionedTenant());
         var handler = new CreateVmCommandHandler(
             _repo.Object,
-            new Mock<Titan.Domain.Repositories.Networking.INetworkRepository>().Object,
+            new Mock<Titan.Domain.Repositories.INetworkRepository>().Object,
             tenantRepo.Object, _currentUser.Object,
             new Mock<IProviderCommandQueue>().Object,
-            new Mock<Titan.Domain.Repositories.Catalog.IVmOfferingRepository>().Object,
-            new Mock<Titan.Domain.Repositories.Catalog.IVmTemplateRepository>().Object,
+            new Mock<Titan.Domain.Repositories.IVmOfferingRepository>().Object,
+            new Mock<Titan.Domain.Repositories.IVmTemplateRepository>().Object,
             new Titan.Tests.Fakes.FakeSshKeyRepository(),
             new Titan.Tests.Fakes.FakeActivityRecorder(),
             new Titan.Application.Options.ClusterOptions { Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }] });
@@ -147,14 +147,14 @@ public class VmEndpointBindingTests
     [Fact] // DELETE /v1/tenant/vms/{vmId}
     public async Task DeleteVmEndpoint_ReachesDeleteCommand_WithRouteVmId_And202()
     {
-        var tenantRepo = new Mock<Titan.Domain.Repositories.Platform.ITenantRepository>();
+        var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
         tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
             .ReturnsAsync(ProvisionedTenant());
         var snapshots = new Mock<IVmSnapshotRepository>();
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<Titan.Domain.Aggregates.Compute.Volume.Volume>());
+            .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
             _repo.Object, tenantRepo.Object, _currentUser.Object, commands.Object,
             snapshots.Object, volumes.Object, new Mock<ILoadBalancerRepository>().Object,

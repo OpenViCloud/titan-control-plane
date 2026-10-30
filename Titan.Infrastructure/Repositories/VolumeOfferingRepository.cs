@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
-using Titan.Domain.Repositories.Catalog;
+using Titan.Domain.Aggregates.VolumeOffering;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

@@ -4,7 +4,7 @@ using FluentValidation;
 using Titan.Application.Commands.Platform.ApiToken;
 using Titan.Application.Commands.Platform.ApiToken.Contracts;
 using Titan.Infrastructure.Auth;
-using ApiTokenAggregate = Titan.Domain.Aggregates.Platform.ApiToken.ApiToken;
+using ApiTokenAggregate = Titan.Domain.Aggregates.ApiToken.ApiToken;
 
 namespace Titan.Infrastructure.Endpoints.ApiToken;
 

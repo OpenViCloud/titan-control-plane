@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.Compute.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 

@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
-using Titan.Domain.Aggregates.Compute.VolumeSnapshot;
+using Titan.Domain.Aggregates.VolumeSnapshot;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 

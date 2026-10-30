@@ -1,5 +1,5 @@
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
-using LoadBalancerAggregate = Titan.Domain.Aggregates.Compute.LoadBalancer.LoadBalancer;
+using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 
 namespace Titan.Infrastructure.Endpoints.LoadBalancer;
 

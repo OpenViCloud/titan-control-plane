@@ -7,8 +7,7 @@ using Titan.Application.Commands.Compute.VmSnapshot;
 using Titan.Application.Commands.Compute.VolumeSnapshot;
 using Titan.Application.Commands.Networking.FirewallRule;
 using Titan.Application.Commands.Networking.Network;
-using Titan.Domain.Repositories.Compute;
-using Titan.Domain.Repositories.Networking;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.VolumeSnapshots;
 

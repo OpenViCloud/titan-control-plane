@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using TopUpAggregate = Titan.Domain.Aggregates.Billing.TopUp.TopUp;
-using Titan.Domain.Aggregates.Billing.TopUp;
+using TopUpAggregate = Titan.Domain.Aggregates.TopUp.TopUp;
+using Titan.Domain.Aggregates.TopUp;
 
 namespace Titan.Application.Queries.Billing.TopUp.Contracts;
 

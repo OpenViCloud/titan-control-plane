@@ -1,5 +1,5 @@
-using Titan.Domain.Aggregates.Billing.WalletMutation;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Fakes;
 

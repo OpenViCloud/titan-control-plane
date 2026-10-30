@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Catalog.VolumeOffering;
-using Titan.Domain.Aggregates.Compute.Volume;
+using Titan.Domain.Aggregates.VolumeOffering;
+using Titan.Domain.Aggregates.Volume;
 
 namespace Titan.Infrastructure.Persistence;
 

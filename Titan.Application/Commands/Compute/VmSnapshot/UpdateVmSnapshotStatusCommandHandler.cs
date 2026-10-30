@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
-using Titan.Domain.Aggregates.Compute.VmSnapshot;
+using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Compute;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 

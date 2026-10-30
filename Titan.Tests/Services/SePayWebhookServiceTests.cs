@@ -3,11 +3,11 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.PaymentGatewayTransaction;
 using Titan.Application.Commands.Billing.PaymentGatewayTransaction.Contracts;
-using Titan.Domain.Aggregates.Billing.PaymentGatewayTransaction;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.Wallet;
-using Titan.Domain.Aggregates.Billing.WalletMutation;
-using Titan.Domain.Repositories.Billing;
+using Titan.Domain.Aggregates.PaymentGatewayTransaction;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 

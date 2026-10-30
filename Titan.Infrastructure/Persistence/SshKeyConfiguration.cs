@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.Compute.SshKey;
+using Titan.Domain.Aggregates.SshKey;
 
 namespace Titan.Infrastructure.Persistence;
 

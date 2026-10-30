@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Platform.ApiToken;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.ApiToken;
+using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;

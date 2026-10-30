@@ -1,4 +1,4 @@
-using VolumeSnapshotAggregate = Titan.Domain.Aggregates.Compute.VolumeSnapshot.VolumeSnapshot;
+using VolumeSnapshotAggregate = Titan.Domain.Aggregates.VolumeSnapshot.VolumeSnapshot;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;
 

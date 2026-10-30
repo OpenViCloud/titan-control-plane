@@ -4,7 +4,7 @@ using Titan.Application.Commands.Platform.ApiToken;
 using Titan.Application.Commands.Platform.ApiToken.Contracts;
 using Titan.Application.Queries.Platform.ApiToken;
 using Titan.Application.Queries.Platform.ApiToken.Contracts;
-using Titan.Domain.Aggregates.Platform.ApiToken;
+using Titan.Domain.Aggregates.ApiToken;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;

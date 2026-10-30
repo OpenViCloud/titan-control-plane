@@ -5,11 +5,10 @@ using Titan.Application.Commands.Catalog.VmOffering;
 using Titan.Application.Commands.Catalog.VmOffering.Contracts;
 using Titan.Application.Queries.Catalog.VmOffering;
 using Titan.Application.Queries.Catalog.VmOffering.Contracts;
-using Titan.Domain.Aggregates.Catalog.VmOffering;
-using Titan.Domain.Aggregates.Platform.AdminAuditLog;
+using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Catalog;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 using Titan.Tests.Fakes;
 

@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Queries.Platform.ApiToken.Contracts;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Platform.ApiToken;
 

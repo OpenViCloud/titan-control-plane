@@ -1,8 +1,7 @@
 using Titan.Application.Services.Billing;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
-using Titan.Domain.Aggregates.Billing.Invoice;
-using Titan.Domain.Repositories.Billing;
-using Titan.Domain.Repositories.Platform;
+using Titan.Domain.Aggregates.Invoice;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Billing.Invoice;
 

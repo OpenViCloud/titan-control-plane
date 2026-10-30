@@ -1,10 +1,10 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Repositories.Billing;
-using TopUpAggregate = Titan.Domain.Aggregates.Billing.TopUp.TopUp;
+using Titan.Domain.Repositories;
+using TopUpAggregate = Titan.Domain.Aggregates.TopUp.TopUp;
 
 namespace Titan.Application.Commands.Billing.TopUp;
 

@@ -1,6 +1,6 @@
 using Titan.Application.Queries.Compute.LoadBalancer.Contracts;
-using Titan.Domain.Repositories.Compute;
-using TenantAggregate = Titan.Domain.Aggregates.Platform.Tenant.Tenant;
+using Titan.Domain.Repositories;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Queries.Compute.LoadBalancer;
 

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
-using Titan.Domain.Aggregates.Billing.TopUp;
-using Titan.Domain.Aggregates.Billing.Wallet;
+using Titan.Domain.Aggregates.TopUp;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
