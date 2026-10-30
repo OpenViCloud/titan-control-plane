@@ -1,15 +1,17 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
+using VmSnapshotTransition = Titan.Domain.Aggregates.Vm.VmSnapshotTransition;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 
 // Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
 // observation converges). Authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the aggregate
 // says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
-public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshotRepo, IActivityRecorder activity)
+public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateVmSnapshotStatusCommand command, CancellationToken ct = default)
     {
@@ -38,11 +40,14 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
                 throw new BadRequestException("INVALID_STATUS", $"Unknown VM snapshot report: '{req.Report}'");
         }
 
-        var snapshot = await snapshotRepo.FindByIdAsync(command.SnapshotId, ct)
-            ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-
-        if (snapshot.VmId != command.VmId)
+        // The snapshot is reached through its VM (titan-ops architecture/code-structure.md#child-entity); a snapshot no VM
+        // has, or one under another VM than the route names, is not found.
+        VmAggregate? vm = await vmRepo.FindBySnapshotIdAsync(command.SnapshotId, ct);
+        if (vm == null || vm.Id != command.VmId)
+        {
             throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
+        }
+        VmSnapshotEntity snapshot = vm.RequireSnapshot(command.SnapshotId);
 
         string? outcome = null;
         switch (req.Report)
@@ -51,18 +56,18 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
                 // Seeing the snapshot never ends a revert: only the revert command's own report does.
                 if (req.Exists == true)
                 {
-                    outcome = CreatedOutcome(snapshot.MarkObserved());
+                    outcome = CreatedOutcome(vm.MarkSnapshotObserved(snapshot.Id));
                 }
                 else
                 {
-                    snapshot.MarkNotFound();
+                    vm.MarkSnapshotNotFound(snapshot.Id);
                 }
                 break;
             case "Created":
-                outcome = CreatedOutcome(snapshot.MarkCreated(req.ExternalId!));
+                outcome = CreatedOutcome(vm.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
                 break;
             case "Reverted":
-                bool revertedNow = snapshot.MarkReverted();
+                bool revertedNow = vm.MarkSnapshotReverted(snapshot.Id);
                 if (revertedNow)
                 {
                     outcome = "vm_snapshot.reverted";
@@ -73,7 +78,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
                 bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && snapshot.ExternalId == null;
                 if (carriesAnIdNotYetStored)
                 {
-                    outcome = CreatedOutcome(snapshot.MarkCreated(req.ExternalId!));
+                    outcome = CreatedOutcome(vm.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
                 }
                 // A revert or delete Incus refused ends with the snapshot kept
                 // (titan-ops architecture/desired-and-current.md#abandoned-request).
@@ -81,15 +86,15 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
                                                 || snapshot.Transition == VmSnapshotTransition.Deleting;
                 if (revertOrDeleteWasWaiting)
                 {
-                    snapshot.AbandonRequest(req.Reason, req.Detail);
+                    vm.AbandonSnapshotRequest(snapshot.Id, req.Reason, req.Detail);
                 }
                 else
                 {
-                    snapshot.MarkRequestFailed(req.Reason, req.Detail);
+                    vm.MarkSnapshotRequestFailed(snapshot.Id, req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
-                bool deletedNow = snapshot.MarkDeleted();
+                bool deletedNow = vm.MarkSnapshotDeleted(snapshot.Id);
                 if (deletedNow)
                 {
                     outcome = "vm_snapshot.deleted";
@@ -102,7 +107,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmSnapshotRepository snapshot
             activity.StageOutcome(snapshot.TenantId, outcome, "vm_snapshot", snapshot.Id, snapshot.Name);
         }
 
-        await snapshotRepo.SaveAsync(snapshot, ct);
+        await vmRepo.SaveAsync(ct);
     }
 
     private static string? CreatedOutcome(bool fulfilledTheCreate)

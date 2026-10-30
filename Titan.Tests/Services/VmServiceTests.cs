@@ -30,7 +30,6 @@ public class VmServiceTests
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
-    private readonly Mock<IVmSnapshotRepository> _snapshotRepo = new();
     private readonly Mock<IVolumeRepository> _volumeRepo = CreateVolumeRepo();
 
     private static Mock<IVolumeRepository> CreateVolumeRepo()
@@ -76,7 +75,7 @@ public class VmServiceTests
 
     private DeleteVmCommandHandler CreateDeleteHandler() =>
         new(_repo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object,
-            _snapshotRepo.Object, _volumeRepo.Object, _loadBalancerRepo.Object, _activity);
+            _volumeRepo.Object, _loadBalancerRepo.Object, _activity);
 
     private StopVmCommandHandler CreateStopHandler() =>
         new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
@@ -85,7 +84,7 @@ public class VmServiceTests
         new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
 
     private UpdateVmStatusCommandHandler CreateUpdateStatusHandler() =>
-        new(_repo.Object, _snapshotRepo.Object, _volumeRepo.Object, _activity);
+        new(_repo.Object, _volumeRepo.Object, _activity);
 
     private MarkVmIntentFailedCommandHandler CreateMarkIntentFailedHandler() =>
         new(_repo.Object, _activity);
@@ -598,17 +597,19 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // A snapshot operation in flight (Creating/Reverting) races the VM delete:
-    // the snapshot command would act on an instance being deleted. CP
-    // blocks the delete with 422 VM_SNAPSHOT_IN_PROGRESS until it settles.
+    // A snapshot operation in flight (Creating/Reverting) races the VM delete: the snapshot command would act on
+    // an instance being deleted. The VM refuses with 422 VM_SNAPSHOT_IN_PROGRESS until it settles, counting the
+    // snapshots it holds (titan-ops architecture/code-structure.md#child-entity).
     [Fact]
     public async Task Delete_SnapshotInProgress_ThrowsBusinessException_NoCommand()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
         var vm = MakeVm(VmSeed.Running);
+        var reverting = vm.AddSnapshotUnchecked("reverting");
+        reverting.MarkCreated("cs-vm-id/s1");
+        vm.RevertSnapshot(reverting.Id);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-        _snapshotRepo.Setup(r => r.AnyInProgressByVmIdAsync(vm.Id, default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
@@ -626,8 +627,8 @@ public class VmServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         var vm = MakeVm(VmSeed.CreateFailed); // never provisioned → ExternalId null
+        vm.AddSnapshotUnchecked("creating"); // a create still waiting
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-        _snapshotRepo.Setup(r => r.AnyInProgressByVmIdAsync(vm.Id, default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
@@ -1104,15 +1105,30 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
+    // The VM's Deleted takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every one is Deleted
+    // in the same save, and a snapshot whose own delete was waiting gets its outcome here, once — its delete command
+    // will only find it already gone.
     [Fact]
-    public async Task UpdateStatus_Deleted_CascadesSnapshotDeletion()
+    public async Task UpdateStatus_Deleted_MarksTheVmsSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
     {
         var vm = MakeVm(VmSeed.Running);
+        var ready = vm.AddSnapshotUnchecked("ready");
+        ready.MarkCreated("cs-vm-id/s1");
+        var leaving = vm.AddSnapshotUnchecked("leaving");
+        leaving.MarkCreated("cs-vm-id/s2");
+        vm.RequestSnapshotDelete(leaving.Id);
+        vm.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
-        _snapshotRepo.Verify(r => r.MarkAllDeletedByVmIdAsync(vm.Id, default), Times.Once);
+        Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
+        Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
+        var outcomes = _activity.Events.Where(e => e.OutcomeTenantId != null).ToList();
+        Assert.Single(outcomes, o => o.Action == "vm.deleted" && o.ResourceId == vm.Id);
+        Assert.Single(outcomes, o => o.Action == "vm_snapshot.deleted" && o.ResourceId == leaving.Id);
+        Assert.DoesNotContain(outcomes, o => o.Action == "vm_snapshot.deleted" && o.ResourceId == ready.Id);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
     // A volume left attached to a deleted VM must not stay Attached for ever: it could not be detached, attached or

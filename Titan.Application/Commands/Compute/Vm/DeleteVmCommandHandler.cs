@@ -15,7 +15,6 @@ public class DeleteVmCommandHandler(
     ITenantRepository tenantRepo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
-    IVmSnapshotRepository snapshotRepo,
     IVolumeRepository volumeRepo,
     ILoadBalancerRepository loadBalancerRepo,
     IActivityRecorder activity)
@@ -47,18 +46,13 @@ public class DeleteVmCommandHandler(
             return;
         }
 
+        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS): the
+        // snapshot command would act on an instance being deleted (titan-ops architecture/code-structure.md#child-entity).
         VmIntentTicket ticket = vm.RequestDelete();
 
-        // A snapshot operation actively touching the VM (Creating/Reverting) races the delete on the
-        // provider side — block until it settles (422). Nothing is saved yet, so the intent
-        // RequestDelete recorded in memory is discarded with the request.
-        if (await snapshotRepo.AnyInProgressByVmIdAsync(command.VmId, ct))
-        {
-            throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
-        }
-
         // Refused rather than editing the load balancer behind the customer's back
-        // (titan-ops features/load-balancer/design.md#lb-and-vm-network). Same discard as above.
+        // (titan-ops features/load-balancer/design.md#lb-and-vm-network). Nothing is saved yet, so the intent
+        // RequestDelete recorded in memory is discarded with the request.
         if (await loadBalancerRepo.IsBackendAsync(command.VmId, ct))
         {
             throw new BusinessException("VM_IS_LOAD_BALANCER_BACKEND",

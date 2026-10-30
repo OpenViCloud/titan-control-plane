@@ -4,7 +4,6 @@ using Microsoft.Extensions.Configuration;
 using Titan.Application.Queries.Compute.VmSnapshot;
 using Titan.Application.Queries.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;
@@ -80,11 +79,10 @@ public class FirewallAndVmSnapshotReconcilerTests
         using var db = NewDb();
         var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
-        var snapshot = VmSnapshot.CreateUnchecked(vm.Id, vm.TenantId, "snap");
+        var snapshot = vm.AddSnapshotUnchecked("snap");
         snapshot.MarkCreated("42:3");
-        snapshot.Revert(vm);
-        db.Vms.Add(vm);
-        db.VmSnapshots.Add(snapshot);
+        vm.RevertSnapshot(snapshot.Id);
+        db.Vms.Add(vm); // the snapshot comes with the VM
         await db.SaveChangesAsync();
         var heartbeat = new ReconcilerHeartbeat();
         var ep = VmSnapshotEndpoint(db, heartbeat, "secret");

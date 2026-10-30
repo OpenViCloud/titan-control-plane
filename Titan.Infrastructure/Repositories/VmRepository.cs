@@ -9,7 +9,18 @@ namespace Titan.Infrastructure.Repositories;
 public class VmRepository(TitanDbContext db) : IVmRepository
 {
     public async Task<Vm?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
-        await db.Vms.FirstOrDefaultAsync(v => v.Id == id, ct);
+        await db.Vms.Include(v => v.Snapshots).FirstOrDefaultAsync(v => v.Id == id, ct);
+
+    // Lock first, load second, as NetworkRepository.FindByIdForUpdateAsync (titan-ops architecture/code-structure.md#child-entity).
+    public async Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.vms WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
+    public async Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) =>
+        await db.Vms.Include(v => v.Snapshots)
+            .FirstOrDefaultAsync(v => v.Snapshots.Any(s => s.Id == snapshotId), ct);
 
     public async Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms

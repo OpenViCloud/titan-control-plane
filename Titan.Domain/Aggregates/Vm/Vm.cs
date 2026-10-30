@@ -43,6 +43,17 @@ public class Vm : AggregateRoot
     // Null means nothing is waiting (titan-ops features/vm/design.md#pending-intent).
     public Guid? PendingIntentId { get; private set; }
 
+    /// The VM's snapshots, each an instance snapshot on Incus named under the instance; rows are kept after Deleted
+    /// (titan-ops features/vm/design.md#vm-snapshot). The repository loads them with the VM.
+    private readonly List<VmSnapshot> _snapshots = [];
+    public IReadOnlyCollection<VmSnapshot> Snapshots => _snapshots;
+
+    /// What counts toward MaxVmSnapshotsPerVm (titan-ops features/vm/design.md#vm-snapshot-counting).
+    public int SnapshotQuotaUsage => _snapshots.Count(s => s.CountsTowardQuota);
+
+    /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
+    private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);
+
     /// Derived, not stored: a stored kind would be a second copy of the desired fields that can disagree.
     /// Create and Start both want Running; until the create has finished, Running is what it waits for.
     public VmIntent? PendingIntent
@@ -222,6 +233,13 @@ public class Vm : AggregateRoot
         {
             throw new BusinessException("VM_INVALID_STATUS", "A delete is already in progress for this VM.");
         }
+        // A snapshot create or revert in flight would act on an instance being deleted
+        // (titan-ops features/vm/design.md#vm-snapshot-counting): refused until it settles, on a VM with no provider id too,
+        // so its row does not vanish under the snapshot command.
+        if (ASnapshotCommandIsRunning)
+        {
+            throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
+        }
 
         bool reachedTheProvider = ExternalId != null;
         if (!reachedTheProvider)
@@ -353,22 +371,98 @@ public class Vm : AggregateRoot
         return RequireExternalId();
     }
 
-    /// VmSnapshot.Create checks the same rule; this hands out the id, and the caller needs both,
-    /// so neither can be skipped.
+    /// AddSnapshot checks the same rule; this hands out the id, and the caller needs both, so neither can be skipped.
     public string BeginSnapshot()
     {
         EnsureSnapshottable();
         return RequireExternalId();
     }
 
-    /// A cross-aggregate precondition for VmSnapshot.Create and VmSnapshot.Revert, never called by a
-    /// handler (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
-    internal void EnsureSnapshottable()
+    /// The precondition of AddSnapshot, RevertSnapshot and BeginSnapshot, never called by a handler
+    /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
+    private void EnsureSnapshottable()
     {
         if (!IncusCanAttachOrSnapshot())
             throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped or Frozen to snapshot or revert.");
         EnsureNoStopOrDeleteWaiting();
     }
+
+    // ---- Snapshots: the VM keeps the per-VM cap and the "no delete under a snapshot command" rule, and routes each
+    // call to the snapshot it names (titan-ops architecture/code-structure.md#child-entity). Logic stays on VmSnapshot;
+    // this is the way in.
+
+    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable) and the tenant's cap is
+    /// checked here on what this VM holds (titan-ops architecture/code-structure.md#tenant-typed-edge); the handler locks
+    /// the VM row first so two requests cannot both count below the cap. The create request is the snapshot's own
+    /// PendingIntentId.
+    public VmSnapshot AddSnapshot(TenantAggregate tenant, string name)
+    {
+        EnsureSnapshottable();
+        tenant.EnsureCanCreateVmSnapshot(SnapshotQuotaUsage);
+        return AddSnapshotUnchecked(name);
+    }
+
+    /// Test seam — internal, reachable only from Titan.Tests: a snapshot of this VM with no check on the VM or the
+    /// cap, so a test can put a VM into any shape. See CreateUnchecked.
+    internal VmSnapshot AddSnapshotUnchecked(string name)
+    {
+        VmSnapshot snapshot = VmSnapshot.CreateUnchecked(Id, TenantId, name);
+        _snapshots.Add(snapshot);
+        return snapshot;
+    }
+
+    public VmSnapshot? SnapshotOrNull(Guid snapshotId)
+    {
+        foreach (VmSnapshot snapshot in _snapshots)
+        {
+            if (snapshot.Id == snapshotId)
+            {
+                return snapshot;
+            }
+        }
+        return null;
+    }
+
+    /// A snapshot this VM does not have answers like a missing one, the same 404 a snapshot of another VM gets
+    /// (titan-ops features/vm/design.md#vm-routes).
+    public VmSnapshot RequireSnapshot(Guid snapshotId) =>
+        SnapshotOrNull(snapshotId) ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
+
+    /// Intent on one snapshot: the VM must accept a revert (its own rule first), then the snapshot must rest on
+    /// Incus; returns the snapshot's provider id for the command. Titan does not stop or start the VM for it.
+    public string RevertSnapshot(Guid snapshotId)
+    {
+        VmSnapshot snapshot = RequireSnapshot(snapshotId);
+        EnsureSnapshottable();
+        return snapshot.Revert();
+    }
+
+    /// Intent on one snapshot: its delete goes through Incus; returns the snapshot's provider id for the command.
+    public string RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
+
+    /// Intent on one snapshot whose create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
+    public void DeleteSnapshotLocally(Guid snapshotId) => RequireSnapshot(snapshotId).DeleteLocally();
+
+    /// The snapshot's revert or delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request).
+    public void AbandonSnapshotRequest(Guid snapshotId, string? reason, string? detail) =>
+        RequireSnapshot(snapshotId).AbandonRequest(reason, detail);
+
+    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges), each
+    // returning what the snapshot's own method returns.
+
+    public bool MarkSnapshotCreated(Guid snapshotId, string externalId) =>
+        RequireSnapshot(snapshotId).MarkCreated(externalId);
+
+    public bool MarkSnapshotObserved(Guid snapshotId) => RequireSnapshot(snapshotId).MarkObserved();
+
+    public bool MarkSnapshotReverted(Guid snapshotId) => RequireSnapshot(snapshotId).MarkReverted();
+
+    public void MarkSnapshotNotFound(Guid snapshotId) => RequireSnapshot(snapshotId).MarkNotFound();
+
+    public bool MarkSnapshotDeleted(Guid snapshotId) => RequireSnapshot(snapshotId).MarkDeleted();
+
+    public void MarkSnapshotRequestFailed(Guid snapshotId, string? reason, string? detail) =>
+        RequireSnapshot(snapshotId).MarkRequestFailed(reason, detail);
 
     /// Intent, Titan-side display name only. The aggregate carries it out itself, so the check sits inside
     /// the mutation (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
@@ -469,11 +563,13 @@ public class Vm : AggregateRoot
         CreateFinished = true;
     }
 
-    /// The delete command saw the instance gone after Titan's own delete. Returns Delete if a delete was waiting;
-    /// any other waiting intent can never happen now, so it is dropped without an outcome.
-    public VmIntent? MarkDeleted()
+    /// The delete command saw the instance gone after Titan's own delete. Fulfilled is Delete if a delete was
+    /// waiting; any other waiting intent can never happen now, so it is dropped without an outcome. Incus deletes an
+    /// instance's snapshots with it (titan-ops features/vm/design.md#vm-snapshot), so every snapshot not yet Deleted goes
+    /// with the VM, its waiting request ended; the ones whose own delete was waiting are named for their outcome.
+    public VmDeletionOutcome MarkDeleted()
     {
-        if (IsTerminal) return null;
+        if (IsTerminal) return new VmDeletionOutcome(null, []);
         VmIntent? waitingBeforeThisReport = PendingIntent;
         CurrentExistence = CurrentExistence.Deleted;
         CurrentState = null;
@@ -485,7 +581,17 @@ public class Vm : AggregateRoot
             fulfilled = VmIntent.Delete;
         }
         PendingIntentId = null;
-        return fulfilled;
+
+        var snapshotsWhoseDeleteWasFulfilled = new List<VmSnapshot>();
+        foreach (VmSnapshot snapshot in _snapshots)
+        {
+            bool itsOwnDeleteWasWaiting = snapshot.MarkDeleted();
+            if (itsOwnDeleteWasWaiting)
+            {
+                snapshotsWhoseDeleteWasFulfilled.Add(snapshot);
+            }
+        }
+        return new VmDeletionOutcome(fulfilled, snapshotsWhoseDeleteWasFulfilled);
     }
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure). Ends the waiting

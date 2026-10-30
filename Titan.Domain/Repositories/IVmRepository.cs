@@ -4,7 +4,14 @@ namespace Titan.Domain.Repositories;
 
 public interface IVmRepository
 {
+    /// The aggregate whole: the VM with its snapshots, tracked (titan-ops architecture/code-structure.md#child-entity).
     Task<Vm?> FindByIdAsync(Guid id, CancellationToken ct = default);
+    /// The same, with the VM's row locked until this context's next save commits: the per-VM snapshot cap is counted
+    /// on the loaded snapshots, so two requests adding a snapshot at the cap take turns.
+    Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
+    /// The VM a snapshot belongs to, with its snapshots, tracked; null when no VM has the snapshot. For the worker's
+    /// callbacks, which name the snapshot.
+    Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default);
     Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default);

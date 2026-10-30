@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.VmSnapshot;
+using Titan.Domain.Aggregates.Vm;
 
 namespace Titan.Infrastructure.Persistence;
 
@@ -10,7 +10,9 @@ public class VmSnapshotConfiguration : IEntityTypeConfiguration<VmSnapshot>
     {
         builder.ToTable("vm_snapshots");
         builder.HasKey(s => s.Id);
-        builder.Property(s => s.Id).HasColumnName("id");
+        // The aggregate sets the id. Left "generated on add", EF reads a snapshot added to a tracked VM as one already
+        // saved and updates it: 0 rows (same trap as LoadBalancerListener, FirewallRule and VolumeSnapshot).
+        builder.Property(s => s.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(s => s.VmId).HasColumnName("vm_id");
         builder.Property(s => s.TenantId).HasColumnName("tenant_id");
         builder.Property(s => s.Name).HasColumnName("name").IsRequired().HasMaxLength(100);

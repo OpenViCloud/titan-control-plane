@@ -3,7 +3,6 @@ using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;

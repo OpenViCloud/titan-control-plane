@@ -109,7 +109,7 @@ public class ModuleBoundaryTests
             "the VM factory asks the tenant about VM quota, so forgetting the check means having no VM",
         ["Volume.Create(tenant) -> Tenant"] = "volume quota",
         ["Volume.CreateFromSnapshot(tenant) -> Tenant"] = "a restore creates a volume, so it spends VOLUME quota",
-        ["VmSnapshot.Create(tenant) -> Tenant"] = "per-VM snapshot quota",
+        ["Vm.AddSnapshot(tenant) -> Tenant"] = "per-VM snapshot quota, counted on the snapshots the VM holds (its child entities)",
         ["Volume.AddSnapshot(tenant) -> Tenant"] = "per-volume snapshot quota, counted on the snapshots the volume holds (its child entities)",
         ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",
         ["Network.AddFirewallRule(tenant) -> Tenant"] = "per-network rule quota, counted on the rules the network holds (its child entities)",
@@ -120,9 +120,6 @@ public class ModuleBoundaryTests
         ["LoadBalancer.Create(backends) -> Vm"] =
             "each backend must be the tenant's VM and accept the network (Vm.BeginLoadBalancerBackend), checked in the factory",
         ["LoadBalancer.RequestUpdate(backends) -> Vm"] = "the same backend rule, on an update",
-        ["VmSnapshot.Create(vm) -> Vm"] =
-            "the VM must accept a snapshot (Vm.EnsureSnapshottable), checked in the factory (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation)",
-        ["VmSnapshot.Revert(vm) -> Vm"] = "a revert checks the snapshot and the VM in one call",
         ["Volume.Attach(vm) -> Vm"] =
             "the VM's side of an attach (Vm.BeginVolumeAttach) is checked before the provider ids are handed out",
 

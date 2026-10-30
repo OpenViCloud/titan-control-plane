@@ -4,7 +4,6 @@ using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
-using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
@@ -31,10 +30,15 @@ public class QuotaInFactoryTests
         return t;
     }
 
-    private static Vm RunningVm(Guid tenantId)
+    // A running VM already holding `snapshots` snapshots that count toward the per-VM cap (its child entities).
+    private static Vm RunningVmWithSnapshots(Guid tenantId, int snapshots)
     {
         var vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
+        for (int i = 0; i < snapshots; i++)
+        {
+            vm.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"42/s{i}");
+        }
         return vm;
     }
 
@@ -121,7 +125,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxVmSnaps: 3);
         Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => VmSnapshotAggregate.Create(RunningVm(t.Id), t, 3, "snap-1")).Code);
+            () => RunningVmWithSnapshots(t.Id, 3).AddSnapshot(t, "snap-1")).Code);
     }
 
     [Fact]
@@ -162,7 +166,7 @@ public class QuotaInFactoryTests
         Assert.NotNull(Network.Create(t, 2, 0, "net-1", "cluster-a", null));
         Assert.NotNull(Volume.Create(t, 3, "vol-1", "cluster-a", "std", 20));
         Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
-        Assert.NotNull(VmSnapshotAggregate.Create(RunningVm(t.Id), t, 2, "snap-1"));
+        Assert.NotNull(RunningVmWithSnapshots(t.Id, 2).AddSnapshot(t, "snap-1"));
         Assert.NotNull(AllocatedVolumeWithSnapshots(t.Id, 1).AddSnapshot(t, "snap-1"));
         Assert.NotNull(UsableNetworkWithRules(t.Id, 4).AddFirewallRule(t, FirewallDirection.Ingress,
             FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));

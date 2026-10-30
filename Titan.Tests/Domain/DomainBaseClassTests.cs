@@ -20,6 +20,7 @@ public class DomainBaseClassTests
         ["VolumeAttachProviderIds"] = "result of Volume attach, the provider ids the attach command carries",
         ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
         ["VolumeDeletionOutcome"] = "result of Volume.MarkDeleted: the volume's own outcome and the snapshots whose delete it finished",
+        ["VmDeletionOutcome"] = "result of Vm.MarkDeleted: the intent it fulfilled and the snapshots whose delete it finished",
     };
 
     [Fact]

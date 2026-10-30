@@ -4,6 +4,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
@@ -21,7 +22,6 @@ namespace Titan.Application.Commands.Compute.Vm;
 // guest-OS shutdown nobody asked for, fulfils nothing.
 public class UpdateVmStatusCommandHandler(
     IVmRepository repo,
-    IVmSnapshotRepository snapshotRepo,
     IVolumeRepository volumeRepo,
     IActivityRecorder activity)
 {
@@ -96,8 +96,15 @@ public class UpdateVmStatusCommandHandler(
                 vm.MarkRequestFailed(req.Reason, req.Detail);
                 break;
             case "Deleted":
-                fulfilled = vm.MarkDeleted();
-                await snapshotRepo.MarkAllDeletedByVmIdAsync(vmId, ct);
+                // The VM takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot) and names the ones whose
+                // own delete was waiting: their delete command will only find them already Deleted, so their outcome
+                // is recorded now.
+                VmDeletionOutcome deletion = vm.MarkDeleted();
+                fulfilled = deletion.Fulfilled;
+                foreach (VmSnapshotEntity snapshot in deletion.SnapshotsWhoseDeleteWasFulfilled)
+                {
+                    activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
+                }
                 // The provider kept the VM's volumes and detached them (titan-ops features/volume/design.md#vm-delete-releases-volumes).
                 List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmAsync(vmId, ct);
                 foreach (VolumeAggregate volume in attachedVolumes)

@@ -380,8 +380,8 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.Running);
         vm.RequestDelete();
 
-        VmIntent? fulfilled = vm.MarkDeleted();
-        VmIntent? second = vm.MarkDeleted();
+        VmIntent? fulfilled = vm.MarkDeleted().Fulfilled;
+        VmIntent? second = vm.MarkDeleted().Fulfilled;
 
         Assert.Equal(VmIntent.Delete, fulfilled);
         Assert.Null(second);
@@ -397,7 +397,7 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.NotFound);
         vm.RequestDelete();
 
-        Assert.Equal(VmIntent.Delete, vm.MarkDeleted());
+        Assert.Equal(VmIntent.Delete, vm.MarkDeleted().Fulfilled);
     }
 
     [Fact] // deleted outside a request while a stop waited: the stop can never happen, nobody asked for a delete
@@ -406,7 +406,7 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.Running);
         vm.RequestStop();
 
-        Assert.Null(vm.MarkDeleted());
+        Assert.Null(vm.MarkDeleted().Fulfilled);
         Assert.Null(vm.PendingIntent);
     }
 

@@ -44,7 +44,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
             var caller = Callers.TenantMember(tenant.Id);
             var handler = new DeleteVmCommandHandler(new VmRepository(db), new TenantRepository(db), caller,
                 new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
-                new VmSnapshotRepository(db), new VolumeRepository(db), new LoadBalancerRepository(db),
+                new VolumeRepository(db), new LoadBalancerRepository(db),
                 new ActivityRecorder(new ActivityEventRepository(db), caller));
 
             ConflictException refused = await Assert.ThrowsAsync<ConflictException>(

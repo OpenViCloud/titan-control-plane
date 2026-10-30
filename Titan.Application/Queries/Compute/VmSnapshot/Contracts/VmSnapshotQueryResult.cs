@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
-using Titan.Domain.Aggregates.VmSnapshot;
-using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
+using VmSnapshotTransition = Titan.Domain.Aggregates.Vm.VmSnapshotTransition;
+using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
@@ -18,7 +18,7 @@ public record VmSnapshotQueryResult(
     string? RequestFailureReason,
     DateTimeOffset? RequestFailedAt)
 {
-    public static VmSnapshotQueryResult From(VmSnapshotAggregate s) =>
+    public static VmSnapshotQueryResult From(VmSnapshotEntity s) =>
         new(s.Id, s.Name, s.CurrentExistence, s.DesiredExistence, s.Transition,
             s.CreatedAt, s.RequestFailureReason, s.RequestFailedAt);
 }

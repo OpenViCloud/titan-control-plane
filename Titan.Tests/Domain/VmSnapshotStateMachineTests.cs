@@ -1,6 +1,5 @@
 using Titan.Tests.Fakes;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 
@@ -26,17 +25,19 @@ public class VmSnapshotStateMachineTests
         return vm;
     }
 
-    private static readonly Vm RunningVm = VmIn(VmState.Running);
+    // Fresh per call: the snapshots a test seeds would otherwise pile up on one VM and reach its cap.
+    private static Vm RunningVm => VmIn(VmState.Running);
 
+    // A snapshot is the VM's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through the VM.
     private static VmSnapshot SnapshotIn(Seed seed)
     {
-        var s = VmSnapshot.Create(RunningVm, TestTenant.WithRoomToSpare(), 0, "snap-1");
+        var s = RunningVm.AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1");
         switch (seed)
         {
-            case Seed.Creating: break; // Create() lands here
+            case Seed.Creating: break; // AddSnapshot() lands here
             case Seed.CreateFailed: s.MarkRequestFailed("could not create", "raw"); break;
             case Seed.Exists: s.MarkCreated("vm42/s7"); break;
-            case Seed.RevertRequested: s.MarkCreated("vm42/s7"); s.Revert(RunningVm); break;
+            case Seed.RevertRequested: s.MarkCreated("vm42/s7"); s.Revert(); break;
             case Seed.DeleteRequested: s.MarkCreated("vm42/s7"); s.RequestDelete(); break;
             case Seed.NotFound: s.MarkCreated("vm42/s7"); s.MarkNotFound(); break;
             case Seed.Deleted: s.MarkCreated("vm42/s7"); s.RequestDelete(); s.MarkDeleted(); break;
@@ -74,7 +75,7 @@ public class VmSnapshotStateMachineTests
     [InlineData(VmState.Error)]
     public void Create_FromAVmInError_Throws(VmState from)
     {
-        var ex = Assert.Throws<BusinessException>(() => VmSnapshot.Create(VmIn(from), TestTenant.WithRoomToSpare(), 0, "s"));
+        var ex = Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot(TestTenant.WithRoomToSpare(), "s"));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
@@ -82,11 +83,12 @@ public class VmSnapshotStateMachineTests
     public void CreateAndRevert_OfAStoppedVm_AreAccepted()
     {
         Vm stopped = VmIn(VmState.Stopped);
-        var created = VmSnapshot.Create(stopped, TestTenant.WithRoomToSpare(), 0, "s");
+        var created = stopped.AddSnapshot(TestTenant.WithRoomToSpare(), "s");
         Assert.Equal(VmSnapshotTransition.Creating, created.Transition);
 
-        var s = SnapshotIn(Seed.Exists);
-        s.Revert(VmIn(VmState.Stopped));
+        var s = stopped.AddSnapshotUnchecked("ready");
+        s.MarkCreated("vm42/s7");
+        stopped.RevertSnapshot(s.Id);
         Assert.Equal("Exists/Exists/Reverting", Shape(s));
     }
 
@@ -137,15 +139,17 @@ public class VmSnapshotStateMachineTests
     public void Revert_WhenIncusHasIt_WaitsForTheRevert_AndYieldsTheId()
     {
         var s = SnapshotIn(Seed.Exists);
-        Assert.Equal("vm42/s7", s.Revert(RunningVm));
+        Assert.Equal("vm42/s7", s.Revert());
         Assert.Equal("Exists/Exists/Reverting", Shape(s));
     }
 
-    [Fact] // revert checks the VM in the same call, not by the caller
+    [Fact] // the VM checks itself in the same call (Vm.RevertSnapshot), not the caller
     public void Revert_WithAVmInError_Throws_AndLeavesTheSnapshotAlone()
     {
-        var s = SnapshotIn(Seed.Exists);
-        var ex = Assert.Throws<BusinessException>(() => s.Revert(VmIn(VmState.Error)));
+        Vm vm = VmIn(VmState.Error);
+        var s = vm.AddSnapshotUnchecked("snap-1");
+        s.MarkCreated("vm42/s7");
+        var ex = Assert.Throws<BusinessException>(() => vm.RevertSnapshot(s.Id));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Equal("Exists/Exists/-", Shape(s));
     }
@@ -157,7 +161,7 @@ public class VmSnapshotStateMachineTests
         {
             var s = SnapshotIn(seed);
             string before = Shape(s);
-            var ex = Assert.Throws<BusinessException>(() => s.Revert(RunningVm));
+            var ex = Assert.Throws<BusinessException>(() => s.Revert());
             Assert.Equal("VM_SNAPSHOT_INVALID_STATE", ex.Code);
             Assert.Equal(before, Shape(s));
         }

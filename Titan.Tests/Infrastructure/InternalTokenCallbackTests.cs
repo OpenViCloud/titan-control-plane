@@ -61,7 +61,7 @@ public class InternalTokenCallbackTests
     [InlineData("wrong")]
     public async Task UpdateVmSnapshotStatus_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateVmSnapshotStatusCommandHandler(new Mock<IVmSnapshotRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var handler = new UpdateVmSnapshotStatusCommandHandler(new Mock<IVmRepository>(MockBehavior.Strict).Object, StrictActivity());
         var ep = Factory.Create<UpdateSnapshotStatusEndpoint>(
             ctx =>
             {

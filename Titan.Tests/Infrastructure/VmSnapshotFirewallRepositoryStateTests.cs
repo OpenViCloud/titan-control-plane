@@ -1,18 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.VmSnapshot;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure;
 
-// The VM snapshot and firewall rule queries that decide quota, billing and what blocks a VM delete, one row per
-// situation. A delete in flight stops counting toward quota the moment it is requested; a revert in flight still
-// bills, a delete in flight does not.
+// The VM snapshot and firewall rule read-side queries: the customer's list, billing and the reconciler's pool, one row
+// per situation. Quota and "what blocks a VM delete" are the VM's own count now (VmSnapshotChildTests): a snapshot is
+// the VM's child entity (titan-ops architecture/code-structure.md#child-entity), seeded through it. A revert in flight
+// still bills, a delete in flight too, until Incus deleted it.
 //
-// Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it), and
-// MarkAllDeletedByVmIdAsync (ExecuteUpdate — InMemory cannot run it; StateRoundTripDbTests does).
+// Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it).
 public class VmSnapshotFirewallRepositoryStateTests
 {
     private static readonly Guid Tenant = Guid.NewGuid();
@@ -29,70 +28,27 @@ public class VmSnapshotFirewallRepositoryStateTests
         return vm;
     }
 
-    private static readonly Vm TheVm = RunningVm();
-
-    private static VmSnapshot Creating(Vm vm, string name) => VmSnapshot.CreateUnchecked(vm.Id, Tenant, name);
-
     private static VmSnapshot Ready(Vm vm, string name)
     {
-        var s = Creating(vm, name);
+        var s = vm.AddSnapshotUnchecked(name);
         s.MarkCreated($"42:{name}");
         return s;
     }
 
-    private static VmSnapshot RevertRequested(Vm vm, string name)
+    // A VM holding one snapshot in every situation: creating, ready, reverting, deleting, deleted, lost, failed.
+    private static Vm VmWithEverySnapshotSituation(string cluster = "vn-hcm-1")
     {
-        var s = Ready(vm, name);
-        s.Revert(TheVm);
-        return s;
-    }
-
-    private static VmSnapshot DeleteRequested(Vm vm, string name)
-    {
-        var s = Ready(vm, name);
-        s.RequestDelete();
-        return s;
-    }
-
-    private static VmSnapshot Deleted(Vm vm, string name)
-    {
-        var s = DeleteRequested(vm, name);
-        s.MarkDeleted();
-        return s;
-    }
-
-    private static VmSnapshot NotFound(Vm vm, string name)
-    {
-        var s = Ready(vm, name);
-        s.MarkNotFound();
-        return s;
-    }
-
-    private static VmSnapshot CreateFailed(Vm vm, string name)
-    {
-        var s = Creating(vm, name);
-        s.MarkRequestFailed("could not create", "raw");
-        return s;
-    }
-
-    private static VmSnapshot[] EverySituation(Vm vm) =>
-    [
-        Creating(vm, "creating"), Ready(vm, "ready"), RevertRequested(vm, "reverting"),
-        DeleteRequested(vm, "deleting"), Deleted(vm, "deleted"), NotFound(vm, "lost"), CreateFailed(vm, "failed"),
-    ];
-
-    // Occupancy (titan-ops features/vm/design.md#vm-snapshot-counting): a snapshot whose delete was requested stops counting
-    // toward MaxVmSnapshotsPerVm; one Incus no longer has, or never had, does not count.
-    [Fact]
-    public async Task SnapshotQuota_CountsCreatingExistingAndReverting_ButNotADeleteInFlight_NotFound_NorAFailedCreate()
-    {
-        using var db = NewDb();
-        db.VmSnapshots.AddRange(EverySituation(TheVm));
-        await db.SaveChangesAsync();
-
-        int count = await new VmSnapshotRepository(db).CountActiveByVmIdAsync(TheVm.Id);
-
-        Assert.Equal(3, count); // creating, ready, reverting
+        var vm = RunningVm(cluster);
+        vm.AddSnapshotUnchecked("creating");
+        Ready(vm, "ready");
+        Ready(vm, "reverting").Revert();
+        Ready(vm, "deleting").RequestDelete();
+        var deleted = Ready(vm, "deleted");
+        deleted.RequestDelete();
+        deleted.MarkDeleted();
+        Ready(vm, "lost").MarkNotFound();
+        vm.AddSnapshotUnchecked("failed").MarkRequestFailed("could not create", "raw");
+        return vm;
     }
 
     // Q-C: billing follows what Incus holds, a revert or a delete in flight included.
@@ -100,7 +56,7 @@ public class VmSnapshotFirewallRepositoryStateTests
     public async Task SnapshotBilling_IsWhatIncusHolds_ADeleteInFlightIncluded()
     {
         using var db = NewDb();
-        db.VmSnapshots.AddRange(EverySituation(TheVm));
+        db.Vms.Add(VmWithEverySnapshotSituation());
         await db.SaveChangesAsync();
 
         var billed = (await new VmSnapshotRepository(db).ListBillableAsync()).Select(s => s.Name).OrderBy(n => n).ToList();
@@ -108,34 +64,14 @@ public class VmSnapshotFirewallRepositoryStateTests
         Assert.Equal(new[] { "deleting", "ready", "reverting" }, billed);
     }
 
-    // What blocks a VM delete (VM_SNAPSHOT_IN_PROGRESS): a create or a revert in flight.
-    [Theory]
-    [InlineData("creating", true)]
-    [InlineData("reverting", true)]
-    [InlineData("ready", false)]
-    [InlineData("deleting", false)]
-    [InlineData("deleted", false)]
-    [InlineData("lost", false)]
-    [InlineData("failed", false)]
-    public async Task InProgress_IsACreateOrARevertInFlight(string situation, bool blocks)
-    {
-        using var db = NewDb();
-        db.VmSnapshots.Add(EverySituation(TheVm).Single(s => s.Name == situation));
-        await db.SaveChangesAsync();
-
-        bool inProgress = await new VmSnapshotRepository(db).AnyInProgressByVmIdAsync(TheVm.Id);
-
-        Assert.Equal(blocks, inProgress);
-    }
-
     [Fact] // a snapshot has no cluster; it lives where its VM lives. Only what has a provider id and is not gone.
     public async Task SnapshotReconcilable_FollowsItsVmsCluster_AndIsWhatReachedTheProvider()
     {
         using var db = NewDb();
+        var here = VmWithEverySnapshotSituation("vn-hcm-1");
         var there = RunningVm("vn-han-1");
-        db.Vms.AddRange(TheVm, there);
-        db.VmSnapshots.AddRange(EverySituation(TheVm));
-        db.VmSnapshots.Add(Ready(there, "elsewhere"));
+        Ready(there, "elsewhere");
+        db.Vms.AddRange(here, there);
         await db.SaveChangesAsync();
 
         var names = (await new VmSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Name).OrderBy(n => n).ToList();
@@ -147,10 +83,11 @@ public class VmSnapshotFirewallRepositoryStateTests
     public async Task SnapshotList_ShowsEverythingButDeleted()
     {
         using var db = NewDb();
-        db.VmSnapshots.AddRange(EverySituation(TheVm));
+        var vm = VmWithEverySnapshotSituation();
+        db.Vms.Add(vm);
         await db.SaveChangesAsync();
 
-        var names = (await new VmSnapshotRepository(db).FindByVmIdAsync(TheVm.Id)).Select(s => s.Name).OrderBy(n => n).ToList();
+        var names = (await new VmSnapshotRepository(db).FindByVmIdAsync(vm.Id)).Select(s => s.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "creating", "deleting", "failed", "lost", "ready", "reverting" }, names);
     }

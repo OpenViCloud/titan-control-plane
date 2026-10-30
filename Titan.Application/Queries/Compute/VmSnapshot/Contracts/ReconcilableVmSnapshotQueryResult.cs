@@ -1,4 +1,4 @@
-using VmSnapshotAggregate = Titan.Domain.Aggregates.VmSnapshot.VmSnapshot;
+using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 
 namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 
@@ -6,6 +6,6 @@ namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 // Titan last recorded. VmId is for the callback route. Internal only — never on a customer path.
 public record ReconcilableVmSnapshotQueryResult(Guid Id, Guid VmId, string ExternalId, string CurrentExistence)
 {
-    public static ReconcilableVmSnapshotQueryResult From(VmSnapshotAggregate s) =>
+    public static ReconcilableVmSnapshotQueryResult From(VmSnapshotEntity s) =>
         new(s.Id, s.VmId, s.RequireExternalId(), s.CurrentExistence.ToString());
 }
