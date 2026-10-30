@@ -1,11 +1,14 @@
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
-namespace Titan.Domain.Aggregates.FirewallRule;
+namespace Titan.Domain.Aggregates.Network;
 
-public class FirewallRule : AggregateRoot
+/// One rule of a network: a line in the network's ACL on Incus (titan-ops features/network/design.md#firewall-on-incus).
+/// A child of Network (titan-ops architecture/code-structure.md#child-entity): the per-network cap and the network's
+/// delete taking every rule with it are the network's invariants, so only the root reaches the methods below, and
+/// handlers go through Network.AddFirewallRule, RequestFirewallRuleDelete and MarkFirewallRule*.
+public class FirewallRule : ChildEntity
 {
     public Guid Id { get; private set; }
     public Guid NetworkId { get; private set; }
@@ -55,18 +58,16 @@ public class FirewallRule : AggregateRoot
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The cap is per
-    /// network, so ruleCount is the count on THIS network.
-    public static FirewallRule Create(
-        Guid networkId, TenantAggregate tenant, int ruleCount,
-        FirewallDirection direction, FirewallProtocol protocol,
-        int? startPort, int? endPort, string cidr)
-    {
-        tenant.EnsureCanCreateFirewallRule(ruleCount);
-        return CreateUnchecked(networkId, tenant.Id, direction, protocol, startPort, endPort, cidr);
-    }
+    /// Counted by occupancy toward MaxFirewallRulesPerNetwork (titan-ops features/network/design.md#firewall-rule-quota-counting):
+    /// what Incus holds or is about to hold. A delete asked for stops counting at once; a failed create with nothing
+    /// on Incus, and a rule Incus lost, do not count.
+    public bool CountsTowardQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
+    /// Called by Network.AddFirewallRule after the network checked itself and the tenant's cap. Also the test
+    /// seam: `internal`, reachable only from Titan.Tests (titan-ops architecture/code-structure.md#tenant-typed-edge).
     internal static FirewallRule CreateUnchecked(
         Guid networkId, Guid tenantId,
         FirewallDirection direction, FirewallProtocol protocol,
@@ -94,7 +95,7 @@ public class FirewallRule : AggregateRoot
 
     /// The create command wrote the rule into its network's ACL. The first id heard is kept; the state is left to
     /// the reconciler.
-    public void MarkCreated(string externalId)
+    internal void MarkCreated(string externalId)
     {
         if (IsTerminal)
         {
@@ -111,7 +112,7 @@ public class FirewallRule : AggregateRoot
 
     /// The reconciler read the rule in its ACL. Returns true when this fulfilled the waiting create, so the
     /// callback records "firewall_rule.created" once. A waiting delete is never withdrawn by an observation.
-    public bool MarkObserved(FirewallRuleState state)
+    internal bool MarkObserved(FirewallRuleState state)
     {
         if (IsTerminal)
         {
@@ -130,7 +131,7 @@ public class FirewallRule : AggregateRoot
 
     /// The reconciler did not find the rule in its ACL. Never Deleted: only a delete command confirms that
     /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a waiting delete keeps waiting.
-    public void MarkNotFound()
+    internal void MarkNotFound()
     {
         if (IsTerminal)
         {
@@ -147,7 +148,7 @@ public class FirewallRule : AggregateRoot
 
     /// The rule's delete command confirmed it gone, or its network's delete took the ACL with it. Returns true when
     /// this fulfilled the rule's own waiting delete.
-    public bool MarkDeleted()
+    internal bool MarkDeleted()
     {
         if (IsTerminal)
         {
@@ -163,7 +164,7 @@ public class FirewallRule : AggregateRoot
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale; a delete's give-up is AbandonRequest.
-    public void MarkRequestFailed(string? reason, string? detail)
+    internal void MarkRequestFailed(string? reason, string? detail)
     {
         if (IsTerminal || !CreateIsWaiting)
         {
@@ -180,7 +181,7 @@ public class FirewallRule : AggregateRoot
     /// waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a
     /// repeat and a rule already deleted; the handler answers those
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public string RequestDelete()
+    internal string RequestDelete()
     {
         if (CreateIsWaiting)
         {
@@ -208,7 +209,7 @@ public class FirewallRule : AggregateRoot
     /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): DesiredExistence
     /// returns to Exists, so it counts against the quota again (it is still enforced on Incus), the reason is kept
     /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request.
-    public void AbandonRequest(string? reason, string? detail)
+    internal void AbandonRequest(string? reason, string? detail)
     {
         if (!DeleteIsWaiting)
         {
@@ -225,7 +226,7 @@ public class FirewallRule : AggregateRoot
     /// Intent: remove a rule whose create failed before Incus had it. Nothing to send and nothing to wait for — the
     /// control plane is the only witness, which is why this request writes the current pair too
     /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteLocally()
+    internal void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId == null && !CreateIsWaiting && !IsTerminal;
         if (!neverReachedIncus)

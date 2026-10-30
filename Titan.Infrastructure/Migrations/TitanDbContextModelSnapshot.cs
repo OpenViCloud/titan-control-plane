@@ -314,89 +314,6 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("backups", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.FirewallRule.FirewallRule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("Cidr")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("cidr");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
-                    b.Property<string>("Direction")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("direction");
-
-                    b.Property<int?>("EndPort")
-                        .HasColumnType("integer")
-                        .HasColumnName("end_port");
-
-                    b.Property<string>("ExternalId")
-                        .HasColumnType("text")
-                        .HasColumnName("external_id");
-
-                    b.Property<Guid>("NetworkId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("network_id");
-
-                    b.Property<Guid?>("PendingIntentId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
-
-                    b.Property<string>("Protocol")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("protocol");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<int?>("StartPort")
-                        .HasColumnType("integer")
-                        .HasColumnName("start_port");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("tenant_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NetworkId");
-
-                    b.ToTable("firewall_rules", "core");
-                });
-
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -662,6 +579,89 @@ namespace Titan.Infrastructure.Migrations
                     b.HasIndex("LoadBalancerId");
 
                     b.ToTable("load_balancer_listeners", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Network.FirewallRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cidr")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cidr");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CurrentExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("current_existence");
+
+                    b.Property<string>("CurrentState")
+                        .HasColumnType("text")
+                        .HasColumnName("current_state");
+
+                    b.Property<string>("DesiredExistence")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("desired_existence");
+
+                    b.Property<string>("Direction")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("direction");
+
+                    b.Property<int?>("EndPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_port");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<Guid>("NetworkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("network_id");
+
+                    b.Property<Guid?>("PendingIntentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_intent_id");
+
+                    b.Property<string>("Protocol")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protocol");
+
+                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("RequestFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("RequestFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<int?>("StartPort")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_port");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NetworkId");
+
+                    b.ToTable("firewall_rules", "core");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Network.Network", b =>
@@ -2053,6 +2053,15 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Network.FirewallRule", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.Network.Network", null)
+                        .WithMany("FirewallRules")
+                        .HasForeignKey("NetworkId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Member", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Tenant.Tenant", "Tenant")
@@ -2113,6 +2122,11 @@ namespace Titan.Infrastructure.Migrations
                     b.Navigation("Backends");
 
                     b.Navigation("Listeners");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Network.Network", b =>
+                {
+                    b.Navigation("FirewallRules");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Tenant.Tenant", b =>

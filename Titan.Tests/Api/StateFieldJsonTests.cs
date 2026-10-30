@@ -3,7 +3,7 @@ using Titan.Application.Queries.Compute.Vm.Contracts;
 using Titan.Application.Queries.Networking.FirewallRule.Contracts;
 using Titan.Application.Queries.Platform.Tenant.Contracts;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 
 namespace Titan.Tests.Api;

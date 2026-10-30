@@ -4,7 +4,7 @@ using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -14,7 +14,6 @@ namespace Titan.Application.Commands.Networking.Network;
 // (titan-ops features/activity/design.md#outcome-source).
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
-    IFirewallRuleRepository firewallRepo,
     IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateNetworkStatusCommand command, CancellationToken ct = default)
@@ -90,23 +89,18 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 break;
             case "Deleted":
-                bool deletedNow = network.MarkDeleted();
-                if (deletedNow)
+                // The network takes its rules with it (titan-ops features/network/design.md#network-lifecycle) and names
+                // the ones whose own delete was waiting: their own delete command will only find them already Deleted,
+                // so their outcome is recorded now.
+                NetworkDeletionOutcome deletion = network.MarkDeleted();
+                if (deletion.FulfilledNetworkDelete)
                 {
                     outcome = "network.deleted";
                 }
-                // The delete command removed the network's ACL, and every rule in it
-                // (titan-ops features/network/design.md#network-lifecycle). A rule whose own delete was waiting is done
-                // here: its own delete command will only find it already Deleted, so its outcome is recorded now.
-                List<FirewallRuleAggregate> rules = await firewallRepo.ListLiveOfNetworkForUpdateAsync(network.Id, ct);
-                foreach (FirewallRuleAggregate rule in rules)
+                foreach (FirewallRuleEntity rule in deletion.RulesWhoseDeleteWasFulfilled)
                 {
-                    bool ruleDeleteFulfilled = rule.MarkDeleted();
-                    if (ruleDeleteFulfilled)
-                    {
-                        activity.StageOutcome(rule.TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id,
-                            FirewallRuleLabel.Describe(rule));
-                    }
+                    activity.StageOutcome(rule.TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id,
+                        FirewallRuleLabel.Describe(rule));
                 }
                 break;
         }

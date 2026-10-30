@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 
 namespace Titan.Infrastructure.Persistence;
 
@@ -10,7 +10,10 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
     {
         builder.ToTable("firewall_rules");
         builder.HasKey(r => r.Id);
-        builder.Property(r => r.Id).HasColumnName("id");
+        // The aggregate sets the id. Left "generated on add", EF reads a rule added to a tracked network as one already
+        // saved and updates it: 0 rows, DbUpdateConcurrencyException (same trap as LoadBalancerListener;
+        // FirewallRuleQuotaRaceDbTests.TwoCreatesOneBelowTheCap_OneIs201_TheOtherIsQuotaExceeded_AndTheCapHolds).
+        builder.Property(r => r.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(r => r.NetworkId).HasColumnName("network_id");
         builder.Property(r => r.TenantId).HasColumnName("tenant_id");
         builder.Property(r => r.Direction).HasColumnName("direction").HasConversion<string>().IsRequired();

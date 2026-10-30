@@ -1,4 +1,4 @@
-using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 

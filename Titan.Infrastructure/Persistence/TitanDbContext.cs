@@ -11,7 +11,6 @@ using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.SshKey;
 using Titan.Domain.Aggregates.ApiToken;
@@ -81,5 +80,39 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     {
         modelBuilder.HasDefaultSchema("core");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TitanDbContext).Assembly);
+    }
+
+    private bool _ownsTransaction;
+
+    /// Locks one aggregate root's row for the rest of this request (titan-ops architecture/code-structure.md#child-entity):
+    /// an invariant counted on the root's children (a per-network cap) holds only if two writers take turns, and the
+    /// row lock is where they queue. Opens a transaction when none is open; the next SaveChangesAsync commits it, so
+    /// every repository's SaveAsync stays "one save, one commit", and a handler that throws before saving commits
+    /// nothing (the transaction ends with the context). The statement is the caller's `SELECT … FOR UPDATE`; it is
+    /// skipped on a provider without rows to lock (InMemory), so only a Postgres test measures the lock.
+    public async Task LockRowAsync(FormattableString lockStatement, CancellationToken ct)
+    {
+        if (!Database.IsRelational())
+        {
+            return;
+        }
+        if (Database.CurrentTransaction == null)
+        {
+            await Database.BeginTransactionAsync(ct);
+            _ownsTransaction = true;
+        }
+        await Database.ExecuteSqlInterpolatedAsync(lockStatement, ct);
+    }
+
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken ct = default)
+    {
+        int written = await base.SaveChangesAsync(acceptAllChangesOnSuccess, ct);
+        bool thisContextOpenedTheTransaction = _ownsTransaction && Database.CurrentTransaction != null;
+        if (thisContextOpenedTheTransaction)
+        {
+            await Database.CurrentTransaction!.CommitAsync(ct);
+            _ownsTransaction = false;
+        }
+        return written;
     }
 }

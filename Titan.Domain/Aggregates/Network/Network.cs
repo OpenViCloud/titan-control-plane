@@ -37,6 +37,15 @@ public class Network : AggregateRoot
     /// longest ago (NetworkPublicIpv6.FirstFree).
     public DateTimeOffset? PublicIpv6ReleasedAt { get; private set; }
 
+    /// The network's rules, each a line in its ACL on Incus; rows are kept after Deleted
+    /// (titan-ops features/network/design.md#firewall-rule-soft-delete). The repository loads them with the network.
+    private readonly List<FirewallRule> _firewallRules = [];
+    public IReadOnlyCollection<FirewallRule> FirewallRules => _firewallRules;
+
+    /// What counts toward MaxFirewallRulesPerNetwork: the rules Incus holds or is about to hold
+    /// (titan-ops features/network/design.md#firewall-rule-quota-counting).
+    public int FirewallRuleQuotaUsage => _firewallRules.Count(r => r.CountsTowardQuota);
+
     private Network() { }
 
     /// Derived, never stored.
@@ -169,13 +178,15 @@ public class Network : AggregateRoot
         }
     }
 
-    /// The delete command confirmed Incus no longer has it. Idempotent, never refuses. Returns true when this
-    /// report fulfilled the waiting delete, so the caller records "network.deleted" once.
-    public bool MarkDeleted()
+    /// The delete command confirmed Incus no longer has it. Idempotent, never refuses. The delete removed the
+    /// network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle), so every rule not
+    /// yet Deleted becomes Deleted here, in the same save; a rule whose own delete was waiting is done by this, and
+    /// is named in the outcome so the caller records "firewall_rule.deleted" for it once, next to "network.deleted".
+    public NetworkDeletionOutcome MarkDeleted()
     {
         if (IsTerminal)
         {
-            return false;
+            return new NetworkDeletionOutcome(false, []);
         }
         bool fulfilled = DeleteIsWaiting;
         CurrentExistence = CurrentExistence.Deleted;
@@ -185,7 +196,16 @@ public class Network : AggregateRoot
         {
             PublicIpv6ReleasedAt = DateTimeOffset.UtcNow;
         }
-        return fulfilled;
+        var rulesWhoseDeleteWasFulfilled = new List<FirewallRule>();
+        foreach (FirewallRule rule in _firewallRules)
+        {
+            bool ruleDeleteFulfilled = rule.MarkDeleted();
+            if (ruleDeleteFulfilled)
+            {
+                rulesWhoseDeleteWasFulfilled.Add(rule);
+            }
+        }
+        return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled);
     }
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
@@ -276,6 +296,77 @@ public class Network : AggregateRoot
             throw new BusinessException("FIREWALL_NETWORK_NOT_READY", "Firewall rules can only be added to a network Incus has created.");
         return RequireExternalId();
     }
+
+    // ---- Firewall rules: the network keeps the per-network cap and routes each call to the rule it names
+    // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
+
+    /// Intent: a new rule in this network's ACL. The network must be usable (BeginFirewallRule) and the tenant's cap
+    /// is checked here on what this network holds (titan-ops architecture/code-structure.md#tenant-typed-edge), so a
+    /// handler cannot add a rule past the cap; the handler locks the network row first so two requests cannot both
+    /// count below it. The create request is the rule's own PendingIntentId.
+    public FirewallRule AddFirewallRule(
+        TenantAggregate tenant,
+        FirewallDirection direction, FirewallProtocol protocol,
+        int? startPort, int? endPort, string cidr)
+    {
+        BeginFirewallRule();
+        tenant.EnsureCanCreateFirewallRule(FirewallRuleQuotaUsage);
+        return AddFirewallRuleUnchecked(direction, protocol, startPort, endPort, cidr);
+    }
+
+    /// Test seam — internal, reachable only from Titan.Tests: a rule in this network with no check on the network
+    /// or the cap, so a test can put a network into any shape. See Vm.CreateUnchecked.
+    internal FirewallRule AddFirewallRuleUnchecked(
+        FirewallDirection direction, FirewallProtocol protocol,
+        int? startPort, int? endPort, string cidr)
+    {
+        FirewallRule rule = FirewallRule.CreateUnchecked(Id, TenantId, direction, protocol, startPort, endPort, cidr);
+        _firewallRules.Add(rule);
+        return rule;
+    }
+
+    public FirewallRule? FirewallRuleOrNull(Guid ruleId)
+    {
+        foreach (FirewallRule rule in _firewallRules)
+        {
+            if (rule.Id == ruleId)
+            {
+                return rule;
+            }
+        }
+        return null;
+    }
+
+    /// A rule this network does not have answers like a missing one, the same 404 the handler gives a rule of
+    /// another network (titan-ops features/network/design.md#firewall-rule-soft-delete).
+    public FirewallRule RequireFirewallRule(Guid ruleId) =>
+        FirewallRuleOrNull(ruleId) ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
+
+    /// Intent on one rule: its delete goes through Incus; returns the rule's provider id for the command.
+    public string RequestFirewallRuleDelete(Guid ruleId) => RequireFirewallRule(ruleId).RequestDelete();
+
+    /// Intent on one rule whose create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
+    public void DeleteFirewallRuleLocally(Guid ruleId) => RequireFirewallRule(ruleId).DeleteLocally();
+
+    /// The rule's delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request).
+    public void AbandonFirewallRuleRequest(Guid ruleId, string? reason, string? detail) =>
+        RequireFirewallRule(ruleId).AbandonRequest(reason, detail);
+
+    // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges), each returning
+    // what the rule's own method returns.
+
+    public void MarkFirewallRuleCreated(Guid ruleId, string externalRuleId) =>
+        RequireFirewallRule(ruleId).MarkCreated(externalRuleId);
+
+    public bool MarkFirewallRuleObserved(Guid ruleId, FirewallRuleState state) =>
+        RequireFirewallRule(ruleId).MarkObserved(state);
+
+    public void MarkFirewallRuleNotFound(Guid ruleId) => RequireFirewallRule(ruleId).MarkNotFound();
+
+    public bool MarkFirewallRuleDeleted(Guid ruleId) => RequireFirewallRule(ruleId).MarkDeleted();
+
+    public void MarkFirewallRuleRequestFailed(Guid ruleId, string? reason, string? detail) =>
+        RequireFirewallRule(ruleId).MarkRequestFailed(reason, detail);
 
     /// A load balancer needs the network's public /64 for its VIP: Incus refuses one on a network with no uplink
     /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.

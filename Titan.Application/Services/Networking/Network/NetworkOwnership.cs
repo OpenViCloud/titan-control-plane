@@ -25,4 +25,18 @@ public static class NetworkOwnership
 
         return network;
     }
+
+    /// The same answer with the network's row locked (INetworkRepository.FindByIdForUpdateAsync): for a request that
+    /// adds to the network and must count what it already holds.
+    public static async Task<NetworkAggregate> RequireNetworkForUpdateAsync(
+        INetworkRepository repo, Guid tenantId, Guid networkId, CancellationToken ct)
+    {
+        var network = await repo.FindByIdForUpdateAsync(networkId, ct)
+            ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
+
+        if (network.TenantId != tenantId)
+            throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
+
+        return network;
+    }
 }

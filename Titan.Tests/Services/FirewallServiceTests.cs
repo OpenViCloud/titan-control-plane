@@ -5,7 +5,6 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Queries.Networking.FirewallRule;
 using Titan.Application.Queries.Networking.FirewallRule.Contracts;
 using Titan.Infrastructure.Endpoints.Network;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -14,6 +13,9 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
+// A rule is written through its network (titan-ops architecture/code-structure.md#child-entity): the create and delete
+// handlers load the network (locked, for a create), change it, and save it through INetworkRepository. The rule
+// repository is read side only, so only the list query asks it.
 public class FirewallServiceTests
 {
     private static readonly Guid TenantId = Guid.NewGuid();
@@ -43,18 +45,18 @@ public class FirewallServiceTests
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateFirewallRuleCommandResult> CreateAsync(Guid networkId, CreateFirewallRuleRequest req, CancellationToken ct = default)
-            => new CreateFirewallRuleCommandHandler(repo, networkRepo, tenantRepo, currentUser, commands, activity).HandleAsync(
+            => new CreateFirewallRuleCommandHandler(networkRepo, tenantRepo, currentUser, commands, activity).HandleAsync(
                 new CreateFirewallRuleCommand(networkId, req.Direction, req.Protocol, req.StartPort, req.EndPort, req.Cidr), ct);
 
         public Task<List<FirewallRuleQueryResult>> ListAsync(Guid networkId, CancellationToken ct = default)
             => new ListFirewallRulesQueryHandler(repo, networkRepo, currentUser).HandleAsync(new ListFirewallRulesQuery(networkId), ct);
 
         public Task DeleteAsync(Guid networkId, Guid ruleId, CancellationToken ct = default)
-            => new DeleteFirewallRuleCommandHandler(repo, networkRepo, currentUser, commands, activity)
+            => new DeleteFirewallRuleCommandHandler(networkRepo, currentUser, commands, activity)
                 .HandleAsync(new DeleteFirewallRuleCommand(networkId, ruleId), ct);
 
         public Task ReportAsync(UpdateFirewallRuleStatusCommand report, CancellationToken ct = default)
-            => new UpdateFirewallRuleStatusCommandHandler(repo, activity).HandleAsync(report, ct);
+            => new UpdateFirewallRuleStatusCommandHandler(networkRepo, activity).HandleAsync(report, ct);
     }
 
     // ── CreateAsync ───────────────────────────────────────────────────────
@@ -63,17 +65,16 @@ public class FirewallServiceTests
     public async Task Create_IngressTcp_ReturnsDto()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(0);
-        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the rule's own fields are asserted on the
-        // instance that was added — the layer that still owns them.
-        FirewallRule? added = null;
-        _repo.Setup(r => r.Add(It.IsAny<FirewallRule>())).Callback<FirewallRule>(r => added = r);
+        Network network = SetupActiveNetwork();
 
         var result = await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default);
 
-        Assert.NotNull(added);
-        Assert.Equal(added!.Id, result.RuleId);
+        // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the rule's own fields are asserted on the
+        // network that now holds it — the aggregate that owns them.
+        FirewallRule added = Assert.Single(network.FirewallRules);
+        Assert.Equal(added.Id, result.RuleId);
+        Assert.Equal(network.Id, added.NetworkId);
+        Assert.Equal(TenantId, added.TenantId);
         Assert.Equal(FirewallDirection.Ingress, added.Direction);
         Assert.Equal(FirewallProtocol.TCP, added.Protocol);
         Assert.Equal(80, added.StartPort);
@@ -82,11 +83,24 @@ public class FirewallServiceTests
         Assert.Null(added.ExternalId);
         Assert.Equal("null/NotCreated/Exists/Creating", Shape(added));
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
-        _repo.Verify(r => r.Add(It.IsAny<FirewallRule>()), Times.Once);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
             It.IsAny<Guid>(), NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
             "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // The network is loaded locked (titan-ops architecture/code-structure.md#child-entity): the cap is counted on what
+    // it holds, so a second create at the cap must wait for this one to commit.
+    [Fact]
+    public async Task Create_LoadsTheNetworkForUpdate_NotTheUnlockedRead()
+    {
+        SetupCurrentUser();
+        SetupActiveNetwork();
+
+        await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default);
+
+        _networkRepo.Verify(r => r.FindByIdForUpdateAsync(NetworkId, It.IsAny<CancellationToken>()), Times.Once);
+        _networkRepo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -94,7 +108,6 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         SetupActiveNetwork();
-        _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(0);
 
         await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Egress", "UDP", 53, 53, "0.0.0.0/0"), default);
 
@@ -107,15 +120,11 @@ public class FirewallServiceTests
     public async Task Create_IcmpNoPorts_SavesNullPorts()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(0);
-
-        FirewallRule? saved = null;
-        _repo.Setup(r => r.Add(It.IsAny<FirewallRule>())).Callback<FirewallRule>(r => saved = r);
+        Network network = SetupActiveNetwork();
 
         await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "ICMP", null, null, "10.0.0.0/8"), default);
 
-        Assert.NotNull(saved);
+        FirewallRule saved = Assert.Single(network.FirewallRules);
         Assert.Null(saved.StartPort);
         Assert.Null(saved.EndPort);
     }
@@ -124,36 +133,58 @@ public class FirewallServiceTests
     public async Task Create_AllProtocolNoPorts_SavesNullPorts()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(0);
-
-        FirewallRule? saved = null;
-        _repo.Setup(r => r.Add(It.IsAny<FirewallRule>())).Callback<FirewallRule>(r => saved = r);
+        Network network = SetupActiveNetwork();
 
         var result = await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Egress", "All", null, null, "0.0.0.0/0"), default);
 
-        Assert.NotNull(saved);
-        Assert.Equal(saved!.Id, result.RuleId);
+        FirewallRule saved = Assert.Single(network.FirewallRules);
+        Assert.Equal(saved.Id, result.RuleId);
         Assert.Equal(FirewallProtocol.All, saved.Protocol);
         Assert.Null(saved.StartPort);
         Assert.Null(saved.EndPort);
     }
 
+    // The cap is the tenant's default (20) counted on the network's own rules: 20 rules Incus holds fill it.
     [Fact]
     public async Task Create_QuotaExceeded_ThrowsBusinessException()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        _repo.Setup(r => r.CountByNetworkAsync(NetworkId, default)).ReturnsAsync(20);
+        Network network = SetupActiveNetwork();
+        for (int i = 0; i < 20; i++)
+        {
+            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+                .MarkActive($"cs-rule-{i}");
+        }
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default));
 
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", ex.Code);
+        Assert.Equal(20, network.FirewallRules.Count);
+        _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // A rule whose delete is waiting stopped counting the moment it was asked for (DCS-Q1), so the cap is not full.
+    [Fact]
+    public async Task Create_AtTheCapWithOneRuleBeingDeleted_IsAccepted()
+    {
+        SetupCurrentUser();
+        Network network = SetupActiveNetwork();
+        for (int i = 0; i < 20; i++)
+        {
+            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+                .MarkActive($"cs-rule-{i}");
+        }
+        network.FirewallRules.First().RequestDelete();
+
+        var result = await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default);
+
+        Assert.Contains(network.FirewallRules, r => r.Id == result.RuleId);
+        Assert.Equal(20, network.FirewallRuleQuotaUsage);
     }
 
     [Fact]
@@ -161,12 +192,13 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // status = Creating
-        _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
+        _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default));
 
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", ex.Code);
+        Assert.Empty(network.FirewallRules);
     }
 
     [Fact]
@@ -174,7 +206,7 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         var network = MakeActiveNetwork(Guid.NewGuid()); // different tenant
-        _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
+        _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default));
@@ -198,12 +230,12 @@ public class FirewallServiceTests
     public async Task List_ReturnsRulesForNetwork()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
+        Network network = SetupActiveNetwork();
         var rules = new List<FirewallRule>
         {
-            FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"),
-            FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 443, 443, "0.0.0.0/0"),
-            FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0"),
+            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"),
+            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 443, 443, "0.0.0.0/0"),
+            network.AddFirewallRuleUnchecked(FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0"),
         };
         _repo.Setup(r => r.ListByNetworkAsync(NetworkId, default)).ReturnsAsync(rules);
 
@@ -227,8 +259,8 @@ public class FirewallServiceTests
 
     // ── DeleteAsync ───────────────────────────────────────────────────────
 
-    // A foreign network must answer exactly like a missing one, and the rule repository must not even
-    // be asked.
+    // A foreign network must answer exactly like a missing one, and nothing else is read: the rule repository is
+    // read side only and the network is the only thing loaded.
     [Fact]
     public async Task Delete_NetworkBelongsToOtherTenant_ThrowsNotFound_AndNeverReadsTheRule()
     {
@@ -240,7 +272,7 @@ public class FirewallServiceTests
             () => CreateService().DeleteAsync(NetworkId, Guid.NewGuid(), default));
 
         Assert.Equal("NETWORK_NOT_FOUND", ex.Code);
-        _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        _repo.VerifyNoOtherCalls();
     }
 
     // titan-ops architecture/desired-and-current.md#forget-on-provider-confirm: the rule is NOT forgotten when the delete is accepted — it stays Deleting until the
@@ -249,14 +281,13 @@ public class FirewallServiceTests
     public async Task Delete_ActiveRule_WaitsForTheProvider_AndRecordsTheRequest()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        FirewallRule rule = MakeRule(Seed.Active);
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.Active);
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
         Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
             rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -269,15 +300,14 @@ public class FirewallServiceTests
     public async Task Delete_Repeated_ChangesNothing(Seed seed)
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        FirewallRule rule = MakeRule(seed);
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, seed);
         string before = Shape(rule);
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
         Assert.Equal(before, Shape(rule));
-        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _activity.VerifyNoOtherCalls();
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -290,11 +320,10 @@ public class FirewallServiceTests
     public async Task Delete_RuleWhoseCreateFailedAfterItsIdArrived_GoesToTheProvider()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        FirewallRule rule = MakeRule(Seed.Creating);
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.Creating);
         rule.MarkCreated("cs-rule-7");
         rule.MarkRequestFailed("reason", "detail");
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
@@ -307,15 +336,14 @@ public class FirewallServiceTests
     public async Task Delete_RuleWhoseCreateFailed_IsDeletedLocally_WithRequestAndOutcome()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        FirewallRule rule = MakeRule(Seed.Error);
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.Error);
         Assert.Null(rule.ExternalId);
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
         Assert.Equal("null/Deleted/Deleted/-", Shape(rule));
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _activity.Verify(a => a.StageOutcome(TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
@@ -326,9 +354,8 @@ public class FirewallServiceTests
     public async Task Delete_AfterAFailedDelete_SendsTheDeleteAgain()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        FirewallRule rule = MakeRule(Seed.DeleteRequested);
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.DeleteRequested);
         // the failed delete gives the rule back
         await CreateService().ReportAsync(new UpdateFirewallRuleStatusCommand(NetworkId, rule.Id, "RequestFailed", Reason: "Firewall rule deletion failed."));
         Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
@@ -344,10 +371,9 @@ public class FirewallServiceTests
     public async Task Delete_ExternalIdNull_ThrowsBusinessException()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
-        var rule = FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
+        Network network = SetupActiveNetwork();
         // ExternalId is null — the create command has not reported yet
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
+        FirewallRule rule = MakeRule(network, Seed.Creating);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().DeleteAsync(NetworkId, rule.Id, default));
@@ -362,7 +388,6 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         SetupActiveNetwork();
-        _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((FirewallRule?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().DeleteAsync(NetworkId, Guid.NewGuid(), default));
@@ -370,19 +395,20 @@ public class FirewallServiceTests
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
     }
 
+    // The rule exists, in another network of the same tenant: the network asked does not have it, so 404.
     [Fact]
     public async Task Delete_RuleBelongsToOtherNetwork_ThrowsNotFoundException()
     {
         SetupCurrentUser();
         SetupActiveNetwork();
-        var rule = FirewallRule.CreateUnchecked(Guid.NewGuid(), TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
-        rule.MarkActive("cs-rule-abc");
-        _repo.Setup(r => r.FindByIdAsync(rule.Id, default)).ReturnsAsync(rule);
+        Network otherNetwork = MakeActiveNetwork(TenantId);
+        FirewallRule rule = MakeRule(otherNetwork, Seed.Active);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().DeleteAsync(NetworkId, rule.Id, default));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
+        Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -390,14 +416,22 @@ public class FirewallServiceTests
     private void SetupCurrentUser() =>
         _currentUser.Setup(u => u.TenantId).Returns(TenantId);
 
-    private void SetupActiveNetwork() =>
-        _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(MakeActiveNetwork(TenantId));
+    /// The network every handler loads: unlocked for a read or a delete, locked for a create, by rule id for a
+    /// callback. One instance, so a test reads the handler's writes off it.
+    private Network SetupActiveNetwork()
+    {
+        Network network = MakeActiveNetwork(TenantId);
+        _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
+        _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
+        _networkRepo.Setup(r => r.FindByFirewallRuleIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(network);
+        return network;
+    }
 
     public enum Seed { Creating, Active, Error, DeleteRequested, Deleted }
 
-    private static FirewallRule MakeRule(Seed seed)
+    private static FirewallRule MakeRule(Network network, Seed seed)
     {
-        FirewallRule rule = FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
+        FirewallRule rule = network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
         switch (seed)
         {
             case Seed.Creating:
@@ -436,6 +470,8 @@ public class FirewallServiceTests
         return $"{state}/{r.CurrentExistence}/{r.DesiredExistence}/{transition}";
     }
 
+    /// Network.CreateUnchecked picks its own id: the repository mock answers the route id NetworkId with this network,
+    /// and a rule it adds carries the network's real id.
     private static Network MakeActiveNetwork(Guid tenantId)
     {
         var network = Network.CreateUnchecked(tenantId, "net-1", "cluster-1");

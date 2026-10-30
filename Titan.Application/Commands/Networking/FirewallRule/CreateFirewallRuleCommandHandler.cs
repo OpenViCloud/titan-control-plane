@@ -2,16 +2,16 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
-using Titan.Domain.Aggregates.FirewallRule;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using FirewallRuleAggregate = Titan.Domain.Aggregates.FirewallRule.FirewallRule;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
 public class CreateFirewallRuleCommandHandler(
-    IFirewallRuleRepository repo,
     INetworkRepository networkRepo,
     ITenantRepository tenantRepo,
     ICurrentUser currentUser,
@@ -23,28 +23,28 @@ public class CreateFirewallRuleCommandHandler(
         var req = command;   // the command IS the wire contract (titan-ops architecture/code-structure.md#command-is-wire-contract)
         var networkId = command.NetworkId;
 
-        var network = await NetworkOwnership.RequireNetworkAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
-
-        // The network answers whether it can take a rule AND hands over the provider id in one
-        // call: the precondition cannot be skipped, and there is no `!` below.
-        var externalNetworkId = network.BeginFirewallRule();
+        // Locked: the per-network cap is counted on the rules loaded with the network, so a second request adding a
+        // rule at the cap waits here and then counts this one (titan-ops architecture/code-structure.md#child-entity).
+        NetworkAggregate network = await NetworkOwnership.RequireNetworkForUpdateAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
 
         // Cap is per network and owned by the network's tenant (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
         var tenant = await tenantRepo.FindByIdAsync(network.TenantId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
-        var ruleCount = await repo.CountByNetworkAsync(networkId, ct);
 
         var direction = Enum.Parse<FirewallDirection>(req.Direction, ignoreCase: true);
         var protocol = Enum.Parse<FirewallProtocol>(req.Protocol, ignoreCase: true);
 
-        var rule = FirewallRuleAggregate.Create(networkId, tenant, ruleCount, direction, protocol, req.StartPort, req.EndPort, req.Cidr);
-        repo.Add(rule);
-        activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with Add
+        // The network answers whether it can take a rule, checks the cap and adds the rule in one call; the provider
+        // id is read after, from a network that just said it is usable.
+        FirewallRuleEntity rule = network.AddFirewallRule(tenant, direction, protocol, req.StartPort, req.EndPort, req.Cidr);
+        string externalNetworkId = network.RequireExternalId();
+
+        activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with the save
         await commands.EnqueueFirewallRuleCreateAsync(
             rule.Id, networkId, req.Direction, req.Protocol,
             req.StartPort, req.EndPort, req.Cidr,
             externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
-        await repo.SaveAsync(ct);
+        await networkRepo.SaveAsync(ct);
 
         return new CreateFirewallRuleCommandResult(rule.Id);
     }

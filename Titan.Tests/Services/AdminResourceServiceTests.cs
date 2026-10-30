@@ -352,6 +352,8 @@ file sealed class StubNetworkRepo(params Network[] seed) : INetworkRepository
     }
 
     public Task<Network?> FindByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Network?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Network?> FindByFirewallRuleIdAsync(Guid ruleId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();

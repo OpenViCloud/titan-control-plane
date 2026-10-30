@@ -5,7 +5,6 @@ using Titan.Application.Queries.Compute.VmSnapshot;
 using Titan.Application.Queries.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmSnapshot;
-using Titan.Domain.Aggregates.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;

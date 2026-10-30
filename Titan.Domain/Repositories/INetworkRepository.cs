@@ -4,7 +4,14 @@ namespace Titan.Domain.Repositories;
 
 public interface INetworkRepository
 {
+    /// The aggregate whole: the network with its firewall rules, tracked (titan-ops architecture/code-structure.md#child-entity).
     Task<Network?> FindByIdAsync(Guid id, CancellationToken ct = default);
+    /// The same, with the network's row locked until this context's next save commits: the per-network rule cap is
+    /// counted on the loaded rules, so two requests adding a rule at the cap take turns (titan-ops architecture/code-structure.md#child-entity).
+    Task<Network?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
+    /// The network a rule belongs to, with its rules, tracked; null when no network has the rule. For the worker's
+    /// callbacks, which name the rule.
+    Task<Network?> FindByFirewallRuleIdAsync(Guid ruleId, CancellationToken ct = default);
     Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     /// Networks of the tenant with a public /64, counted like CountActiveByTenantAsync (MaxPublicIpv6).

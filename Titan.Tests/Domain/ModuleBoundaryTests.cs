@@ -112,7 +112,7 @@ public class ModuleBoundaryTests
         ["VmSnapshot.Create(tenant) -> Tenant"] = "per-VM snapshot quota",
         ["VolumeSnapshot.Create(tenant) -> Tenant"] = "per-volume snapshot quota",
         ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",
-        ["FirewallRule.Create(tenant) -> Tenant"] = "per-network rule quota",
+        ["Network.AddFirewallRule(tenant) -> Tenant"] = "per-network rule quota, counted on the rules the network holds (its child entities)",
         ["SshKey.Create(tenant) -> Tenant"] = "per-tenant SSH key quota",
         ["LoadBalancer.Create(tenant) -> Tenant"] = "per-tenant load balancer quota",
 

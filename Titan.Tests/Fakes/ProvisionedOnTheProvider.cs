@@ -15,10 +15,7 @@ namespace Titan.Domain.Aggregates.Network
             return network.MarkObserved(NetworkStatus.Created);
         }
     }
-}
 
-namespace Titan.Domain.Aggregates.FirewallRule
-{
     public static class FirewallRuleProvisionedOnTheProvider
     {
         /// The create command's id, then the reconciler's first read of the rule in its ACL.
