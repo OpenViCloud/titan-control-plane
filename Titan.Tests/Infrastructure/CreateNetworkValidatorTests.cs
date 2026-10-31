@@ -1,5 +1,6 @@
 using FluentValidation.TestHelper;
 using Titan.Application.Commands.Networking.Network.Contracts;
+using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Endpoints.Network;
 
 namespace Titan.Tests.Infrastructure;

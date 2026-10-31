@@ -112,7 +112,7 @@ jobs:
         working-directory: incus-worker
         run: |
           set -o pipefail
-          cp ../control-plane/Titan.Domain/Aggregates/ProviderCommand/ProviderCommandKinds.cs contract/
+          cp ../control-plane/Titan.Domain/Aggregates/ProviderCommand/Enums/ProviderCommandKinds.cs contract/
           go test -count=1 -run '^TestRoutes_CoverTheControlPlanesKinds$' -v . | tee ../routes.log
           grep -q '^--- PASS: TestRoutes_CoverTheControlPlanesKinds' ../routes.log
 

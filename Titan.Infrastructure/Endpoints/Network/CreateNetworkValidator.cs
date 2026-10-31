@@ -1,7 +1,7 @@
 using FastEndpoints;
 using FluentValidation;
 using Titan.Application.Commands.Networking.Network.Contracts;
-using Titan.Domain.Values;
+using Titan.Domain.Aggregates.Network;
 
 namespace Titan.Infrastructure.Endpoints.Network;
 

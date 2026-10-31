@@ -3,7 +3,6 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 

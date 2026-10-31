@@ -63,9 +63,14 @@ public class DomainFolderConventionTests
             }
 
             var folder = Path.GetDirectoryName(Path.GetRelativePath(domainDir, file))!;
+            var segments = folder.Split(Path.DirectorySeparatorChar);
+            // A role folder sorts files for the reader; the namespace names the aggregate (DomainRoleFolderTests).
+            var namespaceFolder = segments.Length == 3 && segments[0] == "Aggregates"
+                ? string.Join('.', segments[..2])
+                : string.Join('.', segments);
             var expected = folder.Length == 0
                 ? "Titan.Domain"
-                : "Titan.Domain." + folder.Replace(Path.DirectorySeparatorChar, '.');
+                : "Titan.Domain." + namespaceFolder;
 
             if (declared != expected)
                 offenders.Add($"{Path.GetRelativePath(domainDir, file)}: declares '{declared}', folder says '{expected}'");

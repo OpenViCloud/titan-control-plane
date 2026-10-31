@@ -3,7 +3,7 @@ using System.Net;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
-namespace Titan.Domain.Values;
+namespace Titan.Domain.Aggregates.Network;
 
 /// An IPv4 range the customer asks a network for: four octets 0–255 and a prefix 0–32. The /v1 contract (Pattern
 /// below) takes an address that is not the first of its range, such as 10.0.0.5/24; the worker masks it and hands

@@ -19,8 +19,8 @@ public class AggregateBoundaryTests
 
         Assert.NotEmpty(AggregateTypes());
         Assert.True(offenders.Count == 0,
-            "Type(s) not directly inside an aggregate folder. The namespace must be "
-            + "Titan.Domain.Aggregates.<Aggregate>: no module layer above it, no folder below it: "
+            "Type(s) outside an aggregate's namespace. The namespace must be "
+            + "Titan.Domain.Aggregates.<Aggregate>: no module layer above it, no segment below it: "
             + string.Join(", ", offenders));
     }
 
