@@ -17,7 +17,7 @@ public class FirewallRule : ChildEntity
     public FirewallProtocol Protocol { get; private set; }
     public int? StartPort { get; private set; }
     public int? EndPort { get; private set; }
-    public string Cidr { get; private set; } = default!;
+    public FirewallCidr Cidr { get; private set; } = default!;
     public string? ExternalId { get; private set; }
     // Same split as Network (titan-ops architecture/desired-and-current.md#desired-and-current): CurrentState is the Incus
     // ACL rule state, null while the rule is not in the ACL.
@@ -36,6 +36,20 @@ public class FirewallRule : ChildEntity
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
     private FirewallRule() { }
+
+    /// The ports as one value; null for ICMP and All. The two columns stay the storage: EF Core 9 has no nullable
+    /// complex property, so the value is rebuilt from them (titan-ops architecture/code-structure.md#logic-placement).
+    public PortRange? Ports
+    {
+        get
+        {
+            if (StartPort == null || EndPort == null)
+            {
+                return null;
+            }
+            return PortRange.Of(StartPort.Value, EndPort.Value);
+        }
+    }
 
     /// Derived, never stored.
     public FirewallRuleTransition? Transition
@@ -82,7 +96,7 @@ public class FirewallRule : ChildEntity
             Protocol = protocol,
             StartPort = startPort,
             EndPort = endPort,
-            Cidr = cidr,
+            Cidr = FirewallCidr.Parse(cidr),
             CurrentState = null,
             CurrentExistence = CurrentExistence.NotCreated,
             DesiredExistence = DesiredExistence.Exists,

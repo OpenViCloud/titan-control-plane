@@ -3,6 +3,8 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Domain;
 
 // The two cross-aggregate checks a load balancer create and update go through: the network (Networking) and each
@@ -15,7 +17,7 @@ public class LoadBalancerTargetTests
 
     private static Network UsableNetwork(NetworkPublicIpv6? ipv6)
     {
-        var network = Network.Create(Owner, 0, 0, "net-1", "cluster-a", ipv6);
+        var network = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, ipv6);
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -32,7 +34,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_WithoutPublicIpv6_IsRefused_BeforeItsState()
     {
-        Network noIpv6 = Network.Create(Owner, 0, 0, "net-1", "cluster-a", null);
+        Network noIpv6 = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, null);
 
         Assert.Equal("LOAD_BALANCER_NEEDS_PUBLIC_IPV6",
             Assert.Throws<BusinessException>(() => noIpv6.BeginLoadBalancer()).Code);
@@ -41,7 +43,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_NotYetCreated_OrBeingDeleted_IsRefused()
     {
-        Network creating = Network.Create(Owner, 0, 0, "net-1", "cluster-a", Ipv6);
+        Network creating = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, Ipv6);
         Network deleting = UsableNetwork(Ipv6);
         deleting.RequestDelete();
 

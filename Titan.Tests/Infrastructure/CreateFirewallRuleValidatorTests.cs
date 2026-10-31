@@ -36,6 +36,8 @@ public class CreateFirewallRuleValidatorTests
     [InlineData("2001:db8::1/32")]
     [InlineData("not-a-cidr")]
     [InlineData("10.0.0.0")]
+    [InlineData("10.0.0.300/24")]
+    [InlineData("10.0.0.0/33")]
     public void ACidrNeitherIpv4NorIpv6_IsRejected(string cidr)
     {
         _validator.TestValidate(Tcp22(cidr)).ShouldHaveValidationErrorFor(r => r.Cidr);

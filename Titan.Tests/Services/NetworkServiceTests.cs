@@ -79,7 +79,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
         // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the created network's own fields are
         // asserted on the instance that was added — the layer that still owns them.
         Network? added = null;
@@ -91,7 +91,7 @@ public class NetworkServiceTests
         Assert.Equal(added!.Id, result.NetworkId);
         Assert.Null(added.CurrentState);
         Assert.Equal(CurrentExistence.NotCreated, added.CurrentExistence);
-        Assert.Equal("my-net", added.Name);
+        Assert.Equal("my-net", added.Name.Value);
         Assert.Null(added.Cidr);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
@@ -105,7 +105,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", null, FirewallPolicy.Deny, FirewallPolicy.Allow), default);
 
@@ -121,7 +121,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
             CreateService().CreateAsync(new CreateNetworkCommand("my-net", "nowhere"), default));
@@ -150,7 +150,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(true);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
@@ -164,7 +164,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
         _repo.Setup(r => r.HasCidrOverlapAsync(TenantId, "10.0.0.0/24", default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -179,7 +179,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
@@ -379,11 +379,11 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork(); // name "my-net"
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "renamed-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("renamed-net"), default)).ReturnsAsync(false);
 
         await CreateService().RenameAsync(network.Id, new RenameNetworkRequest("renamed-net"), default);
 
-        Assert.Equal("renamed-net", network.Name);
+        Assert.Equal("renamed-net", network.Name.Value);
         Assert.Equal(NetworkStatus.Created, network.CurrentState); // status untouched
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.VerifyNoOtherCalls(); // no provider command for a rename
@@ -397,13 +397,13 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "taken", default)).ReturnsAsync(true);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("taken"), default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().RenameAsync(network.Id, new RenameNetworkRequest("taken"), default));
 
         Assert.Equal("NETWORK_NAME_TAKEN", ex.Code);
-        Assert.Equal("my-net", network.Name); // unchanged
+        Assert.Equal("my-net", network.Name.Value); // unchanged
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
     }
 
@@ -418,8 +418,8 @@ public class NetworkServiceTests
 
         await CreateService().RenameAsync(network.Id, new RenameNetworkRequest("my-net"), default);
 
-        Assert.Equal("my-net", network.Name);
-        _repo.Verify(r => r.ExistsByNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal("my-net", network.Name.Value);
+        _repo.Verify(r => r.ExistsByNameAsync(It.IsAny<Guid>(), It.IsAny<NetworkName>(), It.IsAny<CancellationToken>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
     }
 
@@ -458,7 +458,7 @@ public class NetworkServiceTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "x", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("x"), default)).ReturnsAsync(false);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().RenameAsync(network.Id, new RenameNetworkRequest("x"), default));
@@ -695,7 +695,7 @@ public class NetworkServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
@@ -917,7 +917,7 @@ public class NetworkServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
-        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "my-net", default)).ReturnsAsync(false);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
         _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int>());
         _repo.Setup(r => r.ListPublicIpv6ReleasesInClusterAsync("cluster-1", default))
             .ReturnsAsync(new Dictionary<int, DateTimeOffset?>());

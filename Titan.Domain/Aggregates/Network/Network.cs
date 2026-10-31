@@ -9,7 +9,7 @@ public class Network : AggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
-    public string Name { get; private set; } = default!;
+    public NetworkName Name { get; private set; } = default!;
     public string ClusterId { get; private set; } = default!;
     public string? ExternalId { get; private set; }
     public string? Cidr { get; private set; }
@@ -69,10 +69,14 @@ public class Network : AggregateRoot
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The range the
+    /// customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
+    /// attributes (titan-ops architecture/code-structure.md#logic-placement): the uplink of a network with public IPv6
+    /// routes only the private ranges (titan-ops infra/incus/design.md#ipv6-address-plan). The validator answers the
+    /// same case with 400 first, so NETWORK_CIDR_NOT_PRIVATE is not reached over HTTP.
     public static Network Create(
-        TenantAggregate tenant, int activeNetworkCount, int activePublicIpv6Count, string name, string clusterId,
-        NetworkPublicIpv6? publicIpv6,
+        TenantAggregate tenant, int activeNetworkCount, int activePublicIpv6Count, NetworkName name, string clusterId,
+        Ipv4Cidr? requestedCidr, NetworkPublicIpv6? publicIpv6,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
@@ -80,8 +84,14 @@ public class Network : AggregateRoot
         if (publicIpv6 != null)
         {
             tenant.EnsureCanEnablePublicIpv6(activePublicIpv6Count);
+            bool cidrOutsideThePrivateRanges = requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
+            if (cidrOutsideThePrivateRanges)
+            {
+                throw new BusinessException("NETWORK_CIDR_NOT_PRIVATE",
+                    "The CIDR of a network with public IPv6 must be inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16.");
+            }
         }
-        var network = CreateUnchecked(tenant.Id, name, clusterId, defaultIngressPolicy, defaultEgressPolicy);
+        var network = CreateUnchecked(tenant.Id, name.Value, clusterId, defaultIngressPolicy, defaultEgressPolicy);
         if (publicIpv6 != null)
         {
             network.PublicIpv6Index = publicIpv6.Index;
@@ -101,7 +111,7 @@ public class Network : AggregateRoot
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
-            Name = name,
+            Name = NetworkName.Parse(name),
             ClusterId = clusterId,
             CurrentState = null,
             CurrentExistence = CurrentExistence.NotCreated,
@@ -307,11 +317,18 @@ public class Network : AggregateRoot
     public FirewallRule AddFirewallRule(
         TenantAggregate tenant,
         FirewallDirection direction, FirewallProtocol protocol,
-        int? startPort, int? endPort, string cidr)
+        PortRange? ports, FirewallCidr cidr)
     {
         BeginFirewallRule();
         tenant.EnsureCanCreateFirewallRule(FirewallRuleQuotaUsage);
-        return AddFirewallRuleUnchecked(direction, protocol, startPort, endPort, cidr);
+        int? startPort = null;
+        int? endPort = null;
+        if (ports != null)
+        {
+            startPort = ports.Start;
+            endPort = ports.End;
+        }
+        return AddFirewallRuleUnchecked(direction, protocol, startPort, endPort, cidr.Value);
     }
 
     /// Test seam — internal, reachable only from Titan.Tests: a rule in this network with no check on the network
@@ -394,7 +411,7 @@ public class Network : AggregateRoot
 
     // Titan-side metadata only, no provider call. A network being or already deleted has no name worth
     // changing.
-    public void Rename(string name)
+    public void Rename(NetworkName name)
     {
         bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsTerminal;
         if (beingOrBeenDeleted)

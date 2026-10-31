@@ -1,60 +1,45 @@
 using FastEndpoints;
 using FluentValidation;
 using Titan.Application.Commands.Networking.Network.Contracts;
+using Titan.Domain.Values;
 
 namespace Titan.Infrastructure.Endpoints.Network;
 
+// The rules are the Domain's (NetworkName, Ipv4Cidr); this translates them to 400 in the API's words. Matches() is
+// kept on the Domain's Pattern because the spec copies it as the field's `pattern`; Must() adds the stricter check
+// (octets 0-255, prefix 0-32) that no pattern in the spec expresses.
 public class CreateNetworkValidator : Validator<CreateNetworkCommand>
 {
     private static readonly System.Text.RegularExpressions.Regex CidrRegex =
-        new(@"^\d{1,3}(\.\d{1,3}){3}/\d{1,2}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(Ipv4Cidr.Pattern, System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static readonly System.Text.RegularExpressions.Regex NameRegex =
-        new(@"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(NetworkName.Pattern, System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private const string CidrMessage = "'Cidr' must be a valid CIDR notation (e.g. 10.0.1.0/24).";
 
     public CreateNetworkValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100)
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(NetworkName.MaxLength)
             .Matches(NameRegex).WithMessage("'Name' may only contain letters, digits, hyphens, and underscores, and must start with a letter or digit.");
         RuleFor(x => x.ClusterId).NotEmpty();
         When(x => x.Cidr is not null, () =>
-            RuleFor(x => x.Cidr!).Matches(CidrRegex).WithMessage("'Cidr' must be a valid CIDR notation (e.g. 10.0.1.0/24)."));
+            RuleFor(x => x.Cidr!).Cascade(CascadeMode.Stop)
+                .Matches(CidrRegex).WithMessage(CidrMessage)
+                .Must(c => Ipv4Cidr.TryParse(c, out _)).WithMessage(CidrMessage));
         // The uplink of a network with public IPv6 routes only these (titan-ops infra/incus/design.md#ipv6-address-plan).
+        // A CIDR that does not parse is answered by the rule above alone.
         When(x => x.EnablePublicIpv6 && x.Cidr is not null, () =>
-            RuleFor(x => x.Cidr!).Must(IsInsideAPrivateRange)
+            RuleFor(x => x.Cidr!).Must(IsInsideAPrivateRangeOrNotACidr)
                 .WithMessage("'Cidr' of a network with public IPv6 must be inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16."));
     }
 
-    private static readonly System.Net.IPNetwork[] PrivateRanges =
-    [
-        System.Net.IPNetwork.Parse("10.0.0.0/8"),
-        System.Net.IPNetwork.Parse("172.16.0.0/12"),
-        System.Net.IPNetwork.Parse("192.168.0.0/16"),
-    ];
-
-    private static bool IsInsideAPrivateRange(string cidr)
+    private static bool IsInsideAPrivateRangeOrNotACidr(string cidr)
     {
-        string[] parts = cidr.Split('/');
-        bool parsed = parts.Length == 2
-            && System.Net.IPAddress.TryParse(parts[0], out _)
-            && int.TryParse(parts[1], out _);
-        if (!parsed)
+        if (!Ipv4Cidr.TryParse(cidr, out Ipv4Cidr? parsed))
         {
-            return false;
+            return true;
         }
-        var address = System.Net.IPAddress.Parse(parts[0]);
-        int prefix = int.Parse(parts[1]);
-        if (prefix > 32)
-        {
-            return false;
-        }
-        foreach (var range in PrivateRanges)
-        {
-            if (range.Contains(address) && prefix >= range.PrefixLength)
-            {
-                return true;
-            }
-        }
-        return false;
+        return parsed.IsInsideAPrivateRange;
     }
 }

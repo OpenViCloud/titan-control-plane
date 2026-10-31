@@ -132,7 +132,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         db.Networks.Add(network);
         await db.SaveChangesAsync();
 
-        var cidrs = (await new FirewallRuleRepository(db).ListByNetworkAsync(network.Id)).Select(r => r.Cidr).OrderBy(c => c).ToList();
+        var cidrs = (await new FirewallRuleRepository(db).ListByNetworkAsync(network.Id)).Select(r => r.Cidr.Value).OrderBy(c => c).ToList();
 
         Assert.Equal(new[] { "10.0.0.1/32", "10.0.0.2/32", "10.0.0.3/32", "10.0.0.5/32" }, cidrs);
     }

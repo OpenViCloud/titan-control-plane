@@ -19,7 +19,7 @@ public class FirewallRuleTests
         Assert.Equal(FirewallProtocol.TCP, rule.Protocol);
         Assert.Equal(80, rule.StartPort);
         Assert.Equal(80, rule.EndPort);
-        Assert.Equal("0.0.0.0/0", rule.Cidr);
+        Assert.Equal("0.0.0.0/0", rule.Cidr.Value);
         Assert.Null(rule.ExternalId);
         Assert.True(rule.CreatedAt > DateTimeOffset.MinValue);
     }

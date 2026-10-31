@@ -63,7 +63,7 @@ public class NetworkFirewallRuleTests
         var tenant = TenantWithRuleCap(2);
 
         var ex = Assert.Throws<BusinessException>(
-            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));
+            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
 
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", ex.Code);
         Assert.Equal(5, network.FirewallRules.Count);
@@ -75,7 +75,7 @@ public class NetworkFirewallRuleTests
         var network = NetworkWithEveryRuleSituation(); // usage 2
         var tenant = TenantWithRuleCap(3);
 
-        FirewallRule rule = network.AddFirewallRule(tenant, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "10.0.0.0/8");
+        FirewallRule rule = network.AddFirewallRule(tenant, FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8"));
 
         Assert.Contains(rule, network.FirewallRules);
         Assert.Equal(network.Id, rule.NetworkId);
@@ -92,7 +92,7 @@ public class NetworkFirewallRuleTests
         var tenant = TenantWithRuleCap(0);
 
         var ex = Assert.Throws<BusinessException>(
-            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));
+            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
 
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", ex.Code);
         Assert.Empty(network.FirewallRules);

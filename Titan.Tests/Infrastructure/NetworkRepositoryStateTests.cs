@@ -3,6 +3,8 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Infrastructure;
 
 // A delete request sets DesiredState = Deleted and leaves CurrentState alone; what these tests catch is a
@@ -144,7 +146,7 @@ public class NetworkRepositoryStateTests
         await db.SaveChangesAsync();
         var repo = new NetworkRepository(db);
 
-        Assert.True(await repo.ExistsByNameAsync(Tenant, "leaving"));
-        Assert.False(await repo.ExistsByNameAsync(Tenant, "gone"));
+        Assert.True(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("leaving")));
+        Assert.False(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("gone")));
     }
 }

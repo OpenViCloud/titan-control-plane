@@ -59,7 +59,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         return indexes.ToHashSet();
     }
 
-    public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
+    public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
             n => n.TenantId == tenantId && n.Name == name && n.CurrentExistence != CurrentExistence.Deleted, ct);
 

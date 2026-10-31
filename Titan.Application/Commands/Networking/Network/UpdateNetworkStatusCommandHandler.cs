@@ -107,7 +107,7 @@ public class UpdateNetworkStatusCommandHandler(
 
         if (outcome != null)
         {
-            activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name);
+            activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name.Value);
         }
 
         await repo.SaveAsync(ct);

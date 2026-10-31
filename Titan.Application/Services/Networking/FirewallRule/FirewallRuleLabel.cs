@@ -23,7 +23,7 @@ public static class FirewallRuleLabel
             protocolAndPorts = $"{rule.Protocol} {ports}";
         }
 
-        return $"{rule.Direction} {protocolAndPorts} {preposition} {rule.Cidr}";
+        return $"{rule.Direction} {protocolAndPorts} {preposition} {rule.Cidr.Value}";
     }
 
     private static string DescribePorts(int? startPort, int? endPort)

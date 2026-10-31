@@ -5,6 +5,8 @@ using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// One public /64 per live network of a cluster (titan-ops infra/incus/design.md#ipv6-address-plan). Two creates that picked
@@ -18,7 +20,7 @@ public class NetworkPublicIpv6DbTests(PostgresFixture pg)
     private const string Block = "2001:41d0:d00:d400::/56";
 
     private static Network WithSlash64(Tenant tenant, string cluster, int index) =>
-        Network.Create(tenant, 0, 0, $"net-{Guid.NewGuid():N}", cluster, NetworkPublicIpv6.For(Block, index));
+        Network.Create(tenant, 0, 0, NetworkName.Parse($"net-{Guid.NewGuid():N}"), cluster, null, NetworkPublicIpv6.For(Block, index));
 
     private async Task SaveAsync(Network network)
     {

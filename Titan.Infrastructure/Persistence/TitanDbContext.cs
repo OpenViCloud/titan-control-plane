@@ -67,11 +67,25 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<Rate>().HaveConversion<RateConverter>();
+        // Same convention for the network's shape values (titan-ops architecture/code-structure.md#logic-placement):
+        // a stored name or CIDR that breaks the rule throws on read instead of being served.
+        configurationBuilder.Properties<NetworkName>().HaveConversion<NetworkNameConverter>();
+        configurationBuilder.Properties<FirewallCidr>().HaveConversion<FirewallCidrConverter>();
     }
 
     private sealed class RateConverter : ValueConverter<Rate, decimal>
     {
         public RateConverter() : base(r => r.PerUnit, v => Rate.Of(v)) { }
+    }
+
+    private sealed class NetworkNameConverter : ValueConverter<NetworkName, string>
+    {
+        public NetworkNameConverter() : base(n => n.Value, v => NetworkName.Parse(v)) { }
+    }
+
+    private sealed class FirewallCidrConverter : ValueConverter<FirewallCidr, string>
+    {
+        public FirewallCidrConverter() : base(c => c.Value, v => FirewallCidr.Parse(v)) { }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

@@ -29,7 +29,7 @@ public record NetworkQueryResult(
     string? PublicIpv6Subnet)
 {
     public static NetworkQueryResult From(NetworkAggregate n) =>
-        new(n.Id, n.Name, n.ClusterId, n.Cidr, n.Gateway, n.ExternalId, n.CurrentState,
+        new(n.Id, n.Name.Value, n.ClusterId, n.Cidr, n.Gateway, n.ExternalId, n.CurrentState,
             n.CurrentExistence, n.DesiredExistence, n.Transition,
             n.RequestFailureReason, n.RequestFailedAt,
             n.DefaultIngressPolicy.ToString(), n.DefaultEgressPolicy.ToString(), n.CreatedAt, n.PublicIpv6Subnet);
