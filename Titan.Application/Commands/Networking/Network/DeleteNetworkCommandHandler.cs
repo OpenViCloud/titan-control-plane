@@ -42,8 +42,8 @@ public class DeleteNetworkCommandHandler(
         {
             network.DeleteLocally();
             // Never provisioned: the request and its outcome happen here at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
-            activity.Stage("network.delete_requested", "network", network.Id, network.Name); // atomic with DeleteLocally
-            activity.StageOutcome(network.TenantId, "network.deleted", "network", network.Id, network.Name);
+            activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with DeleteLocally
+            activity.StageOutcome(network.TenantId, "network.deleted", "network", network.Id, network.Name.Value);
             await repo.SaveAsync(ct);
             return;
         }
@@ -51,7 +51,7 @@ public class DeleteNetworkCommandHandler(
         // RequestDelete validates AND yields the provider id: no `network.ExternalId!` below.
         string externalNetworkId = network.RequestDelete();
 
-        activity.Stage("network.delete_requested", "network", network.Id, network.Name); // atomic with RequestDelete
+        activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with RequestDelete
         await commands.EnqueueNetworkDeleteAsync(
             network.Id, externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Deleted

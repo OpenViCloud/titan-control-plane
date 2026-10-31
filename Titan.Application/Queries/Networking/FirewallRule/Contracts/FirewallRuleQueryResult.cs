@@ -26,7 +26,7 @@ public record FirewallRuleQueryResult(
 {
     public static FirewallRuleQueryResult From(FirewallRuleEntity r) =>
         new(r.Id, r.Direction.ToString(), r.Protocol.ToString(),
-            r.StartPort, r.EndPort, r.Cidr, r.ExternalId,
+            r.StartPort, r.EndPort, r.Cidr.Value, r.ExternalId,
             r.CurrentState, r.CurrentExistence, r.DesiredExistence,
             r.Transition, r.RequestFailureReason, r.RequestFailedAt, r.CreatedAt);
 }

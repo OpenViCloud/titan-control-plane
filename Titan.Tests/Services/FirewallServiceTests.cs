@@ -79,7 +79,7 @@ public class FirewallServiceTests
         Assert.Equal(FirewallProtocol.TCP, added.Protocol);
         Assert.Equal(80, added.StartPort);
         Assert.Equal(80, added.EndPort);
-        Assert.Equal("0.0.0.0/0", added.Cidr);
+        Assert.Equal("0.0.0.0/0", added.Cidr.Value);
         Assert.Null(added.ExternalId);
         Assert.Equal("null/NotCreated/Exists/Creating", Shape(added));
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);

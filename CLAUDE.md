@@ -189,6 +189,7 @@ Khoá lệnh = chuỗi id workflow cũ (`titan-ops architecture/provider-and-wor
 | `NETWORK_QUOTA_EXCEEDED` | 422 | |
 | `NETWORK_NAME_TAKEN` | 409 | |
 | `NETWORK_CIDR_OVERLAP` | 422 | |
+| `NETWORK_CIDR_NOT_PRIVATE` | 422 | Domain từ chối network bật public IPv6 với CIDR ngoài `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` (`Network.Create`). Qua `POST /v1/tenant/networks` validator chặn trước ⇒ `400 VALIDATION_ERROR`; 422 này không tới HTTP |
 | `NETWORK_NOT_EMPTY` | 422 | Còn VM có instance trên Incus (mọi status, kể cả `Error`) hoặc đang chờ tạo (`NetworkRepository.HasActiveVmsAsync`), hoặc còn load balancer chưa `Deleted` (`HasLiveLoadBalancersAsync`) |
 | `NETWORK_INVALID_STATE` | 422 | Xoá network khi create còn chờ; rename network đang/đã xoá |
 | `TENANT_SUSPENDED` | 403 | Write ops khi tenant bị suspend |
@@ -209,6 +210,7 @@ Khoá lệnh = chuỗi id workflow cũ (`titan-ops architecture/provider-and-wor
 | `FIREWALL_RULE_NOT_FOUND` | 404 | Rule không tồn tại hoặc thuộc network khác (`DELETE …/firewall-rules/{ruleId}`); callback worker với `ruleId` lạ cũng trả mã này |
 | `INVALID_DEBT_CEILING` | 422 | Domain từ chối trần âm. Qua `PATCH /v1/tenants/{id}/debt-ceiling` validator chặn trước ⇒ `400 VALIDATION_ERROR`; 422 này không tới HTTP |
 | `INVALID_QUOTA` | 422 | `TenantQuota.Create`/`WithVmAndNetworkCaps` với cap **âm** (`titan-ops architecture/tenancy-and-admin.md#tenant-quota`). `0` là cap **hợp lệ** |
+| `INVALID_NETWORK_NAME` / `INVALID_CIDR` / `INVALID_PORT_RANGE` | 422 | Value object ở `Titan.Domain/Values/` (`NetworkName`, `Ipv4Cidr`, `FirewallCidr`, `PortRange`) từ chối dạng tên, CIDR hay dải cổng; cũng ném khi EF đọc hàng sai dạng (`titan-ops architecture/code-structure.md#logic-placement`). Input qua HTTP: validator chặn trước ⇒ `400 VALIDATION_ERROR`, ba mã này không tới HTTP từ request; hàng DB sai dạng (ghi sau lưng EF) ⇒ mọi request materialise hàng đó trả `422` với mã này (`ErrorStatus.For`), không trả dữ liệu sai |
 | `VOLUME_HAS_SNAPSHOTS` | 422 | Xoá volume còn snapshot đang sống — Incus xoá volume là xoá luôn snapshot (`titan-ops features/volume/design.md#delete-refused-with-snapshots`); xoá snapshot trước |
 | `VOLUME_QUOTA_EXCEEDED` | 422 | Cap nay là `Tenant.Quota.MaxVolumes` (mặc định 10), **không** còn `const` trong service; volume đã bấm xoá, `NotFound` hay tạo hỏng **không** tính (DCS-Q1, Q-B/Q-D) |
 | `VOLUME_SNAPSHOT_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxVolumeSnapshotsPerVolume` (mặc định 3), **per volume** |

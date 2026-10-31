@@ -361,9 +361,9 @@ file sealed class StubNetworkRepo(params Network[] seed) : INetworkRepository
     public Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> HasCidrOverlapAsync(Guid tenantId, Ipv4Cidr cidr, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public void Add(Network network) => throw new NotSupportedException();
     public Task SaveAsync(CancellationToken ct = default) => throw new NotSupportedException();

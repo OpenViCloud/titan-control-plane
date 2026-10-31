@@ -14,6 +14,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.TenantId).HasColumnName("tenant_id");
         builder.Property(n => n.Name).HasColumnName("name").IsRequired();
         builder.Property(n => n.ClusterId).HasColumnName("cluster_id").IsRequired();
+        builder.Property(n => n.RequestedCidr).HasColumnName("requested_cidr");
         builder.Property(n => n.Cidr).HasColumnName("cidr");
 
         builder.Property(n => n.ExternalId).HasColumnName("external_id");
@@ -44,6 +45,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.PublicIpv6Subnet).HasColumnName("public_ipv6_subnet");
         builder.Property(n => n.PublicIpv6RouterAddress).HasColumnName("public_ipv6_router_address");
         builder.Property(n => n.PublicIpv6ReleasedAt).HasColumnName("public_ipv6_released_at");
+        builder.Ignore(n => n.PublicIpv6);
 
         // The rules are the network's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
         // through the backing field so EF never needs a setter on the collection. Restrict, not cascade: no row of

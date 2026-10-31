@@ -3,6 +3,8 @@ using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Domain;
 
 // A network's public /64 (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
@@ -22,7 +24,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void Create_WithPublicIpv6_CarriesTheSubnetAndRouter()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "singapore01", Ipv6);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
 
         Assert.Equal(5, network.PublicIpv6Index);
         Assert.Equal("2001:41d0:d00:d405::/64", network.PublicIpv6Subnet);
@@ -32,7 +34,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void Create_WithoutPublicIpv6_HasNone()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "mock", null);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, null);
 
         Assert.Null(network.PublicIpv6Index);
         Assert.Null(network.PublicIpv6Subnet);
@@ -46,15 +48,15 @@ public class NetworkPublicIpv6LifecycleTests
         var t = TenantWith(maxIpv6: 2);
 
         Assert.Equal("IPV6_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 2, "net-1", "singapore01", Ipv6)).Code);
-        Assert.NotNull(Network.Create(t, 0, 2, "net-1", "singapore01", null));
-        Assert.NotNull(Network.Create(t, 0, 1, "net-1", "singapore01", Ipv6));
+            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 2, NetworkName.Parse("net-1"), "singapore01", null, Ipv6)).Code);
+        Assert.NotNull(Network.Create(t, 0, 2, NetworkName.Parse("net-1"), "singapore01", null, null));
+        Assert.NotNull(Network.Create(t, 0, 1, NetworkName.Parse("net-1"), "singapore01", null, Ipv6));
     }
 
     [Fact]
     public void CreateGivesUpBeforeIncusHadIt_GivesTheSubnetBack()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "singapore01", Ipv6);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
 
         network.MarkRequestFailed("Network creation failed.", "detail");
 
@@ -67,7 +69,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void CreateGivesUpAfterIncusHadIt_KeepsTheSubnet()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "singapore01", Ipv6);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
 
         network.MarkRequestFailed("Network creation failed.", "detail");
@@ -79,7 +81,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void DeleteConfirmed_OfANetworkHoldingA64_RecordsWhenItWasGivenBack()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "singapore01", Ipv6);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
@@ -95,7 +97,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void DeleteConfirmed_OfANetworkWithoutA64_RecordsNothing()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "mock", null);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, null);
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
@@ -109,7 +111,7 @@ public class NetworkPublicIpv6LifecycleTests
     [Fact]
     public void DeleteConfirmedTwice_KeepsTheFirstReleaseTime()
     {
-        var network = Network.Create(TenantWith(), 0, 0, "net-1", "singapore01", Ipv6);
+        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();

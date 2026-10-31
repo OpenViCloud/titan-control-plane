@@ -32,6 +32,7 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.RequestFailedAt).HasColumnName("request_failed_at");
         builder.Property(r => r.PendingIntentId).HasColumnName("pending_intent_id");
         builder.Ignore(r => r.Transition);
+        builder.Ignore(r => r.Ports);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.HasIndex(r => r.NetworkId);
     }

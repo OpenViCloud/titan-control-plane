@@ -1,5 +1,7 @@
 using Titan.Domain.Aggregates.Network;
 
+using Titan.Domain.Values;
+
 namespace Titan.Domain.Repositories;
 
 public interface INetworkRepository
@@ -21,11 +23,11 @@ public interface INetworkRepository
     /// Each /64 number a Deleted network of the cluster held, any tenant, with the latest time it was given back (null:
     /// deleted before that was recorded).
     Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId, CancellationToken ct = default);
-    Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default);
+    Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default);
     Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default);
     /// A load balancer of the network is not yet Deleted: it lives on the network on Incus.
     Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default);
-    Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default);
+    Task<bool> HasCidrOverlapAsync(Guid tenantId, Ipv4Cidr cidr, CancellationToken ct = default);
     /// Admin cross-tenant read (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read): every non-Deleted
     /// network, or one tenant's when tenantId is given. Not scoped to a caller.
     Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);

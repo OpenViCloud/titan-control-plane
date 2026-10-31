@@ -55,7 +55,7 @@ public class NetworkReconcilerTests
         db.Networks.AddRange(active, errored, lost, leaving, gone, creating, otherCluster);
         await db.SaveChangesAsync();
 
-        var names = (await new NetworkRepository(db).ListReconcilableAsync(Cluster)).Select(n => n.Name).OrderBy(n => n).ToList();
+        var names = (await new NetworkRepository(db).ListReconcilableAsync(Cluster)).Select(n => n.Name.Value).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "active", "errored", "leaving", "lost" }, names);
     }

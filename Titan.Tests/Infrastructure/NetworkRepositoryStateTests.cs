@@ -3,6 +3,8 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Infrastructure;
 
 // A delete request sets DesiredState = Deleted and leaves CurrentState alone; what these tests catch is a
@@ -19,12 +21,18 @@ public class NetworkRepositoryStateTests
             .UseInMemoryDatabase($"network-state-{Guid.NewGuid()}")
             .Options);
 
-    private static Network Active(string name, string cidr)
+    private static Network Active(string name, string? cidr)
     {
         var network = Network.CreateUnchecked(Tenant, name, "vn-hcm-1");
         network.MarkActive($"ext-{name}", cidr, "10.0.0.1");
         return network;
     }
+
+    private static Network CreateWaiting(string name, string requestedCidr) =>
+        Network.CreateUnchecked(Tenant, name, "vn-hcm-1", requestedCidr: requestedCidr);
+
+    private static Task<bool> Overlaps(TitanDbContext db, string cidr) =>
+        new NetworkRepository(db).HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse(cidr));
 
     private static Network DeleteRequested(string name, string cidr)
     {
@@ -68,26 +76,67 @@ public class NetworkRepositoryStateTests
         db.Networks.Add(DeleteRequested("leaving", "10.2.0.0/24"));
         await db.SaveChangesAsync();
 
-        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, "10.2.0.0/24");
+        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse("10.2.0.0/24"));
 
         Assert.True(overlaps);
     }
 
-    // A network created without a CIDR is stored with an empty one. It holds no range, so the overlap check
-    // skips it instead of parsing it.
+    // A network Incus holds whose report carried no address holds no range; a reported address that is not an IPv4
+    // CIDR is kept verbatim (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim) and
+    // holds none either. Neither makes the check throw.
     [Fact]
-    public async Task CidrOverlap_IgnoresANetworkStoredWithAnEmptyCidr()
+    public async Task CidrOverlap_IgnoresANetworkIncusHoldsWithoutAnIpv4Cidr()
     {
         using var db = NewDb();
-        db.Networks.AddRange(Active("no-range", ""), Active("ranged", "10.1.0.0/24"));
+        db.Networks.AddRange(Active("no-range", null), Active("odd-word", "fd00::/64"), Active("ranged", "10.1.0.0/24"));
         await db.SaveChangesAsync();
 
-        NetworkRepository repo = new(db);
-        bool overlapsTheRangedOne = await repo.HasCidrOverlapAsync(Tenant, "10.1.0.0/25");
-        bool overlapsNothing = await repo.HasCidrOverlapAsync(Tenant, "10.9.0.0/24");
+        bool overlapsTheRangedOne = await Overlaps(db, "10.1.0.0/25");
+        bool overlapsNothing = await Overlaps(db, "10.9.0.0/24");
 
         Assert.True(overlapsTheRangedOne);
         Assert.False(overlapsNothing);
+    }
+
+    // titan-ops features/network/user-stories.md#us-net-intent-02 — the range the customer asked for is held from the
+    // request on: a second create of the same tenant meets it while the first is still waiting for Incus.
+    [Fact]
+    public async Task CidrOverlap_SeesTheRequestedCidrOfACreateStillWaiting()
+    {
+        using var db = NewDb();
+        db.Networks.Add(CreateWaiting("waiting", "10.7.0.0/24"));
+        await db.SaveChangesAsync();
+
+        Assert.True(await Overlaps(db, "10.7.0.0/24"));
+        Assert.True(await Overlaps(db, "10.7.0.128/25"));
+        Assert.False(await Overlaps(db, "10.8.0.0/24"));
+    }
+
+    // A create that gave up before Incus had the network holds nothing: the tenant may ask for the range again.
+    [Fact]
+    public async Task CidrOverlap_IgnoresTheRequestedCidrOfACreateThatGaveUp()
+    {
+        using var db = NewDb();
+        var failed = CreateWaiting("failed", "10.7.0.0/24");
+        failed.MarkRequestFailed("reason", "detail");
+        db.Networks.Add(failed);
+        await db.SaveChangesAsync();
+
+        Assert.False(await Overlaps(db, "10.7.0.0/24"));
+    }
+
+    // Once Incus answered, its word is the range — even when it differs from what was asked for.
+    [Fact]
+    public async Task CidrOverlap_ReadsTheObservedCidr_OnceIncusHoldsTheNetwork()
+    {
+        using var db = NewDb();
+        var created = CreateWaiting("created", "10.7.0.0/24");
+        created.MarkCreated("ext-created", "10.9.0.0/24", "10.9.0.1");
+        db.Networks.Add(created);
+        await db.SaveChangesAsync();
+
+        Assert.True(await Overlaps(db, "10.9.0.0/24"));
+        Assert.False(await Overlaps(db, "10.7.0.0/24"));
     }
 
     [Fact]
@@ -99,7 +148,7 @@ public class NetworkRepositoryStateTests
         db.Networks.Add(gone);
         await db.SaveChangesAsync();
 
-        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, "10.2.0.0/24");
+        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse("10.2.0.0/24"));
 
         Assert.False(overlaps);
     }
@@ -111,7 +160,7 @@ public class NetworkRepositoryStateTests
         db.Networks.Add(Active("active", "10.1.0.0/24"));
         await db.SaveChangesAsync();
 
-        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, "10.1.0.0/25");
+        bool overlaps = await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse("10.1.0.0/25"));
 
         Assert.True(overlaps);
     }
@@ -130,8 +179,8 @@ public class NetworkRepositoryStateTests
         await db.SaveChangesAsync();
         var repo = new NetworkRepository(db);
 
-        Assert.True(await repo.HasCidrOverlapAsync(Tenant, "10.5.0.0/24"));
-        Assert.False(await repo.HasCidrOverlapAsync(Tenant, "10.6.0.0/24"));
+        Assert.True(await repo.HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse("10.5.0.0/24")));
+        Assert.False(await repo.HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse("10.6.0.0/24")));
     }
 
     [Fact]
@@ -144,7 +193,7 @@ public class NetworkRepositoryStateTests
         await db.SaveChangesAsync();
         var repo = new NetworkRepository(db);
 
-        Assert.True(await repo.ExistsByNameAsync(Tenant, "leaving"));
-        Assert.False(await repo.ExistsByNameAsync(Tenant, "gone"));
+        Assert.True(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("leaving")));
+        Assert.False(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("gone")));
     }
 }

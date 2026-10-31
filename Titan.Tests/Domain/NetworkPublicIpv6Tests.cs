@@ -60,6 +60,16 @@ public class NetworkPublicIpv6Tests
     public void For_OutsideOneTo255_IsRefused(int index)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => NetworkPublicIpv6.For(Block, index));
+        Assert.Throws<ArgumentOutOfRangeException>(() => NetworkPublicIpv6.Stored(index, "2001:db8::/64", "2001:db8::101"));
+    }
+
+    // The network's three columns give back the value Create was given, bit for bit.
+    [Fact]
+    public void Stored_IsTheValueForProduced()
+    {
+        NetworkPublicIpv6 produced = NetworkPublicIpv6.For(Block, 3);
+
+        Assert.Equal(produced, NetworkPublicIpv6.Stored(produced.Index, produced.Subnet, produced.RouterAddress));
     }
 
     // A router re-created on the address of one deleted minutes before is unreachable for minutes (OVH keeps the old

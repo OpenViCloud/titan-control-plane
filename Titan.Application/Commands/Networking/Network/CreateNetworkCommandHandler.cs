@@ -4,6 +4,7 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Values;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Commands.Networking.Network;
@@ -26,10 +27,18 @@ public class CreateNetworkCommandHandler(
 
         var activeNetworkCount = await repo.CountActiveByTenantAsync(tenantId, ct);
 
-        if (await repo.ExistsByNameAsync(tenantId, req.Name, ct))
+        // The validator already answered 400 for a bad shape; these are the Domain's own words for the same rules.
+        NetworkName name = NetworkName.Parse(req.Name);
+        Ipv4Cidr? requestedCidr = null;
+        if (req.Cidr != null)
+        {
+            requestedCidr = Ipv4Cidr.Parse(req.Cidr);
+        }
+
+        if (await repo.ExistsByNameAsync(tenantId, name, ct))
             throw new ConflictException("NETWORK_NAME_TAKEN", $"Network name '{req.Name}' is already taken.");
 
-        if (req.Cidr is not null && await repo.HasCidrOverlapAsync(tenantId, req.Cidr, ct))
+        if (requestedCidr != null && await repo.HasCidrOverlapAsync(tenantId, requestedCidr, ct))
             throw new BusinessException("NETWORK_CIDR_OVERLAP", $"CIDR '{req.Cidr}' overlaps with an existing network.");
 
         clusters.ClusterOf(req.ClusterId); // titan-ops features/catalog/design.md#cluster-is-a-real-choice
@@ -42,11 +51,16 @@ public class CreateNetworkCommandHandler(
         }
 
         // Quota refuses inside the factory, so it comes after the name/CIDR checks above.
-        var network = NetworkAggregate.Create(tenant, activeNetworkCount, activePublicIpv6Count, req.Name, req.ClusterId,
-            publicIpv6, req.DefaultIngressPolicy, req.DefaultEgressPolicy);
+        var network = NetworkAggregate.Create(tenant, activeNetworkCount, activePublicIpv6Count, name, req.ClusterId,
+            requestedCidr, publicIpv6, req.DefaultIngressPolicy, req.DefaultEgressPolicy);
         repo.Add(network);
-        activity.Stage("network.create_requested", "network", network.Id, network.Name); // atomic with the network insert
-        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name, network.ClusterId, tenant.ProjectName, req.Cidr,
+        activity.Stage("network.create_requested", "network", network.Id, network.Name.Value); // atomic with the network insert
+        string? heldCidr = null;
+        if (network.RequestedCidr != null)
+        {
+            heldCidr = network.RequestedCidr.Value;
+        }
+        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name.Value, network.ClusterId, tenant.ProjectName, heldCidr,
             network.DefaultIngressPolicy.ToString(), network.DefaultEgressPolicy.ToString(),
             network.PublicIpv6Subnet, network.PublicIpv6RouterAddress, ct);
         await repo.SaveAsync(ct);

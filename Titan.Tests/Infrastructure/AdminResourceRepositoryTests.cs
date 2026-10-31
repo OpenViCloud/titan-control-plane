@@ -138,6 +138,6 @@ public class AdminResourceRepositoryTests
         var all = await repo.ListAllAsync(null);
 
         var net = Assert.Single(all);
-        Assert.Equal("live", net.Name);
+        Assert.Equal("live", net.Name.Value);
     }
 }

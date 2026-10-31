@@ -50,12 +50,17 @@ public sealed record NetworkPublicIpv6 : ValueObject
         return For(block, oldestReleased.Value);
     }
 
+    /// The value as a network stored it in its three columns; nothing is recomputed, since the network does not keep
+    /// the cluster's block For() derives the addresses from.
+    public static NetworkPublicIpv6 Stored(int index, string subnet, string routerAddress)
+    {
+        EnsureIndexInRange(index);
+        return new NetworkPublicIpv6 { Index = index, Subnet = subnet, RouterAddress = routerAddress };
+    }
+
     public static NetworkPublicIpv6 For(string block, int index)
     {
-        if (index < FirstIndex || index > LastIndex)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index), index, "The first /64 holds OVH's gateway and the routers.");
-        }
+        EnsureIndexInRange(index);
         byte[] subnet = IPNetwork.Parse(block).BaseAddress.GetAddressBytes();
         byte[] router = (byte[])subnet.Clone();
         subnet[7] = (byte)index;
@@ -67,5 +72,13 @@ public sealed record NetworkPublicIpv6 : ValueObject
             Subnet = new IPAddress(subnet) + "/64",
             RouterAddress = new IPAddress(router).ToString(),
         };
+    }
+
+    private static void EnsureIndexInRange(int index)
+    {
+        if (index < FirstIndex || index > LastIndex)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, "The first /64 holds OVH's gateway and the routers.");
+        }
     }
 }

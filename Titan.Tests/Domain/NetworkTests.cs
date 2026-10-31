@@ -1,4 +1,5 @@
 using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 
@@ -124,6 +125,23 @@ public class NetworkTests
         Assert.Equal("10.0.0.0/24", network.Cidr);
         Assert.Equal("10.0.0.1", network.Gateway);
         Assert.Equal(NetworkTransition.Creating, network.Transition);
+    }
+
+    // The report's cidr and gateway are optional (omitempty; today the worker leaves them out only on a give-up that
+    // could not read the range back); an empty string means the same. Neither is stored.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void MarkCreated_WithoutAnAddress_LeavesCidrAndGatewayNull(string? absent)
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+
+        network.MarkCreated("cs-net-id", absent, absent);
+
+        Assert.Equal("cs-net-id", network.ExternalId);
+        Assert.Null(network.Cidr);
+        Assert.Null(network.Gateway);
+        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
     }
 
     [Fact]
@@ -430,7 +448,59 @@ public class NetworkTests
     {
         var network = NetworkIn(seed);
 
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.Rename("new")).Code);
+        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.Rename(NetworkName.Parse("new"))).Code);
+    }
+
+    // ── Create: the range asked for against the public IPv6 choice (titan-ops architecture/code-structure.md#logic-placement) ──
+
+    private static readonly NetworkPublicIpv6 SomeIpv6 = NetworkPublicIpv6.For("2001:41d0:d00:d400::/56", 5);
+
+    private static Tenant TenantWithRoom()
+    {
+        Tenant tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        tenant.UpdateQuota(TenantQuota.Create(9, 9, 9, 9, 9, 9, 9, 9, 9));
+        return tenant;
+    }
+
+    [Theory]
+    [InlineData("8.8.8.0/24")]
+    [InlineData("172.32.0.0/24")]
+    [InlineData("9.0.0.0/7")]
+    public void Create_WithPublicIpv6_AndACidrOutsideThePrivateRanges_IsRefused(string cidr)
+    {
+        var ex = Assert.Throws<BusinessException>(() => Network.Create(
+            TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", Ipv4Cidr.Parse(cidr), SomeIpv6));
+
+        Assert.Equal("NETWORK_CIDR_NOT_PRIVATE", ex.Code);
+    }
+
+    [Theory]
+    [InlineData("10.20.0.0/24")]
+    [InlineData("172.16.5.0/24")]
+    [InlineData("192.168.10.0/24")]
+    public void Create_WithPublicIpv6_AndAPrivateCidr_IsAccepted(string cidr)
+    {
+        var network = Network.Create(
+            TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", Ipv4Cidr.Parse(cidr), SomeIpv6);
+
+        Assert.Equal("net-1", network.Name.Value);
+        Assert.Equal(5, network.PublicIpv6Index);
+    }
+
+    [Fact]
+    public void Create_WithPublicIpv6_AndNoCidr_IsAccepted()
+    {
+        Assert.NotNull(Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, SomeIpv6));
+    }
+
+    // A network without public IPv6 sits on no uplink, so any IPv4 range is its own business.
+    [Fact]
+    public void Create_WithoutPublicIpv6_TakesAnyIpv4Cidr()
+    {
+        var network = Network.Create(
+            TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "mock", Ipv4Cidr.Parse("8.8.8.0/24"), null);
+
+        Assert.Null(network.PublicIpv6Index);
     }
 
     // ── DeleteLocally ──────────────────────────────────────────────────────
@@ -465,5 +535,35 @@ public class NetworkTests
         var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
+    }
+
+    // ---- What the customer asked for is the network's own field (titan-ops architecture/code-structure.md#logic-placement).
+
+    [Fact]
+    public void Create_HoldsTheRequestedCidr_FromTheMomentItIsAskedFor()
+    {
+        Network network = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01",
+            Ipv4Cidr.Parse("10.1.0.0/24"), null);
+
+        Assert.Equal(Ipv4Cidr.Parse("10.1.0.0/24"), network.RequestedCidr);
+        Assert.Null(network.Cidr); // Incus has not answered yet
+    }
+
+    [Fact]
+    public void Create_WithoutACidr_HoldsNoRequestedCidr()
+    {
+        Network network = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, null);
+
+        Assert.Null(network.RequestedCidr);
+    }
+
+    [Fact]
+    public void Create_WithPublicIpv6_RebuildsItAsTheOneValueItWasGiven()
+    {
+        Network with = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, SomeIpv6);
+        Network without = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-2"), "singapore01", null, null);
+
+        Assert.Equal(SomeIpv6, with.PublicIpv6);
+        Assert.Null(without.PublicIpv6);
     }
 }

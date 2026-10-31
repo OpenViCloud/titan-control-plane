@@ -5,6 +5,7 @@ using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
@@ -33,10 +34,18 @@ public class CreateFirewallRuleCommandHandler(
 
         var direction = Enum.Parse<FirewallDirection>(req.Direction, ignoreCase: true);
         var protocol = Enum.Parse<FirewallProtocol>(req.Protocol, ignoreCase: true);
+        // The validator already paired the ports with the protocol and answered 400 for a bad shape; these are the
+        // Domain's own words for the same rules.
+        PortRange? ports = null;
+        if (req.StartPort != null && req.EndPort != null)
+        {
+            ports = PortRange.Of(req.StartPort.Value, req.EndPort.Value);
+        }
+        FirewallCidr cidr = FirewallCidr.Parse(req.Cidr);
 
         // The network answers whether it can take a rule, checks the cap and adds the rule in one call; the provider
         // id is read after, from a network that just said it is usable.
-        FirewallRuleEntity rule = network.AddFirewallRule(tenant, direction, protocol, req.StartPort, req.EndPort, req.Cidr);
+        FirewallRuleEntity rule = network.AddFirewallRule(tenant, direction, protocol, ports, cidr);
         string externalNetworkId = network.RequireExternalId();
 
         activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with the save

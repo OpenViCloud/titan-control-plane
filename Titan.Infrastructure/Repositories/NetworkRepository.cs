@@ -59,7 +59,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         return indexes.ToHashSet();
     }
 
-    public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
+    public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
             n => n.TenantId == tenantId && n.Name == name && n.CurrentExistence != CurrentExistence.Deleted, ct);
 
@@ -88,38 +88,36 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Set<Domain.Aggregates.LoadBalancer.LoadBalancer>().AnyAsync(
             lb => lb.NetworkId == networkId && lb.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    public async Task<bool> HasCidrOverlapAsync(Guid tenantId, string cidr, CancellationToken ct = default)
+    public async Task<bool> HasCidrOverlapAsync(Guid tenantId, Ipv4Cidr cidr, CancellationToken ct = default)
     {
-        // Whatever the person asked for, a network Incus holds or is about to hold keeps its range, a delete in
-        // flight included: reusing it could collide on Incus. A network created without a CIDR is stored with an
-        // empty one and holds no range.
-        var existingCidrs = await db.Networks
+        // A network Incus holds keeps the range the worker reported for it (the customer's string, or the one Incus
+        // picked), a delete in flight included: reusing it could collide on Incus. One Incus is about to hold keeps
+        // the range the customer asked for (titan-ops features/network/user-stories.md#us-net-intent-02). A network
+        // without either holds none; a reported address that is not an IPv4 CIDR is kept verbatim and holds none here.
+        var held = await db.Networks
             .Where(n => n.TenantId == tenantId
-                     && n.Cidr != null
-                     && n.Cidr != ""
                      && (n.CurrentExistence == CurrentExistence.Exists
                          || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingIntentId != null)))
-            .Select(n => n.Cidr!)
+            .Select(n => new { n.CurrentExistence, n.Cidr, n.RequestedCidr })
             .ToListAsync(ct);
 
-        return existingCidrs.Any(existing => CidrsOverlap(existing, cidr));
-    }
-
-    private static bool CidrsOverlap(string cidr1, string cidr2)
-    {
-        static (uint Start, uint End) ParseCidr(string cidr)
+        foreach (var network in held)
         {
-            var parts = cidr.Split('/');
-            var ip = parts[0].Split('.').Select(byte.Parse).ToArray();
-            var prefix = int.Parse(parts[1]);
-            var addr = (uint)(ip[0] << 24 | ip[1] << 16 | ip[2] << 8 | ip[3]);
-            var mask = prefix == 0 ? 0u : ~0u << (32 - prefix);
-            return (addr & mask, (addr & mask) | ~mask);
+            Ipv4Cidr? range;
+            if (network.CurrentExistence == CurrentExistence.Exists)
+            {
+                Ipv4Cidr.TryParse(network.Cidr, out range);
+            }
+            else
+            {
+                range = network.RequestedCidr;
+            }
+            if (range != null && range.Overlaps(cidr))
+            {
+                return true;
+            }
         }
-
-        var (s1, e1) = ParseCidr(cidr1);
-        var (s2, e2) = ParseCidr(cidr2);
-        return s1 <= e2 && s2 <= e1;
+        return false;
     }
 
     // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read. tenantId == null spans all tenants.

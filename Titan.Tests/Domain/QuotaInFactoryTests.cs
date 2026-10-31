@@ -6,6 +6,8 @@ using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
 
+using Titan.Domain.Values;
+
 namespace Titan.Tests.Domain;
 
 // QuotaOwnershipTests proves the check is UNREACHABLE from a service; this proves it is
@@ -87,11 +89,11 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxIpv6: 1);
         Assert.Equal("IPV6_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 1, "net-1", "cluster-a", SomeIpv6)).Code);
+            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 1, NetworkName.Parse("net-1"), "cluster-a", null, SomeIpv6)).Code);
 
         // Same tenant, same count, IPv6 not requested — the cap does not apply. This is the half
         // that keeps the assertion above from being "the factory always throws".
-        Assert.NotNull(Network.Create(t, 0, 1, "net-1", "cluster-a", null));
+        Assert.NotNull(Network.Create(t, 0, 1, NetworkName.Parse("net-1"), "cluster-a", null, null));
     }
 
     [Fact]
@@ -99,7 +101,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxNetworks: 3);
         Assert.Equal("NETWORK_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 3, 0, "net-1", "cluster-a", null)).Code);
+            Assert.Throws<BusinessException>(() => Network.Create(t, 3, 0, NetworkName.Parse("net-1"), "cluster-a", null, null)).Code);
     }
 
     [Fact]
@@ -142,7 +144,7 @@ public class QuotaInFactoryTests
         var t = TenantWith(maxFwRules: 5);
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
             () => UsableNetworkWithRules(t.Id, 5).AddFirewallRule(t, FirewallDirection.Ingress,
-                FirewallProtocol.TCP, 80, 80, "0.0.0.0/0")).Code);
+                FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"))).Code);
     }
 
     [Fact]
@@ -162,14 +164,14 @@ public class QuotaInFactoryTests
             maxVolSnaps: 2, maxFwRules: 5, maxIpv6: 1, maxSshKeys: 4);
 
         Assert.NotNull(NewVm(t, 1));
-        Assert.NotNull(Network.Create(t, 2, 0, "net-2", "cluster-a", SomeIpv6));
-        Assert.NotNull(Network.Create(t, 2, 0, "net-1", "cluster-a", null));
+        Assert.NotNull(Network.Create(t, 2, 0, NetworkName.Parse("net-2"), "cluster-a", null, SomeIpv6));
+        Assert.NotNull(Network.Create(t, 2, 0, NetworkName.Parse("net-1"), "cluster-a", null, null));
         Assert.NotNull(Volume.Create(t, 3, "vol-1", "cluster-a", "std", 20));
         Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
         Assert.NotNull(RunningVmWithSnapshots(t.Id, 2).AddSnapshot(t, "snap-1"));
         Assert.NotNull(AllocatedVolumeWithSnapshots(t.Id, 1).AddSnapshot(t, "snap-1"));
         Assert.NotNull(UsableNetworkWithRules(t.Id, 4).AddFirewallRule(t, FirewallDirection.Ingress,
-            FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"));
+            FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
         Assert.NotNull(SshKey.Create(t, 3, "laptop", SshPublicKeyTests.Ed25519));
     }
 

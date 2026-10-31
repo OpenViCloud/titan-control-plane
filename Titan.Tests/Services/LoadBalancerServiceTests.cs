@@ -45,7 +45,7 @@ public class LoadBalancerServiceTests
     private Network NetworkWithIpv6(bool usable = true, Guid? tenantId = null)
     {
         Tenant owner = tenantId == null ? _tenant : TestTenant.Active("other", "kc-o", "o@o.com");
-        var network = Network.Create(owner, 0, 0, $"net-{Guid.NewGuid():N}"[..12], "cluster-1", NetworkPublicIpv6.For(Block, 5));
+        var network = Network.Create(owner, 0, 0, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..12]), "cluster-1", null, NetworkPublicIpv6.For(Block, 5));
         if (usable)
         {
             network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
@@ -56,7 +56,7 @@ public class LoadBalancerServiceTests
 
     private Network NetworkWithoutIpv6()
     {
-        var network = Network.Create(_tenant, 0, 0, "plain", "cluster-1", null);
+        var network = Network.Create(_tenant, 0, 0, NetworkName.Parse("plain"), "cluster-1", null, null);
         network.MarkActive("net-plain", "10.0.0.0/24", "10.0.0.1");
         _networks.Setup(r => r.FindByIdAsync(network.Id, It.IsAny<CancellationToken>())).ReturnsAsync(network);
         return network;
