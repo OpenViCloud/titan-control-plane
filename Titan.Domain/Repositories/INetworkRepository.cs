@@ -33,7 +33,7 @@ public interface INetworkRepository
     Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);
     /// Reached the provider (ExternalId set) and not yet confirmed gone, whatever Incus last said: an Errored network
     /// can come back Created, and a refused delete can still end with the network gone.
-    Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
+    Task<List<ReconcilableNetwork>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
     void Add(Network network);
     Task SaveAsync(CancellationToken ct = default);
 }

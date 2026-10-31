@@ -71,22 +71,7 @@ public class UpdateNetworkStatusCommandHandler(
                 network.MarkCreated(req.ExternalId!, req.Cidr, req.Gateway);
                 break;
             case "RequestFailed":
-                // A give-up report carries the provider id when the Created report never arrived.
-                bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && network.ExternalId == null;
-                if (carriesAnIdNotYetStored)
-                {
-                    network.MarkCreated(req.ExternalId!, req.Cidr, req.Gateway);
-                }
-                // A delete Incus refused gives the network back (titan-ops architecture/desired-and-current.md#abandoned-request).
-                bool deleteWasWaiting = network.Transition == NetworkTransition.Deleting;
-                if (deleteWasWaiting)
-                {
-                    network.AbandonRequest(req.Reason, req.Detail);
-                }
-                else
-                {
-                    network.MarkRequestFailed(req.Reason, req.Detail);
-                }
+                network.MarkRequestFailed(req.ExternalId, req.Cidr, req.Gateway, req.Reason, req.Detail);
                 break;
             case "Deleted":
                 // The network takes its rules with it (titan-ops features/network/design.md#network-lifecycle) and names

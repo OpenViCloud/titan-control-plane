@@ -146,8 +146,8 @@ public class VmSnapshot : ChildEntity
     }
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the reconciler's read model.
-    public string RequireExternalId() =>
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.

@@ -1,5 +1,4 @@
 using Titan.Domain.Aggregates.Network;
-using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 
 namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
 
@@ -7,8 +6,8 @@ namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
 // for the callback route. Internal only — never on a customer path.
 public record ReconcilableFirewallRuleQueryResult(Guid Id, Guid NetworkId, string ExternalId, string? CurrentState, string CurrentExistence)
 {
-    public static ReconcilableFirewallRuleQueryResult From(FirewallRuleEntity r) =>
-        new(r.Id, r.NetworkId, r.RequireExternalId(), StateName(r.CurrentState), r.CurrentExistence.ToString());
+    public static ReconcilableFirewallRuleQueryResult From(ReconcilableFirewallRule r) =>
+        new(r.Id, r.NetworkId, r.ExternalId, StateName(r.CurrentState), r.CurrentExistence.ToString());
 
     private static string? StateName(FirewallRuleState? state)
     {

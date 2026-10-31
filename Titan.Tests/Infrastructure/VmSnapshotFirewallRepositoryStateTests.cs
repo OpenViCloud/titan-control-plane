@@ -74,7 +74,8 @@ public class VmSnapshotFirewallRepositoryStateTests
         db.Vms.AddRange(here, there);
         await db.SaveChangesAsync();
 
-        var names = (await new VmSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Name).OrderBy(n => n).ToList();
+        var ids = (await new VmSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Id).ToList();
+        var names = db.VmSnapshots.Where(s => ids.Contains(s.Id)).Select(s => s.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "deleting", "lost", "ready", "reverting" }, names);
     }

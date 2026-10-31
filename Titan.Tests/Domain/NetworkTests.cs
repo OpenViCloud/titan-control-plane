@@ -90,7 +90,7 @@ public class NetworkTests
             case Seed.Active: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); break;
             case Seed.DeleteRequested: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.RequestDelete(); break;
             case Seed.Deleted: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.RequestDelete(); network.MarkDeleted(); break;
-            case Seed.CreateFailed: network.MarkRequestFailed("reason", "detail"); break;
+            case Seed.CreateFailed: network.MarkRequestFailed(null, null, null, "reason", "detail"); break;
             case Seed.Errored: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.MarkObserved(NetworkStatus.Errored); break;
             case Seed.Pending: network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.MarkObserved(NetworkStatus.Pending); break;
             case Seed.NotFound: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.MarkNotFound(); break;
@@ -275,7 +275,7 @@ public class NetworkTests
     {
         var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
 
-        network.MarkRequestFailed("Network creation failed.", "raw incus error");
+        network.MarkRequestFailed(null, null, null, "Network creation failed.", "raw incus error");
 
         Assert.Equal("Network creation failed.", network.RequestFailureReason);
         Assert.Equal("raw incus error", network.RequestFailureDetail);
@@ -290,7 +290,7 @@ public class NetworkTests
     {
         var network = MakeActiveNetwork();
 
-        network.MarkRequestFailed("late", "late");
+        network.MarkRequestFailed(null, null, null, "late", "late");
 
         Assert.Null(network.RequestFailureReason);
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
@@ -304,7 +304,7 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.RequestDelete();
 
-        network.AbandonRequest("Network deletion failed.", "raw");
+        network.MarkRequestFailed(null, null, null, "Network deletion failed.", "raw");
 
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
         Assert.Null(network.Transition);
@@ -315,14 +315,85 @@ public class NetworkTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
+    // The give-up report carries the provider id when the Created report never arrived: Incus has the network.
     [Fact]
-    public void AbandonRequest_WithNoDeleteWaiting_IsRefused()
+    public void RequestFailed_CarryingAnIdNotYetStored_StoresIt_AndEndsTheCreate()
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+
+        network.MarkRequestFailed("cs-net-id", "10.0.0.0/24", "10.0.0.1", "Network creation failed.", "raw");
+
+        Assert.Equal("cs-net-id", network.ExternalId);
+        Assert.Equal("10.0.0.0/24", network.Cidr);
+        Assert.Equal("10.0.0.1", network.Gateway);
+        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.Equal("Network creation failed.", network.RequestFailureReason);
+        Assert.Null(network.Transition);
+    }
+
+    // Incus holds the /64 of a network it has, so a give-up that carries the id keeps it.
+    [Fact]
+    public void RequestFailed_CarryingAnIdNotYetStored_KeepsThePublicIpv6()
+    {
+        Network network = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, SomeIpv6);
+
+        network.MarkRequestFailed("cs-net-id", null, null, "Network creation failed.", "raw");
+
+        Assert.Equal(SomeIpv6, network.PublicIpv6);
+    }
+
+    // A create that already gave up without an id: a later report that carries it still says Incus has the network.
+    [Fact]
+    public void RequestFailed_WithNothingWaiting_StillStoresAnIdNotYetStored_AndRecordsNoNewReason()
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        network.MarkRequestFailed(null, null, null, "first", "first");
+
+        network.MarkRequestFailed("cs-net-id", "10.0.0.0/24", "10.0.0.1", "late", "late");
+
+        Assert.Equal("cs-net-id", network.ExternalId);
+        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.Equal("first", network.RequestFailureReason);
+    }
+
+    [Fact]
+    public void RequestFailed_CarryingAnId_KeepsTheOneAlreadyStored()
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
+
+        network.MarkRequestFailed("other-id", "10.9.0.0/24", "10.9.0.1", "Network creation failed.", "raw");
+
+        Assert.Equal("cs-net-id", network.ExternalId);
+        Assert.Equal("10.0.0.0/24", network.Cidr);
+        Assert.Equal("Network creation failed.", network.RequestFailureReason);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void RequestFailed_WithoutAnId_StoresNone(string? externalId)
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+
+        network.MarkRequestFailed(externalId, null, null, "Network creation failed.", "raw");
+
+        Assert.Null(network.ExternalId);
+        Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
+    }
+
+    [Fact]
+    public void RequestFailed_WithNothingWaiting_LeavesWhatWasAskedFor()
     {
         var active = MakeActiveNetwork();
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => active.AbandonRequest("r", "d")).Code);
+        active.MarkRequestFailed(null, null, null, "late", "late");
+        Assert.Equal(DesiredExistence.Exists, active.DesiredExistence);
+        Assert.Null(active.RequestFailureReason);
 
         var deleted = NetworkIn(Seed.Deleted);
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => deleted.AbandonRequest("r", "d")).Code);
+        deleted.MarkRequestFailed(null, null, null, "late", "late");
+        Assert.Equal(CurrentExistence.Deleted, deleted.CurrentExistence);
+        Assert.Null(deleted.RequestFailureReason);
     }
 
     // ── RequestDelete: follows Incus — whatever its word, a network Incus may hold is deleted through Incus ──
@@ -431,7 +502,7 @@ public class NetworkTests
         Assert.False(network.MarkObserved(NetworkStatus.Created));
         network.MarkNotFound();
         network.MarkCreated("other", "10.9.0.0/24", "10.9.0.1");
-        network.MarkRequestFailed("late", "late");
+        network.MarkRequestFailed(null, null, null, "late", "late");
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);

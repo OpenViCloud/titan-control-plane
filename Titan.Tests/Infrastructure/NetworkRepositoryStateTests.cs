@@ -53,7 +53,7 @@ public class NetworkRepositoryStateTests
         var lost = Active("lost", "10.4.0.0/24");
         lost.MarkNotFound();
         var failed = Network.CreateUnchecked(Tenant, "failed", "vn-hcm-1");
-        failed.MarkRequestFailed("reason", "detail");
+        failed.MarkRequestFailed(null, null, null, "reason", "detail");
         db.Networks.AddRange(
             Network.CreateUnchecked(Tenant, "creating", "vn-hcm-1"),
             Active("active", "10.1.0.0/24"),
@@ -118,7 +118,7 @@ public class NetworkRepositoryStateTests
     {
         using var db = NewDb();
         var failed = CreateWaiting("failed", "10.7.0.0/24");
-        failed.MarkRequestFailed("reason", "detail");
+        failed.MarkRequestFailed(null, null, null, "reason", "detail");
         db.Networks.Add(failed);
         await db.SaveChangesAsync();
 

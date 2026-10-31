@@ -154,9 +154,9 @@ public class VmRepositoryStateTests
         using var db = NewDb();
         VmRepository repo = await SeededAsync(db);
 
-        List<Vm> watched = await repo.ListReconcilableAsync("cluster-a");
+        var ids = (await repo.ListReconcilableAsync("cluster-a")).Select(v => v.Id).ToList();
 
         Assert.Equal(new[] { "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
-            watched.Select(v => v.Name).OrderBy(n => n).ToArray());
+            db.Vms.Where(v => ids.Contains(v.Id)).Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 }

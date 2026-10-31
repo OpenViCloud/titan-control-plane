@@ -357,7 +357,7 @@ public class NetworkServiceTests
         // The create gave up before Incus had the network — nothing on Incus, so delete locally and send nothing.
         SetupCurrentUser(TenantId);
         var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
-        network.MarkRequestFailed("reason", "detail");
+        network.MarkRequestFailed(null, null, null, "reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
@@ -881,7 +881,7 @@ public class NetworkServiceTests
     {
         SetupCurrentUser(TenantId);
         var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
-        network.MarkRequestFailed("reason", "detail");
+        network.MarkRequestFailed(null, null, null, "reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 

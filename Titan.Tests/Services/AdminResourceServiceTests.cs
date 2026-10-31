@@ -162,7 +162,7 @@ public class AdminResourceServiceTests
     public async Task ListNetworks_CarriesTheFailureDetail_TheTenantNeverSees()
     {
         var failed = Network.CreateUnchecked(TenantA, "failed-net", "vn-hcm-1");
-        failed.MarkRequestFailed("Network creation failed.", "create network: project t-1 not found");
+        failed.MarkRequestFailed(null, null, null, "Network creation failed.", "create network: project t-1 not found");
         var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(failed));
 
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
@@ -334,7 +334,7 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
     public Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ReconcilableVm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByExternalIdsAsync(Guid tenantId, IReadOnlyCollection<string> externalIds, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) => throw new NotSupportedException();
@@ -364,7 +364,7 @@ file sealed class StubNetworkRepo(params Network[] seed) : INetworkRepository
     public Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasCidrOverlapAsync(Guid tenantId, Ipv4Cidr cidr, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<ReconcilableNetwork>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();
     public void Add(Network network) => throw new NotSupportedException();
     public Task SaveAsync(CancellationToken ct = default) => throw new NotSupportedException();
 }

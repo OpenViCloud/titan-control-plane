@@ -1,5 +1,4 @@
 using Titan.Domain.Aggregates.Network;
-using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Queries.Networking.Network.Contracts;
 
@@ -8,8 +7,8 @@ namespace Titan.Application.Queries.Networking.Network.Contracts;
 // Internal only — never on a customer path.
 public record ReconcilableNetworkQueryResult(Guid Id, string ExternalId, string? CurrentState, string CurrentExistence)
 {
-    public static ReconcilableNetworkQueryResult From(NetworkAggregate n) =>
-        new(n.Id, n.RequireExternalId(), StatusName(n.CurrentState), n.CurrentExistence.ToString());
+    public static ReconcilableNetworkQueryResult From(ReconcilableNetwork n) =>
+        new(n.Id, n.ExternalId, StatusName(n.CurrentState), n.CurrentExistence.ToString());
 
     private static string? StatusName(NetworkStatus? status)
     {

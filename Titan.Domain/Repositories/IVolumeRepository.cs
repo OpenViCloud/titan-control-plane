@@ -18,7 +18,7 @@ public interface IVolumeRepository
     /// (titan-ops features/volume/design.md#counting-and-billing). Independent of any VM's state, by design.
     Task<List<Volume>> ListBillableAsync(CancellationToken ct = default);
     /// Volumes in a cluster the storage reconciler should observe: they have a provider id and are not Deleted.
-    Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
+    Task<List<ReconcilableVolume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
     void Add(Volume volume);
     /// Volumes a VM holds or was asked to hold (attached, attaching, detaching), not yet deleted; tracked, with their
     /// snapshots, since the VM's delete changes them.

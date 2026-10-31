@@ -11,5 +11,5 @@ public interface IVmSnapshotRepository
     /// All tenants: Incus holds it — a revert or a delete in flight still bills (titan-ops features/vm/design.md#vm-snapshot-counting).
     Task<List<VmSnapshot>> ListBillableAsync(CancellationToken ct = default);
     /// Snapshots of the cluster's VMs the VM snapshot reconciler observes: they have a provider id and are not Deleted.
-    Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
+    Task<List<ReconcilableVmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
 }

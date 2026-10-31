@@ -49,6 +49,13 @@ public class ChildEntityGuardTests
     private static bool MentionsAChild(Type type) =>
         ItselfAndGenericArguments(type).Any(t => typeof(ChildEntity).IsAssignableFrom(t));
 
+    // IFirewallRuleRepository hands out ReconcilableFirewallRule.
+    private static bool MentionsTheReconcilerRowOf(Type repository, Type type)
+    {
+        string child = repository.Name["I".Length..^"Repository".Length];
+        return ItselfAndGenericArguments(type).Any(t => t.Name == "Reconcilable" + child);
+    }
+
     // A *ForUpdateAsync loads one root for writing: one that hands out children is the aggregate boundary done by hand.
     [Fact]
     public void ForUpdateMethods_LoadOneAggregateRoot()
@@ -110,9 +117,10 @@ public class ChildEntityGuardTests
     }
 
     // Structural half: a child's own repository is the read side (lists, the meter, the reconciler): every method hands
-    // back children. Found by name, so a method returning a root cannot take the repository out of the scan.
+    // back children, or the reconciler's row of one. Found by name, so a method returning a root cannot take the
+    // repository out of the scan.
     [Fact]
-    public void AChildsOwnRepository_OnlyHandsOutChildren()
+    public void AChildsOwnRepository_OnlyHandsOutChildren_OrItsReconcilerRows()
     {
         var childNames = DomainAssembly.GetExportedTypes()
             .Where(t => typeof(ChildEntity).IsAssignableFrom(t) && !t.IsAbstract)
@@ -123,20 +131,17 @@ public class ChildEntityGuardTests
 
         var offenders = childRepositories
             .SelectMany(r => r.GetMethods().Select(m => (r, m)))
-            .Where(x => !MentionsAChild(x.m.ReturnType))
+            .Where(x => !MentionsAChild(x.m.ReturnType) && !MentionsTheReconcilerRowOf(x.r, x.m.ReturnType))
             .Select(x => $"{x.r.Name}.{x.m.Name}")
             .ToList();
 
-        Assert.True(offenders.Count == 0, "A child's own repository only hands out its rows: " + string.Join(", ", offenders));
+        Assert.True(offenders.Count == 0, "A child's own repository only hands out children, or the reconciler's rows of its own child: " + string.Join(", ", offenders));
     }
 
     // Structural half: the compiler keeps Titan.Application off a child's writes, since they are internal. A public
     // method on a child is a way around the root, so each one says why it is not.
     private static readonly Dictionary<string, string> PublicChildMethods = new(StringComparer.Ordinal)
     {
-        ["FirewallRule.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
-        ["VolumeSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
-        ["VmSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["InvoiceItem.Create"] = "the items exist before their invoice: built first, handed to the invoice's factory",
         ["WalletTransaction.ForTopUp"] = "the ledger is not loaded with the wallet: the factory applies the sign, the row goes in beside the balance",
         ["WalletTransaction.ForPromo"] = "same ledger row",

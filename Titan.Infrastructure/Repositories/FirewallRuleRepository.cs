@@ -17,13 +17,14 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task<List<FirewallRule>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
+    public async Task<List<ReconcilableFirewallRule>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.FirewallRules
             .Where(r => r.ExternalId != null
                      && r.CurrentExistence != CurrentExistence.Deleted
                      && db.Networks.Any(n => n.Id == r.NetworkId
                                           && n.ClusterId == clusterId
                                           && n.DesiredExistence == DesiredExistence.Exists))
-            .AsNoTracking()
+            // The filter above keeps only rows with an id.
+            .Select(r => new ReconcilableFirewallRule(r.Id, r.NetworkId, r.ExternalId!, r.CurrentState, r.CurrentExistence))
             .ToListAsync(ct);
 }

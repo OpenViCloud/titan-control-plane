@@ -23,11 +23,12 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
             .ToListAsync(ct);
 
     // A snapshot has no cluster of its own; it lives where its VM lives.
-    public async Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
+    public async Task<List<ReconcilableVmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.ExternalId != null
                      && s.CurrentExistence != CurrentExistence.Deleted
                      && db.Vms.Any(v => v.Id == s.VmId && v.ClusterId == clusterId))
-            .AsNoTracking()
+            // The filter above keeps only rows with an id.
+            .Select(s => new ReconcilableVmSnapshot(s.Id, s.VmId, s.ExternalId!, s.CurrentExistence))
             .ToListAsync(ct);
 }

@@ -215,11 +215,6 @@ public class FirewallRule : ChildEntity
         return externalRuleId;
     }
 
-    /// The reconciler lists only rules with an ExternalId (FirewallRuleRepository.ListReconcilableAsync), so this
-    /// cannot fire on that path; it throws rather than let a caller assert the id.
-    public string RequireExternalId() =>
-        ExternalId ?? throw new BusinessException("FIREWALL_RULE_INVALID_STATE", "Firewall rule has no provider resource yet.");
-
     /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): DesiredExistence
     /// returns to Exists, so it counts against the quota again (it is still enforced on Incus), the reason is kept
     /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request.

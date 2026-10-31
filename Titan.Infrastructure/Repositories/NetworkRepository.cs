@@ -128,12 +128,13 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    public async Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
+    public async Task<List<ReconcilableNetwork>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Networks
             .Where(n => n.ClusterId == clusterId
                         && n.ExternalId != null
                         && n.CurrentExistence != CurrentExistence.Deleted)
-            .AsNoTracking()
+            // The filter above keeps only rows with an id.
+            .Select(n => new ReconcilableNetwork(n.Id, n.ExternalId!, n.CurrentState, n.CurrentExistence))
             .ToListAsync(ct);
 
     public void Add(Network network) => db.Networks.Add(network);

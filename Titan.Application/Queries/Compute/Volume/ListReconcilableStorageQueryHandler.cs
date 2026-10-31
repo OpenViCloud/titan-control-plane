@@ -1,7 +1,7 @@
 using Titan.Application.Queries.Compute.Volume.Contracts;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Repositories;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
-using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Queries.Compute.Volume;
 
@@ -14,7 +14,7 @@ public class ListReconcilableStorageQueryHandler(
 {
     public async Task<ReconcilableStorageQueryResult> HandleAsync(ListReconcilableStorageQuery query, CancellationToken ct = default)
     {
-        List<VolumeAggregate> volumeRows = await volumes.ListReconcilableAsync(query.ClusterId, ct);
+        List<ReconcilableVolume> volumeRows = await volumes.ListReconcilableAsync(query.ClusterId, ct);
         var snapshotRows = await snapshots.ListReconcilableAsync(query.ClusterId, ct);
 
         List<Guid> attachedVmIds = volumeRows
@@ -25,7 +25,7 @@ public class ListReconcilableStorageQueryHandler(
         List<VmAggregate> attachedVms = await vms.ListByIdsAsync(attachedVmIds, ct);
 
         List<ReconcilableVolumeQueryResult> volumeResults = [];
-        foreach (VolumeAggregate volume in volumeRows)
+        foreach (ReconcilableVolume volume in volumeRows)
         {
             string? attachedExternalVmId = null;
             VmAggregate? attachedVm = attachedVms.FirstOrDefault(vm => vm.Id == volume.CurrentAttachedVmId);
@@ -34,7 +34,7 @@ public class ListReconcilableStorageQueryHandler(
                 attachedExternalVmId = attachedVm.ExternalId;
             }
             volumeResults.Add(new ReconcilableVolumeQueryResult(
-                volume.Id, volume.RequireExternalId(), volume.CurrentExistence.ToString(), attachedExternalVmId,
+                volume.Id, volume.ExternalId, volume.CurrentExistence.ToString(), attachedExternalVmId,
                 volume.CurrentAttachedElsewhere));
         }
 

@@ -58,7 +58,7 @@ public class NetworkPublicIpv6LifecycleTests
     {
         var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
 
-        network.MarkRequestFailed("Network creation failed.", "detail");
+        network.MarkRequestFailed(null, null, null, "Network creation failed.", "detail");
 
         Assert.Null(network.PublicIpv6Index);
         Assert.Null(network.PublicIpv6Subnet);
@@ -72,7 +72,7 @@ public class NetworkPublicIpv6LifecycleTests
         var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, Ipv6);
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
 
-        network.MarkRequestFailed("Network creation failed.", "detail");
+        network.MarkRequestFailed(null, null, null, "Network creation failed.", "detail");
 
         Assert.Equal(5, network.PublicIpv6Index);
     }

@@ -45,13 +45,14 @@ public class VmRepository(TitanDbContext db) : IVmRepository
                  v.Name == name &&
                  v.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    public async Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
+    public async Task<List<ReconcilableVm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.ClusterId == clusterId
                         && v.ExternalId != null
                         && v.CurrentExistence != CurrentExistence.Deleted
                         && (v.HasBeenRunning || v.RequestFailureReason == null))
-            .AsNoTracking()
+            // The filter above keeps only rows with an id.
+            .Select(v => new ReconcilableVm(v.Id, v.ExternalId!, v.CurrentState, v.CurrentExistence, v.IpAddress, v.PublicIpv6Address))
             .ToListAsync(ct);
 
     // A VM is billed while its instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every

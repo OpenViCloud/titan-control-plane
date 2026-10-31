@@ -69,7 +69,7 @@ public class NetworkPublicIpv6DbTests(PostgresFixture pg)
         gone.RequestDelete();
         gone.MarkDeleted();
         Network failed = WithSlash64(tenant, cluster, 4);
-        failed.MarkRequestFailed("Network creation failed.", null);
+        failed.MarkRequestFailed(null, null, null, "Network creation failed.", null);
         Network live = WithSlash64(tenant, cluster, 5);
         await SaveAsync(gone);
         await SaveAsync(failed);

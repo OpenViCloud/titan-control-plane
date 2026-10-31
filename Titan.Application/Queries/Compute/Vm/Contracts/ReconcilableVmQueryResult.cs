@@ -1,5 +1,4 @@
 using Titan.Domain.Aggregates.Vm;
-using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 
 namespace Titan.Application.Queries.Compute.Vm.Contracts;
 
@@ -15,8 +14,8 @@ public record ReconcilableVmQueryResult(
     string? IpAddress,
     string? PublicIpv6Address)
 {
-    public static ReconcilableVmQueryResult From(VmAggregate v) =>
-        new(v.Id, v.RequireExternalId(), StateName(v.CurrentState), v.CurrentExistence.ToString(), v.IpAddress,
+    public static ReconcilableVmQueryResult From(ReconcilableVm v) =>
+        new(v.Id, v.ExternalId, StateName(v.CurrentState), v.CurrentExistence.ToString(), v.IpAddress,
             v.PublicIpv6Address);
 
     private static string? StateName(VmState? state)

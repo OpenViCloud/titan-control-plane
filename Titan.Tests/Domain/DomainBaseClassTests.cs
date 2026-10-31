@@ -21,6 +21,12 @@ public class DomainBaseClassTests
         ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
         ["VolumeDeletionOutcome"] = "result of Volume.MarkDeleted: the volume's own outcome and the snapshots whose delete it finished",
         ["VmDeletionOutcome"] = "result of Vm.MarkDeleted: the intent it fulfilled and the snapshots whose delete it finished",
+        ["ReconcilableNetwork"] = "one row of INetworkRepository.ListReconcilableAsync",
+        ["ReconcilableFirewallRule"] = "one row of IFirewallRuleRepository.ListReconcilableAsync",
+        ["ReconcilableVm"] = "one row of IVmRepository.ListReconcilableAsync",
+        ["ReconcilableVmSnapshot"] = "one row of IVmSnapshotRepository.ListReconcilableAsync",
+        ["ReconcilableVolume"] = "one row of IVolumeRepository.ListReconcilableAsync",
+        ["ReconcilableVolumeSnapshot"] = "one row of IVolumeSnapshotRepository.ListReconcilableAsync",
     };
 
     [Fact]

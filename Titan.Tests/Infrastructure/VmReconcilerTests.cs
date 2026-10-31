@@ -68,9 +68,10 @@ public class VmReconcilerTests
         db.Vms.AddRange(creating, running, failed, lost, destroyed, withoutId, otherCluster);
         await db.SaveChangesAsync();
 
-        List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
+        var ids = (await new VmRepository(db).ListReconcilableAsync(Cluster)).Select(v => v.Id).ToList();
 
-        Assert.Equal(new[] { "creating", "failed", "lost", "running" }, listed.Select(v => v.Name).OrderBy(n => n).ToArray());
+        Assert.Equal(new[] { "creating", "failed", "lost", "running" },
+            db.Vms.Where(v => ids.Contains(v.Id)).Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 
     // A create that gave up after the provider had the instance is not observed: observing it would turn a create
@@ -87,7 +88,7 @@ public class VmReconcilerTests
         await handler.HandleAsync(new UpdateVmStatusCommand(refused.Id, "RequestFailed", ExternalId: "45",
             Reason: "The VM could not be created."));
 
-        List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
+        var listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
 
         Assert.Equal("The VM could not be created.", refused.RequestFailureReason);
         Assert.Equal("45", refused.ExternalId);

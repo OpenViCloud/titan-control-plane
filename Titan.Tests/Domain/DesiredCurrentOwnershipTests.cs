@@ -10,7 +10,9 @@ namespace Titan.Tests.Domain;
 // instead of a convention.
 //
 // What these tests are SILENT about: they read source text. An assignment made some other way — reflection,
-// a helper that takes the aggregate as a parameter, EF writing a shadow property — is invisible here. Green
+// a helper that takes the aggregate as a parameter, EF writing a shadow property, a method not named Mark* that a Mark* calls to
+// write desired (Network.MarkRequestFailed reaches AbandonRequest: a give-up withdraws the delete,
+// titan-ops architecture/desired-and-current.md#abandoned-request) — is invisible here. Green
 // means "no assignment in the shapes we look for", not "no path exists".
 public class DesiredCurrentOwnershipTests
 {

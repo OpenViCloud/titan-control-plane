@@ -127,7 +127,8 @@ public class VolumeRepositoryStateTests
             Deleted("deleted"), NotFound("lost"), CreateFailed("failed"), elsewhere);
         await db.SaveChangesAsync();
 
-        var names = (await new VolumeRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(v => v.Name).OrderBy(n => n).ToList();
+        var ids = (await new VolumeRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(v => v.Id).ToList();
+        var names = db.Volumes.Where(v => ids.Contains(v.Id)).Select(v => v.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "attached", "available", "deleting", "lost" }, names);
     }
@@ -186,7 +187,8 @@ public class VolumeRepositoryStateTests
         db.Volumes.AddRange(here, there);
         await db.SaveChangesAsync();
 
-        var names = (await new VolumeSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Name).ToList();
+        var ids = (await new VolumeSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Id).ToList();
+        var names = db.VolumeSnapshots.Where(s => ids.Contains(s.Id)).Select(s => s.Name).ToList();
 
         Assert.Equal(new[] { "mine" }, names);
     }

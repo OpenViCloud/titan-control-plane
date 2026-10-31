@@ -21,7 +21,8 @@ public class Network : AggregateRoot
     /// give-up report that carried the id), and after one that carried no address.
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
-    // Only Mark* writes the current pair; only a request writes DesiredExistence
+    // Only Mark*, and DeleteLocally for a network Incus never had, writes the current pair; only a request, or the
+    // give-up that withdraws it, writes DesiredExistence
     // (titan-ops architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus word, null while
     // Incus has no network (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     public NetworkStatus? CurrentState { get; private set; }
@@ -258,11 +259,21 @@ public class Network : AggregateRoot
         return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled);
     }
 
-    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
-    /// the waiting create. A give-up with no create waiting is stale and records nothing; a delete's give-up is
-    /// AbandonRequest.
-    public void MarkRequestFailed(string? reason, string? detail)
+    /// A command gave up (titan-ops architecture/desired-and-current.md#request-failure). The report carries the provider
+    /// id when the Created report never arrived, and it is kept: Incus has the network. Then the waiting request decides:
+    /// a delete gives the network back, a create ends with the reason. With nothing waiting the report is stale and
+    /// records nothing more.
+    public void MarkRequestFailed(string? externalId, string? cidr, string? gateway, string? reason, string? detail)
     {
+        if (!string.IsNullOrEmpty(externalId) && ExternalId == null)
+        {
+            MarkCreated(externalId, cidr, gateway);
+        }
+        if (DeleteIsWaiting)
+        {
+            AbandonRequest(reason, detail);
+            return;
+        }
         if (IsTerminal || !CreateIsWaiting)
         {
             return;
@@ -311,9 +322,8 @@ public class Network : AggregateRoot
 
     /// The delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the network is
     /// still on Incus, so DesiredExistence returns to Exists (it counts against the quota again), the reason is kept
-    /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request. Not a Mark*:
-    /// it changes what was asked for.
-    public void AbandonRequest(string? reason, string? detail)
+    /// (titan-ops architecture/desired-and-current.md#request-failure) and the next delete is a new request.
+    private void AbandonRequest(string? reason, string? detail)
     {
         if (!DeleteIsWaiting)
         {
@@ -444,8 +454,8 @@ public class Network : AggregateRoot
         && DesiredExistence == DesiredExistence.Exists
         && PendingIntentId == null;
 
-    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it. Public for the
-    /// reconciler's read model.
+    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it. Public for the handler
+    /// that creates a firewall rule: its command carries this id.
     public string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
 
