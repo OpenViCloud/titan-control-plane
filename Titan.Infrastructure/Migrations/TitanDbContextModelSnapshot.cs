@@ -756,6 +756,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
 
+                    b.Property<string>("RequestedCidr")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_cidr");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");

@@ -165,7 +165,7 @@ public class NetworkServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
-        _repo.Setup(r => r.HasCidrOverlapAsync(TenantId, "10.0.0.0/24", default)).ReturnsAsync(true);
+        _repo.Setup(r => r.HasCidrOverlapAsync(TenantId, Ipv4Cidr.Parse("10.0.0.0/24"), default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", "10.0.0.0/24"), default));
@@ -184,7 +184,7 @@ public class NetworkServiceTests
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
         _repo.Verify(r => r.HasCidrOverlapAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Ipv4Cidr>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -617,21 +617,44 @@ public class NetworkServiceTests
         Assert.Empty(_activity.Events);
     }
 
-    // A network created WITHOUT a CIDR gets its Created report with empty cidr/gateway. It must still store the
-    // provider id, or the reconciler never lists the network and its create waits forever.
+    // A Created report that carries no cidr/gateway (the contract leaves both optional) must still store the provider
+    // id, or the reconciler never lists the network and its create waits forever; the two addresses stay null — no
+    // layer writes "" for an address the report did not carry.
     [Fact]
     public async Task UpdateStatus_CreateReportWithoutCidr_StillProvisions_AndRecordsCreated()
     {
         var network = Network.CreateUnchecked(TenantId, "no-cidr", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
-        await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-9", "", ""));
+        await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-9", null, null));
         await CreateService().UpdateStatusAsync(network.Id, Observed("Created"));
 
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
         Assert.Equal("cs-net-9", network.ExternalId);
+        Assert.Null(network.Cidr);
+        Assert.Null(network.Gateway);
         Assert.Null(network.Transition);
         Assert.Single(_activity.Events, e => e.Action == "network.created");
+    }
+
+    // The create command carries the range the network holds, not the request's text.
+    [Fact]
+    public async Task Create_WithACidr_HoldsIt_AndSendsTheHeldRangeToTheWorker()
+    {
+        SetupCurrentUser(TenantId);
+        SetupTenant();
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
+        _repo.Setup(r => r.HasCidrOverlapAsync(TenantId, Ipv4Cidr.Parse("10.0.0.0/24"), default)).ReturnsAsync(false);
+        Network? added = null;
+        _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
+
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", "10.0.0.0/24"), default);
+
+        Assert.NotNull(added);
+        Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.RequestedCidr);
+        _commands.Verify(w => w.EnqueueNetworkCreateAsync(
+            added.Id, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A delete that failed leaves the customer free to press Delete again — a new request, a new command.

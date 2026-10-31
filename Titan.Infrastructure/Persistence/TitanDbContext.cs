@@ -70,6 +70,7 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
         // Same convention for the network's shape values (titan-ops architecture/code-structure.md#logic-placement):
         // a stored name or CIDR that breaks the rule throws on read instead of being served.
         configurationBuilder.Properties<NetworkName>().HaveConversion<NetworkNameConverter>();
+        configurationBuilder.Properties<Ipv4Cidr>().HaveConversion<Ipv4CidrConverter>();
         configurationBuilder.Properties<FirewallCidr>().HaveConversion<FirewallCidrConverter>();
     }
 
@@ -81,6 +82,11 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     private sealed class NetworkNameConverter : ValueConverter<NetworkName, string>
     {
         public NetworkNameConverter() : base(n => n.Value, v => NetworkName.Parse(v)) { }
+    }
+
+    private sealed class Ipv4CidrConverter : ValueConverter<Ipv4Cidr, string>
+    {
+        public Ipv4CidrConverter() : base(c => c.Value, v => Ipv4Cidr.Parse(v)) { }
     }
 
     private sealed class FirewallCidrConverter : ValueConverter<FirewallCidr, string>

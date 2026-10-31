@@ -28,7 +28,7 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
                 .InclusiveBetween(PortRange.MinPort, PortRange.MaxPort).WithMessage("'StartPort' must be between 1 and 65535.");
             RuleFor(x => x.EndPort).Must(p => p.HasValue).WithMessage("'EndPort' is required for TCP/UDP.")
                 .InclusiveBetween(PortRange.MinPort, PortRange.MaxPort).WithMessage("'EndPort' must be between 1 and 65535.");
-            RuleFor(x => x).Must(r => PortRange.TryOf(r.StartPort.Value, r.EndPort.Value, out _))
+            RuleFor(x => x).Must(StartIsAtOrBeforeEnd)
                 .WithMessage("'StartPort' must be less than or equal to 'EndPort'.")
                 .When(r => r.StartPort.HasValue && r.EndPort.HasValue
                            && PortRange.IsPort(r.StartPort.Value) && PortRange.IsPort(r.EndPort.Value));
@@ -43,5 +43,15 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
         RuleFor(x => x.Cidr).NotEmpty()
             .Must(c => FirewallCidr.TryParse(c, out _))
             .WithMessage("'Cidr' must be a valid IPv4 or IPv6 CIDR notation (e.g. 0.0.0.0/0 or ::/0).");
+    }
+
+    // Reached only when both ports are present and in range (the When above); the null checks are for the compiler.
+    private static bool StartIsAtOrBeforeEnd(CreateFirewallRuleRequest r)
+    {
+        if (r.StartPort == null || r.EndPort == null)
+        {
+            return true;
+        }
+        return PortRange.TryOf(r.StartPort.Value, r.EndPort.Value, out _);
     }
 }

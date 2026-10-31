@@ -38,7 +38,7 @@ public class CreateNetworkCommandHandler(
         if (await repo.ExistsByNameAsync(tenantId, name, ct))
             throw new ConflictException("NETWORK_NAME_TAKEN", $"Network name '{req.Name}' is already taken.");
 
-        if (requestedCidr != null && await repo.HasCidrOverlapAsync(tenantId, requestedCidr.Value, ct))
+        if (requestedCidr != null && await repo.HasCidrOverlapAsync(tenantId, requestedCidr, ct))
             throw new BusinessException("NETWORK_CIDR_OVERLAP", $"CIDR '{req.Cidr}' overlaps with an existing network.");
 
         clusters.ClusterOf(req.ClusterId); // titan-ops features/catalog/design.md#cluster-is-a-real-choice
@@ -55,7 +55,12 @@ public class CreateNetworkCommandHandler(
             requestedCidr, publicIpv6, req.DefaultIngressPolicy, req.DefaultEgressPolicy);
         repo.Add(network);
         activity.Stage("network.create_requested", "network", network.Id, network.Name.Value); // atomic with the network insert
-        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name.Value, network.ClusterId, tenant.ProjectName, req.Cidr,
+        string? heldCidr = null;
+        if (network.RequestedCidr != null)
+        {
+            heldCidr = network.RequestedCidr.Value;
+        }
+        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name.Value, network.ClusterId, tenant.ProjectName, heldCidr,
             network.DefaultIngressPolicy.ToString(), network.DefaultEgressPolicy.ToString(),
             network.PublicIpv6Subnet, network.PublicIpv6RouterAddress, ct);
         await repo.SaveAsync(ct);

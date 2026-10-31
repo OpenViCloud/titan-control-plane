@@ -59,8 +59,8 @@ public class NetworkValueObjectTests
         Assert.False(Ipv4Cidr.TryParse(cidr, out _));
     }
 
-    // The address need not be the first of its range: the validator accepted 10.0.0.5/24 before, and Incus takes
-    // ipv4.address as the router address with its prefix (titan-ops features/network/design.md#network-lifecycle).
+    // The address need not be the first of its range: the /v1 contract takes 10.0.0.5/24, and the worker masks it and
+    // gives Incus the first host as ipv4.address (titan-ops features/network/design.md#network-worker).
     [Theory]
     [InlineData("10.0.0.5/24")]
     [InlineData("0.0.0.0/0")]
@@ -150,6 +150,22 @@ public class NetworkValueObjectTests
     public void PortRange_IsPort_IsTheSameBoundAsOf(int port, bool isPort)
     {
         Assert.Equal(isPort, PortRange.IsPort(port));
+    }
+
+    // ---- Ipv4Cidr.Overlaps: the range arithmetic behind NetworkRepository.HasCidrOverlapAsync.
+
+    [Theory]
+    [InlineData("10.1.0.0/24", "10.1.0.0/25", true)]
+    [InlineData("10.1.0.0/25", "10.1.0.0/24", true)]
+    [InlineData("10.1.0.0/24", "10.1.0.0/24", true)]
+    [InlineData("10.1.0.5/24", "10.1.0.200/24", true)]
+    [InlineData("0.0.0.0/0", "192.168.7.0/24", true)]
+    [InlineData("10.1.0.0/24", "10.1.1.0/24", false)]
+    [InlineData("10.1.0.0/24", "10.2.0.0/24", false)]
+    [InlineData("10.1.0.255/32", "10.1.1.0/32", false)]
+    public void Ipv4Cidr_Overlaps_WhenTheTwoRangesShareAnAddress(string one, string other, bool overlaps)
+    {
+        Assert.Equal(overlaps, Ipv4Cidr.Parse(one).Overlaps(Ipv4Cidr.Parse(other)));
     }
 
     // ---- Value semantics (titan-ops architecture/code-structure.md#domain-base-classes)

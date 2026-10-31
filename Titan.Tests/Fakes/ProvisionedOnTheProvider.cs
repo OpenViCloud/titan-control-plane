@@ -9,7 +9,7 @@ namespace Titan.Domain.Aggregates.Network
 {
     public static class NetworkProvisionedOnTheProvider
     {
-        public static bool MarkActive(this Network network, string externalId, string cidr, string gateway)
+        public static bool MarkActive(this Network network, string externalId, string? cidr, string? gateway)
         {
             network.MarkCreated(externalId, cidr, gateway);
             return network.MarkObserved(NetworkStatus.Created);

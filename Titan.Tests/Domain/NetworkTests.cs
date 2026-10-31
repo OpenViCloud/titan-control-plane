@@ -127,6 +127,23 @@ public class NetworkTests
         Assert.Equal(NetworkTransition.Creating, network.Transition);
     }
 
+    // The report's cidr and gateway are optional (omitempty; today the worker leaves them out only on a give-up that
+    // could not read the range back); an empty string means the same. Neither is stored.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void MarkCreated_WithoutAnAddress_LeavesCidrAndGatewayNull(string? absent)
+    {
+        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+
+        network.MarkCreated("cs-net-id", absent, absent);
+
+        Assert.Equal("cs-net-id", network.ExternalId);
+        Assert.Null(network.Cidr);
+        Assert.Null(network.Gateway);
+        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+    }
+
     [Fact]
     public void Created_FulfilsTheCreateOnce()
     {
@@ -518,5 +535,35 @@ public class NetworkTests
         var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
+    }
+
+    // ---- What the customer asked for is the network's own field (titan-ops architecture/code-structure.md#logic-placement).
+
+    [Fact]
+    public void Create_HoldsTheRequestedCidr_FromTheMomentItIsAskedFor()
+    {
+        Network network = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01",
+            Ipv4Cidr.Parse("10.1.0.0/24"), null);
+
+        Assert.Equal(Ipv4Cidr.Parse("10.1.0.0/24"), network.RequestedCidr);
+        Assert.Null(network.Cidr); // Incus has not answered yet
+    }
+
+    [Fact]
+    public void Create_WithoutACidr_HoldsNoRequestedCidr()
+    {
+        Network network = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, null);
+
+        Assert.Null(network.RequestedCidr);
+    }
+
+    [Fact]
+    public void Create_WithPublicIpv6_RebuildsItAsTheOneValueItWasGiven()
+    {
+        Network with = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-1"), "singapore01", null, SomeIpv6);
+        Network without = Network.Create(TenantWithRoom(), 0, 0, NetworkName.Parse("net-2"), "singapore01", null, null);
+
+        Assert.Equal(SomeIpv6, with.PublicIpv6);
+        Assert.Null(without.PublicIpv6);
     }
 }

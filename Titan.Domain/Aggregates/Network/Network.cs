@@ -12,6 +12,13 @@ public class Network : AggregateRoot
     public NetworkName Name { get; private set; } = default!;
     public string ClusterId { get; private set; } = default!;
     public string? ExternalId { get; private set; }
+    /// The range the customer asked for, held from the request on so a second create of the tenant meets it while
+    /// this one still waits for Incus (titan-ops architecture/code-structure.md#logic-placement); null = Incus picks.
+    public Ipv4Cidr? RequestedCidr { get; private set; }
+    /// The address the worker reported for the create, verbatim: the range the create asked for as the customer typed
+    /// it, or the one Incus picked when none was asked for
+    /// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim); null until the Created report (or a
+    /// give-up report that carried the id), and after one that carried no address.
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
     // Only Mark* writes the current pair; only a request writes DesiredExistence
@@ -36,6 +43,20 @@ public class Network : AggregateRoot
     /// When the delete of a network holding a /64 was confirmed: the allocator takes back the number given back
     /// longest ago (NetworkPublicIpv6.FirstFree).
     public DateTimeOffset? PublicIpv6ReleasedAt { get; private set; }
+
+    /// The three columns as the one value Create was given. EF Core 9 has no nullable complex property, so the
+    /// columns stay the storage and the value is rebuilt (titan-ops architecture/code-structure.md#logic-placement).
+    public NetworkPublicIpv6? PublicIpv6
+    {
+        get
+        {
+            if (PublicIpv6Index == null || PublicIpv6Subnet == null || PublicIpv6RouterAddress == null)
+            {
+                return null;
+            }
+            return NetworkPublicIpv6.Stored(PublicIpv6Index.Value, PublicIpv6Subnet, PublicIpv6RouterAddress);
+        }
+    }
 
     /// The network's rules, each a line in its ACL on Incus; rows are kept after Deleted
     /// (titan-ops features/network/design.md#firewall-rule-soft-delete). The repository loads them with the network.
@@ -92,6 +113,7 @@ public class Network : AggregateRoot
             }
         }
         var network = CreateUnchecked(tenant.Id, name.Value, clusterId, defaultIngressPolicy, defaultEgressPolicy);
+        network.RequestedCidr = requestedCidr;
         if (publicIpv6 != null)
         {
             network.PublicIpv6Index = publicIpv6.Index;
@@ -105,13 +127,20 @@ public class Network : AggregateRoot
     internal static Network CreateUnchecked(
         Guid tenantId, string name, string clusterId,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
-        FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
+        FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow,
+        string? requestedCidr = null)
     {
+        Ipv4Cidr? requested = null;
+        if (requestedCidr != null)
+        {
+            requested = Ipv4Cidr.Parse(requestedCidr);
+        }
         return new Network
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = NetworkName.Parse(name),
+            RequestedCidr = requested,
             ClusterId = clusterId,
             CurrentState = null,
             CurrentExistence = CurrentExistence.NotCreated,
@@ -129,18 +158,29 @@ public class Network : AggregateRoot
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
 
-    /// The create command: Incus has the network, with the address it was given. The status is left to the
-    /// reconciler, so a report lost after this still leaves a network whose delete reaches Incus.
-    public void MarkCreated(string externalId, string cidr, string gateway)
+    /// The create command: Incus has the network, with the address it reported. The status is left to the
+    /// reconciler, so a report lost after this still leaves a network whose delete reaches Incus. The report's two addresses are
+    /// optional (today the worker leaves them out only on a give-up that could not read the range back); an empty
+    /// string is the same absence, and neither is stored.
+    public void MarkCreated(string externalId, string? cidr, string? gateway)
     {
         if (IsTerminal)
         {
             return;
         }
         ExternalId = externalId;
-        Cidr = cidr;
-        Gateway = gateway;
+        Cidr = AddressOrNull(cidr);
+        Gateway = AddressOrNull(gateway);
         CurrentExistence = CurrentExistence.Exists;
+    }
+
+    private static string? AddressOrNull(string? reported)
+    {
+        if (reported == null || reported.Length == 0)
+        {
+            return null;
+        }
+        return reported;
     }
 
     /// The reconciler read the network on Incus. Created fulfils a waiting create; Errored and Unavailable say it
@@ -389,7 +429,7 @@ public class Network : AggregateRoot
     /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
     public string BeginLoadBalancer()
     {
-        if (PublicIpv6Subnet == null)
+        if (PublicIpv6 == null)
             throw new BusinessException("LOAD_BALANCER_NEEDS_PUBLIC_IPV6", "A load balancer needs a network with public IPv6.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_INVALID_STATE", "Load balancers can only be added to a network Incus has created.");
