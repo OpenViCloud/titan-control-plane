@@ -6,7 +6,6 @@ using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
 
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 

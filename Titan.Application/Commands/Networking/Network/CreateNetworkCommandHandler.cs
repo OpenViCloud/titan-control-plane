@@ -4,7 +4,6 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Aggregates.Network;
-using Titan.Domain.Values;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Commands.Networking.Network;

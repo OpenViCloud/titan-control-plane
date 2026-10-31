@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
-namespace Titan.Domain.Values;
+namespace Titan.Domain.Aggregates.Network;
 
 /// The ports a TCP or UDP firewall rule covers, both ends inclusive: 1–65535 and start ≤ end. A single port is a
 /// range whose ends are equal. The rule lives here so no path builds a rule Incus refuses

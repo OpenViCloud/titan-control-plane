@@ -1,5 +1,5 @@
 using Titan.Domain.Exceptions;
-using Titan.Domain.Values;
+using Titan.Domain.Aggregates.Network;
 
 namespace Titan.Tests.Domain;
 

@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 

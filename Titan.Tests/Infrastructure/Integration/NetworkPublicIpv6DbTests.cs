@@ -5,7 +5,6 @@ using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Infrastructure.Integration;
 

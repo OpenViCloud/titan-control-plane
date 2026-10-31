@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
-namespace Titan.Domain.Values;
+namespace Titan.Domain.Aggregates.Network;
 
 /// A network's name as the customer typed it. The shape rule lives here so no path — API, handler or test seam —
 /// builds a network with a name the /v1 contract never allowed (titan-ops architecture/code-structure.md#logic-placement); the

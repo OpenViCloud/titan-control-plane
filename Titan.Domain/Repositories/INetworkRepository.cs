@@ -1,6 +1,5 @@
 using Titan.Domain.Aggregates.Network;
 
-using Titan.Domain.Values;
 
 namespace Titan.Domain.Repositories;
 

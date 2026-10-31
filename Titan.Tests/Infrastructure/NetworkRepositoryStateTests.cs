@@ -3,7 +3,6 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Infrastructure;
 

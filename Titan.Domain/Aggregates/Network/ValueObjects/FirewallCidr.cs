@@ -4,7 +4,7 @@ using System.Net.Sockets;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
-namespace Titan.Domain.Values;
+namespace Titan.Domain.Aggregates.Network;
 
 /// The range a firewall rule matches: an IPv4 CIDR (Ipv4Cidr), or an IPv6 CIDR written as the range's first address
 /// and not ::ffff:a.b.c.d — an IPv4 range in IPv6 clothing whose ICMP family the worker would have to guess
