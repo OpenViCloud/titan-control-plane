@@ -34,7 +34,7 @@ public class ClusterIpv6Route : AggregateRoot
 
     /// The route a new network gets, out of the free routes of its cluster. A router re-created on the address of one
     /// deleted minutes before gets no packet for minutes (titan-ops features/network/design.md#ipv6-public), so a route
-    /// never used comes first (the lowest number), then the one given back longest ago.
+    /// with no release on record comes first (the lowest number), then the one given back longest ago.
     public static ClusterIpv6Route NextToGive(string clusterId, IReadOnlyCollection<ClusterIpv6Route> free)
     {
         // Null sorts first: no release on record.
