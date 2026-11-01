@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.ClusterIpv6Pool;
 
 /// The 255 /64 blocks of a cluster's /56: which network holds each and when each was given back, across every tenant
 /// (titan-ops infra/incus/design.md#ipv6-address-plan). One pool per cluster; its Version is the guard between two
-/// requests that load it at once (titan-ops features/network/design.md#ipv6-public).
+/// requests that load it at once.
 public class ClusterIpv6Pool : AggregateRoot
 {
     public const int FirstNumber = 1;

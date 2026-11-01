@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using PoolAggregate = Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool;
 
 namespace Titan.Application.Commands.Networking.Network;
@@ -122,9 +123,10 @@ public class UpdateNetworkStatusCommandHandler(
         await repo.SaveAsync(ct);
     }
 
-    // The block goes back to the cluster's pool in the same save as the network that let go of it. A pool that does
-    // not hold it (a report repeated after the pool already took it back) has nothing to take back.
-    private async Task TakeBlock64BackAsync(Titan.Domain.Aggregates.Network.Network network, CancellationToken ct)
+    // The block goes back to the cluster's pool in the same save as the network that let go of it. A report must not
+    // fail because the pool and the network disagree (no pool, or a pool that does not hold the block): there is
+    // nothing to take back, and the disagreement shows in the consistency test.
+    private async Task TakeBlock64BackAsync(NetworkAggregate network, CancellationToken ct)
     {
         PoolAggregate? pool = await pools.FindAsync(network.ClusterId, ct);
         if (pool == null)

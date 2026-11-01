@@ -205,8 +205,7 @@ public class ClusterIpv6PoolTests
         Assert.True(HoldingOf(pool, 1).GivenBackAt >= before);
     }
 
-    // Two requests that loaded the pool at the same version meet at the version token (titan-ops
-    // features/network/design.md#ipv6-public): each change moves it.
+    // Two requests that loaded the pool at the same version meet at the version token: each change moves it.
     [Fact]
     public void GiveAndTakeBack_EachMoveTheVersion()
     {
@@ -220,6 +219,15 @@ public class ClusterIpv6PoolTests
 
         Assert.True(afterGive > start);
         Assert.True(pool.Version > afterGive);
+    }
+
+    // The first /64 holds OVH's gateway and the routers, and the /56 has 255 more: no holding is outside 1..255.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(256)]
+    public void AHoldingOutsideOneTo255_IsRefused(int number)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ClusterIpv6Pool.CreateUnchecked("singapore01", (number, true, null)));
     }
 
     [Theory]

@@ -453,7 +453,6 @@ public class NetworkTests
 
     // ── Create: the range asked for against the public IPv6 choice (titan-ops architecture/code-structure.md#logic-placement) ──
 
-
     private static Tenant TenantWithRoom()
     {
         Tenant tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");

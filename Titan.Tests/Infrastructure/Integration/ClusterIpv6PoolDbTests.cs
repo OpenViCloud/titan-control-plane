@@ -95,6 +95,9 @@ public class ClusterIpv6PoolDbTests(PostgresFixture pg)
         Assert.Equal(2, stored.Holdings.Count);
         Assert.True(stored.IsBlock64HeldBy(winner));
         Assert.False(stored.IsBlock64HeldBy(loser));
+
+        // Asking again is the way out of the 409: the loser gets the next block, not the winner's.
+        Assert.Equal(3, await GiveBlock64AndSaveAsync(cluster, loser));
     }
 
     // Both requests update the same holding row, so no key stops the later one: only the version does, or its network

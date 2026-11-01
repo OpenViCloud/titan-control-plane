@@ -14,9 +14,9 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The network keeps the two addresses of its /64 block and the cluster's pool keeps who holds which block; the two
-/// commit in one save, so after any run of creates, give-ups and deletes they agree (titan-ops
-/// features/network/design.md#ipv6-public). ChildEntityGuardTests cannot see a handler that saves two aggregates, so
-/// this is the test that notices a branch that lets go of a block and forgets to tell the pool.
+/// commit in one save, so after any run of creates, give-ups and deletes they agree
+/// (titan-ops features/network/design.md#ipv6-public). ChildEntityGuardTests cannot see a handler that saves two
+/// aggregates, so this is the test that notices a branch that lets go of a block and forgets to tell the pool.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -112,6 +112,26 @@ public class ClusterIpv6PoolConsistencyDbTests(PostgresFixture pg)
         // The two blocks that went back carry the time they went back; the next network gets a block never held.
         Assert.Equal(2, pool.Holdings.Count(h => !h.IsHeld && h.GivenBackAt != null));
         Assert.Equal(5, await CreateNumberAsync(tenant.Id, cluster));
+    }
+
+    // The columns the pool replaces are still on networks until a later migration drops them. A number left in them,
+    // with the pool holding nothing, is not held: the pool is the only place that says who holds a block.
+    [Fact]
+    public async Task ANumberLeftInTheNetworksOwnColumn_IsNotHeld_WhenThePoolHoldsNothing()
+    {
+        string cluster = $"cluster-{Guid.NewGuid():N}";
+        Tenant tenant = TestTenant.Active($"pool-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "pool@titan.local", maxNetworks: 10);
+        var legacy = Network.CreateUnchecked(tenant.Id, "legacy-one", cluster);
+        await using (TitanDbContext seed = pg.NewDbContext())
+        {
+            seed.Tenants.Add(tenant);
+            seed.Networks.Add(legacy);
+            await seed.SaveChangesAsync();
+            await seed.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE core.networks SET public_ipv6_index = 1, public_ipv6_subnet = {"2001:db8::/64"} WHERE id = {legacy.Id}");
+        }
+
+        Assert.Equal(1, await CreateNumberAsync(tenant.Id, cluster));
     }
 
     private async Task<int> CreateNumberAsync(Guid tenantId, string cluster)

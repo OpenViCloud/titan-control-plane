@@ -8,8 +8,8 @@ namespace Titan.Tests.Fakes;
 /// 2001:41d0:d00:d400::/56.
 public static class TestNetworks
 {
-    public const string Subnet = "2001:41d0:d00:d405::/64";
-    public const string Router = "2001:41d0:d00:d400::105";
+    private const string Subnet = "2001:41d0:d00:d405::/64";
+    private const string Router = "2001:41d0:d00:d400::105";
 
     public static Network CreatingWithPublicIpv6(Tenant tenant, string name, string cluster, Ipv4Cidr? cidr = null)
     {

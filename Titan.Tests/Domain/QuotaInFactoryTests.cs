@@ -72,7 +72,6 @@ public class QuotaInFactoryTests
     private static Vm NewVm(Tenant t, int activeVms) =>
         Vm.Create(t, activeVms, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20, userData: null);
 
-
     // ── at the cap, the FACTORY refuses, with the code clients already know ──
 
     [Fact]

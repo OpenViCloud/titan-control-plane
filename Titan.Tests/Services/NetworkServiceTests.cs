@@ -1055,6 +1055,22 @@ public class NetworkServiceTests
         _pools.Verify(p => p.FindOrAddAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // The caller over their IPv6 cap hears the cap, whatever the pool holds: the quota is checked before a block is given.
+    [Fact]
+    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_WhileEveryBlock64IsHeld_AnswersTheQuota()
+    {
+        SetupFreshCreate();
+        SetupCluster("ovnup", Block56);
+        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1",
+            Enumerable.Range(1, 255).Select(number => (number, true, (DateTimeOffset?)null)).ToArray());
+        _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(10);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
+
+        Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
+    }
+
     // Without IPv6 the pool is not asked: a cluster with no public IPv6 still makes networks.
     [Fact]
     public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_AsksThePoolForNothing()

@@ -7,8 +7,8 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The migration that moves the numbers a network holds to the cluster's pool runs once, on tables that may hold real
-/// networks (titan-ops features/network/design.md#ipv6-public). Dev held none when it was written, so these tests give
-/// the SQL the rows it never met: the migration's own BackfillSql is run here, on networks seeded by hand.
+/// networks (titan-ops features/network/design.md#ipv6-public). A dev database may hold none, so these tests give the
+/// SQL the rows it would otherwise never meet: the migration's own BackfillSql is run here, on networks seeded by hand.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -19,7 +19,7 @@ public class ClusterIpv6PoolBackfillDbTests(PostgresFixture pg)
 
     private static string NewCluster() => $"cluster-{Guid.NewGuid():N}";
 
-    // A network row as the code before the pool left it: the number on the network itself.
+    // A network row that still carries its block number in its own columns.
     private async Task<Guid> SeedAsync(string cluster, int? number, string existence, DateTimeOffset? givenBackAt)
     {
         var network = Network.CreateUnchecked(Guid.NewGuid(), $"net-{Guid.NewGuid():N}", cluster);
