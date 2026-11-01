@@ -42,7 +42,8 @@ public class InternalTokenCallbackTests
     [InlineData("wrong")]
     public async Task UpdateNetworkStatus_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object,
+            new Mock<IClusterIpv6PoolRepository>(MockBehavior.Strict).Object, StrictActivity());
         var ep = Factory.Create<UpdateNetworkStatusEndpoint>(
             ctx =>
             {

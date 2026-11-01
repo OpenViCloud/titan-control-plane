@@ -2,6 +2,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Tests.Fakes;
 
 
 namespace Titan.Tests.Domain;
@@ -12,11 +13,18 @@ namespace Titan.Tests.Domain;
 public class LoadBalancerTargetTests
 {
     private static readonly Tenant Owner = TestTenant.WithRoomToSpare();
-    private static readonly NetworkPublicIpv6 Ipv6 = NetworkPublicIpv6.For("2001:41d0:d00:d400::/56", 5);
 
-    private static Network UsableNetwork(NetworkPublicIpv6? ipv6)
+    private static Network UsableNetwork(bool withPublicIpv6)
     {
-        var network = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, ipv6);
+        Network network;
+        if (withPublicIpv6)
+        {
+            network = TestNetworks.CreatingWithPublicIpv6(Owner, "net-1", "cluster-a");
+        }
+        else
+        {
+            network = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, wantsPublicIpv6: false);
+        }
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -24,7 +32,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_WithItsSlash64_AndUsable_HandsOutItsId()
     {
-        Network network = UsableNetwork(Ipv6);
+        Network network = UsableNetwork(true);
 
         Assert.Equal("net-ext", network.BeginLoadBalancer());
     }
@@ -33,7 +41,7 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_WithoutPublicIpv6_IsRefused_BeforeItsState()
     {
-        Network noIpv6 = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, null);
+        Network noIpv6 = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, false);
 
         Assert.Equal("LOAD_BALANCER_NEEDS_PUBLIC_IPV6",
             Assert.Throws<BusinessException>(() => noIpv6.BeginLoadBalancer()).Code);
@@ -42,8 +50,8 @@ public class LoadBalancerTargetTests
     [Fact]
     public void Network_NotYetCreated_OrBeingDeleted_IsRefused()
     {
-        Network creating = Network.Create(Owner, 0, 0, NetworkName.Parse("net-1"), "cluster-a", null, Ipv6);
-        Network deleting = UsableNetwork(Ipv6);
+        Network creating = TestNetworks.CreatingWithPublicIpv6(Owner, "net-1", "cluster-a");
+        Network deleting = UsableNetwork(true);
         deleting.RequestDelete();
 
         Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.BeginLoadBalancer()).Code);
