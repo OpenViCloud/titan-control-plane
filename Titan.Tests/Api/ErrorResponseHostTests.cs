@@ -3,8 +3,8 @@ using System.Text.Json;
 
 namespace Titan.Tests.Api;
 
-// An error declares the length of its body (titan-ops architecture/http-contract.md#error-envelope): the edge in front of
-// prd turns a refused websocket upgrade answered with a chunked body into its own 502, so the CLI lost the code.
+// An error declares the length of its body (titan-ops architecture/http-contract.md#error-envelope): Cloudflare's edge turned
+// a refused websocket upgrade answered with a chunked body into its own 502, so the CLI lost the code (measured before prd).
 // Measured through the real host because the error writer is the host's exception handler.
 // FullHost — WebApplicationFactory test; own CI process (see CatalogContractTests for why).
 [Trait("Category", "FullHost")]
