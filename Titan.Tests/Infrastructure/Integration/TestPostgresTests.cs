@@ -11,7 +11,7 @@ public sealed class TestPostgresTests
     private const string LocalServer = "Host=127.0.0.1;Port=15432;Username=titan_it;Password=pw;Database=postgres";
 
     [Theory]
-    [InlineData("Host=titan-db-rw.titan-db-staging.svc.cluster.local;Username=u;Password=p")]
+    [InlineData("Host=titan-db-rw.titan-db-prd.svc.cluster.local;Username=u;Password=p")]
     [InlineData("Host=10.0.0.5;Username=u;Password=p")]
     [InlineData("Host=db.example.com;Username=u;Password=p")]
     public void A_server_that_is_not_loopback_is_refused(string server)

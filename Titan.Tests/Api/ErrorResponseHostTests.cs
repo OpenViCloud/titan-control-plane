@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Titan.Tests.Api;
 
 // An error declares the length of its body (titan-ops architecture/http-contract.md#error-envelope): the edge in front of
-// staging turns a refused websocket upgrade answered with a chunked body into its own 502, so the CLI lost the code.
+// prd turns a refused websocket upgrade answered with a chunked body into its own 502, so the CLI lost the code.
 // Measured through the real host because the error writer is the host's exception handler.
 // FullHost — WebApplicationFactory test; own CI process (see CatalogContractTests for why).
 [Trait("Category", "FullHost")]
@@ -33,7 +33,7 @@ public class ErrorResponseHostTests
         Assert.False(string.IsNullOrEmpty(envelope.RootElement.GetProperty("title").GetString()));
     }
 
-    // What gitops/control-plane/overlays/staging/patch-env.yaml of titan-ops sets on dev and staging.
+    // What the control plane's environment sets on dev and prd.
     private sealed class TokenFactory() : RealHostFactory(
         new Dictionary<string, string?> { ["Internal:Token"] = InternalToken }, new Dictionary<string, string>());
 }

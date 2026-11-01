@@ -16,7 +16,7 @@ public class ClusterConfigGuardHostTests
         var identity = IncusTestKit.NewIdentity();
         return new Dictionary<string, string>
         {
-            ["environment"] = "Staging",
+            ["environment"] = "Production",
             ["Clusters:0:Id"] = "singapore01",
             ["Clusters:0:Name"] = "Singapore 01",
             ["Clusters:0:Endpoint"] = endpoint,
@@ -29,7 +29,7 @@ public class ClusterConfigGuardHostTests
     [Fact]
     public async Task AValidClusterAndIdentity_Starts()
     {
-        await using var factory = new StagingFactory(AValidCluster());
+        await using var factory = new ProductionFactory(AValidCluster());
         await factory.InitializeAsync();
 
         var client = factory.CreateClient();
@@ -41,7 +41,7 @@ public class ClusterConfigGuardHostTests
     [Fact]
     public async Task AClusterOverPlainHttp_DoesNotStart()
     {
-        await using var factory = new StagingFactory(AValidCluster(endpoint: "http://localhost:8443"));
+        await using var factory = new ProductionFactory(AValidCluster(endpoint: "http://localhost:8443"));
         await factory.InitializeAsync();
 
         var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
@@ -55,7 +55,7 @@ public class ClusterConfigGuardHostTests
         var settings = AValidCluster();
         settings.Remove("ProviderClientIdentity:CertificatePem");
         settings.Remove("ProviderClientIdentity:KeyPem");
-        await using var factory = new StagingFactory(settings);
+        await using var factory = new ProductionFactory(settings);
         await factory.InitializeAsync();
 
         var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
@@ -63,7 +63,7 @@ public class ClusterConfigGuardHostTests
         Assert.Contains("ProviderClientIdentity", ex.ToString());
     }
 
-    private sealed class StagingFactory(Dictionary<string, string> settings) : RealHostFactory(
+    private sealed class ProductionFactory(Dictionary<string, string> settings) : RealHostFactory(
         new Dictionary<string, string?> { ["Keycloak:Authority"] = "http://keycloak.test/realms/titan" },
         settings)
     {

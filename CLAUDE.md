@@ -157,7 +157,7 @@ Khoá lệnh = chuỗi id workflow cũ (`titan-ops architecture/provider-and-wor
 
 ### DB Migrations
 - Chạy qua `Titan.Infrastructure`, không dùng `Database.EnsureCreated()` hay auto-migrate
-- 🔑 **Lịch sử migration bắt đầu ở `Initial`** (INCUS-STATUS PR-4: 59 migration gộp thành một, database `titan` dev + staging xoá và dựng lại từ rỗng — `titan-ops architecture/code-structure.md#migrations`). Migration mới nối sau `Initial`; schema của `Initial` = schema của 59 migration (diff `pg_dump --schema-only` chỉ khác 15 `DEFAULT` backfill). Test migration theo dữ liệu cũ (21 file `*MigrationTests`) **đã gỡ**; `InitialMigrationTests` canh lịch sử bắt đầu ở `Initial` (một hàng `Initial`, đứng đầu) + seed catalog
+- 🔑 **Lịch sử migration bắt đầu ở `Initial`** (INCUS-STATUS PR-4: 59 migration gộp thành một, database `titan` của mọi env xoá và dựng lại từ rỗng — `titan-ops architecture/code-structure.md#migrations`). Migration mới nối sau `Initial`; schema của `Initial` = schema của 59 migration (diff `pg_dump --schema-only` chỉ khác 15 `DEFAULT` backfill). Test migration theo dữ liệu cũ (21 file `*MigrationTests`) **đã gỡ**; `InitialMigrationTests` canh lịch sử bắt đầu ở `Initial` (một hàng `Initial`, đứng đầu) + seed catalog
 - Network unique index có `HasFilter("current_existence <> 'Deleted'")` (INCUS-STATUS PR-2) — tenant có thể tạo lại network cùng tên sau khi xóa; **cùng** điều kiện với `NetworkRepository.ExistsByNameAsync`
 - VM unique `(tenant_id, name)` có `HasFilter("current_existence <> 'Deleted'")` (INCUS-STATUS PR-1) — **cùng** điều kiện với `VmRepository.ExistsByNameAsync`; index chặt hơn check thì tên handler cho là rảnh sẽ nổ `500` ở index
 
