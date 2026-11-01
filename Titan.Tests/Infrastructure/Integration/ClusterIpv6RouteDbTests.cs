@@ -133,7 +133,8 @@ public class ClusterIpv6RouteDbTests(PostgresFixture pg)
         Assert.Empty(await new ClusterIpv6RouteRepository(db).LockFreeAsync(NewCluster()));
     }
 
-    // Every route handed out is one this create holds locked: another connection cannot lock any of them.
+    // Every route handed out is one this create holds locked: another connection can lock none of them. It does not
+    // reach the case the one statement exists for, a route freed between a lock and a later read.
     [Fact]
     public async Task LockFree_LocksEveryRouteItHandsOut()
     {
@@ -143,12 +144,11 @@ public class ClusterIpv6RouteDbTests(PostgresFixture pg)
         Assert.Equal(255, free.Count);
 
         await using TitanDbContext other = pg.NewDbContext();
-        foreach (ClusterIpv6Route route in free.Where(r => r.Number is 1 or 255))
-        {
-            var ex = await Assert.ThrowsAnyAsync<Npgsql.PostgresException>(() => other.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT number FROM core.cluster_ipv6_routes WHERE cluster_id = {cluster} AND number = {route.Number} FOR UPDATE NOWAIT"));
-            Assert.Equal(Npgsql.PostgresErrorCodes.LockNotAvailable, ex.SqlState);
-        }
+        int lockableByAnother = await other.Database
+            .SqlQuery<int>($"SELECT count(*)::int AS \"Value\" FROM (SELECT number FROM core.cluster_ipv6_routes WHERE cluster_id = {cluster} FOR UPDATE SKIP LOCKED) lockable")
+            .SingleAsync();
+
+        Assert.Equal(0, lockableByAnother);
     }
 
     [Fact]
@@ -174,8 +174,8 @@ public class ClusterIpv6RouteDbTests(PostgresFixture pg)
         await Assert.ThrowsAnyAsync<DbUpdateException>(() => GiveAndSaveAsync(other, network));
     }
 
-    // The second create waits at its lock until the first commits, then reads the routes still free. Its own lock
-    // statement must find the row the first took no longer free, or both would save the same route.
+    // The second create waits at its lock until the first commits, and its statement then leaves out the row the first
+    // took; otherwise both would save the same route.
     [Fact]
     public async Task TwoCreatesAtOnce_TheSecondWaits_ThenTakesTheNextRoute()
     {

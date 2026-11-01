@@ -14,7 +14,8 @@ public class ClusterIpv6Route : AggregateRoot
     public string ClusterId { get; private set; } = default!;
     public int Number { get; private set; }
     public Guid? NetworkId { get; private set; }
-    /// When the route last went back; null while held and for a route never used. Only orders the free routes.
+    /// When the route last went back; null while held, for a route never used, and for one that went back before the time
+    /// was recorded. Only orders the free routes.
     public DateTimeOffset? ReleasedAt { get; private set; }
 
     public bool IsFree => NetworkId == null;
