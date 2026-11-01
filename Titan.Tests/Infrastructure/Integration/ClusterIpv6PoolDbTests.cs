@@ -6,7 +6,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// One pool per cluster owns which networks hold which /64 number (titan-ops features/network/design.md#ipv6-public).
+/// One pool per cluster owns which networks hold which /64 number.
 /// Two requests that loaded the pool at the same version both pass the handler; only the database stops the later
 /// commit, and ErrorStatus turns that into 409 IPV6_ALLOCATION_CONFLICT. InMemory enforces no key and no number, so only
 /// Postgres shows it.

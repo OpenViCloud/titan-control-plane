@@ -14,9 +14,9 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The network keeps the two addresses of its /64 block and the cluster's pool keeps who holds which block; the two
-/// commit in one save, so after any run of creates, give-ups and deletes they agree
-/// (titan-ops features/network/design.md#ipv6-public). ChildEntityGuardTests cannot see a handler that saves two
-/// aggregates, so this is the test that notices a branch that lets go of a block and forgets to tell the pool.
+/// commit in one save, so after any run of creates, give-ups and deletes they agree. ChildEntityGuardTests cannot see
+/// a handler that saves two aggregates, so this is the test that notices a branch that lets go of a block and forgets
+/// to tell the pool.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]

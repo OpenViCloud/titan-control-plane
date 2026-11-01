@@ -17,7 +17,7 @@ public record ErrorStatus(int Status, string Code)
     public const string ProviderCommandKeyIndex = "IX_provider_commands_key";
 
     /// Two network creates in one cluster loaded the cluster's /64 pool at the same instant; the second commit finds its
-    /// version moved or a key taken (titan-ops infra/incus/design.md#ipv6-address-plan). Asking again picks another /64.
+    /// version moved or a key taken. Asking again picks another /64.
     public const string Ipv6AllocationConflictCode = "IPV6_ALLOCATION_CONFLICT";
 
     /// Two load balancer creates on one network picked the same free VIP at the same instant

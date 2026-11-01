@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Tenant;
 namespace Titan.Tests.Fakes;
 
 /// A network as the create handler leaves it when public IPv6 was asked for: its create waits, and the cluster's pool
-/// has handed over a /64 block (titan-ops features/network/design.md#ipv6-public). The block is block 5 of the /56
+/// has handed over a /64 block. The block is block 5 of the /56
 /// 2001:41d0:d00:d400::/56.
 public static class TestNetworks
 {

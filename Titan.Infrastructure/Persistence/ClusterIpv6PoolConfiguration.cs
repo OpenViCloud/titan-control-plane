@@ -4,7 +4,6 @@ using Titan.Domain.Aggregates.ClusterIpv6Pool;
 
 namespace Titan.Infrastructure.Persistence;
 
-// titan-ops features/network/design.md#ipv6-public
 public class ClusterIpv6PoolConfiguration : IEntityTypeConfiguration<ClusterIpv6Pool>
 {
     public const string ClusterIndexName = "ix_cluster_ipv6_pools_cluster_id";

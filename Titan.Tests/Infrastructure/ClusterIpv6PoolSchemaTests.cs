@@ -7,7 +7,7 @@ namespace Titan.Tests.Infrastructure;
 
 // The InMemory provider enforces no key and no index, so the model metadata the migration comes from is pinned here.
 // Two network creates in one cluster meet at the pool's version, a first allocation of a cluster at its unique
-// cluster_id, and a network holding two blocks at the holder index (titan-ops infra/incus/design.md#ipv6-address-plan);
+// cluster_id, and a network holding two blocks at the holder index;
 // ErrorStatus finds the clash by these names.
 public class ClusterIpv6PoolSchemaTests
 {

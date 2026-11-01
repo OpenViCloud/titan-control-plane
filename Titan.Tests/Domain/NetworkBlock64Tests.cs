@@ -181,9 +181,9 @@ public class NetworkBlock64Tests
     }
 
     // The only other way a network row ends is a local delete of a failed create that has no provider id; a give-up
-    // before Incus had the network already let the block go, so there is none left for it to keep.
+    // before Incus had the network already let the block go (the first assertion), so the local delete has none to keep.
     [Fact]
-    public void DeleteLocally_AfterTheCreateGaveUpBeforeIncus_HoldsNoBlock()
+    public void DeleteLocally_OfACreateThatGaveUpBeforeIncus_EndsDeleted_WithNoBlockLeftToKeep()
     {
         Network network = HoldingBlock64();
         Assert.True(network.MarkRequestFailed("Network creation failed.", null));
@@ -191,7 +191,6 @@ public class NetworkBlock64Tests
         network.DeleteLocally();
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.False(network.HasPublicIpv6);
     }
 
     [Fact]

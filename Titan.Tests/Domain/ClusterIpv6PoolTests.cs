@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops infra/incus/design.md#ipv6-address-plan: /64 number n of the cluster's /56 goes with the router address
 // ::(0x100 + n) of the first /64, the next hop of the static OVH route for that /64. A wrong digit here is a
 // network that gets its /64 and never receives a packet. The pool owns which numbers are held and when each was
-// given back (titan-ops features/network/design.md#ipv6-public).
+// given back.
 public class ClusterIpv6PoolTests
 {
     private const string Block56 = "2001:41d0:d00:d400::/56";
@@ -221,11 +221,12 @@ public class ClusterIpv6PoolTests
         Assert.True(pool.Version > afterGive);
     }
 
-    // The first /64 holds OVH's gateway and the routers, and the /56 has 255 more: no holding is outside 1..255.
+    // The first /64 holds OVH's gateway and the routers, and the /56 has 255 more: the seam that builds a pool from
+    // given holdings refuses a number outside 1..255.
     [Theory]
     [InlineData(0)]
     [InlineData(256)]
-    public void AHoldingOutsideOneTo255_IsRefused(int number)
+    public void CreateUnchecked_RefusesAHoldingOutsideOneTo255(int number)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => ClusterIpv6Pool.CreateUnchecked("singapore01", (number, true, null)));
     }

@@ -125,7 +125,7 @@ public class UpdateNetworkStatusCommandHandler(
 
     // The block goes back to the cluster's pool in the same save as the network that let go of it. A report must not
     // fail because the pool and the network disagree (no pool, or a pool that does not hold the block): there is
-    // nothing to take back, and the disagreement shows in the consistency test.
+    // nothing to take back.
     private async Task TakeBlock64BackAsync(NetworkAggregate network, CancellationToken ct)
     {
         PoolAggregate? pool = await pools.FindAsync(network.ClusterId, ct);

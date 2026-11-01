@@ -7,7 +7,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// The migration that moves the numbers a network holds to the cluster's pool runs once, on tables that may hold real
-/// networks (titan-ops features/network/design.md#ipv6-public). A dev database may hold none, so these tests give the
+/// networks. A dev database may hold none, so these tests give the
 /// SQL the rows it would otherwise never meet: the migration's own BackfillSql is run here, on networks seeded by hand.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]

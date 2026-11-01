@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Titan.Infrastructure.Migrations
 {
     /// Which network holds each /64 block of a cluster, and when each was given back, moves from the networks table to
-    /// one pool per cluster (titan-ops features/network/design.md#ipv6-public). The columns on networks stay for now:
+    /// one pool per cluster. The columns on networks stay for now:
     /// the code before this migration still reads them, and the drop comes in a later migration, after a release has
     /// carried this one. Down drops the pool tables. The columns on networks are no longer written, so a network that got its block after this
     /// migration ran is not in them: Down after such a network exists loses which block it held.
