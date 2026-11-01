@@ -119,7 +119,7 @@ jobs:
   # Built on every run beside the tests, its layers kept in the Actions cache. Pushed only from main, once the tests
   # passed, by the push job reading those layers back, tagged with the commit's first 7 characters. The source label
   # links the package to this repository. Which tag an environment runs is decided outside this repository: dev by
-  # scripts/pull-images.py of OpenViCloud/titan-local-cluster, staging by a release of OpenViCloud/titan-ops. This
+  # scripts/pull-images.py of OpenViCloud/titan-local-cluster, prd by a release of OpenViCloud/titan-ops. This
   # repository holds no credential for either (titan-ops architecture/platform-infra.md#gitops-flow).
   image:
     name: Image build
