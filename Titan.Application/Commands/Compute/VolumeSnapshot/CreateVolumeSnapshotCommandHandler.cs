@@ -1,5 +1,6 @@
 using VolumeSnapshotTicket = Titan.Domain.Aggregates.Volume.VolumeSnapshotTicket;
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -32,8 +33,10 @@ public class CreateVolumeSnapshotCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        // The volume checks itself (resting on Incus), checks the cap and adds the snapshot in one call.
-        VolumeSnapshotTicket ticket = volume.AddSnapshot(tenant, command.Name);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.VolumeSnapshot, volume.SnapshotQuotaUsage);
+
+        // The volume checks itself (resting on Incus) and adds the snapshot in one call.
+        VolumeSnapshotTicket ticket = volume.AddSnapshot(command.Name);
         VolumeSnapshotEntity snapshot = ticket.Snapshot;
         string externalVolumeId = ticket.ExternalVolumeId;
         activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the save

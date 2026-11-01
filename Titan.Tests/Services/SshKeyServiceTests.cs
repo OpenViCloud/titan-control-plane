@@ -92,12 +92,23 @@ public class SshKeyServiceTests
         Assert.Single(_keys.Saved);
     }
 
+    // A tenant at its cap hears that, whatever it pasted.
+    [Fact]
+    public async Task Add_AtTheTenantCap_WithABadKey_AnswersTheQuota()
+    {
+        _tenant.UpdateQuota(TenantQuota.Create(10, 1, 10, 3, 3, 20, 10, 1, 5));
+        await AddAsync("laptop", SshPublicKeyTests.Ed25519);
+
+        BusinessException refused = await Assert.ThrowsAsync<BusinessException>(() => AddAsync("desktop", "not a key"));
+        Assert.Equal("SSH_KEY_QUOTA_EXCEEDED", refused.Code);
+    }
+
     [Fact]
     public async Task List_ShowsOnlyTheCallersTenant()
     {
         await AddAsync("laptop", SshPublicKeyTests.Ed25519);
         Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
-        _keys.Saved.Add(Titan.Domain.Aggregates.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048));
+        _keys.Saved.Add(Titan.Domain.Aggregates.SshKey.SshKey.Create(other.Id, "theirs", SshPublicKeyTests.Rsa2048));
 
         SshKeyQueryResult listed = Assert.Single(await ListAsync());
         Assert.Equal("laptop", listed.Name);
@@ -119,7 +130,7 @@ public class SshKeyServiceTests
     public async Task Delete_AnotherTenantsKey_IsNotFound_AndKeepsIt()
     {
         Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
-        var theirs = Titan.Domain.Aggregates.SshKey.SshKey.Create(other, 0, "theirs", SshPublicKeyTests.Rsa2048);
+        var theirs = Titan.Domain.Aggregates.SshKey.SshKey.Create(other.Id, "theirs", SshPublicKeyTests.Rsa2048);
         _keys.Saved.Add(theirs);
 
         NotFoundException refused = await Assert.ThrowsAsync<NotFoundException>(() => DeleteAsync(theirs.Id));

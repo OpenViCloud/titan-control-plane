@@ -5,8 +5,8 @@ using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.Network;
 
 /// One rule of a network: a line in the network's ACL on Incus (titan-ops features/network/design.md#firewall-on-incus).
-/// A child of Network (titan-ops architecture/code-structure.md#child-entity): the per-network cap and the network's
-/// delete taking every rule with it are the network's invariants, so only the root reaches the methods below, and
+/// A child of Network (titan-ops architecture/code-structure.md#child-entity): the network's delete taking
+/// every rule with it is the network's invariant, so only the root reaches the methods below, and
 /// handlers go through Network.AddFirewallRule, RequestFirewallRuleDelete and MarkFirewallRule*.
 public class FirewallRule : ChildEntity
 {
@@ -80,8 +80,7 @@ public class FirewallRule : ChildEntity
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Called by Network.AddFirewallRule after the network checked itself and the tenant's cap
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Called by Network.AddFirewallRule after the network checked itself.
     internal static FirewallRule Create(
         Guid networkId, Guid tenantId,
         FirewallDirection direction, FirewallProtocol protocol,

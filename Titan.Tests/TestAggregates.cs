@@ -11,8 +11,6 @@ namespace Titan.Tests;
 // factory cannot reach is reached by the same steps the provider's reports take (Fakes/ProvisionedOnTheProvider.cs).
 internal static class TestAggregates
 {
-    private const int MoreThanAnyTestAdds = 1000;
-
     internal static NetworkAggregate Network(
         Tenant owner, string name, string clusterId,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
@@ -25,12 +23,12 @@ internal static class TestAggregates
             requested = Ipv4Cidr.Parse(requestedCidr);
         }
         return NetworkAggregate.Create(
-            owner, 0, 0, NetworkName.Parse(name), clusterId, requested, false, defaultIngressPolicy, defaultEgressPolicy);
+            owner.Id, NetworkName.Parse(name), clusterId, requested, false, defaultIngressPolicy, defaultEgressPolicy);
     }
 
-    internal static VmSnapshot WithSnapshot(this Vm vm, string name) => vm.AddSnapshot(Roomy(), name).Snapshot;
+    internal static VmSnapshot WithSnapshot(this Vm vm, string name) => vm.AddSnapshot(name).Snapshot;
 
-    internal static VolumeSnapshot WithSnapshot(this VolumeAggregate volume, string name) => volume.AddSnapshot(Roomy(), name).Snapshot;
+    internal static VolumeSnapshot WithSnapshot(this VolumeAggregate volume, string name) => volume.AddSnapshot(name).Snapshot;
 
     internal static FirewallRule WithFirewallRule(
         this NetworkAggregate network, FirewallDirection direction, FirewallProtocol protocol, int? startPort, int? endPort, string cidr)
@@ -40,15 +38,6 @@ internal static class TestAggregates
         {
             ports = PortRange.Of(startPort.Value, endPort.Value);
         }
-        return network.AddFirewallRule(Roomy(), direction, protocol, ports, FirewallCidr.Parse(cidr)).Rule;
-    }
-
-    private static Tenant Roomy()
-    {
-        Tenant tenant = TestTenant.WithRoomToSpare();
-        tenant.UpdateQuota(TenantQuota.Create(
-            MoreThanAnyTestAdds, MoreThanAnyTestAdds, MoreThanAnyTestAdds, MoreThanAnyTestAdds, MoreThanAnyTestAdds,
-            MoreThanAnyTestAdds, MoreThanAnyTestAdds, MoreThanAnyTestAdds, MoreThanAnyTestAdds));
-        return tenant;
+        return network.AddFirewallRule(direction, protocol, ports, FirewallCidr.Parse(cidr)).Rule;
     }
 }

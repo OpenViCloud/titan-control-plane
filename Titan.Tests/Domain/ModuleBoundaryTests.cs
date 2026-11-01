@@ -99,23 +99,11 @@ public class ModuleBoundaryTests
     // ── titan-ops architecture/code-structure.md#tenant-typed-edge: aggregates reference each other by id ──────────────
     //
     // A typed reference from one aggregate's public surface (property, field, constructor, method) to another
-    // aggregate's type needs a row here saying why an id is not enough. The Tenant rows are the quota rule: a quota
-    // check must reach the tenant's caps from inside the factory of the thing being created, and a Guid cannot
-    // answer "may I".
+    // aggregate's type needs a row here saying why an id is not enough.
     //
     // Each row is one measured edge. Adding one is allowed; adding one silently is not.
     private static readonly Dictionary<string, string> AggregateEdgeAllowlist = new(StringComparer.Ordinal)
     {
-        ["Vm.Create(tenant) -> Tenant"] =
-            "the VM factory asks the tenant about VM quota, so forgetting the check means having no VM",
-        ["Volume.Create(tenant) -> Tenant"] = "volume quota",
-        ["Vm.AddSnapshot(tenant) -> Tenant"] = "per-VM snapshot quota, counted on the snapshots the VM holds (its child entities)",
-        ["Volume.AddSnapshot(tenant) -> Tenant"] = "per-volume snapshot quota, counted on the snapshots the volume holds (its child entities)",
-        ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",
-        ["Network.AddFirewallRule(tenant) -> Tenant"] = "per-network rule quota, counted on the rules the network holds (its child entities)",
-        ["SshKey.Create(tenant) -> Tenant"] = "per-tenant SSH key quota",
-        ["LoadBalancer.Create(tenant) -> Tenant"] = "per-tenant load balancer quota",
-
         // A rule that spans two aggregates is checked by the one being changed, on the other's state.
         ["LoadBalancer.Create(backends) -> Vm"] =
             "each backend must be the tenant's VM and accept the network (Vm.BeginLoadBalancerBackend), checked in the factory",

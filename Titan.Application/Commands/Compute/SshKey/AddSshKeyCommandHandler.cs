@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.SshKey.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -21,7 +22,8 @@ public class AddSshKeyCommandHandler(
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
         int keyCount = await repo.CountByTenantAsync(tenantId, ct);
 
-        SshKeyAggregate key = SshKeyAggregate.Create(tenant, keyCount, command.Name, command.PublicKey);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.SshKey, keyCount);
+        SshKeyAggregate key = SshKeyAggregate.Create(tenant.Id, command.Name, command.PublicKey);
 
         bool fingerprintTaken = await repo.ExistsByFingerprintAsync(tenantId, key.Fingerprint, ct);
         if (fingerprintTaken)

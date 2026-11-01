@@ -1,8 +1,6 @@
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Domain.Aggregates.Network;
 
@@ -74,32 +72,26 @@ public class Network : AggregateRoot
     private bool CreateIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
     private bool DeleteIsWaiting => PendingIntentId != null && DesiredExistence == DesiredExistence.Deleted;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The range the
-    /// customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
+    /// The range the customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
     /// attributes (titan-ops architecture/code-structure.md#logic-placement): the uplink of a network with public IPv6
     /// routes only the private ranges (titan-ops infra/incus/design.md#ipv6-address-plan). The validator answers the
     /// same case with 400 first, so NETWORK_CIDR_NOT_PRIVATE is not reached over HTTP.
     public static Network Create(
-        TenantAggregate tenant, int activeNetworkCount, int activePublicIpv6Count, NetworkName name, string clusterId,
+        Guid tenantId, NetworkName name, string clusterId,
         Ipv4Cidr? requestedCidr, bool wantsPublicIpv6,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
-        tenant.EnsureHasRoom(TenantQuotaKind.Network, activeNetworkCount);
-        if (wantsPublicIpv6)
+        bool cidrOutsideThePrivateRanges = wantsPublicIpv6 && requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
+        if (cidrOutsideThePrivateRanges)
         {
-            tenant.EnsureHasRoom(TenantQuotaKind.PublicIpv6, activePublicIpv6Count);
-            bool cidrOutsideThePrivateRanges = requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
-            if (cidrOutsideThePrivateRanges)
-            {
-                throw new BusinessException("NETWORK_CIDR_NOT_PRIVATE",
-                    "The CIDR of a network with public IPv6 must be inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16.");
-            }
+            throw new BusinessException("NETWORK_CIDR_NOT_PRIVATE",
+                "The CIDR of a network with public IPv6 must be inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16.");
         }
         return new Network
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
+            TenantId = tenantId,
             Name = name,
             RequestedCidr = requestedCidr,
             ClusterId = clusterId,
@@ -312,21 +304,17 @@ public class Network : AggregateRoot
         return RequireExternalId();
     }
 
-    // ---- Firewall rules: the network keeps the per-network cap and routes each call to the rule it names
+    // ---- Firewall rules: the network counts its rules and routes each call to the rule it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
 
-    /// Intent: a new rule in this network's ACL. The network must be usable and the tenant's cap is checked here on
-    /// what this network holds (titan-ops architecture/code-structure.md#tenant-typed-edge), so a handler cannot add a
-    /// rule past the cap; the handler locks the network row first so two requests cannot both count below it. The
-    /// create request is the rule's own PendingIntentId.
+    /// Intent: a new rule in this network's ACL. The network must be usable. The create request is the rule's own
+    /// PendingIntentId.
     public FirewallRuleTicket AddFirewallRule(
-        TenantAggregate tenant,
         FirewallDirection direction, FirewallProtocol protocol,
         PortRange? ports, FirewallCidr cidr)
     {
         if (!IsUsable)
             throw new BusinessException("FIREWALL_NETWORK_NOT_READY", "Firewall rules can only be added to a network Incus has created.");
-        tenant.EnsureHasRoom(TenantQuotaKind.FirewallRule, FirewallRuleQuotaUsage);
         int? startPort = null;
         int? endPort = null;
         if (ports != null)

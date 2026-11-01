@@ -169,6 +169,25 @@ public class FirewallServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // The handler asks about quota before the network checks itself (titan-ops architecture/code-structure.md#quota-gate).
+    [Fact]
+    public async Task Create_AtTheCap_OnANetworkNotUsable_AnswersTheQuota()
+    {
+        SetupCurrentUser();
+        Network network = SetupActiveNetwork();
+        for (int i = 0; i < 20; i++)
+        {
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+                .MarkActive($"cs-rule-{i}");
+        }
+        network.MarkObserved(NetworkStatus.Errored);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default));
+
+        Assert.Equal("FIREWALL_QUOTA_EXCEEDED", ex.Code);
+    }
+
     // A rule whose delete is waiting stopped counting the moment it was asked for (DCS-Q1), so the cap is not full.
     [Fact]
     public async Task Create_AtTheCapWithOneRuleBeingDeleted_IsAccepted()

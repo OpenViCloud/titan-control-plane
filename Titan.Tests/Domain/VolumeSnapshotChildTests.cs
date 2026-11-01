@@ -15,16 +15,9 @@ public class VolumeSnapshotChildTests
 
     private static Volume RestingVolume()
     {
-        var volume = Volume.Create(TenantIdOwner, 0, "vol-1", "cluster-1", "offering-1", 50);
+        var volume = Volume.Create(TenantIdOwner.Id, "vol-1", "cluster-1", "offering-1", 50);
         volume.MarkCreated("vol11");
         return volume;
-    }
-
-    private static Tenant TenantWithSnapshotCap(int maxVolumeSnapshotsPerVolume)
-    {
-        var tenant = TestTenant.Active("t", "kc", "t@x.io");
-        tenant.UpdateQuota(TenantQuota.Create(10, 1, 10, 3, maxVolumeSnapshotsPerVolume, 20, 10, 20, 5));
-        return tenant;
     }
 
     // The same five situations the repository count once measured (titan-ops features/volume/design.md#counting-and-billing):
@@ -58,22 +51,11 @@ public class VolumeSnapshotChildTests
     }
 
     [Fact]
-    public void AddSnapshot_AtTheCap_Refuses_AndAddsNothing()
-    {
-        var volume = VolumeWithEverySnapshotSituation(); // usage 2
-
-        var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot(TenantWithSnapshotCap(2), "one-more"));
-
-        Assert.Equal("VOLUME_SNAPSHOT_QUOTA_EXCEEDED", ex.Code);
-        Assert.Equal(6, volume.Snapshots.Count);
-    }
-
-    [Fact]
     public void AddSnapshot_OneBelowTheCap_AddsASnapshotWaitingForItsCreate()
     {
         var volume = VolumeWithEverySnapshotSituation(); // usage 2
 
-        VolumeSnapshot snapshot = volume.AddSnapshot(TenantWithSnapshotCap(3), "nightly").Snapshot;
+        VolumeSnapshot snapshot = volume.AddSnapshot("nightly").Snapshot;
 
         Assert.Contains(snapshot, volume.Snapshots);
         Assert.Equal(volume.Id, snapshot.VolumeId);
@@ -82,13 +64,12 @@ public class VolumeSnapshotChildTests
         Assert.Equal(3, volume.SnapshotQuotaUsage);
     }
 
-    // The volume says it cannot take a snapshot before anyone counts: a different code from the cap.
     [Fact]
-    public void AddSnapshot_OnAVolumeNotResting_IsRefusedBeforeTheQuota()
+    public void AddSnapshot_OnAVolumeNotResting_IsRefused()
     {
-        var volume = Volume.Create(TenantIdOwner, 0, "vol-1", "cluster-1", "offering-1", 50); // Creating
+        var volume = Volume.Create(TenantIdOwner.Id, "vol-1", "cluster-1", "offering-1", 50); // Creating
 
-        var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot(TenantWithSnapshotCap(0), "nightly"));
+        var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot("nightly"));
 
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
         Assert.Empty(volume.Snapshots);

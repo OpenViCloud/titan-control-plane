@@ -11,15 +11,15 @@ public class ApiTokenTests
     public const string Secret = "ovc_q3v9Xk2LmP0aZ8yT4rWbN6cJ1dF5gH7sE9uIoK2pQwA";
     public static readonly DateTimeOffset Now = new(2026, 10, 18, 9, 0, 0, TimeSpan.Zero);
 
-    private static ApiToken Create(int tokenCount = 0, string name = "terraform", string secret = Secret, int? days = 90) =>
-        ApiToken.Create(Guid.NewGuid(), "kc-1", tokenCount, name, secret, days, Now);
+    private static ApiToken Create(string name = "terraform", string secret = Secret, int? days = 90) =>
+        ApiToken.Create(Guid.NewGuid(), "kc-1", name, secret, days, Now);
 
     [Fact]
     public void Create_KeepsTheTenantTheCreatorAndTheName_AndOnlyAHashOfTheSecret()
     {
         var tenantId = Guid.NewGuid();
 
-        ApiToken token = ApiToken.Create(tenantId, "kc-1", 0, "  terraform  ", Secret, 90, Now);
+        ApiToken token = ApiToken.Create(tenantId, "kc-1", "  terraform  ", Secret, 90, Now);
 
         Assert.NotEqual(Guid.Empty, token.Id);
         Assert.Equal(tenantId, token.TenantId);
@@ -95,14 +95,6 @@ public class ApiTokenTests
     {
         Assert.Throws<BadRequestException>(() => Create(name: new string('t', 65)));
         Assert.NotNull(Create(name: new string('t', 64)));
-    }
-
-    [Fact]
-    public void Create_TheTwentyFirstToken_IsRefused_TheTwentiethIsNot()
-    {
-        Assert.NotNull(Create(tokenCount: ApiToken.MaxPerTenant - 1));
-        Assert.Equal("API_TOKEN_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Create(tokenCount: ApiToken.MaxPerTenant)).Code);
     }
 
     [Fact]

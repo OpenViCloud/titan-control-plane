@@ -1,6 +1,7 @@
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -52,8 +53,13 @@ public class CreateNetworkCommandHandler(
             activePublicIpv6Count = await repo.CountPublicIpv6ActiveByTenantAsync(tenantId, ct);
         }
 
-        // Quota refuses inside the factory, so it comes after the name/CIDR checks above.
-        var network = NetworkAggregate.Create(tenant, activeNetworkCount, activePublicIpv6Count, name, req.ClusterId,
+        // Quota comes after the name/CIDR checks above.
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Network, activeNetworkCount);
+        if (req.EnablePublicIpv6)
+        {
+            TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.PublicIpv6, activePublicIpv6Count);
+        }
+        var network = NetworkAggregate.Create(tenant.Id, name, req.ClusterId,
             requestedCidr, req.EnablePublicIpv6, req.DefaultIngressPolicy, req.DefaultEgressPolicy);
         string? routerAddress = null;
         if (block56 != null)

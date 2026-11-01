@@ -8,7 +8,7 @@ public class Tenant : AggregateRoot
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
     public TenantStatus Status { get; private set; }
-    /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by EnsureHasRoom below.
+    /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by TenantQuotaGate in Titan.Application.
     public TenantQuota Quota { get; private set; } = TenantQuota.Default;
 
     /// Whole VND. A reference number the admin reads at month-end close; it blocks nothing
@@ -93,36 +93,4 @@ public class Tenant : AggregateRoot
     public void UpdateQuota(TenantQuota quota)
         => Quota = quota ?? throw new Titan.Domain.Exceptions.BusinessException(
             "INVALID_QUOTA", "Quota must be provided.");
-
-    // The caller counts (a repository query, not part of this aggregate); the tenant decides
-    // (titan-ops architecture/code-structure.md#tenant-typed-edge). `internal`, called only from what creates the
-    // things being counted, so the compiler stops Titan.Application from skipping the check.
-
-    /// count is what already exists: per tenant for most kinds, on one VM, volume or network for the three kinds whose
-    /// cap is per parent. `>=`, so a cap of 0 refuses the first one (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none):
-    /// reading 0 as "unlimited" would grant infinite resources at the moment an admin tried to cut them off.
-    internal void EnsureHasRoom(TenantQuotaKind kind, int count)
-    {
-        (int cap, string code, string message) = kind switch
-        {
-            TenantQuotaKind.Vm => (Quota.MaxVms, "VM_QUOTA_EXCEEDED", "VM quota exceeded."),
-            TenantQuotaKind.Network => (Quota.MaxNetworks, "NETWORK_QUOTA_EXCEEDED", "Network quota exceeded."),
-            TenantQuotaKind.Volume => (Quota.MaxVolumes, "VOLUME_QUOTA_EXCEEDED", $"Volume quota exceeded (max {Quota.MaxVolumes})."),
-            TenantQuotaKind.VmSnapshot => (Quota.MaxVmSnapshotsPerVm, "VM_SNAPSHOT_QUOTA_EXCEEDED",
-                $"VM snapshot quota exceeded (max {Quota.MaxVmSnapshotsPerVm})."),
-            TenantQuotaKind.VolumeSnapshot => (Quota.MaxVolumeSnapshotsPerVolume, "VOLUME_SNAPSHOT_QUOTA_EXCEEDED",
-                $"Snapshot quota exceeded (max {Quota.MaxVolumeSnapshotsPerVolume} per volume)."),
-            TenantQuotaKind.FirewallRule => (Quota.MaxFirewallRulesPerNetwork, "FIREWALL_QUOTA_EXCEEDED",
-                $"Firewall rule quota of {Quota.MaxFirewallRulesPerNetwork} per network has been reached."),
-            TenantQuotaKind.SshKey => (Quota.MaxSshKeys, "SSH_KEY_QUOTA_EXCEEDED", $"SSH key quota exceeded (max {Quota.MaxSshKeys})."),
-            TenantQuotaKind.LoadBalancer => (Quota.MaxLoadBalancers, "LOAD_BALANCER_QUOTA_EXCEEDED",
-                $"Load balancer quota exceeded (max {Quota.MaxLoadBalancers})."),
-            TenantQuotaKind.PublicIpv6 => (Quota.MaxPublicIpv6, "IPV6_QUOTA_EXCEEDED", $"Public IPv6 quota exceeded (max {Quota.MaxPublicIpv6})."),
-            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "A quota kind this tenant has no cap for."),
-        };
-        if (count >= cap)
-        {
-            throw new Titan.Domain.Exceptions.BusinessException(code, message);
-        }
-    }
 }

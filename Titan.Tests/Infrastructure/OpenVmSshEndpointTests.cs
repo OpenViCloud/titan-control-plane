@@ -36,7 +36,7 @@ public class OpenVmSshEndpointTests
     public OpenVmSshEndpointTests()
     {
         _currentUser.SetupGet(u => u.TenantId).Returns(_tenantId);
-        _vm = Vm.Create(_tenantIdOwner, 0, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
+        _vm = Vm.Create(_tenantIdOwner.Id, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
         _vm.MarkCreated("vmabc");
         _vm.MarkObserved(VmState.Running, "10.0.0.5");
         _vms.Setup(r => r.FindByIdAsync(_vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_vm);

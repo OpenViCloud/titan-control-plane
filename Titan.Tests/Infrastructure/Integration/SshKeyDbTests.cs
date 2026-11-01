@@ -29,9 +29,9 @@ public class SshKeyDbTests(PostgresFixture pg)
     {
         var tenantOwner = TestTenant.WithRoomToSpare();
         var tenant = tenantOwner.Id;
-        SshKey key = SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519);
+        SshKey key = SshKey.Create(tenantOwner.Id, "laptop", SshPublicKeyTests.Ed25519);
         await SaveAsync(key);
-        await SaveAsync(SshKey.Create(TestTenant.WithRoomToSpare(), 0, "laptop", SshPublicKeyTests.Ed25519));
+        await SaveAsync(SshKey.Create(TestTenant.WithRoomToSpare().Id, "laptop", SshPublicKeyTests.Ed25519));
 
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new SshKeyRepository(db);
@@ -47,10 +47,10 @@ public class SshKeyDbTests(PostgresFixture pg)
     {
         var tenantOwner = TestTenant.WithRoomToSpare();
         var tenant = tenantOwner.Id;
-        await SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519));
+        await SaveAsync(SshKey.Create(tenantOwner.Id, "laptop", SshPublicKeyTests.Ed25519));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(
-            () => SaveAsync(SshKey.Create(tenantOwner, 0, "other-name", SshPublicKeyTests.Ed25519)));
+            () => SaveAsync(SshKey.Create(tenantOwner.Id, "other-name", SshPublicKeyTests.Ed25519)));
         AssertUniqueViolation(ex);
     }
 
@@ -59,10 +59,10 @@ public class SshKeyDbTests(PostgresFixture pg)
     {
         var tenantOwner = TestTenant.WithRoomToSpare();
         var tenant = tenantOwner.Id;
-        await SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519));
+        await SaveAsync(SshKey.Create(tenantOwner.Id, "laptop", SshPublicKeyTests.Ed25519));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(
-            () => SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Rsa2048)));
+            () => SaveAsync(SshKey.Create(tenantOwner.Id, "laptop", SshPublicKeyTests.Rsa2048)));
         AssertUniqueViolation(ex);
     }
 }

@@ -24,7 +24,7 @@ public class VmSnapshotFirewallRepositoryStateTests
 
     private static Vm RunningVm(string cluster = "vn-hcm-1")
     {
-        var vm = Vm.Create(TenantOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", cluster, 20);
+        var vm = Vm.Create(TenantOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
         return vm;
     }

@@ -15,7 +15,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class VmNameUniquenessDbTests(PostgresFixture pg)
 {
     private static Vm NewVm(Titan.Domain.Aggregates.Tenant.Tenant owner, string name) =>
-        Vm.Create(owner, 0, Guid.NewGuid(), name, "m", "tpl", "cluster-a", 20);
+        Vm.Create(owner.Id, Guid.NewGuid(), name, "m", "tpl", "cluster-a", 20);
 
     private async Task SaveAsync(Vm vm)
     {

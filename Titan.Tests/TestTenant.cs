@@ -2,17 +2,11 @@ using Titan.Domain.Aggregates.Tenant;
 
 namespace Titan.Tests;
 
-// The quota decision is inside the creation factories, so every checked factory needs a Tenant.
-// Most tests are not about quota at all — they are about the OTHER invariant the
-// factory carries (a VM must be Running to snapshot, a snapshot must exist on Incus to restore). Those
-// tests use this: a tenant with room to spare, so quota never becomes the reason a test passes.
-//
-// Tests that ARE about quota build their own tenant with the cap they mean to hit. That split is
-// deliberate — a shared "generous" tenant used in a quota test would hide the very thing under test.
+// A tenant the way a signup and an approval make one. A handler test about a cap sets the cap it means to hit on it
+// (titan-ops architecture/code-structure.md#quota-gate).
 internal static class TestTenant
 {
-    /// Default TenantQuota: 10 VMs, 10 volumes, 3 snapshots per VM/volume, 20 firewall rules,
-    /// 10 public IPv6. Paired with a count of 0 at the call site, quota cannot fire.
+    /// Default TenantQuota: 10 VMs, 10 volumes, 3 snapshots per VM/volume, 20 firewall rules, 10 public IPv6.
     internal static Tenant WithRoomToSpare() => Active("test-tenant", "kc-test", "test@titan.local");
 
     /// An approved tenant: approval is activation (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).

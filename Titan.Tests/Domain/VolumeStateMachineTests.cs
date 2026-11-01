@@ -25,7 +25,7 @@ public class VolumeStateMachineTests
 
     private static Volume VolumeIn(Seed seed)
     {
-        var v = Volume.Create(TestTenant.WithRoomToSpare(), 0, "vol-1", "cluster-a", "std", 20);
+        var v = Volume.Create(TestTenant.WithRoomToSpare().Id, "vol-1", "cluster-a", "std", 20);
         switch (seed)
         {
             case Seed.Creating: break; // Create() lands here
@@ -73,7 +73,7 @@ public class VolumeStateMachineTests
 
     private static Vm VmForAttach(VmShape shape)
     {
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (shape == VmShape.Creating) return vm;
         vm.MarkRunning("vm42", "10.0.0.5");
         if (shape == VmShape.Ready) vm.MarkObserved(VmState.Ready, "10.0.0.5");
@@ -213,7 +213,7 @@ public class VolumeStateMachineTests
     [Fact]
     public void Attach_ToAVmInAnotherCluster_Throws()
     {
-        var v = Volume.Create(TestTenant.WithRoomToSpare(), 0, "vol-1", "cluster-b", "std", 20);
+        var v = Volume.Create(TestTenant.WithRoomToSpare().Id, "vol-1", "cluster-b", "std", 20);
         v.MarkCreated("vol11");
         var ex = Assert.Throws<BusinessException>(() => v.Attach(VmForAttach(VmShape.Running)));
         Assert.Equal("VOLUME_CLUSTER_MISMATCH", ex.Code);
@@ -499,7 +499,7 @@ public class VolumeStateMachineTests
     [InlineData(Seed.AttachedElsewhere)]
     public void AddSnapshot_WhenIncusHasItAndNothingWaits_YieldsTheId(Seed seed)
     {
-        Assert.Equal("vol11", VolumeIn(seed).AddSnapshot(TestTenant.WithRoomToSpare(), "s").ExternalVolumeId);
+        Assert.Equal("vol11", VolumeIn(seed).AddSnapshot("s").ExternalVolumeId);
     }
 
     [Theory]
@@ -512,7 +512,7 @@ public class VolumeStateMachineTests
     [InlineData(Seed.Deleted)]
     public void AddSnapshot_FromEveryOtherSituation_Throws(Seed seed)
     {
-        var ex = Assert.Throws<BusinessException>(() => VolumeIn(seed).AddSnapshot(TestTenant.WithRoomToSpare(), "s"));
+        var ex = Assert.Throws<BusinessException>(() => VolumeIn(seed).AddSnapshot("s"));
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 
@@ -548,7 +548,7 @@ public class VolumeStateMachineTests
 
     private static VolumeSnapshot SnapshotIn(SnapSeed seed)
     {
-        var s = VolumeIn(Seed.Available).AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1").Snapshot;
+        var s = VolumeIn(Seed.Available).AddSnapshot("snap-1").Snapshot;
         switch (seed)
         {
             case SnapSeed.Creating: break;
@@ -712,7 +712,7 @@ public class VolumeStateMachineTests
     public void Snapshot_Create_OfAVolumeNotResting_Throws(Seed seed)
     {
         var ex = Assert.Throws<BusinessException>(
-            () => VolumeIn(seed).AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1"));
+            () => VolumeIn(seed).AddSnapshot("snap-1"));
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 }

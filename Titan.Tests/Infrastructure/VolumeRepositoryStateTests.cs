@@ -20,7 +20,7 @@ public class VolumeRepositoryStateTests
             .Options);
 
     private static Volume Creating(string name) =>
-        Volume.Create(TenantOwner, 0, name, "vn-hcm-1", "vo-std", 20);
+        Volume.Create(TenantOwner.Id, name, "vn-hcm-1", "vo-std", 20);
 
     private static Volume Available(string name)
     {
@@ -31,7 +31,7 @@ public class VolumeRepositoryStateTests
 
     private static Vm RunningVm()
     {
-        var vm = Vm.Create(TenantOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "vn-hcm-1", 20);
+        var vm = Vm.Create(TenantOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "vn-hcm-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         return vm;
     }
@@ -121,7 +121,7 @@ public class VolumeRepositoryStateTests
     public async Task Reconcilable_IsWhatReachedIncusInTheCluster_AndIsNotConfirmedGone()
     {
         using var db = NewDb();
-        var elsewhere = Volume.Create(TenantOwner, 0, "elsewhere", "vn-han-1", "vo-std", 20);
+        var elsewhere = Volume.Create(TenantOwner.Id, "elsewhere", "vn-han-1", "vo-std", 20);
         elsewhere.MarkCreated("ext-elsewhere");
         db.Volumes.AddRange(
             Creating("creating"), Available("available"), Attached("attached", RunningVm()), DeleteRequested("deleting"),
@@ -176,7 +176,7 @@ public class VolumeRepositoryStateTests
     {
         using var db = NewDb();
         var here = Available("here");
-        var there = Volume.Create(TenantOwner, 0, "there", "vn-han-1", "vo-std", 20);
+        var there = Volume.Create(TenantOwner.Id, "there", "vn-han-1", "vo-std", 20);
         there.MarkCreated("ext-there");
         var gone = SnapshotOf(here, "gone");
         gone.RequestDelete();

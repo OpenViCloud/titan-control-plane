@@ -96,7 +96,7 @@ public class ApiTokenServiceTests
     {
         for (int i = 0; i < ApiToken.MaxPerTenant; i++)
         {
-            _tokens.Saved.Add(ApiToken.Create(_tenantId, "kc-1", 0, $"t{i}", SecretNumber(i), null, ApiTokenTests.Now));
+            _tokens.Saved.Add(ApiToken.Create(_tenantId, "kc-1", $"t{i}", SecretNumber(i), null, ApiTokenTests.Now));
         }
 
         BusinessException refused = await Assert.ThrowsAsync<BusinessException>(() => CreateAsync());
@@ -108,7 +108,7 @@ public class ApiTokenServiceTests
     {
         for (int i = 0; i < ApiToken.MaxPerTenant; i++)
         {
-            _tokens.Saved.Add(ApiToken.Create(Guid.NewGuid(), "kc-9", 0, $"t{i}", SecretNumber(i), null, ApiTokenTests.Now));
+            _tokens.Saved.Add(ApiToken.Create(Guid.NewGuid(), "kc-9", $"t{i}", SecretNumber(i), null, ApiTokenTests.Now));
         }
 
         await CreateAsync();
@@ -151,7 +151,7 @@ public class ApiTokenServiceTests
     [Fact]
     public async Task Delete_ATokenOfAnotherTenant_IsApiTokenNotFound_AndKeepsIt()
     {
-        ApiToken foreign = ApiToken.Create(Guid.NewGuid(), "kc-9", 0, "theirs", OtherSecret, null, ApiTokenTests.Now);
+        ApiToken foreign = ApiToken.Create(Guid.NewGuid(), "kc-9", "theirs", OtherSecret, null, ApiTokenTests.Now);
         _tokens.Saved.Add(foreign);
 
         NotFoundException refused = await Assert.ThrowsAsync<NotFoundException>(() => DeleteAsync(foreign.Id));
@@ -162,7 +162,7 @@ public class ApiTokenServiceTests
     [Fact]
     public async Task List_ShowsOnlyTheCallersTenant()
     {
-        _tokens.Saved.Add(ApiToken.Create(Guid.NewGuid(), "kc-9", 0, "theirs", OtherSecret, null, ApiTokenTests.Now));
+        _tokens.Saved.Add(ApiToken.Create(Guid.NewGuid(), "kc-9", "theirs", OtherSecret, null, ApiTokenTests.Now));
         await CreateAsync();
 
         ApiTokenQueryResult listed = Assert.Single(await ListAsync());

@@ -170,6 +170,21 @@ public class NetworkServiceTests
         Assert.Equal("NETWORK_NAME_TAKEN", ex.Code);
     }
 
+    // The name is checked before the quota: a network's name answers first.
+    [Fact]
+    public async Task Create_AtTheCapWithATakenName_AnswersTheName()
+    {
+        SetupCurrentUser(TenantId);
+        SetupTenant(maxNetworks: 1);
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(1);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(true);
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(
+            () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default));
+
+        Assert.Equal("NETWORK_NAME_TAKEN", ex.Code);
+    }
+
     [Fact]
     public async Task Create_CidrOverlap_ThrowsBusinessException()
     {
@@ -1048,7 +1063,22 @@ public class NetworkServiceTests
         _commands.VerifyNoOtherCalls();
     }
 
-    // The cap counts the caller's networks with a /64; the factory refuses at it (QuotaInFactoryTests), before any
+    // The IPv6 cap applies only when IPv6 is asked for.
+    [Fact]
+    public async Task Create_WithoutPublicIpv6_WithNoIpv6Room_Succeeds()
+    {
+        SetupCurrentUser(TenantId);
+        var tenant = TestTenant.WithRoomToSpare();
+        tenant.UpdateQuota(TenantQuota.Create(10, 1, 10, 3, 3, 20, 0, 20, 5));
+        _tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default)).ReturnsAsync(tenant);
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+
+        var result = await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
+
+        Assert.NotEqual(Guid.Empty, result.NetworkId);
+    }
+
+    // The cap counts the caller's networks with a /64; the gate refuses at it (TenantQuotaInvariantTests), before any
     // route is locked.
     [Fact]
     public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused_AndNoRouteIsLocked()
@@ -1097,7 +1127,7 @@ public class NetworkServiceTests
     // A network whose create waits and that holds route 1, as the create handler leaves them.
     private Network CreatingNetworkHoldingARoute()
     {
-        Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
+        Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
         RouteRow(1).HandTo(network.Id);
         network.ReceivePublicIpv6(RouteRow(1).SubnetIn(Block56));
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
@@ -1165,7 +1195,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_DeletedReport_WhenNoRouteNamesTheNetwork_StillRecordsTheDelete()
     {
-        Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
+        Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
         network.ReceivePublicIpv6("2001:41d0:d00:d405::/64");
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);

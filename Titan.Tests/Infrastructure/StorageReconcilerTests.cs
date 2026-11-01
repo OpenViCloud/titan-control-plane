@@ -41,7 +41,7 @@ public class StorageReconcilerTests
     public async Task Endpoint_WithToken_ReturnsVolumesAndSnapshots_WithWhatWasLastSeen_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, "data", Cluster, "vo-std", 20);
+        var volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(null, true);
         var snapshot = volume.WithSnapshot("snap");
@@ -73,9 +73,9 @@ public class StorageReconcilerTests
     {
         using var db = NewDb();
         var owner = TestTenant.WithRoomToSpare();
-        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(owner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(owner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkCreated("vm0123456789abcdefghijklmnop");
-        var volume = Volume.Create(owner, 0, "data", Cluster, "vo-std", 20);
+        var volume = Volume.Create(owner.Id, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(vm.Id, false);
         db.Vms.Add(vm);

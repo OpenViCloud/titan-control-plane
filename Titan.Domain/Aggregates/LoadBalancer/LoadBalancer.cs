@@ -1,8 +1,6 @@
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Domain.Aggregates.LoadBalancer;
 
@@ -81,19 +79,17 @@ public class LoadBalancer : AggregateRoot
     /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). The network is
-    /// checked by the caller through Network.BeginLoadBalancer: this aggregate holds no Network type
+    /// The network is checked by the caller through Network.BeginLoadBalancer: this aggregate holds no Network type
     /// (titan-ops architecture/code-structure.md#module-boundary).
     public static LoadBalancer Create(
-        TenantAggregate tenant, int activeLoadBalancerCount, string name, Guid networkId, string externalNetworkId,
+        Guid tenantId, string name, Guid networkId, string externalNetworkId,
         string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
         IReadOnlyList<Vm.Vm> backends)
     {
-        tenant.EnsureHasRoom(TenantQuotaKind.LoadBalancer, activeLoadBalancerCount);
         var loadBalancer = new LoadBalancer
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
+            TenantId = tenantId,
             NetworkId = networkId,
             ExternalNetworkId = externalNetworkId,
             NetworkSubnet = networkSubnet,

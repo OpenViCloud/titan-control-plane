@@ -26,7 +26,7 @@ public class AdminResourceRepositoryTests
 
     private static Vm Vm(Titan.Domain.Aggregates.Tenant.Tenant owner, string name, Action<Vm>? mutate = null)
     {
-        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(owner, 0, Guid.NewGuid(), name, "s", "t", "vn-hcm-1", 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(owner.Id, Guid.NewGuid(), name, "s", "t", "vn-hcm-1", 20);
         mutate?.Invoke(vm);
         return vm;
     }

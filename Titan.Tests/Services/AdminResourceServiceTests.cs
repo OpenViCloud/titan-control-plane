@@ -33,7 +33,7 @@ public class AdminResourceServiceTests
 
     private static Vm RunningVm(Titan.Domain.Aggregates.Tenant.Tenant owner, string name)
     {
-        var vm = Vm.Create(owner, 0, Guid.NewGuid(), name, "s", "tmpl-1", "vn-hcm-1", 20);
+        var vm = Vm.Create(owner.Id, Guid.NewGuid(), name, "s", "tmpl-1", "vn-hcm-1", 20);
         vm.MarkRunning("one-123", "10.0.0.5");
         return vm;
     }
@@ -206,7 +206,7 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
     {
         var vm = RunningVm(TenantBOwner, "victim");
-        var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TenantBOwner, 0, "data-1", vm.ClusterId, "std", 20);
+        var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TenantBOwner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -264,7 +264,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_InvalidStatus_Throws_NoCommand()
     {
-        var vm = Vm.Create(TenantBOwner, 0, Guid.NewGuid(), "starting", "s", "t", "z", 10); // Starting — not deletable
+        var vm = Vm.Create(TenantBOwner.Id, Guid.NewGuid(), "starting", "s", "t", "z", 10); // Starting — not deletable
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
@@ -293,7 +293,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_OfACreateRefusedBeforeProvisioning_DeletesLocally_NoCommand()
     {
-        var vm = Vm.Create(TenantBOwner, 0, Guid.NewGuid(), "orphan", "s", "t", "z", 10);
+        var vm = Vm.Create(TenantBOwner.Id, Guid.NewGuid(), "orphan", "s", "t", "z", 10);
         vm.MarkRequestFailed("never provisioned", null);            // the create gave up, no ExternalId
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);

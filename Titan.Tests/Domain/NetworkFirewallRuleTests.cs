@@ -20,13 +20,6 @@ public class NetworkFirewallRuleTests
         return network;
     }
 
-    private static Tenant TenantWithRuleCap(int maxFirewallRulesPerNetwork)
-    {
-        var tenant = TestTenant.Active("t", "kc", "t@x.io");
-        tenant.UpdateQuota(TenantQuota.Create(10, 1, 10, 3, 3, maxFirewallRulesPerNetwork, 10, 20, 5));
-        return tenant;
-    }
-
     private static FirewallRule Rule(Network network, int port) =>
         network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, port, port, "0.0.0.0/0");
 
@@ -58,25 +51,11 @@ public class NetworkFirewallRuleTests
     }
 
     [Fact]
-    public void AddFirewallRule_AtTheCap_Refuses_AndAddsNothing()
-    {
-        var network = NetworkWithEveryRuleSituation(); // usage 2
-        var tenant = TenantWithRuleCap(2);
-
-        var ex = Assert.Throws<BusinessException>(
-            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
-
-        Assert.Equal("FIREWALL_QUOTA_EXCEEDED", ex.Code);
-        Assert.Equal(5, network.FirewallRules.Count);
-    }
-
-    [Fact]
     public void AddFirewallRule_OneBelowTheCap_AddsARuleWaitingForItsCreate()
     {
         var network = NetworkWithEveryRuleSituation(); // usage 2
-        var tenant = TenantWithRuleCap(3);
 
-        FirewallRule rule = network.AddFirewallRule(tenant, FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        FirewallRule rule = network.AddFirewallRule(FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8")).Rule;
 
         Assert.Contains(rule, network.FirewallRules);
         Assert.Equal(network.Id, rule.NetworkId);
@@ -85,15 +64,13 @@ public class NetworkFirewallRuleTests
         Assert.Equal(3, network.FirewallRuleQuotaUsage);
     }
 
-    // A DIFFERENT code from the cap, and checked first: the network says it cannot take a rule before anyone counts.
     [Fact]
-    public void AddFirewallRule_OnANetworkNotUsable_IsRefusedBeforeTheQuota()
+    public void AddFirewallRule_OnANetworkNotUsable_IsRefused()
     {
         var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1"); // Creating
-        var tenant = TenantWithRuleCap(0);
 
         var ex = Assert.Throws<BusinessException>(
-            () => network.AddFirewallRule(tenant, FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
+            () => network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
 
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", ex.Code);
         Assert.Empty(network.FirewallRules);

@@ -25,7 +25,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
     {
         Tenant tenant = TestTenant.Active($"vms-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vms-race@titan.local");
         string offeringId = await SeedOfferingAsync();
-        Vm vm = Vm.Create(tenant, 0, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
+        Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..20]); // on Incus, running: snapshottable
         vm.MarkObserved(VmState.Running, "10.0.0.5");
         int cap = tenant.Quota.MaxVmSnapshotsPerVm;

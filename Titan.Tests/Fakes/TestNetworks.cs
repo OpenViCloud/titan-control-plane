@@ -11,7 +11,7 @@ public static class TestNetworks
 
     public static Network CreatingWithPublicIpv6(Tenant tenant, string name, string cluster, Ipv4Cidr? cidr = null)
     {
-        Network network = Network.Create(tenant, 0, 0, NetworkName.Parse(name), cluster, cidr, wantsPublicIpv6: true);
+        Network network = Network.Create(tenant.Id, NetworkName.Parse(name), cluster, cidr, wantsPublicIpv6: true);
         network.ReceivePublicIpv6(Subnet);
         return network;
     }

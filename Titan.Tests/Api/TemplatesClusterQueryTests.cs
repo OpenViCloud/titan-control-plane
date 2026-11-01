@@ -25,7 +25,7 @@ public class TemplatesClusterQueryTests(RealHostFactory factory) : IClassFixture
         {
             var db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
             db.Tenants.Add(tenant);
-            db.ApiTokens.Add(ApiToken.Create(tenant.Id, kc, 0, "templates", secret, null, DateTimeOffset.UtcNow));
+            db.ApiTokens.Add(ApiToken.Create(tenant.Id, kc, "templates", secret, null, DateTimeOffset.UtcNow));
             await db.SaveChangesAsync();
         }
 

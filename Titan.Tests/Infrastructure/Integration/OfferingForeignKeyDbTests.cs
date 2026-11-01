@@ -35,7 +35,7 @@ public class OfferingForeignKeyDbTests(PostgresFixture pg)
     public async Task Volume_WithAnOfferingTheCatalogLacks_IsRefused()
     {
         await using var db = pg.NewDbContext();
-        db.Volumes.Add(Volume.Create(TestTenant.WithRoomToSpare(), 0, "orphan-vol", "cluster-a", "no-such-offering", 10));
+        db.Volumes.Add(Volume.Create(TestTenant.WithRoomToSpare().Id, "orphan-vol", "cluster-a", "no-such-offering", 10));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         AssertForeignKey(ex.InnerException, "FK_volumes_volume_offerings_volume_offering_id");
@@ -45,7 +45,7 @@ public class OfferingForeignKeyDbTests(PostgresFixture pg)
     public async Task Vm_WithAnOfferingTheCatalogLacks_IsRefused()
     {
         await using var db = pg.NewDbContext();
-        db.Vms.Add(Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "orphan-vm", "no-such-offering", "tpl", "cluster-a", 20));
+        db.Vms.Add(Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "orphan-vm", "no-such-offering", "tpl", "cluster-a", 20));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         AssertForeignKey(ex.InnerException, "FK_vms_vm_offerings_vm_offering_id");
@@ -58,7 +58,7 @@ public class OfferingForeignKeyDbTests(PostgresFixture pg)
     {
         await using var db = pg.NewDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync();
-        db.Volumes.Add(Volume.Create(TestTenant.WithRoomToSpare(), 0, "uses-standard", "cluster-a", "standard", 10));
+        db.Volumes.Add(Volume.Create(TestTenant.WithRoomToSpare().Id, "uses-standard", "cluster-a", "standard", 10));
         await db.SaveChangesAsync();
 
         var ex = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>

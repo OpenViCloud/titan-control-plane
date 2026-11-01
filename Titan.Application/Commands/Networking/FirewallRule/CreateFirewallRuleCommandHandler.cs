@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
@@ -42,8 +43,10 @@ public class CreateFirewallRuleCommandHandler(
         }
         FirewallCidr cidr = FirewallCidr.Parse(req.Cidr);
 
-        // The network answers whether it can take a rule, checks the cap and adds the rule in one call.
-        FirewallRuleTicket ticket = network.AddFirewallRule(tenant, direction, protocol, ports, cidr);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage);
+
+        // The network answers whether it can take a rule and adds it in one call.
+        FirewallRuleTicket ticket = network.AddFirewallRule(direction, protocol, ports, cidr);
         FirewallRuleEntity rule = ticket.Rule;
         string externalNetworkId = ticket.ExternalNetworkId;
 

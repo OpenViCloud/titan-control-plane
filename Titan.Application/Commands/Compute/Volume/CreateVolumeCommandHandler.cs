@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Options;
 using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Domain.Exceptions;
@@ -34,8 +35,8 @@ public class CreateVolumeCommandHandler(
 
         var activeVolumeCount = await repo.CountActiveByTenantAsync(callerId, ct);
 
-        // Quota refuses inside the factory — see CreateVmCommandHandler.
-        var volume = VolumeAggregate.Create(tenant, activeVolumeCount, req.Name, req.ClusterId, req.VolumeOfferingId, req.SizeGb);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Volume, activeVolumeCount);
+        var volume = VolumeAggregate.Create(tenant.Id, req.Name, req.ClusterId, req.VolumeOfferingId, req.SizeGb);
         clusters.ClusterOf(volume.ClusterId); // titan-ops features/catalog/design.md#cluster-is-a-real-choice
         repo.Add(volume);
         activity.Stage("volume.create_requested", "volume", volume.Id, volume.Name); // atomic with the volume insert

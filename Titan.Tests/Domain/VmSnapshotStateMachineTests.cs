@@ -17,7 +17,7 @@ public class VmSnapshotStateMachineTests
 
     private static Vm VmIn(VmState status)
     {
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (status == VmState.Running) vm.MarkRunning("vm42", "10.0.0.5");
         else if (status == VmState.Stopped) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkStopped(); }
         else if (status == VmState.Error) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkObserved(VmState.Error, null); }
@@ -31,7 +31,7 @@ public class VmSnapshotStateMachineTests
     // A snapshot is the VM's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through the VM.
     private static VmSnapshot SnapshotIn(Seed seed)
     {
-        var s = RunningVm.AddSnapshot(TestTenant.WithRoomToSpare(), "snap-1").Snapshot;
+        var s = RunningVm.AddSnapshot("snap-1").Snapshot;
         switch (seed)
         {
             case Seed.Creating: break; // AddSnapshot() lands here
@@ -75,7 +75,7 @@ public class VmSnapshotStateMachineTests
     [InlineData(VmState.Error)]
     public void Create_FromAVmInError_Throws(VmState from)
     {
-        var ex = Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot(TestTenant.WithRoomToSpare(), "s"));
+        var ex = Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot("s"));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
@@ -83,7 +83,7 @@ public class VmSnapshotStateMachineTests
     public void CreateAndRevert_OfAStoppedVm_AreAccepted()
     {
         Vm stopped = VmIn(VmState.Stopped);
-        var created = stopped.AddSnapshot(TestTenant.WithRoomToSpare(), "s").Snapshot;
+        var created = stopped.AddSnapshot("s").Snapshot;
         Assert.Equal(VmSnapshotTransition.Creating, created.Transition);
 
         var s = stopped.WithSnapshot("ready");

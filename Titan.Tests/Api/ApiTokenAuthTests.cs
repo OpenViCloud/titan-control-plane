@@ -42,7 +42,7 @@ public class ApiTokenAuthTests(RealHostFactory factory) : IClassFixture<RealHost
     {
         string secret = FreshSecret();
         string owner = tenant.Members.Single().KeycloakUserId;
-        ApiToken token = ApiToken.Create(tenant.Id, owner, 0, "t-" + Guid.NewGuid().ToString("N")[..8], secret, days,
+        ApiToken token = ApiToken.Create(tenant.Id, owner, "t-" + Guid.NewGuid().ToString("N")[..8], secret, days,
             createdAt ?? DateTimeOffset.UtcNow);
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();

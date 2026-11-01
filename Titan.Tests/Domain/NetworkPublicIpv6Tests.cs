@@ -13,15 +13,8 @@ public class NetworkPublicIpv6Tests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
 
-    private static Tenant TenantWith(int maxNetworks = 9, int maxIpv6 = 9)
-    {
-        var t = TestTenant.Active("acme", "kc-1", "a@acme.com");
-        t.UpdateQuota(TenantQuota.Create(9, maxNetworks, 9, 9, 9, 9, maxIpv6, 9, 9));
-        return t;
-    }
-
     private static Network WantingPublicIpv6(string cluster = "singapore01") =>
-        Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), cluster, null, wantsPublicIpv6: true);
+        Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), cluster, null, wantsPublicIpv6: true);
 
     private static Network HoldingASubnet()
     {
@@ -54,7 +47,7 @@ public class NetworkPublicIpv6Tests
     [Fact]
     public void Create_WithoutPublicIpv6_HasNone()
     {
-        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
+        var network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
 
         Assert.False(network.HasPublicIpv6);
         Assert.Null(network.PublicIpv6Subnet);
@@ -78,24 +71,12 @@ public class NetworkPublicIpv6Tests
         Assert.Throws<InvalidOperationException>(() => network.ReceivePublicIpv6(Subnet));
     }
 
-    // The cap pair (QuotaInFactoryTests): at the cap the factory refuses, and only when IPv6 is asked for.
-    [Fact]
-    public void Create_AtTheIpv6Cap_Refuses_OnlyWhenIpv6IsAsked()
-    {
-        var t = TenantWith(maxIpv6: 2);
-
-        Assert.Equal("IPV6_QUOTA_EXCEEDED",
-            Assert.Throws<BusinessException>(() => Network.Create(t, 0, 2, NetworkName.Parse("net-1"), "singapore01", null, true)).Code);
-        Assert.NotNull(Network.Create(t, 0, 2, NetworkName.Parse("net-1"), "singapore01", null, false));
-        Assert.NotNull(Network.Create(t, 0, 1, NetworkName.Parse("net-1"), "singapore01", null, true));
-    }
-
     // The uplink of a network with public IPv6 routes only the private ranges.
     [Fact]
     public void Create_WantingPublicIpv6_WithACidrOutsideThePrivateRanges_Refuses()
     {
         var ex = Assert.Throws<BusinessException>(() =>
-            Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "singapore01", Ipv4Cidr.Parse("8.8.8.0/24"), true));
+            Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "singapore01", Ipv4Cidr.Parse("8.8.8.0/24"), true));
 
         Assert.Equal("NETWORK_CIDR_NOT_PRIVATE", ex.Code);
     }
@@ -128,7 +109,7 @@ public class NetworkPublicIpv6Tests
     [Fact]
     public void CreateGivesUp_OfANetworkWithoutASubnet_SaysNothingWasLetGo()
     {
-        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
+        var network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
 
         Assert.False(network.MarkRequestFailed("Network creation failed.", "detail"));
     }

@@ -45,7 +45,7 @@ public class ComputeOwnershipTests
         new(_volumeSnapshotRepo.Object, _volumeRepo.Object, _currentUser.Object);
 
     private static Volume ForeignVolume() =>
-        Volume.Create(OtherTenantOwner, 0, "vol-of-someone-else", "cluster-1", "offering-1", 50);
+        Volume.Create(OtherTenantOwner.Id, "vol-of-someone-else", "cluster-1", "offering-1", 50);
 
     // ── The leak itself ───────────────────────────────────────────────────
     //

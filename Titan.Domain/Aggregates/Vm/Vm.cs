@@ -1,8 +1,6 @@
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Domain.Aggregates.Vm;
 
@@ -107,10 +105,8 @@ public class Vm : AggregateRoot
 
     private Vm() { }
 
-    /// Quota is checked inside the only way to obtain a Vm (titan-ops architecture/code-structure.md#tenant-typed-edge).
     public static Vm Create(
-        TenantAggregate tenant,
-        int activeVmCount,
+        Guid tenantId,
         Guid networkId,
         string name,
         string vmOfferingId,
@@ -119,12 +115,10 @@ public class Vm : AggregateRoot
         int diskSizeGb,
         string? userData = null)
     {
-        tenant.EnsureHasRoom(TenantQuotaKind.Vm, activeVmCount);
-
         return new Vm
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
+            TenantId = tenantId,
             NetworkId = networkId,
             Name = name,
             CurrentState = null,
@@ -363,18 +357,15 @@ public class Vm : AggregateRoot
         EnsureNoStopOrDeleteWaiting();
     }
 
-    // ---- Snapshots: the VM keeps the per-VM cap and the "no delete under a snapshot command" rule, and routes each
+    // ---- Snapshots: the VM counts its snapshots, keeps the "no delete under a snapshot command" rule, and routes each
     // call to the snapshot it names (titan-ops architecture/code-structure.md#child-entity). Logic stays on VmSnapshot;
     // this is the way in.
 
-    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable) and the tenant's cap is
-    /// checked here on what this VM holds (titan-ops architecture/code-structure.md#tenant-typed-edge); the handler locks
-    /// the VM row first so two requests cannot both count below the cap. The create request is the snapshot's own
-    /// PendingIntentId.
-    public VmSnapshotTicket AddSnapshot(TenantAggregate tenant, string name)
+    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable). The create request is the
+    /// snapshot's own PendingIntentId.
+    public VmSnapshotTicket AddSnapshot(string name)
     {
         EnsureSnapshottable();
-        tenant.EnsureHasRoom(TenantQuotaKind.VmSnapshot, SnapshotQuotaUsage);
         VmSnapshot snapshot = VmSnapshot.Create(Id, TenantId, name);
         _snapshots.Add(snapshot);
         return new VmSnapshotTicket(snapshot, RequireExternalId());
