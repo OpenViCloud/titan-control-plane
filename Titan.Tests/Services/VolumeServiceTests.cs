@@ -15,7 +15,8 @@ namespace Titan.Tests.Services;
 
 public class VolumeServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
 
@@ -209,7 +210,7 @@ public class VolumeServiceTests
         // Volume.Attach(vm) takes the VM, so the VM lookup comes first and a missing VM wins with 404.
         // Seeding a real VM isolates the rule this test is named after instead of leaning on error
         // precedence.
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -238,7 +239,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        var vm = MakeVm(VmState.Running, tenantId: Guid.NewGuid());
+        var vm = MakeVm(VmState.Running, owner: TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -383,7 +384,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-3");
         string before = Shape(volume);
-        volume.AddSnapshotUnchecked("live").MarkCreated("cs-vol-3/s1");
+        volume.WithSnapshot("live").MarkCreated("cs-vol-3/s1");
         _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateService().DeleteAsync(volume.Id, default));
@@ -575,7 +576,7 @@ public class VolumeServiceTests
     {
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
-        Vm othersVm = MakeVm(VmState.Running, externalVmId: "vm-shared-name", tenantId: Guid.NewGuid());
+        Vm othersVm = MakeVm(VmState.Running, externalVmId: "vm-shared-name", owner: TestTenant.WithRoomToSpare());
         SetupTenantVms(othersVm);
 
         await CreateService().UpdateStatusAsync(volume.Id,
@@ -757,14 +758,15 @@ public class VolumeServiceTests
     [Fact]
     public async Task UpdateStatus_Deleted_MarksTheVolumesSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
     {
-        var volume = MakeVolume(VolumeSeed.Deleting);
+        var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
-        var lost = volume.AddSnapshotUnchecked("lost");
+        var lost = volume.WithSnapshot("lost");
         lost.MarkCreated("vol/s1");
         lost.MarkNotFound();
-        var leaving = volume.AddSnapshotUnchecked("leaving");
+        var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol/s2");
         leaving.RequestDelete();
+        volume.RequestDelete();
 
         await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Deleted"));
 
@@ -921,12 +923,12 @@ public class VolumeServiceTests
         VolumeSeed status,
         string? clusterId = null,
         string? externalVolumeId = null,
-        Guid? tenantId = null,
+        Titan.Domain.Aggregates.Tenant.Tenant? owner = null,
         Vm? attachTo = null)
     {
-        var vol = Volume.CreateUnchecked(tenantId ?? TenantId, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
+        var vol = Volume.Create(owner ?? TenantIdOwner, 0, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
         var externalId = externalVolumeId ?? "cs-vol-default";
-        Vm target = attachTo ?? MakeVm(VmState.Running, clusterId: clusterId, tenantId: tenantId);
+        Vm target = attachTo ?? MakeVm(VmState.Running, clusterId: clusterId, owner: owner);
         switch (status)
         {
             case VolumeSeed.Creating:
@@ -966,10 +968,9 @@ public class VolumeServiceTests
         VmState status,
         string? clusterId = null,
         string? externalVmId = null,
-        Guid? tenantId = null)
+        Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vm = Vm.CreateUnchecked(
-            tenantId ?? TenantId,
+        var vm = Vm.Create(owner ?? TenantIdOwner, 0,
             Guid.NewGuid(),
             "test-vm",
             "offering-1",

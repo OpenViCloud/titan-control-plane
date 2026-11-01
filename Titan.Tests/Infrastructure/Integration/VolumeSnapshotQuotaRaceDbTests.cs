@@ -25,12 +25,12 @@ public class VolumeSnapshotQuotaRaceDbTests(PostgresFixture pg)
     {
         Tenant tenant = TestTenant.Active($"vs-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vs-race@titan.local");
         string offeringId = await SeedOfferingAsync();
-        Volume volume = Volume.CreateUnchecked(tenant.Id, $"vol-{Guid.NewGuid():N}"[..12], "cluster-1", offeringId, 20);
+        Volume volume = Volume.Create(tenant, 0, $"vol-{Guid.NewGuid():N}"[..12], "cluster-1", offeringId, 20);
         volume.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
         int cap = tenant.Quota.MaxVolumeSnapshotsPerVolume;
         for (int i = 0; i < cap - 1; i++)
         {
-            volume.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"{volume.ExternalId}/s{i}");
+            volume.WithSnapshot($"snap-{i}").MarkCreated($"{volume.ExternalId}/s{i}");
         }
         await using (TitanDbContext seed = pg.NewDbContext())
         {
@@ -61,11 +61,10 @@ public class VolumeSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ASnapshotWhoseVolumeDoesNotExist_IsRefusedByTheDatabase()
     {
-        Volume orphanHolder = Volume.CreateUnchecked(Guid.NewGuid(), $"gone-{Guid.NewGuid():N}"[..12], "cluster-1", "std", 20);
-        VolumeSnapshot orphan = orphanHolder.AddSnapshotUnchecked("orphan");
+        VolumeSnapshot orphan = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), "orphan");
 
         await using TitanDbContext db = pg.NewDbContext();
-        db.VolumeSnapshots.Add(orphan); // the volume itself is never added
+        db.VolumeSnapshots.Add(orphan); // no such volume
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }

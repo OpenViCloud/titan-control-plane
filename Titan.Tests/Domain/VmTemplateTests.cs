@@ -14,7 +14,7 @@ public class VmTemplateTests
 
     private static string Shape(VmTemplate t, string clusterId)
     {
-        VmTemplateCluster? cluster = t.ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId);
         if (cluster == null)
         {
             return "none";
@@ -75,8 +75,8 @@ public class VmTemplateTests
         t.RequestSyncIn(Mock);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.NotNull(t.ClusterOrNull(Mock)!.PendingIntentId);
-        Assert.Null(t.ClusterOrNull(Mock)!.ExternalTemplateId);
+        Assert.NotNull(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
     }
 
     [Fact] // each cluster is its own request: asking in one cluster says nothing about another
@@ -100,7 +100,7 @@ public class VmTemplateTests
         t.RequestSyncIn(Mock);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.Equal("wrong architecture", t.ClusterOrNull(Mock)!.RequestFailureReason);
+        Assert.Equal("wrong architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
     [Fact] // the alias went missing on Incus: sync pulls it again
@@ -157,10 +157,10 @@ public class VmTemplateTests
 
         Assert.True(fulfilled);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Equal("tpl-a", t.ClusterOrNull(Mock)!.ExternalTemplateId);
-        Assert.Null(t.ClusterOrNull(Mock)!.RequestFailureReason);
-        Assert.Null(t.ClusterOrNull(Mock)!.RequestFailureDetail);
-        Assert.Null(t.ClusterOrNull(Mock)!.RequestFailedAt);
+        Assert.Equal("tpl-a", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureDetail);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailedAt);
     }
 
     [Fact] // a repeated report of the same command fulfils nothing the second time
@@ -219,7 +219,7 @@ public class VmTemplateTests
 
         Assert.True(recorded);
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
-        VmTemplateCluster cluster = t.ClusterOrNull(Mock)!;
+        VmTemplateCluster cluster = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!;
         Assert.Equal("image of another architecture", cluster.RequestFailureReason);
         Assert.Equal("raw error", cluster.RequestFailureDetail);
         Assert.NotNull(cluster.RequestFailedAt);
@@ -234,7 +234,7 @@ public class VmTemplateTests
 
         Assert.False(recorded);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.ClusterOrNull(Mock)!.RequestFailureReason);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
     [Fact] // the reconciler found the alias gone from one cluster: the other cluster is untouched
@@ -247,7 +247,7 @@ public class VmTemplateTests
         t.MarkNotFoundIn(Mock);
 
         Assert.Equal("NotFound/Exists/-", Shape(t, Mock));
-        Assert.Equal("tpl-a", t.ClusterOrNull(Mock)!.ExternalTemplateId);
+        Assert.Equal("tpl-a", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
         Assert.Equal("Exists/Exists/-", Shape(t, Singapore));
     }
 
@@ -261,7 +261,7 @@ public class VmTemplateTests
 
         t.MarkNotFoundIn(Mock);
 
-        Assert.Equal("image of another architecture", t.ClusterOrNull(Mock)!.RequestFailureReason);
+        Assert.Equal("image of another architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
     [Fact] // a sync still waiting ends once the reconciler sees the alias missing
@@ -287,7 +287,7 @@ public class VmTemplateTests
         t.MarkObservedIn(Mock);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.ClusterOrNull(Mock)!.RequestFailureReason);
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
     [Fact] // the reconciler sees the alias while a sync waits: that sync is done

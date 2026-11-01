@@ -41,7 +41,7 @@ public class PromotionalCreditDbTests(PostgresFixture pg)
             var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, default);
             wallet!.Credit(500_000L);
             creditRepo.AddTopUp(topUp);
-            walletRepo.AddTransaction(WalletTransaction.ForPromo(wallet.Id, 500_000L, topUp.Id, wallet.AvailableAmount));
+            walletRepo.AddTransaction(WalletTransaction.Create(WalletTransactionType.Promo, wallet.Id, 500_000L, topUp.Id, wallet.AvailableAmount));
             await walletRepo.SaveChangesAsync(default);
         }
 

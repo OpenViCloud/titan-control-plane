@@ -1,3 +1,4 @@
+using Titan.Infrastructure.Validation;
 using FastEndpoints;
 using FluentValidation;
 using Titan.Application.Commands.Networking.Network.Contracts;
@@ -26,7 +27,7 @@ public class CreateNetworkValidator : Validator<CreateNetworkCommand>
         When(x => x.Cidr is not null, () =>
             RuleFor(x => x.Cidr!).Cascade(CascadeMode.Stop)
                 .Matches(CidrRegex).WithMessage(CidrMessage)
-                .Must(c => Ipv4Cidr.TryParse(c, out _)).WithMessage(CidrMessage));
+                .Must(c => DomainValue.OrNull(() => Ipv4Cidr.Parse(c)) != null).WithMessage(CidrMessage));
         // The uplink of a network with public IPv6 routes only these (titan-ops infra/incus/design.md#ipv6-address-plan).
         // A CIDR that does not parse is answered by the rule above alone.
         When(x => x.EnablePublicIpv6 && x.Cidr is not null, () =>
@@ -36,7 +37,8 @@ public class CreateNetworkValidator : Validator<CreateNetworkCommand>
 
     private static bool IsInsideAPrivateRangeOrNotACidr(string cidr)
     {
-        if (!Ipv4Cidr.TryParse(cidr, out Ipv4Cidr? parsed))
+        Ipv4Cidr? parsed = DomainValue.OrNull(() => Ipv4Cidr.Parse(cidr));
+        if (parsed == null)
         {
             return true;
         }

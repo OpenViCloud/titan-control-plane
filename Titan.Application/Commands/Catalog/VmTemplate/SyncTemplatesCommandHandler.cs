@@ -77,7 +77,7 @@ public class SyncTemplatesCommandHandler(
 
     private static bool NeedsASyncRequest(VmTemplateAggregate template, string clusterId)
     {
-        VmTemplateCluster? row = template.ClusterOrNull(clusterId);
+        VmTemplateCluster? row = template.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId);
         if (row == null)
         {
             return true;

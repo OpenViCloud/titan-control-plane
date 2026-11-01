@@ -27,10 +27,11 @@ public class SshKeyDbTests(PostgresFixture pg)
     [Fact]
     public async Task AKey_RoundTrips_AndIsListedForItsTenantOnly()
     {
-        var tenant = Guid.NewGuid();
-        SshKey key = SshKey.CreateUnchecked(tenant, "laptop", SshPublicKeyTests.Ed25519);
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        SshKey key = SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519);
         await SaveAsync(key);
-        await SaveAsync(SshKey.CreateUnchecked(Guid.NewGuid(), "laptop", SshPublicKeyTests.Ed25519));
+        await SaveAsync(SshKey.Create(TestTenant.WithRoomToSpare(), 0, "laptop", SshPublicKeyTests.Ed25519));
 
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new SshKeyRepository(db);
@@ -44,22 +45,24 @@ public class SshKeyDbTests(PostgresFixture pg)
     [Fact]
     public async Task TheSameKeyTwiceInOneTenant_IsRefusedByTheIndex()
     {
-        var tenant = Guid.NewGuid();
-        await SaveAsync(SshKey.CreateUnchecked(tenant, "laptop", SshPublicKeyTests.Ed25519));
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        await SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(
-            () => SaveAsync(SshKey.CreateUnchecked(tenant, "other-name", SshPublicKeyTests.Ed25519)));
+            () => SaveAsync(SshKey.Create(tenantOwner, 0, "other-name", SshPublicKeyTests.Ed25519)));
         AssertUniqueViolation(ex);
     }
 
     [Fact]
     public async Task TheSameNameTwiceInOneTenant_IsRefusedByTheIndex()
     {
-        var tenant = Guid.NewGuid();
-        await SaveAsync(SshKey.CreateUnchecked(tenant, "laptop", SshPublicKeyTests.Ed25519));
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        await SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Ed25519));
 
         var ex = await Assert.ThrowsAsync<DbUpdateException>(
-            () => SaveAsync(SshKey.CreateUnchecked(tenant, "laptop", SshPublicKeyTests.Rsa2048)));
+            () => SaveAsync(SshKey.Create(tenantOwner, 0, "laptop", SshPublicKeyTests.Rsa2048)));
         AssertUniqueViolation(ex);
     }
 }

@@ -28,7 +28,8 @@ namespace Titan.Tests.Infrastructure;
 public class VmEndpointBindingTests
 {
     private static readonly Guid VmId = Guid.Parse("11111111-2222-3333-4444-555555555555");
-    private static readonly Guid TenantId = Guid.Parse("99999999-8888-7777-6666-555555555555");
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
 
     // Handlers are concrete classes with no interface (titan-ops architecture/code-structure.md#no-mediatr), so the recording happens one
     // layer down, at the repository. That is a better place for it anyway: it proves the endpoint
@@ -50,12 +51,8 @@ public class VmEndpointBindingTests
     // legal state to hand an external id out of.
     private static VmAggregate SampleVm()
     {
-        // CreateUnchecked, because the VM has to belong to THIS TenantId — the one _currentUser
-        // reports. Vm.Create derives the owner from the tenant it is handed, which would be a
-        // different id each call and would fail the ownership check for a reason this test is not
-        // about. Same choice VmServiceTests makes, for the same reason.
-        var vm = VmAggregate.CreateUnchecked(
-            TenantId, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "cluster-1", 20);
+        // The VM has to belong to THIS TenantId, the one _currentUser reports.
+        var vm = VmAggregate.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "cluster-1", 20);
         vm.MarkRunning("one-42", "10.0.0.5", null);
         return vm;
     }

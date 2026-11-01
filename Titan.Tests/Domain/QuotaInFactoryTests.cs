@@ -32,39 +32,39 @@ public class QuotaInFactoryTests
     }
 
     // A running VM already holding `snapshots` snapshots that count toward the per-VM cap (its child entities).
-    private static Vm RunningVmWithSnapshots(Guid tenantId, int snapshots)
+    private static Vm RunningVmWithSnapshots(Tenant owner, int snapshots)
     {
-        var vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vm = Vm.Create(owner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         for (int i = 0; i < snapshots; i++)
         {
-            vm.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"42/s{i}");
+            vm.WithSnapshot($"snap-{i}").MarkCreated($"42/s{i}");
         }
         return vm;
     }
 
-    private static Volume AllocatedVolume(Guid tenantId)
+    private static Volume AllocatedVolume(Tenant owner)
     {
-        var v = Volume.CreateUnchecked(tenantId, "vol-1", "cluster-a", "std", 20);
+        var v = Volume.Create(owner, 0, "vol-1", "cluster-a", "std", 20);
         v.MarkCreated("11");
         return v;
     }
 
     private static VolumeSnapshot BackedUpSnapshot(Tenant t)
     {
-        var s = AllocatedVolume(t.Id).AddSnapshot(t, "snap-1");
+        var s = AllocatedVolume(t).AddSnapshot(t, "snap-1").Snapshot;
         s.MarkCreated("5");
         return s;
     }
 
     // A volume Incus has created holding `counting` snapshots that count toward the cap: the volume counts its own
     // snapshots (titan-ops architecture/code-structure.md#child-entity).
-    private static Volume AllocatedVolumeWithSnapshots(Guid tenantId, int counting)
+    private static Volume AllocatedVolumeWithSnapshots(Tenant owner, int counting)
     {
-        var v = AllocatedVolume(tenantId);
+        var v = AllocatedVolume(owner);
         for (int i = 0; i < counting; i++)
         {
-            v.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"11/s{i}");
+            v.WithSnapshot($"snap-{i}").MarkCreated($"11/s{i}");
         }
         return v;
     }
@@ -116,7 +116,7 @@ public class QuotaInFactoryTests
         var t = TenantWith(maxVolumes: 4);
         var snap = BackedUpSnapshot(t);
         Assert.Equal("VOLUME_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => Volume.CreateFromSnapshot(snap, t, 4, "vol-2", "cluster-a", "std", 20)).Code);
+            () => Volume.Create(t, 4, "vol-2", "cluster-a", "std", 20, snap)).Code);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxVmSnaps: 3);
         Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => RunningVmWithSnapshots(t.Id, 3).AddSnapshot(t, "snap-1")).Code);
+            () => RunningVmWithSnapshots(t, 3).AddSnapshot(t, "snap-1")).Code);
     }
 
     [Fact]
@@ -132,7 +132,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxVolSnaps: 2);
         Assert.Equal("VOLUME_SNAPSHOT_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => AllocatedVolumeWithSnapshots(t.Id, 2).AddSnapshot(t, "snap-1")).Code);
+            () => AllocatedVolumeWithSnapshots(t, 2).AddSnapshot(t, "snap-1")).Code);
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class QuotaInFactoryTests
     {
         var t = TenantWith(maxFwRules: 5);
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(
-            () => UsableNetworkWithRules(t.Id, 5).AddFirewallRule(t, FirewallDirection.Ingress,
+            () => UsableNetworkWithRules(t, 5).AddFirewallRule(t, FirewallDirection.Ingress,
                 FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"))).Code);
     }
 
@@ -164,10 +164,10 @@ public class QuotaInFactoryTests
         Assert.NotNull(Network.Create(t, 2, 0, NetworkName.Parse("net-2"), "cluster-a", null, true));
         Assert.NotNull(Network.Create(t, 2, 0, NetworkName.Parse("net-1"), "cluster-a", null, false));
         Assert.NotNull(Volume.Create(t, 3, "vol-1", "cluster-a", "std", 20));
-        Assert.NotNull(Volume.CreateFromSnapshot(BackedUpSnapshot(t), t, 3, "vol-2", "cluster-a", "std", 20));
-        Assert.NotNull(RunningVmWithSnapshots(t.Id, 2).AddSnapshot(t, "snap-1"));
-        Assert.NotNull(AllocatedVolumeWithSnapshots(t.Id, 1).AddSnapshot(t, "snap-1"));
-        Assert.NotNull(UsableNetworkWithRules(t.Id, 4).AddFirewallRule(t, FirewallDirection.Ingress,
+        Assert.NotNull(Volume.Create(t, 3, "vol-2", "cluster-a", "std", 20, BackedUpSnapshot(t)));
+        Assert.NotNull(RunningVmWithSnapshots(t, 2).AddSnapshot(t, "snap-1"));
+        Assert.NotNull(AllocatedVolumeWithSnapshots(t, 1).AddSnapshot(t, "snap-1"));
+        Assert.NotNull(UsableNetworkWithRules(t, 4).AddFirewallRule(t, FirewallDirection.Ingress,
             FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
         Assert.NotNull(SshKey.Create(t, 3, "laptop", SshPublicKeyTests.Ed25519));
     }
@@ -192,13 +192,13 @@ public class QuotaInFactoryTests
 
     // A network Incus has created, holding `counting` rules that count toward the cap: the network counts its own
     // rules (titan-ops architecture/code-structure.md#child-entity), so the test shapes the network, not a number.
-    private static Network UsableNetworkWithRules(Guid tenantId, int counting)
+    private static Network UsableNetworkWithRules(Tenant owner, int counting)
     {
-        var network = Network.CreateUnchecked(tenantId, "net", "cluster-a");
+        var network = TestAggregates.Network(owner, "net", "cluster-a");
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
         for (int i = 0; i < counting; i++)
         {
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
                 .MarkActive($"acl/rule-{i}");
         }
         return network;

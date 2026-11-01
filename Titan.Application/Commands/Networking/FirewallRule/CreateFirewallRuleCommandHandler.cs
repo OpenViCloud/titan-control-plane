@@ -42,10 +42,10 @@ public class CreateFirewallRuleCommandHandler(
         }
         FirewallCidr cidr = FirewallCidr.Parse(req.Cidr);
 
-        // The network answers whether it can take a rule, checks the cap and adds the rule in one call; the provider
-        // id is read after, from a network that just said it is usable.
-        FirewallRuleEntity rule = network.AddFirewallRule(tenant, direction, protocol, ports, cidr);
-        string externalNetworkId = network.RequireExternalId();
+        // The network answers whether it can take a rule, checks the cap and adds the rule in one call.
+        FirewallRuleTicket ticket = network.AddFirewallRule(tenant, direction, protocol, ports, cidr);
+        FirewallRuleEntity rule = ticket.Rule;
+        string externalNetworkId = ticket.ExternalNetworkId;
 
         activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with the save
         await commands.EnqueueFirewallRuleCreateAsync(

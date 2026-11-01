@@ -32,20 +32,20 @@ public class WalletTests
         var walletId = Guid.NewGuid();
 
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            WalletTransaction.ForTopUp(walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
+            WalletTransaction.Create(WalletTransactionType.TopUp, walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            WalletTransaction.ForPromo(walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
+            WalletTransaction.Create(WalletTransactionType.Promo, walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            WalletTransaction.ForInvoicePayment(walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
+            WalletTransaction.Create(WalletTransactionType.InvoicePayment, walletId, bad, Guid.NewGuid(), balanceAfter: 0L));
     }
 
     [Fact]
-    public void ForTopUp_IsMoneyIn()
+    public void Create_TopUp_IsMoneyIn()
     {
         var walletId = Guid.NewGuid();
         var topUpId = Guid.NewGuid();
 
-        var txn = WalletTransaction.ForTopUp(walletId, 500_000L, topUpId, balanceAfter: 500_000L);
+        var txn = WalletTransaction.Create(WalletTransactionType.TopUp, walletId, 500_000L, topUpId, balanceAfter: 500_000L);
 
         Assert.Equal(walletId, txn.WalletId);
         Assert.Equal(500_000L, txn.Amount);           // positive — money in
@@ -55,13 +55,13 @@ public class WalletTests
     }
 
     [Fact]
-    public void ForPromo_IsMoneyIn_AndDistinguishableFromTopUp()
+    public void Create_Promo_IsMoneyIn_AndDistinguishableFromTopUp()
     {
         // The Type split exists for accounting: money the customer paid (deferred revenue) must stay separable
         // from credit Titan gave away. Spending never reads it (titan-ops architecture/money-and-wallet.md#credit-is-money).
         var requestId = Guid.NewGuid();
 
-        var txn = WalletTransaction.ForPromo(Guid.NewGuid(), 100_000L, requestId, balanceAfter: 100_000L);
+        var txn = WalletTransaction.Create(WalletTransactionType.Promo, Guid.NewGuid(), 100_000L, requestId, balanceAfter: 100_000L);
 
         Assert.Equal(100_000L, txn.Amount);
         Assert.Equal(WalletTransactionType.Promo, txn.Type);
@@ -69,13 +69,13 @@ public class WalletTests
     }
 
     [Fact]
-    public void ForInvoicePayment_IsMoneyOut_SignAppliedByTheFactory()
+    public void Create_InvoicePayment_IsMoneyOut_SignAppliedByTheFactory()
     {
         // The caller passes what the invoice cost — a POSITIVE number — and gets back a NEGATIVE
         // movement. No call site can spell a spend as income by forgetting a minus sign.
         var invoiceId = Guid.NewGuid();
 
-        var txn = WalletTransaction.ForInvoicePayment(Guid.NewGuid(), 30_000L, invoiceId, balanceAfter: 70_000L);
+        var txn = WalletTransaction.Create(WalletTransactionType.InvoicePayment, Guid.NewGuid(), 30_000L, invoiceId, balanceAfter: 70_000L);
 
         Assert.Equal(-30_000L, txn.Amount);
         Assert.Equal(WalletTransactionType.InvoicePayment, txn.Type);
@@ -91,9 +91,9 @@ public class WalletTests
         var walletId = Guid.NewGuid();
         var movements = new[]
         {
-            WalletTransaction.ForTopUp(walletId, 500_000L, Guid.NewGuid(), 500_000L),
-            WalletTransaction.ForPromo(walletId, 10_000L, Guid.NewGuid(), 510_000L),
-            WalletTransaction.ForInvoicePayment(walletId, 158L, Guid.NewGuid(), 509_842L),
+            WalletTransaction.Create(WalletTransactionType.TopUp, walletId, 500_000L, Guid.NewGuid(), 500_000L),
+            WalletTransaction.Create(WalletTransactionType.Promo, walletId, 10_000L, Guid.NewGuid(), 510_000L),
+            WalletTransaction.Create(WalletTransactionType.InvoicePayment, walletId, 158L, Guid.NewGuid(), 509_842L),
         };
 
         Assert.Equal(509_842L, movements.Sum(m => m.Amount));

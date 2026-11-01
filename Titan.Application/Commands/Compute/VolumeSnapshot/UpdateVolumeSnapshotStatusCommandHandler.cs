@@ -2,6 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
@@ -46,7 +47,7 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
         {
             throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         }
-        VolumeSnapshotEntity snapshot = volume.RequireSnapshot(command.SnapshotId);
+        VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
         string? outcome = null;
         switch (req.Report)

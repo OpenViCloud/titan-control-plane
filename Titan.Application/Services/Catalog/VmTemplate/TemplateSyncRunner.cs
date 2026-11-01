@@ -54,7 +54,7 @@ public class TemplateSyncRunner(
                 {
                     total++;
                     // A cluster with no row yet has not been asked: it counts as pending, like a sync still waiting.
-                    VmTemplateCluster? row = t.ClusterOrNull(cluster.Id);
+                    VmTemplateCluster? row = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == cluster.Id);
                     if (row == null)
                     {
                         continue;

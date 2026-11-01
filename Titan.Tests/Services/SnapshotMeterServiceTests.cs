@@ -16,7 +16,8 @@ namespace Titan.Tests.Services;
 // per-snapshot rate: Titan tracks no snapshot size, so there is nothing to bill per-GB.
 public class SnapshotMeterServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     private static readonly DateTimeOffset Now = new(2026, 8, 16, 9, 10, 0, TimeSpan.Zero);
     private const decimal Rate = 6000m;   // VND/h — whole-đồng so rounded Cost is exact (titan-ops architecture/money-and-wallet.md#money-is-long-vnd)
 
@@ -45,18 +46,18 @@ public class SnapshotMeterServiceTests
     // VM that was never running, in production or in a test.
     private static VmSnapshot ReadyVmSnapshot(string name = "vm-snap")
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
-        var snap = vm.AddSnapshotUnchecked(name);
+        var snap = vm.WithSnapshot(name);
         snap.MarkCreated("ext-vm-snap");
         return snap;
     }
 
     private static VolumeSnapshot BackedUpVolumeSnapshot(string name = "vol-snap")
     {
-        var vol = Volume.CreateUnchecked(TenantId, "vol-1", "cluster-1", "offering-1", 50);
+        var vol = Volume.Create(TenantIdOwner, 0, "vol-1", "cluster-1", "offering-1", 50);
         vol.MarkCreated("ext-vol");
-        var snap = VolumeSnapshot.CreateUnchecked(vol.Id, TenantId, name);
+        var snap = VolumeSnapshot.Create(vol.Id, TenantId, name);
         snap.MarkCreated("ext-vol-snap");
         return snap;
     }

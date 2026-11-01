@@ -12,20 +12,20 @@ public class TenantProjectNameTests
         var t = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
 
         string expected = "t-" + t.Id.ToString("N");
-        Assert.Equal(expected, t.ProjectName);
+        Assert.Equal(expected, Tenant.ProjectNameFor(t.Id));
     }
 
     [Fact] // the oracle is the id alone: name, email and status do not take part
     public void ProjectName_DoesNotDependOnAnythingButTheId()
     {
         var t = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
-        string before = t.ProjectName;
+        string before = Tenant.ProjectNameFor(t.Id);
 
         t.Approve();
         t.Suspend();
 
-        Assert.Equal(before, t.ProjectName);
-        Assert.Matches("^t-[0-9a-f]{32}$", t.ProjectName);
+        Assert.Equal(before, Tenant.ProjectNameFor(t.Id));
+        Assert.Matches("^t-[0-9a-f]{32}$", Tenant.ProjectNameFor(t.Id));
     }
 
     [Fact]
@@ -34,6 +34,6 @@ public class TenantProjectNameTests
         var a = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
         var b = Tenant.CreatePending("acme", "owner-2", "admin@acme.com");
 
-        Assert.NotEqual(a.ProjectName, b.ProjectName);
+        Assert.NotEqual(Tenant.ProjectNameFor(a.Id), Tenant.ProjectNameFor(b.Id));
     }
 }

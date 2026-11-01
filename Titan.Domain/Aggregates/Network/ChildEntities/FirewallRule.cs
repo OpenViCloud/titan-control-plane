@@ -80,9 +80,9 @@ public class FirewallRule : ChildEntity
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Called by Network.AddFirewallRule after the network checked itself and the tenant's cap. Also the test
-    /// seam: `internal`, reachable only from Titan.Tests (titan-ops architecture/code-structure.md#tenant-typed-edge).
-    internal static FirewallRule CreateUnchecked(
+    /// Called by Network.AddFirewallRule after the network checked itself and the tenant's cap
+    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    internal static FirewallRule Create(
         Guid networkId, Guid tenantId,
         FirewallDirection direction, FirewallProtocol protocol,
         int? startPort, int? endPort, string cidr)

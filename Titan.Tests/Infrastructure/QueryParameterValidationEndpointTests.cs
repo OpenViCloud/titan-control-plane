@@ -17,7 +17,8 @@ namespace Titan.Tests.Infrastructure;
 // not a 200 with an empty body that reads like "no usage" or "no top-ups".
 public class QueryParameterValidationEndpointTests
 {
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid Tenant = TenantOwner.Id;
 
     private static ICurrentUser Caller()
     {
@@ -57,7 +58,7 @@ public class QueryParameterValidationEndpointTests
     [Fact]
     public async Task VmCost_MonthOutsideOneToTwelve_Is400()
     {
-        Vm vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        Vm vm = Vm.Create(TenantOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         var vms = new Mock<IVmRepository>();
         vms.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
         GetVmCostEndpoint ep = Factory.Create<GetVmCostEndpoint>(

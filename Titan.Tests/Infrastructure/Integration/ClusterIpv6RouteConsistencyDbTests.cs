@@ -120,7 +120,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
     {
         string cluster = $"cluster-{Guid.NewGuid():N}";
         Tenant tenant = TestTenant.Active($"route-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "route@titan.local", maxNetworks: 10);
-        var legacy = Network.CreateUnchecked(tenant.Id, "legacy-one", cluster);
+        var legacy = TestAggregates.Network(tenant, "legacy-one", cluster);
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             seed.Tenants.Add(tenant);

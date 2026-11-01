@@ -21,7 +21,7 @@ public class DeleteVolumeSnapshotCommandHandler(
         var volume = await ComputeOwnership.RequireVolumeAsync(volumeRepo, callerId, volumeId, ct);
 
         // A snapshot of another volume answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
-        VolumeSnapshotEntity snapshot = volume.RequireSnapshot(command.SnapshotId);
+        VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).

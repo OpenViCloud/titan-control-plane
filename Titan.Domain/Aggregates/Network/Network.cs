@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -84,10 +85,10 @@ public class Network : AggregateRoot
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
-        tenant.EnsureCanCreateNetwork(activeNetworkCount);
+        tenant.EnsureHasRoom(TenantQuotaKind.Network, activeNetworkCount);
         if (wantsPublicIpv6)
         {
-            tenant.EnsureCanEnablePublicIpv6(activePublicIpv6Count);
+            tenant.EnsureHasRoom(TenantQuotaKind.PublicIpv6, activePublicIpv6Count);
             bool cidrOutsideThePrivateRanges = requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
             if (cidrOutsideThePrivateRanges)
             {
@@ -95,9 +96,21 @@ public class Network : AggregateRoot
                     "The CIDR of a network with public IPv6 must be inside 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16.");
             }
         }
-        var network = CreateUnchecked(tenant.Id, name.Value, clusterId, defaultIngressPolicy, defaultEgressPolicy);
-        network.RequestedCidr = requestedCidr;
-        return network;
+        return new Network
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant.Id,
+            Name = name,
+            RequestedCidr = requestedCidr,
+            ClusterId = clusterId,
+            CurrentState = null,
+            CurrentExistence = CurrentExistence.NotCreated,
+            DesiredExistence = DesiredExistence.Exists,
+            PendingIntentId = Guid.NewGuid(),
+            DefaultIngressPolicy = defaultIngressPolicy,
+            DefaultEgressPolicy = defaultEgressPolicy,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
     }
 
     /// The /64 of the route given to this network. The route keeps who holds it by the network's id, so the /64 comes
@@ -113,35 +126,6 @@ public class Network : AggregateRoot
             throw new InvalidOperationException($"Network {Id} is not waiting for its create, so it takes no new /64.");
         }
         PublicIpv6Subnet = subnet;
-    }
-
-    /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
-    internal static Network CreateUnchecked(
-        Guid tenantId, string name, string clusterId,
-        FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
-        FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow,
-        string? requestedCidr = null)
-    {
-        Ipv4Cidr? requested = null;
-        if (requestedCidr != null)
-        {
-            requested = Ipv4Cidr.Parse(requestedCidr);
-        }
-        return new Network
-        {
-            Id = Guid.NewGuid(),
-            TenantId = tenantId,
-            Name = NetworkName.Parse(name),
-            RequestedCidr = requested,
-            ClusterId = clusterId,
-            CurrentState = null,
-            CurrentExistence = CurrentExistence.NotCreated,
-            DesiredExistence = DesiredExistence.Exists,
-            PendingIntentId = Guid.NewGuid(),
-            DefaultIngressPolicy = defaultIngressPolicy,
-            DefaultEgressPolicy = defaultEgressPolicy,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
     }
 
     /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs). Its name is already free
@@ -328,27 +312,21 @@ public class Network : AggregateRoot
         return RequireExternalId();
     }
 
-    public string BeginFirewallRule()
-    {
-        if (!IsUsable)
-            throw new BusinessException("FIREWALL_NETWORK_NOT_READY", "Firewall rules can only be added to a network Incus has created.");
-        return RequireExternalId();
-    }
-
     // ---- Firewall rules: the network keeps the per-network cap and routes each call to the rule it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
 
-    /// Intent: a new rule in this network's ACL. The network must be usable (BeginFirewallRule) and the tenant's cap
-    /// is checked here on what this network holds (titan-ops architecture/code-structure.md#tenant-typed-edge), so a
-    /// handler cannot add a rule past the cap; the handler locks the network row first so two requests cannot both
-    /// count below it. The create request is the rule's own PendingIntentId.
-    public FirewallRule AddFirewallRule(
+    /// Intent: a new rule in this network's ACL. The network must be usable and the tenant's cap is checked here on
+    /// what this network holds (titan-ops architecture/code-structure.md#tenant-typed-edge), so a handler cannot add a
+    /// rule past the cap; the handler locks the network row first so two requests cannot both count below it. The
+    /// create request is the rule's own PendingIntentId.
+    public FirewallRuleTicket AddFirewallRule(
         TenantAggregate tenant,
         FirewallDirection direction, FirewallProtocol protocol,
         PortRange? ports, FirewallCidr cidr)
     {
-        BeginFirewallRule();
-        tenant.EnsureCanCreateFirewallRule(FirewallRuleQuotaUsage);
+        if (!IsUsable)
+            throw new BusinessException("FIREWALL_NETWORK_NOT_READY", "Firewall rules can only be added to a network Incus has created.");
+        tenant.EnsureHasRoom(TenantQuotaKind.FirewallRule, FirewallRuleQuotaUsage);
         int? startPort = null;
         int? endPort = null;
         if (ports != null)
@@ -356,21 +334,14 @@ public class Network : AggregateRoot
             startPort = ports.Start;
             endPort = ports.End;
         }
-        return AddFirewallRuleUnchecked(direction, protocol, startPort, endPort, cidr.Value);
-    }
-
-    /// Test seam — internal, reachable only from Titan.Tests: a rule in this network with no check on the network
-    /// or the cap, so a test can put a network into any shape. See Vm.CreateUnchecked.
-    internal FirewallRule AddFirewallRuleUnchecked(
-        FirewallDirection direction, FirewallProtocol protocol,
-        int? startPort, int? endPort, string cidr)
-    {
-        FirewallRule rule = FirewallRule.CreateUnchecked(Id, TenantId, direction, protocol, startPort, endPort, cidr);
+        FirewallRule rule = FirewallRule.Create(Id, TenantId, direction, protocol, startPort, endPort, cidr.Value);
         _firewallRules.Add(rule);
-        return rule;
+        return new FirewallRuleTicket(rule, RequireExternalId());
     }
 
-    public FirewallRule? FirewallRuleOrNull(Guid ruleId)
+    /// A rule this network does not have answers like a missing one, the same 404 the handler gives a rule of
+    /// another network (titan-ops features/network/design.md#firewall-rule-soft-delete).
+    private FirewallRule RequireFirewallRule(Guid ruleId)
     {
         foreach (FirewallRule rule in _firewallRules)
         {
@@ -379,13 +350,8 @@ public class Network : AggregateRoot
                 return rule;
             }
         }
-        return null;
+        throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
     }
-
-    /// A rule this network does not have answers like a missing one, the same 404 the handler gives a rule of
-    /// another network (titan-ops features/network/design.md#firewall-rule-soft-delete).
-    public FirewallRule RequireFirewallRule(Guid ruleId) =>
-        FirewallRuleOrNull(ruleId) ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
 
     /// Intent on one rule: its delete goes through Incus; returns the rule's provider id for the command.
     public string RequestFirewallRuleDelete(Guid ruleId) => RequireFirewallRule(ruleId).RequestDelete();
@@ -432,9 +398,8 @@ public class Network : AggregateRoot
         && DesiredExistence == DesiredExistence.Exists
         && PendingIntentId == null;
 
-    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it. Public for the
-    /// reconciler's read model.
-    public string RequireExternalId() =>
+    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it.
+    private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
 
     // Titan-side metadata only, no provider call. A network being or already deleted has no name worth

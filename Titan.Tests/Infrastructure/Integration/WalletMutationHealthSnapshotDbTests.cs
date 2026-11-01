@@ -77,11 +77,11 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
 
         // Seeded newest-first on purpose: a query that returned whatever the database handed back
         // first would answer 30s here, and this ordering is what catches it.
-        await SeedAsync(WalletMutation.ForCredit(walletId, 1_000L, "TopUp", Guid.NewGuid()),
+        await SeedAsync(WalletMutation.Create(WalletMutationType.Credit, walletId, 1_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromSeconds(30));
-        await SeedAsync(WalletMutation.ForCredit(walletId, 1_000L, "TopUp", Guid.NewGuid()),
+        await SeedAsync(WalletMutation.Create(WalletMutationType.Credit, walletId, 1_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromSeconds(300));
-        await SeedAsync(WalletMutation.ForCredit(walletId, 1_000L, "TopUp", Guid.NewGuid()),
+        await SeedAsync(WalletMutation.Create(WalletMutationType.Credit, walletId, 1_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromSeconds(90));
 
         var snapshot = await SnapshotAsync();
@@ -101,12 +101,12 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
 
         // A business failure: the consumer's re-check found the wallet short (titan-ops architecture/money-and-wallet.md#single-writer-outbox). MarkFailed
         // is called directly, so Attempts stays 0. Nobody should be paged for this.
-        var shortfall = WalletMutation.ForDebit(walletId, 500L, "Invoice", Guid.NewGuid());
+        var shortfall = WalletMutation.Create(WalletMutationType.Debit, walletId, 500L, "Invoice", Guid.NewGuid());
         shortfall.MarkFailed("insufficient funds at apply time");
         await SeedAsync(shortfall);
 
         // Poison: the sweeper burned through every retry before giving up.
-        var poison = WalletMutation.ForDebit(walletId, 700L, "Invoice", Guid.NewGuid());
+        var poison = WalletMutation.Create(WalletMutationType.Debit, walletId, 700L, "Invoice", Guid.NewGuid());
         for (var i = 0; i < MaxAttempts; i++) poison.RecordAttempt($"attempt {i} failed");
         poison.MarkFailed("given up");
         await SeedAsync(poison);
@@ -130,7 +130,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
         var walletId = Guid.NewGuid();
         var reopenedInvoice = Guid.NewGuid();
 
-        var givenUp = WalletMutation.ForDebit(walletId, 700L, "Invoice", reopenedInvoice);
+        var givenUp = WalletMutation.Create(WalletMutationType.Debit, walletId, 700L, "Invoice", reopenedInvoice);
         for (var i = 0; i < MaxAttempts; i++) givenUp.RecordAttempt($"attempt {i} failed");
         givenUp.MarkFailed("given up");
         await SeedAsync(givenUp, age: TimeSpan.FromDays(2));
@@ -142,7 +142,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
             await db.SaveChangesAsync();
         }
 
-        var stillStuck = WalletMutation.ForDebit(walletId, 900L, "Invoice", Guid.NewGuid());
+        var stillStuck = WalletMutation.Create(WalletMutationType.Debit, walletId, 900L, "Invoice", Guid.NewGuid());
         for (var i = 0; i < MaxAttempts; i++) stillStuck.RecordAttempt($"attempt {i} failed");
         stillStuck.MarkFailed("given up");
         await SeedAsync(stillStuck);
@@ -160,7 +160,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
     {
         await ClearAsync();
 
-        var applied = WalletMutation.ForCredit(Guid.NewGuid(), 1_000L, "TopUp", Guid.NewGuid());
+        var applied = WalletMutation.Create(WalletMutationType.Credit, Guid.NewGuid(), 1_000L, "TopUp", Guid.NewGuid());
         applied.MarkApplied();
         await SeedAsync(applied, age: TimeSpan.FromHours(2));
 

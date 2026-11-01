@@ -1,3 +1,4 @@
+using ApiTokenSecret = Titan.Domain.Aggregates.ApiToken.ApiTokenSecret;
 using Microsoft.AspNetCore.Http;
 using FastEndpoints;
 using FluentValidation;
@@ -16,7 +17,7 @@ public class CreateApiTokenValidator : Validator<CreateApiTokenCommand>
             .Must(HasAcceptedLength)
             .WithMessage($"Name must be 1 to {ApiTokenAggregate.MaxNameLength} characters.");
         RuleFor(x => x.Token)
-            .Must(token => token != null && ApiTokenAggregate.IsWellFormed(token))
+            .Must(token => token != null && ApiTokenSecret.IsWellFormed(token))
             .WithMessage("Token must be ovc_ followed by 43 base64url characters.");
         RuleFor(x => x.ExpiresInDays)
             .Must(days => days == null || ApiTokenAggregate.Lifetimes.Contains(days.Value))

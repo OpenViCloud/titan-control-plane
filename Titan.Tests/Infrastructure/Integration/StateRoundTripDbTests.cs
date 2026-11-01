@@ -16,12 +16,12 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 {
     // A rule is the network's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through it.
     private static FirewallRule NewRule(Network network) =>
-        network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
     [Fact]
     public async Task WaitingStop_SurvivesAReload_AndResendsTheSameId()
     {
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         VmIntentTicket ticket = vm.RequestStop();
 
@@ -48,8 +48,9 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     [Fact]
     public async Task NetworkName_IsHeldDuringADelete_AndFreedOnceDeleted()
     {
-        var tenant = Guid.NewGuid();
-        var leaving = Network.CreateUnchecked(tenant, "shared-name", "cluster-a");
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        var leaving = TestAggregates.Network(tenantOwner, "shared-name", "cluster-a");
         leaving.MarkActive("20", "10.0.0.0/24", "10.0.0.1");
         leaving.RequestDelete();
 
@@ -61,7 +62,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
-            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "cluster-a"));
+            db.Networks.Add(TestAggregates.Network(tenantOwner, "shared-name", "cluster-a"));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(ex.InnerException).SqlState);
         }
@@ -72,7 +73,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
             stored.MarkDeleted();
             await db.SaveChangesAsync();
 
-            db.Networks.Add(Network.CreateUnchecked(tenant, "shared-name", "cluster-a"));
+            db.Networks.Add(TestAggregates.Network(tenantOwner, "shared-name", "cluster-a"));
             await db.SaveChangesAsync(); // no violation: the filter drops the deleted row
         }
     }
@@ -80,7 +81,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     [Fact]
     public async Task FirewallRuleState_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
     {
-        Network network = Network.CreateUnchecked(Guid.NewGuid(), $"rt-net-{Guid.NewGuid():N}"[..12], "cluster-a");
+        Network network = TestAggregates.Network(TestTenant.WithRoomToSpare(), $"rt-net-{Guid.NewGuid():N}"[..12], "cluster-a");
         network.MarkActive("net-1", "10.0.0.0/24", "10.0.0.1");
         Guid networkId = network.Id;
         FirewallRule creating = NewRule(network);

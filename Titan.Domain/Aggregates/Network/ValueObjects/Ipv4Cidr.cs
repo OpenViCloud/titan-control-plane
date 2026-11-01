@@ -33,16 +33,17 @@ public sealed record Ipv4Cidr : ValueObject
 
     public static Ipv4Cidr Parse(string? value)
     {
-        if (!TryParse(value, out Ipv4Cidr? cidr))
+        if (!IsValid(value))
         {
             throw new BusinessException("INVALID_CIDR", "An IPv4 CIDR is four octets 0-255 and a prefix 0-32, like 10.0.1.0/24.");
         }
-        return cidr;
+        string[] addressAndPrefix = value.Split('/');
+        return new Ipv4Cidr { Value = value, Address = IPAddress.Parse(addressAndPrefix[0]), PrefixLength = int.Parse(addressAndPrefix[1]) };
     }
 
-    public static bool TryParse(string? value, [NotNullWhen(true)] out Ipv4Cidr? cidr)
+    /// `internal` for FirewallCidr, whose IPv4 half is this rule.
+    internal static bool IsValid([NotNullWhen(true)] string? value)
     {
-        cidr = null;
         if (value == null)
         {
             return false;
@@ -69,7 +70,6 @@ public sealed record Ipv4Cidr : ValueObject
         {
             return false;
         }
-        cidr = new Ipv4Cidr { Value = value, Address = IPAddress.Parse(addressAndPrefix[0]), PrefixLength = prefix };
         return true;
     }
 

@@ -121,9 +121,9 @@ public class WalletServiceTests
         var t0 = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var wallet = Guid.NewGuid();
         _walletRepo.Setup(r => r.ListTransactionsByTenantAsync(Tenant, default)).ReturnsAsync([
-            At(WalletTransaction.ForPromo(wallet, 100L, Guid.NewGuid(), 100L), t0),
-            At(WalletTransaction.ForTopUp(wallet, 900000L, Guid.NewGuid(), 900100L), t0.AddDays(1)),
-            At(WalletTransaction.ForInvoicePayment(wallet, 40L, Guid.NewGuid(), 900060L), t0.AddDays(2)),
+            At(WalletTransaction.Create(WalletTransactionType.Promo, wallet, 100L, Guid.NewGuid(), 100L), t0),
+            At(WalletTransaction.Create(WalletTransactionType.TopUp, wallet, 900000L, Guid.NewGuid(), 900100L), t0.AddDays(1)),
+            At(WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet, 40L, Guid.NewGuid(), 900060L), t0.AddDays(2)),
         ]);
 
         var st = await CreateService().GetMyStatementAsync();
@@ -151,8 +151,8 @@ public class WalletServiceTests
         var t0 = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var wallet = Guid.NewGuid();
         _walletRepo.Setup(r => r.ListTransactionsByTenantAsync(Tenant, default)).ReturnsAsync([
-            At(WalletTransaction.ForTopUp(wallet, 500L, Guid.NewGuid(), 500L), t0),
-            At(WalletTransaction.ForInvoicePayment(wallet, 200L, Guid.NewGuid(), 300L), t0.AddDays(4)),
+            At(WalletTransaction.Create(WalletTransactionType.TopUp, wallet, 500L, Guid.NewGuid(), 500L), t0),
+            At(WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet, 200L, Guid.NewGuid(), 300L), t0.AddDays(4)),
         ]);
 
         var st = await CreateService().GetMyStatementAsync();

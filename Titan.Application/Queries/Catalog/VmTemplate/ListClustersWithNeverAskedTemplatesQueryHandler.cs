@@ -14,7 +14,7 @@ public class ListClustersWithNeverAskedTemplatesQueryHandler(IVmTemplateReposito
         var templates = await repo.ListAllAsync(ct);
         return clusters.Clusters
             .Select(c => c.Id)
-            .Where(clusterId => templates.Any(t => t.ClusterOrNull(clusterId) == null))
+            .Where(clusterId => templates.Any(t => t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId) == null))
             .ToList();
     }
 }

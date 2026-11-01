@@ -11,7 +11,8 @@ namespace Titan.Tests.Infrastructure;
 // Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it).
 public class VolumeRepositoryStateTests
 {
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid Tenant = TenantOwner.Id;
 
     private static TitanDbContext NewDb() =>
         new(new DbContextOptionsBuilder<TitanDbContext>()
@@ -19,7 +20,7 @@ public class VolumeRepositoryStateTests
             .Options);
 
     private static Volume Creating(string name) =>
-        Volume.CreateUnchecked(Tenant, name, "vn-hcm-1", "vo-std", 20);
+        Volume.Create(TenantOwner, 0, name, "vn-hcm-1", "vo-std", 20);
 
     private static Volume Available(string name)
     {
@@ -30,7 +31,7 @@ public class VolumeRepositoryStateTests
 
     private static Vm RunningVm()
     {
-        var vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", "vn-hcm-1", 20);
+        var vm = Vm.Create(TenantOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "vn-hcm-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         return vm;
     }
@@ -120,7 +121,7 @@ public class VolumeRepositoryStateTests
     public async Task Reconcilable_IsWhatReachedIncusInTheCluster_AndIsNotConfirmedGone()
     {
         using var db = NewDb();
-        var elsewhere = Volume.CreateUnchecked(Tenant, "elsewhere", "vn-han-1", "vo-std", 20);
+        var elsewhere = Volume.Create(TenantOwner, 0, "elsewhere", "vn-han-1", "vo-std", 20);
         elsewhere.MarkCreated("ext-elsewhere");
         db.Volumes.AddRange(
             Creating("creating"), Available("available"), Attached("attached", RunningVm()), DeleteRequested("deleting"),
@@ -139,7 +140,7 @@ public class VolumeRepositoryStateTests
     // (VolumeSnapshotChildTests), not in a query.
     private static VolumeSnapshot SnapshotOf(Volume volume, string name, bool created = true)
     {
-        var snapshot = volume.AddSnapshotUnchecked(name);
+        var snapshot = volume.WithSnapshot(name);
         if (created)
         {
             snapshot.MarkCreated($"ext-{name}");
@@ -175,7 +176,7 @@ public class VolumeRepositoryStateTests
     {
         using var db = NewDb();
         var here = Available("here");
-        var there = Volume.CreateUnchecked(Tenant, "there", "vn-han-1", "vo-std", 20);
+        var there = Volume.Create(TenantOwner, 0, "there", "vn-han-1", "vo-std", 20);
         there.MarkCreated("ext-there");
         var gone = SnapshotOf(here, "gone");
         gone.RequestDelete();

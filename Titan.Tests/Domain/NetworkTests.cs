@@ -58,12 +58,14 @@ public class NetworkTests
     }
 
     [Fact]
-    public void BeginFirewallRule_WhenCreated_YieldsTheProviderId_AndMutatesNothing()
+    public void AddFirewallRule_WhenCreated_YieldsTheProviderId()
     {
-        var network = MakeActiveNetwork();
-        Assert.Equal("cs-net-id", network.BeginFirewallRule());
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.Equal("cs-net-id", AddARule(MakeActiveNetwork()).ExternalNetworkId);
     }
+
+    private static FirewallRuleTicket AddARule(Network network) =>
+        network.AddFirewallRule(
+            TestTenant.WithRoomToSpare(), FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"));
 
     // A DIFFERENT code from BeginVmDeployment, on purpose: the firewall endpoint answers FIREWALL_NETWORK_NOT_READY.
     [Theory]
@@ -73,17 +75,17 @@ public class NetworkTests
     [InlineData(Seed.CreateFailed)]
     [InlineData(Seed.Errored)]
     [InlineData(Seed.NotFound)]
-    public void BeginFirewallRule_WhenNotUsable_Throws(Seed seed)
+    public void AddFirewallRule_WhenNotUsable_Throws(Seed seed)
     {
         var network = NetworkIn(seed);
-        Assert.Equal("FIREWALL_NETWORK_NOT_READY", Assert.Throws<BusinessException>(network.BeginFirewallRule).Code);
+        Assert.Equal("FIREWALL_NETWORK_NOT_READY", Assert.Throws<BusinessException>(() => AddARule(network)).Code);
     }
 
     public enum Seed { Creating, Active, DeleteRequested, Deleted, CreateFailed, Errored, Pending, NotFound }
 
     private static Network NetworkIn(Seed seed)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
         switch (seed)
         {
             case Seed.Creating: break;
@@ -104,7 +106,7 @@ public class NetworkTests
     [Fact]
     public void Create_HasNoIncusStatus_IsNotCreated_AndWaitsForItsCreate()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
         Assert.Null(network.CurrentState);
         Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
@@ -115,7 +117,7 @@ public class NetworkTests
     [Fact]
     public void MarkCreated_RecordsTheIdAndAddress_AndThatIncusHasIt_ButLeavesTheStatusToTheReconciler()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
@@ -134,7 +136,7 @@ public class NetworkTests
     [InlineData("")]
     public void MarkCreated_WithoutAnAddress_LeavesCidrAndGatewayNull(string? absent)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
         network.MarkCreated("cs-net-id", absent, absent);
 
@@ -147,7 +149,7 @@ public class NetworkTests
     [Fact]
     public void Created_FulfilsTheCreateOnce()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         bool first = network.MarkObserved(NetworkStatus.Created);
@@ -185,7 +187,7 @@ public class NetworkTests
     [InlineData(NetworkStatus.Unknown, false)]
     public void AFailedIncusStatus_EndsAWaitingCreate_OthersKeepItWaiting(NetworkStatus status, bool ends)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         bool fulfilled = network.MarkObserved(status);
@@ -248,7 +250,7 @@ public class NetworkTests
     [Fact]
     public void NotFound_EndsAWaitingCreate()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
         network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
         network.MarkNotFound();
@@ -273,7 +275,7 @@ public class NetworkTests
     [Fact]
     public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItNotCreated()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
         network.MarkRequestFailed("Network creation failed.", "raw incus error");
 
@@ -366,7 +368,7 @@ public class NetworkTests
     [Fact]
     public void RequestDelete_WhileTheCreateWaits_Throws()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
         var ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
 
@@ -530,7 +532,7 @@ public class NetworkTests
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "my-net", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

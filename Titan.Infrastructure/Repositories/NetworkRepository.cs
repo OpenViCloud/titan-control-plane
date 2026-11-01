@@ -1,3 +1,4 @@
+using Titan.Infrastructure.Validation;
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Repositories;
@@ -84,7 +85,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             Ipv4Cidr? range;
             if (network.CurrentExistence == CurrentExistence.Exists)
             {
-                Ipv4Cidr.TryParse(network.Cidr, out range);
+                range = DomainValue.OrNull(() => Ipv4Cidr.Parse(network.Cidr));
             }
             else
             {

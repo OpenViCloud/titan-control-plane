@@ -30,7 +30,7 @@ public class NetworkReconcilerTests
 
     private static Network ActiveIn(string cluster, string name)
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), name, cluster);
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), name, cluster);
         network.MarkActive($"ext-{name}", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -50,7 +50,7 @@ public class NetworkReconcilerTests
         leaving.RequestDelete();
         var gone = ActiveIn(Cluster, "gone");
         gone.MarkDeleted();
-        var creating = Network.CreateUnchecked(Guid.NewGuid(), "creating", Cluster);
+        var creating = TestAggregates.Network(TestTenant.WithRoomToSpare(), "creating", Cluster);
         var otherCluster = ActiveIn("vn-han-1", "elsewhere");
         db.Networks.AddRange(active, errored, lost, leaving, gone, creating, otherCluster);
         await db.SaveChangesAsync();

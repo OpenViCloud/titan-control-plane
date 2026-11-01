@@ -19,7 +19,7 @@ public class FirewallRuleStatusCallbackTests
 
     private static Network ActiveNetwork()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -39,7 +39,7 @@ public class FirewallRuleStatusCallbackTests
         new(_network.Id, rule.Id, report, exists, state, externalRuleId, reason, detail);
 
     private FirewallRule CreatingRule() =>
-        _network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        _network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
     private FirewallRule DeletingRule()
     {

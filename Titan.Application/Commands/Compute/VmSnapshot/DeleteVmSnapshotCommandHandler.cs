@@ -21,7 +21,7 @@ public class DeleteVmSnapshotCommandHandler(
         var vm = await ComputeOwnership.RequireVmAsync(vmRepo, callerId, vmId, ct);
 
         // A snapshot of another VM answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
-        VmSnapshotEntity snapshot = vm.RequireSnapshot(command.SnapshotId);
+        VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).

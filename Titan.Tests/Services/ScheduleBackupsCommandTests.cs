@@ -31,14 +31,14 @@ public class ScheduleBackupsCommandTests
 
     private static Vm RunningVm(string externalId)
     {
-        Vm vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
         vm.MarkRunning(externalId, "10.0.0.2");
         return vm;
     }
 
     private static Volume CreatedVolume(string externalId)
     {
-        Volume volume = Volume.CreateUnchecked(Guid.NewGuid(), "data-1", "mock", "std", 10);
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, "data-1", "mock", "std", 10);
         volume.MarkCreated(externalId);
         return volume;
     }
@@ -82,7 +82,7 @@ public class ScheduleBackupsCommandTests
     [Fact]
     public async Task AVmNotOnIncus_GetsNoBackup()
     {
-        Vm creating = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
+        Vm creating = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
         Vm gone = RunningVm("vm-gone");
         gone.MarkDeleted();
         Holds([creating, gone], []);

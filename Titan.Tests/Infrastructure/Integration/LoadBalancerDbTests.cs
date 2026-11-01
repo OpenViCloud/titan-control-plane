@@ -22,7 +22,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
 
     private static Vm VmOnIncus(Tenant tenant, Guid networkId)
     {
-        var vm = Vm.CreateUnchecked(tenant.Id, networkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
+        var vm = Vm.Create(tenant, 0, networkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
         vm.MarkObserved(VmState.Running, "10.0.0.5", null);
         return vm;

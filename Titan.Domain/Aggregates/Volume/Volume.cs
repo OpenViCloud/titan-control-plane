@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -83,21 +84,24 @@ public class Volume : AggregateRoot
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). A volume
+    /// restored from a snapshot spends volume quota, not snapshot quota: the thing being created is a volume. The
+    /// snapshot's readiness is an invariant of that creation (titan-ops features/volume/design.md#volume-restore-is-a-new-volume);
+    /// sizing and cluster come from the source volume, which the caller resolves.
     public static Volume Create(
         TenantAggregate tenant, int activeVolumeCount,
-        string name, string clusterId, string volumeOfferingId, int sizeGb)
+        string name, string clusterId, string volumeOfferingId, int sizeGb,
+        VolumeSnapshot? restoredFrom = null)
     {
-        tenant.EnsureCanCreateVolume(activeVolumeCount);
-        return CreateUnchecked(tenant.Id, name, clusterId, volumeOfferingId, sizeGb);
-    }
-
-    /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
-    internal static Volume CreateUnchecked(Guid tenantId, string name, string clusterId, string volumeOfferingId, int sizeGb) =>
-        new()
+        if (restoredFrom != null)
+        {
+            restoredFrom.EnsureRestorable();
+        }
+        tenant.EnsureHasRoom(TenantQuotaKind.Volume, activeVolumeCount);
+        return new Volume
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            TenantId = tenant.Id,
             Name = name,
             ClusterId = clusterId,
             VolumeOfferingId = volumeOfferingId,
@@ -107,24 +111,12 @@ public class Volume : AggregateRoot
             PendingIntentId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow
         };
+    }
 
     /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
-
-    /// The snapshot's readiness is an invariant of this creation
-    /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume). Sizing and cluster come from the source
-    /// volume, which the caller resolves; the snapshot is that volume's child, read through Volume.RequireSnapshot.
-    public static Volume CreateFromSnapshot(
-        VolumeSnapshot snapshot, TenantAggregate tenant, int activeVolumeCount, string name,
-        string clusterId, string volumeOfferingId, int sizeGb)
-    {
-        snapshot.EnsureRestorable();
-        // A restore spends volume quota, not snapshot quota: the thing being created is a volume.
-        tenant.EnsureCanCreateVolume(activeVolumeCount);
-        return CreateUnchecked(tenant.Id, name, clusterId, volumeOfferingId, sizeGb);
-    }
 
     /// Checks the volume, the VM (Vm.BeginVolumeAttach) and the cluster; the provider ids come out only past all
     /// three (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
@@ -226,13 +218,6 @@ public class Volume : AggregateRoot
         PendingIntentId = null;
     }
 
-    /// AddSnapshot checks the same rule; this hands out the id, and the caller needs both, so neither can be skipped.
-    public string BeginSnapshot()
-    {
-        EnsureSnapshottable();
-        return RequireExternalId();
-    }
-
     // ---- Snapshots: the volume keeps the per-volume cap and routes each call to the snapshot it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on VolumeSnapshot; this is the way in.
 
@@ -240,23 +225,18 @@ public class Volume : AggregateRoot
     /// cap is checked here on what this volume holds (titan-ops architecture/code-structure.md#tenant-typed-edge); the
     /// handler locks the volume row first so two requests cannot both count below the cap. The create request is
     /// the snapshot's own PendingIntentId.
-    public VolumeSnapshot AddSnapshot(TenantAggregate tenant, string name)
+    public VolumeSnapshotTicket AddSnapshot(TenantAggregate tenant, string name)
     {
         EnsureSnapshottable();
-        tenant.EnsureCanCreateVolumeSnapshot(SnapshotQuotaUsage);
-        return AddSnapshotUnchecked(name);
-    }
-
-    /// Test seam — internal, reachable only from Titan.Tests: a snapshot of this volume with no check on the volume
-    /// or the cap, so a test can put a volume into any shape. See Vm.CreateUnchecked.
-    internal VolumeSnapshot AddSnapshotUnchecked(string name)
-    {
-        VolumeSnapshot snapshot = VolumeSnapshot.CreateUnchecked(Id, TenantId, name);
+        tenant.EnsureHasRoom(TenantQuotaKind.VolumeSnapshot, SnapshotQuotaUsage);
+        VolumeSnapshot snapshot = VolumeSnapshot.Create(Id, TenantId, name);
         _snapshots.Add(snapshot);
-        return snapshot;
+        return new VolumeSnapshotTicket(snapshot, RequireExternalId());
     }
 
-    public VolumeSnapshot? SnapshotOrNull(Guid snapshotId)
+    /// A snapshot this volume does not have answers like a missing one, the same 404 a snapshot of another volume gets
+    /// (titan-ops features/volume/design.md#volume-snapshot).
+    private VolumeSnapshot RequireSnapshot(Guid snapshotId)
     {
         foreach (VolumeSnapshot snapshot in _snapshots)
         {
@@ -265,13 +245,8 @@ public class Volume : AggregateRoot
                 return snapshot;
             }
         }
-        return null;
+        throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
     }
-
-    /// A snapshot this volume does not have answers like a missing one, the same 404 a snapshot of another volume gets
-    /// (titan-ops features/volume/design.md#volume-snapshot).
-    public VolumeSnapshot RequireSnapshot(Guid snapshotId) =>
-        SnapshotOrNull(snapshotId) ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
 
     /// Intent on one snapshot: its delete goes through Incus; returns the snapshot's provider id for the command.
     public string RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
@@ -284,7 +259,7 @@ public class Volume : AggregateRoot
         RequireSnapshot(snapshotId).AbandonRequest(reason, detail);
 
     /// A restore starts from a snapshot resting on Incus and hands out its provider id
-    /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is CreateFromSnapshot's.
+    /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is Create's.
     public string BeginSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).BeginRestore();
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges), each
@@ -303,12 +278,11 @@ public class Volume : AggregateRoot
         RequireSnapshot(snapshotId).MarkRequestFailed(reason, detail);
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the storage
-    /// reconciler's read model.
-    public string RequireExternalId() =>
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VOLUME_INVALID_STATE", "Volume has no provider resource yet.");
 
-    /// The precondition of AddSnapshot and BeginSnapshot, never called by a handler
+    /// The precondition of AddSnapshot, never called by a handler
     /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     private void EnsureSnapshottable()
     {

@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.RegularExpressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
@@ -9,7 +6,7 @@ namespace Titan.Domain.Aggregates.ApiToken;
 /// A long-lived bearer a tenant member creates for Terraform, CI and the CLI
 /// (titan-ops features/public-api/design.md#api-token). It acts as the member who created it. Only a hash of the
 /// secret is kept: the portal makes the secret and shows it once. Titan-only, deleted outright when revoked.
-public partial class ApiToken : AggregateRoot
+public class ApiToken : AggregateRoot
 {
     public const int MaxNameLength = 64;
     public const int MaxPerTenant = 20;
@@ -51,7 +48,7 @@ public partial class ApiToken : AggregateRoot
             throw new BadRequestException("INVALID_API_TOKEN_NAME", $"The token name must be 1 to {MaxNameLength} characters.");
         }
 
-        if (!IsWellFormed(secret))
+        if (!ApiTokenSecret.IsWellFormed(secret))
         {
             throw new BadRequestException("INVALID_API_TOKEN", "The token must be ovc_ followed by 43 base64url characters.");
         }
@@ -75,16 +72,11 @@ public partial class ApiToken : AggregateRoot
             KeycloakUserId = keycloakUserId,
             Name = trimmedName,
             Prefix = secret[..PrefixLength],
-            SecretHash = HashOf(secret),
+            SecretHash = ApiTokenSecret.HashOf(secret),
             CreatedAt = now,
             ExpiresAt = expiresAt,
         };
     }
-
-    public static bool IsWellFormed(string secret) => SecretShape().IsMatch(secret);
-
-    public static string HashOf(string secret) =>
-        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(secret)));
 
     /// Expired at its expiry instant, not one tick later.
     public bool IsUsableAt(DateTimeOffset now)
@@ -96,7 +88,4 @@ public partial class ApiToken : AggregateRoot
 
         return now < ExpiresAt.Value;
     }
-
-    [GeneratedRegex("^ovc_[A-Za-z0-9_-]{43}$")]
-    private static partial Regex SecretShape();
 }

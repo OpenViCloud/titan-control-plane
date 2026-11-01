@@ -3,6 +3,7 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Repositories;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
@@ -50,7 +51,7 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
         {
             throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         }
-        FirewallRuleEntity rule = network.RequireFirewallRule(command.RuleId);
+        FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
         string? outcome = null;
         switch (command.Report)

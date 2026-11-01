@@ -138,9 +138,7 @@ public class ChildEntityGuardTests
         ["VolumeSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["VmSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["InvoiceItem.Create"] = "the items exist before their invoice: built first, handed to the invoice's factory",
-        ["WalletTransaction.ForTopUp"] = "the ledger is not loaded with the wallet: the factory applies the sign, the row goes in beside the balance",
-        ["WalletTransaction.ForPromo"] = "same ledger row",
-        ["WalletTransaction.ForInvoicePayment"] = "same ledger row",
+        ["WalletTransaction.Create"] = "the ledger is not loaded with the wallet: the factory applies the sign, the row goes in beside the balance",
     };
 
     [Fact]

@@ -16,7 +16,8 @@ namespace Titan.Tests.Services;
 public class ComputeOwnershipTests
 {
     private static readonly Guid CallerTenant = Guid.NewGuid();
-    private static readonly Guid OtherTenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant OtherTenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid OtherTenant = OtherTenantOwner.Id;
 
     private readonly Mock<IVolumeRepository> _volumeRepo = new();
     private readonly Mock<IVmRepository> _vmRepo = new();
@@ -44,7 +45,7 @@ public class ComputeOwnershipTests
         new(_volumeSnapshotRepo.Object, _volumeRepo.Object, _currentUser.Object);
 
     private static Volume ForeignVolume() =>
-        Volume.CreateUnchecked(OtherTenant, "vol-of-someone-else", "cluster-1", "offering-1", 50);
+        Volume.Create(OtherTenantOwner, 0, "vol-of-someone-else", "cluster-1", "offering-1", 50);
 
     // ── The leak itself ───────────────────────────────────────────────────
     //

@@ -19,7 +19,8 @@ namespace Titan.Tests.Services;
 // save it through IVolumeRepository. The snapshot repository is read side only, so only the list query asks it.
 public class VolumeSnapshotServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
 
@@ -151,7 +152,7 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         for (int i = 0; i < 3; i++)
         {
-            volume.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
+            volume.WithSnapshot($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
         }
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -174,7 +175,7 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         for (int i = 0; i < 3; i++)
         {
-            volume.AddSnapshotUnchecked($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
+            volume.WithSnapshot($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
         }
         volume.Snapshots.First().RequestDelete();
 
@@ -228,7 +229,7 @@ public class VolumeSnapshotServiceTests
     public async Task Create_VolumeOfAnotherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1", tenantId: Guid.NewGuid());
+        var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1", owner: TestTenant.WithRoomToSpare());
         SetupVolume(volume);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -705,11 +706,11 @@ public class VolumeSnapshotServiceTests
     public enum VolSeed { Creating, Available, Attaching, Attached, Detaching, Deleting, Deleted, NotFound }
     public enum SnapSeed { Creating, CreateFailed, Exists, Deleting, Deleted }
 
-    private static Volume MakeVolume(VolSeed status, string? csId = null, Guid? tenantId = null)
+    private static Volume MakeVolume(VolSeed status, string? csId = null, Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vol = Volume.CreateUnchecked(tenantId ?? TenantId, "vol-01", "cluster-1", "offering-1", 50);
+        var vol = Volume.Create(owner ?? TenantIdOwner, 0, "vol-01", "cluster-1", "offering-1", 50);
         var effectiveId = csId ?? "cs-vol-default";
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("cs-vm-1", "10.0.0.5");
         switch (status)
         {
@@ -727,7 +728,7 @@ public class VolumeSnapshotServiceTests
     // A snapshot of the volume, in the shape named (titan-ops architecture/code-structure.md#child-entity).
     private static VolumeSnapshot MakeSnapshot(Volume volume, SnapSeed status, string? csSnapId = null)
     {
-        var snap = volume.AddSnapshotUnchecked("snap-01");
+        var snap = volume.WithSnapshot("snap-01");
         switch (status)
         {
             case SnapSeed.CreateFailed: snap.MarkRequestFailed("could not create", "raw"); break;

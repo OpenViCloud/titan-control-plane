@@ -1,3 +1,4 @@
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
@@ -41,7 +42,7 @@ public class DeleteVmCommandHandler(
         if (deleteIsWaiting)
         {
             VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Delete);
-            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, tenant.ProjectName, vm.ClusterId, ct);
+            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
             await repo.SaveAsync(ct);
             return;
         }
@@ -83,7 +84,7 @@ public class DeleteVmCommandHandler(
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, tenant.ProjectName, vm.ClusterId, ct);
+        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
         await repo.SaveAsync(ct); // intent, request event and provider command together
     }
 }

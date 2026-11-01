@@ -294,7 +294,7 @@ public class FirewallRuleLifecycleTests
     }
 
     private static FirewallRule NewRule() =>
-        FirewallRule.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
+        FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
 
     private static FirewallRule ActiveRule()
     {

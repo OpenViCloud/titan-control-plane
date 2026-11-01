@@ -36,7 +36,7 @@ public class GrantTopUpCommandHandler(
         wallet.Credit(amount);
         repo.AddTopUp(topUp);
         walletRepo.AddTransaction(
-            WalletTransaction.ForPromo(wallet.Id, amount, topUp.Id, wallet.AvailableAmount));
+            WalletTransaction.Create(WalletTransactionType.Promo, wallet.Id, amount, topUp.Id, wallet.AvailableAmount));
         try
         {
             await walletRepo.SaveChangesAsync(ct);

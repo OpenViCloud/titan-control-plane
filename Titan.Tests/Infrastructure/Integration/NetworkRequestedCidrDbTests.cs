@@ -17,8 +17,9 @@ public class NetworkRequestedCidrDbTests(PostgresFixture pg)
     [Fact]
     public async Task ARequestedCidr_RoundTrips_AndIsSeenByTheOverlapCheck_WhileTheCreateWaits()
     {
-        Guid tenant = Guid.NewGuid();
-        var waiting = Network.CreateUnchecked(tenant, "waiting", "cluster-a", requestedCidr: "10.77.0.0/24");
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        var waiting = TestAggregates.Network(tenantOwner, "waiting", "cluster-a", requestedCidr: "10.77.0.0/24");
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Networks.Add(waiting);
@@ -41,7 +42,7 @@ public class NetworkRequestedCidrDbTests(PostgresFixture pg)
     [Fact]
     public async Task MarkCreatedWithoutAnAddress_StoresNull_NotAnEmptyString()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "no-address", "cluster-a");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "no-address", "cluster-a");
         network.MarkCreated("ext-no-address", null, null);
         await using (TitanDbContext db = pg.NewDbContext())
         {
@@ -63,7 +64,7 @@ public class NetworkRequestedCidrDbTests(PostgresFixture pg)
     [Fact]
     public async Task ARequestedCidrThatBreaksTheRule_FailsAtLoad_NotSilently()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "was-fine", "cluster-a", requestedCidr: "10.0.0.0/24");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "was-fine", "cluster-a", requestedCidr: "10.0.0.0/24");
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Networks.Add(network);

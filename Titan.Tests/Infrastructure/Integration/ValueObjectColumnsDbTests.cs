@@ -17,7 +17,7 @@ public class ValueObjectColumnsDbTests(PostgresFixture pg)
     [Fact]
     public async Task ANetworkNameThatBreaksTheRule_FailsAtLoad_NotSilently()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "was-fine", "cluster-a");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "was-fine", "cluster-a");
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Networks.Add(network);
@@ -36,8 +36,9 @@ public class ValueObjectColumnsDbTests(PostgresFixture pg)
     [Fact]
     public async Task AFirewallRuleCidrThatBreaksTheRule_FailsAtLoad_NotSilently()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "with-a-rule", "cluster-a");
-        FirewallRule rule = network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "with-a-rule", "cluster-a");
+        network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Networks.Add(network);
@@ -57,8 +58,9 @@ public class ValueObjectColumnsDbTests(PostgresFixture pg)
     [Fact]
     public async Task AValidNameAndCidr_RoundTrip()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "round_trip-01", "cluster-a");
-        FirewallRule rule = network.AddFirewallRuleUnchecked(FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "2001:db8::/32");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "round_trip-01", "cluster-a");
+        network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
+        network.WithFirewallRule(FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "2001:db8::/32");
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Networks.Add(network);

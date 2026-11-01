@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -118,28 +119,12 @@ public class Vm : AggregateRoot
         int diskSizeGb,
         string? userData = null)
     {
-        tenant.EnsureCanCreateVm(activeVmCount);
+        tenant.EnsureHasRoom(TenantQuotaKind.Vm, activeVmCount);
 
-        return CreateUnchecked(tenant.Id, networkId, name, vmOfferingId, templateId, clusterId,
-            diskSizeGb, userData);
-    }
-
-    /// Test seam that skips the quota check; `internal`, so only Titan.Tests reaches it
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
-    internal static Vm CreateUnchecked(
-        Guid tenantId,
-        Guid networkId,
-        string name,
-        string vmOfferingId,
-        string templateId,
-        string clusterId,
-        int diskSizeGb,
-        string? userData = null)
-    {
         return new Vm
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            TenantId = tenant.Id,
             NetworkId = networkId,
             Name = name,
             CurrentState = null,
@@ -234,8 +219,7 @@ public class Vm : AggregateRoot
             throw new BusinessException("VM_INVALID_STATUS", "A delete is already in progress for this VM.");
         }
         // A snapshot create or revert in flight would act on an instance being deleted
-        // (titan-ops features/vm/design.md#vm-snapshot-counting): refused until it settles, on a VM with no provider id too,
-        // so its row does not vanish under the snapshot command.
+        // (titan-ops features/vm/design.md#vm-snapshot-counting): refused until it settles.
         if (ASnapshotCommandIsRunning)
         {
             throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
@@ -301,9 +285,8 @@ public class Vm : AggregateRoot
     }
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the VM reconciler's
-    /// read model.
-    public string RequireExternalId() =>
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
 
     /// The VM half of Volume.Attach. It runs BEFORE the cluster check there, so a VM in the wrong state
@@ -371,14 +354,7 @@ public class Vm : AggregateRoot
         return RequireExternalId();
     }
 
-    /// AddSnapshot checks the same rule; this hands out the id, and the caller needs both, so neither can be skipped.
-    public string BeginSnapshot()
-    {
-        EnsureSnapshottable();
-        return RequireExternalId();
-    }
-
-    /// The precondition of AddSnapshot, RevertSnapshot and BeginSnapshot, never called by a handler
+    /// The precondition of AddSnapshot and RevertSnapshot, never called by a handler
     /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     private void EnsureSnapshottable()
     {
@@ -395,23 +371,18 @@ public class Vm : AggregateRoot
     /// checked here on what this VM holds (titan-ops architecture/code-structure.md#tenant-typed-edge); the handler locks
     /// the VM row first so two requests cannot both count below the cap. The create request is the snapshot's own
     /// PendingIntentId.
-    public VmSnapshot AddSnapshot(TenantAggregate tenant, string name)
+    public VmSnapshotTicket AddSnapshot(TenantAggregate tenant, string name)
     {
         EnsureSnapshottable();
-        tenant.EnsureCanCreateVmSnapshot(SnapshotQuotaUsage);
-        return AddSnapshotUnchecked(name);
-    }
-
-    /// Test seam — internal, reachable only from Titan.Tests: a snapshot of this VM with no check on the VM or the
-    /// cap, so a test can put a VM into any shape. See CreateUnchecked.
-    internal VmSnapshot AddSnapshotUnchecked(string name)
-    {
-        VmSnapshot snapshot = VmSnapshot.CreateUnchecked(Id, TenantId, name);
+        tenant.EnsureHasRoom(TenantQuotaKind.VmSnapshot, SnapshotQuotaUsage);
+        VmSnapshot snapshot = VmSnapshot.Create(Id, TenantId, name);
         _snapshots.Add(snapshot);
-        return snapshot;
+        return new VmSnapshotTicket(snapshot, RequireExternalId());
     }
 
-    public VmSnapshot? SnapshotOrNull(Guid snapshotId)
+    /// A snapshot this VM does not have answers like a missing one, the same 404 a snapshot of another VM gets
+    /// (titan-ops features/vm/design.md#vm-routes).
+    private VmSnapshot RequireSnapshot(Guid snapshotId)
     {
         foreach (VmSnapshot snapshot in _snapshots)
         {
@@ -420,13 +391,8 @@ public class Vm : AggregateRoot
                 return snapshot;
             }
         }
-        return null;
+        throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
     }
-
-    /// A snapshot this VM does not have answers like a missing one, the same 404 a snapshot of another VM gets
-    /// (titan-ops features/vm/design.md#vm-routes).
-    public VmSnapshot RequireSnapshot(Guid snapshotId) =>
-        SnapshotOrNull(snapshotId) ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
 
     /// Intent on one snapshot: the VM must accept a revert (its own rule first), then the snapshot must rest on
     /// Incus; returns the snapshot's provider id for the command. Titan does not stop or start the VM for it.

@@ -513,7 +513,7 @@ public class InvoiceServiceTests
         var invoice = Invoice.Generate(TenantId, 2026, 1, DateTimeOffset.UtcNow,
             [InvoiceItem.Create(UsageResourceType.Compute, VmId, "web-01", 10L, "SGD")], "SGD");
         _invoiceRepo.Seed(invoice);
-        _mutationRepo.Add(WalletMutation.ForDebit(Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id));
+        _mutationRepo.Add(WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id));
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().MarkPaidAsync(invoice.Id, default));
@@ -530,7 +530,7 @@ public class InvoiceServiceTests
         var invoice = Invoice.Generate(TenantId, 2026, 1, DateTimeOffset.UtcNow,
             [InvoiceItem.Create(UsageResourceType.Compute, VmId, "web-01", 10L, "SGD")], "SGD");
         _invoiceRepo.Seed(invoice);
-        var failed = WalletMutation.ForDebit(Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var failed = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
         failed.MarkFailed("wallet spent before the debit was applied");
         _mutationRepo.Add(failed);
 
@@ -846,7 +846,7 @@ public class InvoiceServiceTests
         await CreateService().PayFromWalletAsync(invoice.Id, default);
         WalletMutation first = Assert.Single(_mutationRepo.Added);
         first.MarkFailed("insufficient funds at apply time");
-        var stale = WalletMutation.ForDebit(first.WalletId, 299_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var stale = WalletMutation.Create(WalletMutationType.Debit, first.WalletId, 299_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
         stale.MarkFailed("insufficient funds at apply time");
         _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = stale;
 
@@ -863,7 +863,7 @@ public class InvoiceServiceTests
         var invoice = MakeOwedInvoice(TenantId, 300_000L, T0);
         _invoiceRepo.Seed(invoice);
         _walletRepo.SeedBalance(TenantId, 500_000L);
-        var foreign = WalletMutation.ForDebit(Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var foreign = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
         foreign.MarkFailed("insufficient funds at apply time");
         _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = foreign;
 
@@ -895,7 +895,7 @@ public class InvoiceServiceTests
         var invoice = MakeOwedInvoice(TenantId, 300_000L, T0);
         _invoiceRepo.Seed(invoice);
         _walletRepo.SeedBalance(TenantId, 500_000L);
-        WalletMutation winner = WalletMutation.ForDebit(Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        WalletMutation winner = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
         _walletRepo.RejectNextSave = true;
         _walletRepo.WhenRejecting = () => _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = winner;
 
@@ -1087,7 +1087,7 @@ public class InvoiceServiceTests
 
     private static WalletMutation MutationInState(Guid invoiceId, WalletMutationStatus status)
     {
-        var mutation = WalletMutation.ForDebit(Guid.NewGuid(), 300_000L, "Invoice", invoiceId);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, "Invoice", invoiceId);
         if (status == WalletMutationStatus.Applied) mutation.MarkApplied();
         if (status == WalletMutationStatus.Failed) mutation.MarkFailed("not enough money");
         return mutation;
@@ -1210,7 +1210,7 @@ public class FakeWalletRepository : IWalletRepository
             throw new ConcurrencyConflictException("WALLET_CONCURRENCY_CONFLICT", "simulated conflict");
         }
 
-        // Commit: record the InvoicePayment debits (Amount is stored negative by ForInvoicePayment).
+        // Commit: record the InvoicePayment debits (Amount is stored negative by WalletTransaction.Create).
         foreach (var t in _staged.Where(x => x.Type == WalletTransactionType.InvoicePayment))
         {
             var tenantId = _wallets.First(kv => kv.Value.Id == t.WalletId).Key;

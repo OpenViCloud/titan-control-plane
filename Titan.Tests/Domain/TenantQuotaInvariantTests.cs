@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Tests.Fakes;
@@ -15,13 +16,13 @@ public class TenantQuotaInvariantTests
     // depend on. The codes are load-bearing — the portal branches on res.data.code.
     public static TheoryData<string, Action<TenantAggregate, int>, int, string> Guards() => new()
     {
-        { "vm",              (t, n) => t.EnsureCanCreateVm(n),              10, "VM_QUOTA_EXCEEDED" },
-        { "network",         (t, n) => t.EnsureCanCreateNetwork(n),          1, "NETWORK_QUOTA_EXCEEDED" },
-        { "volume",          (t, n) => t.EnsureCanCreateVolume(n),          10, "VOLUME_QUOTA_EXCEEDED" },
-        { "vmSnapshot",      (t, n) => t.EnsureCanCreateVmSnapshot(n),       3, "VM_SNAPSHOT_QUOTA_EXCEEDED" },
-        { "volumeSnapshot",  (t, n) => t.EnsureCanCreateVolumeSnapshot(n),   3, "VOLUME_SNAPSHOT_QUOTA_EXCEEDED" },
-        { "firewallRule",    (t, n) => t.EnsureCanCreateFirewallRule(n),    20, "FIREWALL_QUOTA_EXCEEDED" },
-        { "publicIpv6",      (t, n) => t.EnsureCanEnablePublicIpv6(n),      10, "IPV6_QUOTA_EXCEEDED" },
+        { "vm",              (t, n) => t.EnsureHasRoom(TenantQuotaKind.Vm, n),              10, "VM_QUOTA_EXCEEDED" },
+        { "network",         (t, n) => t.EnsureHasRoom(TenantQuotaKind.Network, n),          1, "NETWORK_QUOTA_EXCEEDED" },
+        { "volume",          (t, n) => t.EnsureHasRoom(TenantQuotaKind.Volume, n),          10, "VOLUME_QUOTA_EXCEEDED" },
+        { "vmSnapshot",      (t, n) => t.EnsureHasRoom(TenantQuotaKind.VmSnapshot, n),       3, "VM_SNAPSHOT_QUOTA_EXCEEDED" },
+        { "volumeSnapshot",  (t, n) => t.EnsureHasRoom(TenantQuotaKind.VolumeSnapshot, n),   3, "VOLUME_SNAPSHOT_QUOTA_EXCEEDED" },
+        { "firewallRule",    (t, n) => t.EnsureHasRoom(TenantQuotaKind.FirewallRule, n),    20, "FIREWALL_QUOTA_EXCEEDED" },
+        { "publicIpv6",      (t, n) => t.EnsureHasRoom(TenantQuotaKind.PublicIpv6, n),      10, "IPV6_QUOTA_EXCEEDED" },
     };
 
     [Theory] // at the cap, creation is refused, with the code callers already branch on
@@ -61,8 +62,8 @@ public class TenantQuotaInvariantTests
         var tenant = NewTenant();
         tenant.UpdateQuota(Titan.Domain.Aggregates.Tenant.TenantQuota.Create(0, 0, 0, 0, 0, 0, 0, 0, 0));
 
-        Assert.Equal("VM_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureCanCreateVm(0)).Code);
-        Assert.Equal("VOLUME_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureCanCreateVolume(0)).Code);
+        Assert.Equal("VM_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureHasRoom(TenantQuotaKind.Vm, 0)).Code);
+        Assert.Equal("VOLUME_QUOTA_EXCEEDED", Assert.Throws<BusinessException>(() => tenant.EnsureHasRoom(TenantQuotaKind.Volume, 0)).Code);
     }
 
     [Fact] // the two-cap admin path must not wipe the other five

@@ -43,10 +43,19 @@ public sealed record TenantQuota : ValueObject
     public const int DefaultMaxSshKeys = 20;
     public const int DefaultMaxLoadBalancers = 5;
 
-    public static TenantQuota Default => Create(
-        DefaultMaxVms, DefaultMaxNetworks, DefaultMaxVolumes, DefaultMaxVmSnapshotsPerVm,
-        DefaultMaxVolumeSnapshotsPerVolume, DefaultMaxFirewallRulesPerNetwork, DefaultMaxPublicIpv6, DefaultMaxSshKeys,
-        DefaultMaxLoadBalancers);
+    // A new instance each read: every tenant owns its own quota row.
+    public static TenantQuota Default => new()
+    {
+        MaxVms = DefaultMaxVms,
+        MaxNetworks = DefaultMaxNetworks,
+        MaxVolumes = DefaultMaxVolumes,
+        MaxVmSnapshotsPerVm = DefaultMaxVmSnapshotsPerVm,
+        MaxVolumeSnapshotsPerVolume = DefaultMaxVolumeSnapshotsPerVolume,
+        MaxFirewallRulesPerNetwork = DefaultMaxFirewallRulesPerNetwork,
+        MaxPublicIpv6 = DefaultMaxPublicIpv6,
+        MaxSshKeys = DefaultMaxSshKeys,
+        MaxLoadBalancers = DefaultMaxLoadBalancers,
+    };
 
     public static TenantQuota Create(
         int maxVms,

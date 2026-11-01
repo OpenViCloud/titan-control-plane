@@ -84,7 +84,7 @@ public class QuotaOwnershipTests
 
         Assert.True(offenders.Count == 0,
             "Application service compares against a tenant cap directly. The service COUNTS, the "
-            + "tenant DECIDES (docs/architecture/tenancy-and-admin.md#tenant-quota) — call tenant.EnsureCanCreateX(count) instead: "
+            + "tenant DECIDES (docs/architecture/tenancy-and-admin.md#tenant-quota) — pass the tenant and the count to the factory instead: "
             + string.Join(" | ", offenders));
     }
 
@@ -108,7 +108,7 @@ public class QuotaOwnershipTests
         foreach (var file in files)
         {
             var code = Regex.Replace(File.ReadAllText(file), @"//.*$", "", RegexOptions.Multiline);
-            foreach (var m in Regex.Matches(code, @"\.(EnsureCanCreate\w+|EnsureCanEnable\w+)\("))
+            foreach (var m in Regex.Matches(code, @"\.(EnsureHasRoom)\("))
                 offenders.Add($"{Path.GetFileName(file)}: {((Match)m).Groups[1].Value}");
         }
 
@@ -126,7 +126,7 @@ public class QuotaOwnershipTests
 
         var publicChecks = tenant
             .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-            .Where(m => m.Name.StartsWith("EnsureCan", StringComparison.Ordinal))
+            .Where(m => m.Name == "EnsureHasRoom")
             .Select(m => m.Name)
             .OrderBy(x => x, StringComparer.Ordinal)
             .ToList();

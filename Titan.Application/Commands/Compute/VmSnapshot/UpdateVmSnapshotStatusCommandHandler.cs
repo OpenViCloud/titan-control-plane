@@ -1,6 +1,7 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Domain.Exceptions;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
@@ -47,7 +48,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
         {
             throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         }
-        VmSnapshotEntity snapshot = vm.RequireSnapshot(command.SnapshotId);
+        VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
         string? outcome = null;
         switch (req.Report)

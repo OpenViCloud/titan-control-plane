@@ -39,7 +39,7 @@ public class ClusterIpv6RouteDbTests(PostgresFixture pg)
     {
         await using TitanDbContext db = pg.NewDbContext();
         ClusterIpv6Route route = (await new ClusterIpv6RouteRepository(db).FindHeldByAsync(network))!;
-        route.TakeBack();
+        route.TakeBack(DateTimeOffset.UtcNow);
         await db.SaveChangesAsync();
     }
 

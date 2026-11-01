@@ -32,7 +32,6 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         });
         // Whole VND like Invoice.Total, because the admin reads them side by side at month-end close.
         builder.Property(t => t.DebtCeiling).HasColumnName("debt_ceiling").HasColumnType("bigint").IsRequired();
-        builder.Ignore(t => t.ProjectName);
         builder.Property(t => t.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(t => t.Name).IsUnique();

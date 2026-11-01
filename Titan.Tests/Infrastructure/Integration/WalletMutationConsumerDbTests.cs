@@ -63,7 +63,7 @@ public class WalletMutationConsumerDbTests(PostgresFixture pg)
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
         var topUpId = Guid.NewGuid();
-        var mutation = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", topUpId);
+        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", topUpId);
         await EnqueueAsync(mutation);
 
         await using (var db = pg.NewDbContext())
@@ -95,7 +95,7 @@ public class WalletMutationConsumerDbTests(PostgresFixture pg)
     {
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
-        var mutation = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
+        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
         await EnqueueAsync(mutation);
 
         await using (var db = pg.NewDbContext())
@@ -118,7 +118,7 @@ public class WalletMutationConsumerDbTests(PostgresFixture pg)
     {
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
-        var credit = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
+        var credit = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
         // A debit pays a real, still-owed invoice; one whose invoice is gone fails without touching the wallet.
         var invoice = Invoice.Generate(tenantId, 2026, 9, DateTimeOffset.UtcNow.AddDays(-1),
             [InvoiceItem.Create(UsageResourceType.Compute, Guid.NewGuid(), "vm-1", 30_000L, "VND")], "VND");
@@ -127,7 +127,7 @@ public class WalletMutationConsumerDbTests(PostgresFixture pg)
             seed.Invoices.Add(invoice);
             await seed.SaveChangesAsync();
         }
-        var debit = WalletMutation.ForDebit(wallet.Id, 30_000L, "Invoice", invoice.Id);
+        var debit = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 30_000L, "Invoice", invoice.Id);
         await EnqueueAsync(credit);
         await EnqueueAsync(debit);
 

@@ -130,7 +130,7 @@ public class UpdateNetworkStatusCommandHandler(
         RouteAggregate? route = await routes.FindHeldByAsync(network.Id, ct);
         if (route != null)
         {
-            route.TakeBack();
+            route.TakeBack(DateTimeOffset.UtcNow);
         }
     }
 

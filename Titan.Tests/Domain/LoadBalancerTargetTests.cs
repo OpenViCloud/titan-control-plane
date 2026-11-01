@@ -60,7 +60,7 @@ public class LoadBalancerTargetTests
 
     private static Vm VmOnIncus(Guid networkId)
     {
-        var vm = Vm.CreateUnchecked(Owner.Id, networkId, "vm-1", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create(Owner, 0, networkId, "vm-1", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("vmabc", "10.0.0.5");
         return vm;
     }
@@ -89,7 +89,7 @@ public class LoadBalancerTargetTests
     {
         Guid networkId = Guid.NewGuid();
         Vm elsewhere = VmOnIncus(Guid.NewGuid());
-        Vm creating = Vm.CreateUnchecked(Owner.Id, networkId, "vm-2", "m", "tpl", "cluster-a", 20);
+        Vm creating = Vm.Create(Owner, 0, networkId, "vm-2", "m", "tpl", "cluster-a", 20);
         Vm deleting = VmOnIncus(networkId);
         deleting.RequestDelete();
 

@@ -41,10 +41,10 @@ public class StorageReconcilerTests
     public async Task Endpoint_WithToken_ReturnsVolumesAndSnapshots_WithWhatWasLastSeen_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var volume = Volume.CreateUnchecked(Guid.NewGuid(), "data", Cluster, "vo-std", 20);
+        var volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(null, true);
-        var snapshot = volume.AddSnapshotUnchecked("snap");
+        var snapshot = volume.WithSnapshot("snap");
         snapshot.MarkCreated("img-8");
         db.Volumes.Add(volume);
         await db.SaveChangesAsync();
@@ -72,9 +72,10 @@ public class StorageReconcilerTests
     public async Task Endpoint_NamesTheAttachedVm_ByItsIncusInstance()
     {
         using var db = NewDb();
-        var vm = Titan.Domain.Aggregates.Vm.Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        var owner = TestTenant.WithRoomToSpare();
+        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(owner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkCreated("vm0123456789abcdefghijklmnop");
-        var volume = Volume.CreateUnchecked(vm.TenantId, "data", Cluster, "vo-std", 20);
+        var volume = Volume.Create(owner, 0, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(vm.Id, false);
         db.Vms.Add(vm);

@@ -66,7 +66,7 @@ public static class InvoiceWalletSettlement
         bool reopened = debit != null;
         if (debit == null)
         {
-            debit = WalletMutation.ForDebit(
+            debit = WalletMutation.Create(WalletMutationType.Debit, 
                 wallet.Id, invoice.Total, WalletMutationConsumer.InvoiceRefType, invoice.Id);
             mutationRepo.Add(debit);
         }

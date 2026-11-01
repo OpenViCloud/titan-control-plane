@@ -10,11 +10,12 @@ namespace Titan.Tests.Domain;
 // observation to the snapshot it names, and takes every snapshot with it when its own delete is confirmed.
 public class VolumeSnapshotChildTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
 
     private static Volume RestingVolume()
     {
-        var volume = Volume.CreateUnchecked(TenantId, "vol-1", "cluster-1", "offering-1", 50);
+        var volume = Volume.Create(TenantIdOwner, 0, "vol-1", "cluster-1", "offering-1", 50);
         volume.MarkCreated("vol11");
         return volume;
     }
@@ -31,19 +32,19 @@ public class VolumeSnapshotChildTests
     private static Volume VolumeWithEverySnapshotSituation()
     {
         var volume = RestingVolume();
-        volume.AddSnapshotUnchecked("creating"); // counts
-        volume.AddSnapshotUnchecked("ready").MarkCreated("vol11/s1"); // counts
-        var leaving = volume.AddSnapshotUnchecked("leaving");
+        volume.WithSnapshot("creating"); // counts
+        volume.WithSnapshot("ready").MarkCreated("vol11/s1"); // counts
+        var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
         leaving.RequestDelete();
-        var lost = volume.AddSnapshotUnchecked("lost");
+        var lost = volume.WithSnapshot("lost");
         lost.MarkCreated("vol11/s3");
         lost.MarkNotFound();
-        var gone = volume.AddSnapshotUnchecked("gone");
+        var gone = volume.WithSnapshot("gone");
         gone.MarkCreated("vol11/s4");
         gone.RequestDelete();
         gone.MarkDeleted();
-        volume.AddSnapshotUnchecked("failed").MarkRequestFailed("could not create", "raw");
+        volume.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
         return volume;
     }
 
@@ -72,7 +73,7 @@ public class VolumeSnapshotChildTests
     {
         var volume = VolumeWithEverySnapshotSituation(); // usage 2
 
-        VolumeSnapshot snapshot = volume.AddSnapshot(TenantWithSnapshotCap(3), "nightly");
+        VolumeSnapshot snapshot = volume.AddSnapshot(TenantWithSnapshotCap(3), "nightly").Snapshot;
 
         Assert.Contains(snapshot, volume.Snapshots);
         Assert.Equal(volume.Id, snapshot.VolumeId);
@@ -85,7 +86,7 @@ public class VolumeSnapshotChildTests
     [Fact]
     public void AddSnapshot_OnAVolumeNotResting_IsRefusedBeforeTheQuota()
     {
-        var volume = Volume.CreateUnchecked(TenantId, "vol-1", "cluster-1", "offering-1", 50); // Creating
+        var volume = Volume.Create(TenantIdOwner, 0, "vol-1", "cluster-1", "offering-1", 50); // Creating
 
         var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot(TenantWithSnapshotCap(0), "nightly"));
 
@@ -99,13 +100,13 @@ public class VolumeSnapshotChildTests
     public void MarkDeleted_MarksEverySnapshotDeleted_AndNamesOnlyTheSnapshotsWhoseOwnDeleteWasWaiting()
     {
         var volume = RestingVolume();
-        var lost = volume.AddSnapshotUnchecked("lost");
+        var lost = volume.WithSnapshot("lost");
         lost.MarkCreated("vol11/s1");
         lost.MarkNotFound();
-        var leaving = volume.AddSnapshotUnchecked("leaving");
+        var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
         leaving.RequestDelete();
-        var alreadyGone = volume.AddSnapshotUnchecked("gone");
+        var alreadyGone = volume.WithSnapshot("gone");
         alreadyGone.MarkCreated("vol11/s3");
         alreadyGone.RequestDelete();
         alreadyGone.MarkDeleted();
@@ -136,7 +137,7 @@ public class VolumeSnapshotChildTests
     public void MarkDeleted_Repeated_IsAbsorbed_AndNamesNothingAgain()
     {
         var volume = RestingVolume();
-        var leaving = volume.AddSnapshotUnchecked("leaving");
+        var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
         leaving.RequestDelete();
         volume.RequestDelete();
@@ -150,15 +151,15 @@ public class VolumeSnapshotChildTests
 
     // A snapshot the volume does not have answers like a missing one.
     [Fact]
-    public void RequireSnapshot_OfAnotherVolumesSnapshot_IsNotFound()
+    public void ASnapshotOfAnotherVolume_IsNotFound()
     {
         var volume = RestingVolume();
         var other = RestingVolume();
-        var foreign = other.AddSnapshotUnchecked("theirs");
-        volume.AddSnapshotUnchecked("mine");
+        var foreign = other.WithSnapshot("theirs");
+        volume.WithSnapshot("mine");
 
-        Assert.Null(volume.SnapshotOrNull(foreign.Id));
-        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.RequireSnapshot(foreign.Id)).Code);
+        Assert.DoesNotContain(volume.Snapshots, s => s.Id == foreign.Id);
+        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.DeleteSnapshotLocally(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.RequestSnapshotDelete(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.BeginSnapshotRestore(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.MarkSnapshotDeleted(foreign.Id)).Code);
@@ -169,8 +170,8 @@ public class VolumeSnapshotChildTests
     public void SnapshotCalls_ReachTheSnapshotNamed_AndReturnItsAnswer()
     {
         var volume = RestingVolume();
-        var snapshot = volume.AddSnapshotUnchecked("s");
-        var untouched = volume.AddSnapshotUnchecked("u");
+        var snapshot = volume.WithSnapshot("s");
+        var untouched = volume.WithSnapshot("u");
 
         Assert.True(volume.MarkSnapshotCreated(snapshot.Id, "vol11/s1"));
         Assert.False(volume.MarkSnapshotObserved(snapshot.Id));
@@ -195,7 +196,7 @@ public class VolumeSnapshotChildTests
     public void DeleteSnapshotLocally_OnASnapshotWhoseCreateFailed_WritesBothPairs()
     {
         var volume = RestingVolume();
-        var failed = volume.AddSnapshotUnchecked("failed");
+        var failed = volume.WithSnapshot("failed");
         volume.MarkSnapshotRequestFailed(failed.Id, "reason", "detail");
 
         volume.DeleteSnapshotLocally(failed.Id);

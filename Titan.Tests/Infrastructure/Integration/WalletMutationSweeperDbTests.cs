@@ -119,7 +119,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
         var mutation = await EnqueueAsync(
-            WalletMutation.ForCredit(wallet.Id, 250_000L, "TopUp", Guid.NewGuid()),
+            WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 250_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromMinutes(1));
 
         var (sweeper, services) = NewSweeper();
@@ -143,7 +143,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
         var mutation = await EnqueueAsync(
-            WalletMutation.ForCredit(wallet.Id, 250_000L, "TopUp", Guid.NewGuid()));  // age: now
+            WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 250_000L, "TopUp", Guid.NewGuid()));  // age: now
 
         var (sweeper, services) = NewSweeper(staleAfterSeconds: 60);
         var swept = await SweepAsync(sweeper, services);
@@ -162,7 +162,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         var tenantId = Guid.NewGuid();
         var wallet = await SeedWalletAsync(tenantId);
         var mutation = await EnqueueAsync(
-            WalletMutation.ForCredit(wallet.Id, 250_000L, "TopUp", Guid.NewGuid()),
+            WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 250_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromMinutes(1));
 
         var (sweeper, services) = NewSweeper();
@@ -185,7 +185,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         var tenantId = Guid.NewGuid();
         await SeedWalletAsync(tenantId);
         var mutation = await EnqueueAsync(
-            WalletMutation.ForCredit(Guid.NewGuid(), 250_000L, "TopUp", Guid.NewGuid()),
+            WalletMutation.Create(WalletMutationType.Credit, Guid.NewGuid(), 250_000L, "TopUp", Guid.NewGuid()),
             age: TimeSpan.FromMinutes(1));
 
         var (sweeper, services) = NewSweeper(maxAttempts: 2);

@@ -1,3 +1,4 @@
+using Titan.Infrastructure.Validation;
 using FastEndpoints;
 using FluentValidation;
 using Titan.Domain.Aggregates.Network;
@@ -31,7 +32,7 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
             RuleFor(x => x).Must(StartIsAtOrBeforeEnd)
                 .WithMessage("'StartPort' must be less than or equal to 'EndPort'.")
                 .When(r => r.StartPort.HasValue && r.EndPort.HasValue
-                           && PortRange.IsPort(r.StartPort.Value) && PortRange.IsPort(r.EndPort.Value));
+                           && IsPort(r.StartPort.Value) && IsPort(r.EndPort.Value));
         });
 
         When(x => x.Protocol is "ICMP" or "All", () =>
@@ -41,9 +42,11 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
         });
 
         RuleFor(x => x.Cidr).NotEmpty()
-            .Must(c => FirewallCidr.TryParse(c, out _))
+            .Must(c => DomainValue.OrNull(() => FirewallCidr.Parse(c)) != null)
             .WithMessage("'Cidr' must be a valid IPv4 or IPv6 CIDR notation (e.g. 0.0.0.0/0 or ::/0).");
     }
+
+    private static bool IsPort(int port) => port >= PortRange.MinPort && port <= PortRange.MaxPort;
 
     // Reached only when both ports are present and in range (the When above); the null checks are for the compiler.
     private static bool StartIsAtOrBeforeEnd(CreateFirewallRuleRequest r)
@@ -52,6 +55,6 @@ public class CreateFirewallRuleValidator : Validator<CreateFirewallRuleRequest>
         {
             return true;
         }
-        return PortRange.TryOf(r.StartPort.Value, r.EndPort.Value, out _);
+        return DomainValue.OrNull(() => PortRange.Of(r.StartPort.Value, r.EndPort.Value)) != null;
     }
 }

@@ -15,9 +15,12 @@ public record ReconcilableVmQueryResult(
     string? IpAddress,
     string? PublicIpv6Address)
 {
-    public static ReconcilableVmQueryResult From(VmAggregate v) =>
-        new(v.Id, v.RequireExternalId(), StateName(v.CurrentState), v.CurrentExistence.ToString(), v.IpAddress,
-            v.PublicIpv6Address);
+    // The repository lists only VMs with a provider id, so a missing one here is a broken query, not a row to skip quietly.
+    public static ReconcilableVmQueryResult From(VmAggregate v)
+    {
+        string externalId = v.ExternalId ?? throw new InvalidOperationException($"VM {v.Id} has no provider id and cannot be reconciled.");
+        return new(v.Id, externalId, StateName(v.CurrentState), v.CurrentExistence.ToString(), v.IpAddress, v.PublicIpv6Address);
+    }
 
     private static string? StateName(VmState? state)
     {
