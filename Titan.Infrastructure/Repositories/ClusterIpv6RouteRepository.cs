@@ -9,11 +9,12 @@ public class ClusterIpv6RouteRepository(TitanDbContext db) : IClusterIpv6RouteRe
 {
     public async Task<IReadOnlyList<ClusterIpv6Route>> LockFreeAsync(string clusterId, CancellationToken ct = default)
     {
-        // By number, so two creates take the rows in one order and cannot deadlock.
-        await db.LockRowAsync(
-            $"SELECT number FROM core.cluster_ipv6_routes WHERE cluster_id = {clusterId} AND network_id IS NULL ORDER BY number FOR UPDATE",
-            ct);
-        return await db.ClusterIpv6Routes.Where(r => r.ClusterId == clusterId && r.NetworkId == null).ToListAsync(ct);
+        await db.BeginLockTransactionAsync(ct);
+        // One statement locks and reads: a later read could see a route freed since, which this create holds no lock on,
+        // and two creates could then take it. By number, so two creates take the rows in one order and cannot deadlock.
+        return await db.ClusterIpv6Routes
+            .FromSql($"SELECT * FROM core.cluster_ipv6_routes WHERE cluster_id = {clusterId} AND network_id IS NULL ORDER BY number FOR UPDATE")
+            .ToListAsync(ct);
     }
 
     public async Task<ClusterIpv6Route?> FindHeldByAsync(Guid networkId, CancellationToken ct = default) =>

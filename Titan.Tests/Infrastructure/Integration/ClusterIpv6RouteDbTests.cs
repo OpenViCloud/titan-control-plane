@@ -117,10 +117,38 @@ public class ClusterIpv6RouteDbTests(PostgresFixture pg)
     [Fact]
     public async Task EveryRouteHeld_LeavesNothingToGive()
     {
-        string cluster = NewCluster();
+        string cluster = await ClusterWithRoutesAsync();
         await using TitanDbContext db = pg.NewDbContext();
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE core.cluster_ipv6_routes SET network_id = gen_random_uuid() WHERE cluster_id = {cluster}");
 
         Assert.Empty(await new ClusterIpv6RouteRepository(db).LockFreeAsync(cluster));
+    }
+
+    [Fact]
+    public async Task AClusterWithNoRows_HasNothingToGive()
+    {
+        await using TitanDbContext db = pg.NewDbContext();
+
+        Assert.Empty(await new ClusterIpv6RouteRepository(db).LockFreeAsync(NewCluster()));
+    }
+
+    // Every route handed out is one this create holds locked: another connection cannot lock any of them.
+    [Fact]
+    public async Task LockFree_LocksEveryRouteItHandsOut()
+    {
+        string cluster = await ClusterWithRoutesAsync();
+        await using TitanDbContext creating = pg.NewDbContext();
+        IReadOnlyList<ClusterIpv6Route> free = await new ClusterIpv6RouteRepository(creating).LockFreeAsync(cluster);
+        Assert.Equal(255, free.Count);
+
+        await using TitanDbContext other = pg.NewDbContext();
+        foreach (ClusterIpv6Route route in free.Where(r => r.Number is 1 or 255))
+        {
+            var ex = await Assert.ThrowsAnyAsync<Npgsql.PostgresException>(() => other.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT number FROM core.cluster_ipv6_routes WHERE cluster_id = {cluster} AND number = {route.Number} FOR UPDATE NOWAIT"));
+            Assert.Equal(Npgsql.PostgresErrorCodes.LockNotAvailable, ex.SqlState);
+        }
     }
 
     [Fact]

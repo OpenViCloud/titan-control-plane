@@ -1112,6 +1112,8 @@ public class NetworkServiceTests
         Assert.False(network.HasPublicIpv6);
         Assert.True(RouteRow(1).IsFree);
         Assert.NotNull(RouteRow(1).ReleasedAt);
+        // A route never used still comes before the one just given back.
+        Assert.Equal(2, ClusterIpv6Route.NextToGive("cluster-1", _routeRows.Where(route => route.IsFree).ToList()).Number);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 

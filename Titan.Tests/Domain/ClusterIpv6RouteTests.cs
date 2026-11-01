@@ -72,7 +72,7 @@ public class ClusterIpv6RouteTests
     }
 
     [Fact]
-    public void NextToGive_WithNoFreeRoute_Throws422Ipv6NotAvailable()
+    public void NextToGive_WithNoFreeRoute_ThrowsIpv6NotAvailable()
     {
         var ex = Assert.Throws<BusinessException>(() => ClusterIpv6Route.NextToGive("singapore01", []));
 

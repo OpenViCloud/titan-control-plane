@@ -4,8 +4,8 @@ namespace Titan.Domain.Repositories;
 
 public interface IClusterIpv6RouteRepository
 {
-    /// Every free route of the cluster, tracked and locked until the caller's save commits. A second caller waits here,
-    /// then sees what the first left free, so two creates never take one route.
+    /// Every free route of the cluster, tracked and locked until the caller's save commits; only a locked route is
+    /// handed out. A second caller waits here, then gets what the first left free, so two creates never take one route.
     Task<IReadOnlyList<ClusterIpv6Route>> LockFreeAsync(string clusterId, CancellationToken ct = default);
 
     /// The route the network holds, tracked; null when it holds none.

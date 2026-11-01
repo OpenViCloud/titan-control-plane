@@ -225,7 +225,7 @@ Khoá lệnh = chuỗi id workflow cũ (`titan-ops architecture/provider-and-wor
 | `VM_IS_LOAD_BALANCER_BACKEND` | 422 | Xoá VM mà một load balancer chưa `Deleted` còn gửi tới (desired hoặc Incus đang giữ) — gỡ backend trước |
 | `FIREWALL_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxFirewallRulesPerNetwork` (mặc định 20), **per network**; rule đã bấm xoá thôi tính (DCS-Q1) |
 | `IPV6_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxPublicIpv6` (mặc định 10): đếm **network** có `/64` public, như `MaxNetworks`; chỉ kiểm khi tạo network xin IPv6 (`titan-ops features/network/design.md#ipv6-quota`) |
-| `IPV6_NOT_AVAILABLE` | 422 | Tạo network xin IPv6 ở cluster thiếu `ovnUplinkNetwork` hoặc `ipv6Block`, hoặc hết `/64` trống (255 mỗi cluster) — không hàng, không lệnh (`titan-ops features/network/design.md#ipv6-public`) |
+| `IPV6_NOT_AVAILABLE` | 422 | Tạo network xin IPv6 ở cluster thiếu `ovnUplinkNetwork` hoặc `ipv6Block`, hết route rảnh (255 mỗi cluster), hoặc cluster mới mà control plane chưa tạo được hàng route — không hàng, không lệnh (`titan-ops features/network/design.md#ipv6-public`) |
 | `TOPUP_NOT_FOUND` | 404 | TopUp id không tồn tại |
 | `TOPUP_INVALID_STATE` | 422 | Confirm/Fail TopUp không từ trạng thái hợp lệ (chỉ từ Pending) |
 | `INVOICE_INVALID_STATE` | 422 | `SettleFromWallet` (trả hoá đơn từ ví) không từ trạng thái `New` (`MarkSettledByWallet` đã gỡ — `titan-ops architecture/money-and-wallet.md#human-confirmed-debit` / `titan-ops architecture/money-and-wallet.md#wallet-one-balance`) |

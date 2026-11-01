@@ -116,12 +116,19 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
         {
             return;
         }
+        await BeginLockTransactionAsync(ct);
+        await Database.ExecuteSqlInterpolatedAsync(lockStatement, ct);
+    }
+
+    /// Opens the transaction a lock lives in, for a caller whose one statement both locks and reads. The next
+    /// SaveChangesAsync commits it.
+    public async Task BeginLockTransactionAsync(CancellationToken ct)
+    {
         if (Database.CurrentTransaction == null)
         {
             await Database.BeginTransactionAsync(ct);
             _ownsTransaction = true;
         }
-        await Database.ExecuteSqlInterpolatedAsync(lockStatement, ct);
     }
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken ct = default)

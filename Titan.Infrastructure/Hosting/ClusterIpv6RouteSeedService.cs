@@ -7,8 +7,8 @@ using Titan.Domain.Repositories;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Gives every cluster with public IPv6 a row for each of its static routes, once, when the control plane starts
-/// (titan-ops features/network/design.md#ipv6-public). The cluster list is config, so a new cluster means a restart.
+/// Gives every cluster with public IPv6 a row for each of its static routes, once, when the control plane starts. The
+/// cluster list is config, so a new cluster means a restart.
 /// A failure leaves the pod running and tries again: a cluster that already has its rows loses nothing, and only a new
 /// one answers IPV6_NOT_AVAILABLE meanwhile.
 /// </summary>

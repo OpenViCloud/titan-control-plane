@@ -14,14 +14,14 @@ namespace Titan.Infrastructure.Migrations
     public partial class ClusterIpv6Route : Migration
     {
         /// All 255 rows of a cluster that has a pool, so its routes are complete before the control plane starts.
-        public const string CopyFromThePoolSql = @"
+        private const string CopyFromThePoolSql = @"
 INSERT INTO core.cluster_ipv6_routes (cluster_id, number, network_id, released_at)
 SELECT p.cluster_id, n, h.holder_network_id, h.given_back_at
 FROM core.cluster_ipv6_pools p
 CROSS JOIN generate_series(1, 255) n
 LEFT JOIN core.cluster_ipv6_block64_holdings h ON h.pool_id = p.id AND h.block64_number = n;";
 
-        public const string CopyBackToThePoolSql = @"
+        private const string CopyBackToThePoolSql = @"
 INSERT INTO core.cluster_ipv6_pools (id, cluster_id, version)
 SELECT gen_random_uuid(), cluster_id, 0
 FROM core.cluster_ipv6_routes
