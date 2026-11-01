@@ -19,7 +19,6 @@ namespace Titan.Tests.Services;
 // over a fake repository; the provider command queue is a Moq mock where the command itself is the assertion.
 public class LoadBalancerServiceTests
 {
-    private const string Block = "2001:41d0:d00:d400::/56";
     private readonly Tenant _tenant = TestTenant.WithRoomToSpare();
     private Guid TenantId => _tenant.Id;
     private string Project => "t-" + TenantId.ToString("N");
@@ -45,7 +44,7 @@ public class LoadBalancerServiceTests
     private Network NetworkWithIpv6(bool usable = true, Guid? tenantId = null)
     {
         Tenant owner = tenantId == null ? _tenant : TestTenant.Active("other", "kc-o", "o@o.com");
-        var network = Network.Create(owner, 0, 0, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..12]), "cluster-1", null, NetworkPublicIpv6.For(Block, 5));
+        var network = TestNetworks.CreatingWithPublicIpv6(owner, $"net-{Guid.NewGuid():N}"[..12], "cluster-1");
         if (usable)
         {
             network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
@@ -56,7 +55,7 @@ public class LoadBalancerServiceTests
 
     private Network NetworkWithoutIpv6()
     {
-        var network = Network.Create(_tenant, 0, 0, NetworkName.Parse("plain"), "cluster-1", null, null);
+        var network = Network.Create(_tenant, 0, 0, NetworkName.Parse("plain"), "cluster-1", null, wantsPublicIpv6: false);
         network.MarkActive("net-plain", "10.0.0.0/24", "10.0.0.1");
         _networks.Setup(r => r.FindByIdAsync(network.Id, It.IsAny<CancellationToken>())).ReturnsAsync(network);
         return network;

@@ -43,21 +43,10 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks.CountAsync(
             n => n.TenantId == tenantId &&
-                 n.PublicIpv6Index != null &&
+                 n.PublicIpv6Subnet != null &&
                  n.DesiredExistence == DesiredExistence.Exists &&
                  (n.CurrentExistence == CurrentExistence.Exists
                   || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingIntentId != null)), ct);
-
-    // Like the name, a /64 stays taken until the delete command confirms the network gone: Incus still has its
-    // router until then. Same condition as the unique index in NetworkConfiguration.
-    public async Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default)
-    {
-        var indexes = await db.Networks
-            .Where(n => n.ClusterId == clusterId && n.PublicIpv6Index != null && n.CurrentExistence != CurrentExistence.Deleted)
-            .Select(n => n.PublicIpv6Index!.Value)
-            .ToListAsync(ct);
-        return indexes.ToHashSet();
-    }
 
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
@@ -65,17 +54,6 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
 
     // A VM holds the network while its instance exists on the provider (whatever its status, a delete in flight
     // included: Incus refuses to delete a network an instance still uses) or its create is still waiting.
-    public async Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId,
-        CancellationToken ct = default)
-    {
-        var releases = await db.Networks
-            .Where(n => n.ClusterId == clusterId && n.PublicIpv6Index != null && n.CurrentExistence == CurrentExistence.Deleted)
-            .GroupBy(n => n.PublicIpv6Index!.Value)
-            .Select(g => new { Index = g.Key, ReleasedAt = g.Max(n => n.PublicIpv6ReleasedAt) })
-            .ToListAsync(ct);
-        return releases.ToDictionary(r => r.Index, r => r.ReleasedAt);
-    }
-
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
             v => v.NetworkId == networkId &&

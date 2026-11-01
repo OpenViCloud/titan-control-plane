@@ -6,6 +6,7 @@ using Titan.Application.Queries.Networking.Network;
 using Titan.Application.Queries.Networking.Network.Contracts;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.Network;
+using Titan.Domain.Aggregates.ClusterIpv6Pool;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -20,15 +21,24 @@ public class NetworkServiceTests
     private static readonly Guid TenantId = Guid.NewGuid();
 
     private readonly Mock<INetworkRepository> _repo = new();
+    private readonly Mock<IClusterIpv6PoolRepository> _pools = new();
+    // The cluster's pool, as the repository hands it out: the real aggregate, so the tests see the real policy.
+    private ClusterIpv6Pool _pool = ClusterIpv6Pool.Create("cluster-1");
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
     private readonly Titan.Tests.Fakes.FakeActivityRecorder _activity = new();
 
+    public NetworkServiceTests()
+    {
+        _pools.Setup(p => p.FindOrAddAsync("cluster-1", default)).ReturnsAsync(() => _pool);
+        _pools.Setup(p => p.FindAsync("cluster-1", default)).ReturnsAsync(() => _pool);
+    }
+
     // Facade over the network command and query handlers so the tests keep one call shape; it proves
     // nothing on its own — the handlers underneath are the real ones.
     private NetworkFacade CreateService() =>
-        new(_repo.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
+        new(_repo.Object, _pools.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
 
     private readonly Titan.Application.Options.ClusterOptions _clusters = new()
     {
@@ -36,12 +46,12 @@ public class NetworkServiceTests
     };
 
     private sealed class NetworkFacade(
-        INetworkRepository repo, ITenantRepository tenantRepo,
+        INetworkRepository repo, IClusterIpv6PoolRepository pools, ITenantRepository tenantRepo,
         Titan.Application.Options.ClusterOptions clusters,
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateNetworkCommandResult> CreateAsync(CreateNetworkCommand req, CancellationToken ct = default)
-            => new CreateNetworkCommandHandler(repo, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
+            => new CreateNetworkCommandHandler(repo, pools, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
 
         public Task<List<NetworkQueryResult>> ListAsync(CancellationToken ct = default)
             => new ListNetworksQueryHandler(repo, currentUser).HandleAsync(new ListNetworksQuery(), ct);
@@ -57,7 +67,7 @@ public class NetworkServiceTests
                 .HandleAsync(new DeleteNetworkCommand(networkId), ct);
 
         public Task UpdateStatusAsync(Guid networkId, UpdateNetworkStatusRequest req, CancellationToken ct = default)
-            => new UpdateNetworkStatusCommandHandler(repo, activity)
+            => new UpdateNetworkStatusCommandHandler(repo, pools, activity)
                 .HandleAsync(new UpdateNetworkStatusCommand(networkId, req.Report, req.Exists, req.Status, req.ExternalId,
                     req.Cidr, req.Gateway, req.Reason, req.Detail), ct);
     }
@@ -924,7 +934,9 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Public IPv6: one /64 of the cluster per network (titan-ops infra/incus/design.md#ipv6-address-plan) ──
+    // ── Public IPv6: one /64 block of the cluster per network (titan-ops infra/incus/design.md#ipv6-address-plan) ──
+
+    private const string Block56 = "2001:41d0:d00:d400::/56";
 
     private void SetupCluster(string? uplink, string? block)
     {
@@ -941,45 +953,44 @@ public class NetworkServiceTests
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
-        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int>());
-        _repo.Setup(r => r.ListPublicIpv6ReleasesInClusterAsync("cluster-1", default))
-            .ReturnsAsync(new Dictionary<int, DateTimeOffset?>());
     }
 
     // A /64 given back minutes ago would put the new network's router where OVH still sees the old one
-    // (titan-ops features/network/design.md#ipv6-public): the handler hands the releases to the allocator.
+    // (titan-ops features/network/design.md#ipv6-public): the pool gives a block never held first.
     [Fact]
-    public async Task Create_WithPublicIpv6_SkipsASlash64JustGivenBack_WhileOneWasNeverUsed()
+    public async Task Create_WithPublicIpv6_SkipsABlock64JustGivenBack_WhileOneWasNeverUsed()
     {
         SetupFreshCreate();
-        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6ReleasesInClusterAsync("cluster-1", default))
-            .ReturnsAsync(new Dictionary<int, DateTimeOffset?> { [1] = DateTimeOffset.UtcNow });
+        SetupCluster("ovnup", Block56);
+        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1", (1, false, DateTimeOffset.UtcNow));
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default);
 
         Assert.NotNull(added);
-        Assert.Equal(2, added!.PublicIpv6Index);
+        Assert.Equal("2001:41d0:d00:d402::/64", added!.PublicIpv6Subnet);
+        Assert.True(_pool.IsBlock64HeldBy(added.Id));
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_TakesTheLowestFreeSlash64_AndSendsItsRouter()
+    public async Task Create_WithPublicIpv6_TakesTheLowestFreeBlock64_AndSendsItsRouter()
     {
         SetupFreshCreate();
-        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int> { 1, 2 });
+        SetupCluster("ovnup", Block56);
+        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1", (1, true, null), (2, true, null));
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default);
 
         Assert.NotNull(added);
-        Assert.Equal(3, added!.PublicIpv6Index);
+        Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
+        Assert.True(_pool.IsBlock64HeldBy(added.Id));
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
             added.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
             "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
     [Theory]
@@ -995,6 +1006,7 @@ public class NetworkServiceTests
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
+        Assert.Empty(_pool.Holdings);
         _commands.VerifyNoOtherCalls();
     }
 
@@ -1010,43 +1022,182 @@ public class NetworkServiceTests
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_WhenEverySlash64IsTaken_IsRefused()
+    public async Task Create_WithPublicIpv6_WhenEveryBlock64IsHeld_IsRefused_AndNothingIsStaged()
     {
         SetupFreshCreate();
-        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
-        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(Enumerable.Range(1, 255).ToHashSet());
+        SetupCluster("ovnup", Block56);
+        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1",
+            Enumerable.Range(1, 255).Select(number => (number, true, (DateTimeOffset?)null)).ToArray());
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+        _commands.VerifyNoOtherCalls();
     }
 
-    // The cap counts the caller's networks with a /64; the factory refuses at it (QuotaInFactoryTests).
+    // The cap counts the caller's networks with a /64; the factory refuses at it (QuotaInFactoryTests), before the
+    // pool gives anything away.
     [Fact]
-    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused()
+    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused_AndThePoolGivesNothing()
     {
         SetupFreshCreate();
-        SetupCluster("ovnup", "2001:41d0:d00:d400::/56");
+        SetupCluster("ovnup", Block56);
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(10);
-        _repo.Setup(r => r.ListPublicIpv6IndexesInClusterAsync("cluster-1", default)).ReturnsAsync(new HashSet<int>());
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
+        Assert.Empty(_pool.Holdings);
+        _pools.Verify(p => p.FindOrAddAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Without IPv6 no /64 is looked for: a cluster with no public IPv6 still makes networks.
+    // Without IPv6 the pool is not asked: a cluster with no public IPv6 still makes networks.
     [Fact]
-    public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_LooksForNo64()
+    public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_AsksThePoolForNothing()
     {
         SetupFreshCreate();
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
-        _repo.Verify(r => r.ListPublicIpv6IndexesInClusterAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _pools.Verify(p => p.FindOrAddAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(_pool.Holdings);
+    }
+
+    // ── The block goes back to the pool in the same save as the network that let go of it ──
+
+    // A network whose create waits and that holds a block the pool gave it, as the create handler leaves them.
+    private Network CreatingNetworkHoldingBlock64()
+    {
+        Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
+        GrantedBlock64 granted = _pool.GiveBlock64To(network.Id, Block56);
+        network.ReceivePublicIpv6(granted.Subnet, granted.RouterAddress);
+        _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
+        return network;
+    }
+
+    [Fact]
+    public async Task UpdateStatus_CreateGivesUpBeforeIncus_TakesTheBlock64Back_AtTheBackOfTheLine()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+
+        await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed."));
+
+        Assert.False(network.HasPublicIpv6);
+        Assert.False(_pool.IsBlock64HeldBy(network.Id));
+        Assert.NotNull(_pool.Holdings.Single().GivenBackAt);
+        // A block never held still comes before the one just given back.
+        Assert.Equal(2, _pool.GiveBlock64To(Guid.NewGuid(), Block56).Number);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_CreateGivesUpAfterIncusHadIt_KeepsTheBlock64()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        int versionBefore = _pool.Version;
+
+        await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed.", id: "net-x"));
+
+        Assert.True(network.HasPublicIpv6);
+        Assert.True(_pool.IsBlock64HeldBy(network.Id));
+        Assert.Equal(versionBefore, _pool.Version);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_DeletedReport_TakesTheBlock64Back()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        network.MarkObserved(NetworkStatus.Created);
+        network.RequestDelete();
+
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+
+        Assert.False(_pool.IsBlock64HeldBy(network.Id));
+        Assert.NotNull(_pool.Holdings.Single().GivenBackAt);
+    }
+
+    // The worker repeats a report it could not confirm was received: the second one finds nothing left to take back.
+    [Fact]
+    public async Task UpdateStatus_DeletedReportTwice_TakesTheBlock64BackOnce()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        network.MarkObserved(NetworkStatus.Created);
+        network.RequestDelete();
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+        int versionAfterTheFirst = _pool.Version;
+        DateTimeOffset? givenBackAt = _pool.Holdings.Single().GivenBackAt;
+
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+
+        Assert.Equal(versionAfterTheFirst, _pool.Version);
+        Assert.Equal(givenBackAt, _pool.Holdings.Single().GivenBackAt);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_DeletedReport_WhenTheClusterHasNoPool_StillRecordsTheDelete()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        network.MarkObserved(NetworkStatus.Created);
+        network.RequestDelete();
+        _pools.Setup(p => p.FindAsync("cluster-1", default)).ReturnsAsync((ClusterIpv6Pool?)null);
+
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+
+        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+    }
+
+    // A report must not stay unanswerable because the two halves drifted apart: the pool has no holding for the block the
+    // network says it has, so the network is deleted all the same and the pool is left as it is.
+    [Fact]
+    public async Task UpdateStatus_DeletedReport_WhenThePoolDoesNotHoldTheBlock_StillRecordsTheDelete()
+    {
+        Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
+        network.ReceivePublicIpv6("2001:41d0:d00:d405::/64", "2001:41d0:d00:d400::105");
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        network.MarkObserved(NetworkStatus.Created);
+        network.RequestDelete();
+        _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
+
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+
+        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.Empty(_pool.Holdings);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_ADeleteIncusRefused_KeepsTheBlock64()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        network.MarkObserved(NetworkStatus.Created);
+        network.RequestDelete();
+        int versionBefore = _pool.Version;
+
+        await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network deletion failed."));
+
+        Assert.True(_pool.IsBlock64HeldBy(network.Id));
+        Assert.Equal(versionBefore, _pool.Version);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_ObservedReports_LeaveThePoolAlone()
+    {
+        Network network = CreatingNetworkHoldingBlock64();
+        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
+        int versionBefore = _pool.Version;
+
+        await CreateService().UpdateStatusAsync(network.Id, Observed("Created"));
+        await CreateService().UpdateStatusAsync(network.Id, NotFoundReport);
+
+        Assert.Equal(versionBefore, _pool.Version);
+        Assert.True(_pool.IsBlock64HeldBy(network.Id));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

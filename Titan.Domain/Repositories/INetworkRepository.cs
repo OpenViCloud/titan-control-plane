@@ -15,13 +15,8 @@ public interface INetworkRepository
     Task<Network?> FindByFirewallRuleIdAsync(Guid ruleId, CancellationToken ct = default);
     Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
-    /// Networks of the tenant with a public /64, counted like CountActiveByTenantAsync (MaxPublicIpv6).
+    /// Networks of the tenant with a public /64 block, counted like CountActiveByTenantAsync (MaxPublicIpv6).
     Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
-    /// The /64 numbers live networks of the cluster hold, any tenant: same rule as the unique index on them.
-    Task<HashSet<int>> ListPublicIpv6IndexesInClusterAsync(string clusterId, CancellationToken ct = default);
-    /// Each /64 number a Deleted network of the cluster held, any tenant, with the latest time it was given back (null:
-    /// deleted before that was recorded).
-    Task<Dictionary<int, DateTimeOffset?>> ListPublicIpv6ReleasesInClusterAsync(string clusterId, CancellationToken ct = default);
     Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default);
     Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default);
     /// A load balancer of the network is not yet Deleted: it lives on the network on Incus.

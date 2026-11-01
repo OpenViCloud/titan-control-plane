@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using PoolAggregate = Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -14,6 +15,7 @@ namespace Titan.Application.Commands.Networking.Network;
 // (titan-ops features/activity/design.md#outcome-source).
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
+    IClusterIpv6PoolRepository pools,
     IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateNetworkStatusCommand command, CancellationToken ct = default)
@@ -51,6 +53,7 @@ public class UpdateNetworkStatusCommandHandler(
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
         string? outcome = null;
+        bool letGoOfBlock64 = false;
         switch (req.Report)
         {
             case "Observed":
@@ -85,7 +88,7 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 else
                 {
-                    network.MarkRequestFailed(req.Reason, req.Detail);
+                    letGoOfBlock64 = network.MarkRequestFailed(req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
@@ -93,6 +96,7 @@ public class UpdateNetworkStatusCommandHandler(
                 // the ones whose own delete was waiting: their own delete command will only find them already Deleted,
                 // so their outcome is recorded now.
                 NetworkDeletionOutcome deletion = network.MarkDeleted();
+                letGoOfBlock64 = deletion.LetGoOfBlock64;
                 if (deletion.FulfilledNetworkDelete)
                 {
                     outcome = "network.deleted";
@@ -110,7 +114,27 @@ public class UpdateNetworkStatusCommandHandler(
             activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name.Value);
         }
 
+        if (letGoOfBlock64)
+        {
+            await TakeBlock64BackAsync(network, ct);
+        }
+
         await repo.SaveAsync(ct);
+    }
+
+    // The block goes back to the cluster's pool in the same save as the network that let go of it. A pool that does
+    // not hold it (a report repeated after the pool already took it back) has nothing to take back.
+    private async Task TakeBlock64BackAsync(Titan.Domain.Aggregates.Network.Network network, CancellationToken ct)
+    {
+        PoolAggregate? pool = await pools.FindAsync(network.ClusterId, ct);
+        if (pool == null)
+        {
+            return;
+        }
+        if (pool.IsBlock64HeldBy(network.Id))
+        {
+            pool.TakeBlock64BackFrom(network.Id);
+        }
     }
 
     // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).

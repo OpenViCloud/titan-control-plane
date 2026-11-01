@@ -35,28 +35,13 @@ public class Network : AggregateRoot
     public DateTimeOffset CreatedAt { get; private set; }
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
-    // The network's public /64 and the router address OVH routes it to; null = no public IPv6
-    // (titan-ops infra/incus/design.md#ipv6-address-plan). The index is unique per cluster among live networks.
-    public int? PublicIpv6Index { get; private set; }
+    // The /64 block the cluster's pool gave the network and the router address OVH routes it to; null = no public IPv6
+    // (titan-ops infra/incus/design.md#ipv6-address-plan). Which block number it is, and when it is given back,
+    // is the pool's to know (ClusterIpv6Pool).
     public string? PublicIpv6Subnet { get; private set; }
     public string? PublicIpv6RouterAddress { get; private set; }
-    /// When the delete of a network holding a /64 was confirmed: the allocator takes back the number given back
-    /// longest ago (NetworkPublicIpv6.FirstFree).
-    public DateTimeOffset? PublicIpv6ReleasedAt { get; private set; }
 
-    /// The three columns as the one value Create was given. EF Core 9 has no nullable complex property, so the
-    /// columns stay the storage and the value is rebuilt (titan-ops architecture/code-structure.md#logic-placement).
-    public NetworkPublicIpv6? PublicIpv6
-    {
-        get
-        {
-            if (PublicIpv6Index == null || PublicIpv6Subnet == null || PublicIpv6RouterAddress == null)
-            {
-                return null;
-            }
-            return NetworkPublicIpv6.Stored(PublicIpv6Index.Value, PublicIpv6Subnet, PublicIpv6RouterAddress);
-        }
-    }
+    public bool HasPublicIpv6 => PublicIpv6Subnet != null;
 
     /// The network's rules, each a line in its ACL on Incus; rows are kept after Deleted
     /// (titan-ops features/network/design.md#firewall-rule-soft-delete). The repository loads them with the network.
@@ -97,12 +82,12 @@ public class Network : AggregateRoot
     /// same case with 400 first, so NETWORK_CIDR_NOT_PRIVATE is not reached over HTTP.
     public static Network Create(
         TenantAggregate tenant, int activeNetworkCount, int activePublicIpv6Count, NetworkName name, string clusterId,
-        Ipv4Cidr? requestedCidr, NetworkPublicIpv6? publicIpv6,
+        Ipv4Cidr? requestedCidr, bool wantsPublicIpv6,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
         tenant.EnsureCanCreateNetwork(activeNetworkCount);
-        if (publicIpv6 != null)
+        if (wantsPublicIpv6)
         {
             tenant.EnsureCanEnablePublicIpv6(activePublicIpv6Count);
             bool cidrOutsideThePrivateRanges = requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
@@ -114,13 +99,23 @@ public class Network : AggregateRoot
         }
         var network = CreateUnchecked(tenant.Id, name.Value, clusterId, defaultIngressPolicy, defaultEgressPolicy);
         network.RequestedCidr = requestedCidr;
-        if (publicIpv6 != null)
-        {
-            network.PublicIpv6Index = publicIpv6.Index;
-            network.PublicIpv6Subnet = publicIpv6.Subnet;
-            network.PublicIpv6RouterAddress = publicIpv6.RouterAddress;
-        }
         return network;
+    }
+
+    /// The /64 block the cluster's pool handed over for this network, which has its own id only once created
+    /// (titan-ops features/network/design.md#ipv6-public). Once, and only while the create is waiting.
+    public void ReceivePublicIpv6(string subnet, string routerAddress)
+    {
+        if (HasPublicIpv6)
+        {
+            throw new InvalidOperationException($"Network {Id} already has a public IPv6 /64 block.");
+        }
+        if (!CreateIsWaiting)
+        {
+            throw new InvalidOperationException($"Network {Id} is not waiting for its create, so it takes no new /64 block.");
+        }
+        PublicIpv6Subnet = subnet;
+        PublicIpv6RouterAddress = routerAddress;
     }
 
     /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
@@ -236,16 +231,13 @@ public class Network : AggregateRoot
     {
         if (IsTerminal)
         {
-            return new NetworkDeletionOutcome(false, []);
+            return new NetworkDeletionOutcome(false, [], false);
         }
         bool fulfilled = DeleteIsWaiting;
+        bool holdsBlock64 = HasPublicIpv6;
         CurrentExistence = CurrentExistence.Deleted;
         CurrentState = null;
         PendingIntentId = null;
-        if (PublicIpv6Index != null)
-        {
-            PublicIpv6ReleasedAt = DateTimeOffset.UtcNow;
-        }
         var rulesWhoseDeleteWasFulfilled = new List<FirewallRule>();
         foreach (FirewallRule rule in _firewallRules)
         {
@@ -255,17 +247,17 @@ public class Network : AggregateRoot
                 rulesWhoseDeleteWasFulfilled.Add(rule);
             }
         }
-        return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled);
+        return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled, holdsBlock64);
     }
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale and records nothing; a delete's give-up is
-    /// AbandonRequest.
-    public void MarkRequestFailed(string? reason, string? detail)
+    /// AbandonRequest. True when the network let go of its /64 block, which the caller takes back in the cluster's pool.
+    public bool MarkRequestFailed(string? reason, string? detail)
     {
         if (IsTerminal || !CreateIsWaiting)
         {
-            return;
+            return false;
         }
         RequestFailureReason = reason;
         RequestFailureDetail = detail;
@@ -274,12 +266,13 @@ public class Network : AggregateRoot
         // Incus never had the network, so nothing holds the /64 there; keeping it here would take one of the
         // cluster's 255 until the tenant deletes the row.
         bool incusNeverHadIt = ExternalId is null;
-        if (incusNeverHadIt)
+        if (incusNeverHadIt && HasPublicIpv6)
         {
-            PublicIpv6Index = null;
             PublicIpv6Subnet = null;
             PublicIpv6RouterAddress = null;
+            return true;
         }
+        return false;
     }
 
     // ---- The provider id is handed out only after validating
@@ -429,7 +422,7 @@ public class Network : AggregateRoot
     /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
     public string BeginLoadBalancer()
     {
-        if (PublicIpv6 == null)
+        if (!HasPublicIpv6)
             throw new BusinessException("LOAD_BALANCER_NEEDS_PUBLIC_IPV6", "A load balancer needs a network with public IPv6.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_INVALID_STATE", "Load balancers can only be added to a network Incus has created.");

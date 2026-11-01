@@ -41,11 +41,14 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             .HasConversion<string>()
             .IsRequired()
             .HasDefaultValue(FirewallPolicy.Allow);
-        builder.Property(n => n.PublicIpv6Index).HasColumnName("public_ipv6_index");
         builder.Property(n => n.PublicIpv6Subnet).HasColumnName("public_ipv6_subnet");
         builder.Property(n => n.PublicIpv6RouterAddress).HasColumnName("public_ipv6_router_address");
-        builder.Property(n => n.PublicIpv6ReleasedAt).HasColumnName("public_ipv6_released_at");
-        builder.Ignore(n => n.PublicIpv6);
+        builder.Ignore(n => n.HasPublicIpv6);
+        // The block number and the time it was given back moved to ClusterIpv6Pool. Their columns, and the unique
+        // index on them, stay in the model without a property until a later migration drops them, after a release has
+        // carried the pool: the code before the pool still reads and writes them, and nothing here writes them now.
+        builder.Property<int?>("PublicIpv6Index").HasColumnName("public_ipv6_index");
+        builder.Property<DateTimeOffset?>("PublicIpv6ReleasedAt").HasColumnName("public_ipv6_released_at");
 
         // The rules are the network's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
         // through the backing field so EF never needs a setter on the collection. Restrict, not cascade: no row of
@@ -63,9 +66,8 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             // holds it (titan-ops features/network/design.md#network-name-reuse). Same filter as ExistsByNameAsync.
             .HasFilter("current_existence <> 'Deleted'");
 
-        // One /64 per live network of a cluster: two creates that picked the same number race here, not in Incus
-        // (titan-ops infra/incus/design.md#ipv6-address-plan). Same condition as ListPublicIpv6IndexesInClusterAsync.
-        builder.HasIndex(n => new { n.ClusterId, n.PublicIpv6Index })
+        // Legacy guard of the columns above: the pool holds the one-block-per-network rule now.
+        builder.HasIndex(nameof(Network.ClusterId), "PublicIpv6Index")
             .IsUnique()
             .HasDatabaseName(PublicIpv6IndexName)
             .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
