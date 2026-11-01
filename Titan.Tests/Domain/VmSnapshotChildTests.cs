@@ -16,16 +16,9 @@ public class VmSnapshotChildTests
 
     private static Vm RunningVm()
     {
-        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vm = Vm.Create(TenantIdOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("vm42", "10.0.0.5");
         return vm;
-    }
-
-    private static Tenant TenantWithSnapshotCap(int maxVmSnapshotsPerVm)
-    {
-        var tenant = TestTenant.Active("t", "kc", "t@x.io");
-        tenant.UpdateQuota(TenantQuota.Create(10, 1, 10, maxVmSnapshotsPerVm, 3, 20, 10, 20, 5));
-        return tenant;
     }
 
     // The seven situations the repository count once measured (titan-ops features/vm/design.md#vm-snapshot-counting):
@@ -63,22 +56,11 @@ public class VmSnapshotChildTests
     }
 
     [Fact]
-    public void AddSnapshot_AtTheCap_Refuses_AndAddsNothing()
-    {
-        var vm = VmWithEverySnapshotSituation(); // usage 3
-
-        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot(TenantWithSnapshotCap(3), "one-more"));
-
-        Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", ex.Code);
-        Assert.Equal(7, vm.Snapshots.Count);
-    }
-
-    [Fact]
     public void AddSnapshot_OneBelowTheCap_AddsASnapshotWaitingForItsCreate()
     {
         var vm = VmWithEverySnapshotSituation(); // usage 3
 
-        VmSnapshot snapshot = vm.AddSnapshot(TenantWithSnapshotCap(4), "nightly").Snapshot;
+        VmSnapshot snapshot = vm.AddSnapshot("nightly").Snapshot;
 
         Assert.Contains(snapshot, vm.Snapshots);
         Assert.Equal(vm.Id, snapshot.VmId);
@@ -87,20 +69,19 @@ public class VmSnapshotChildTests
         Assert.Equal(4, vm.SnapshotQuotaUsage);
     }
 
-    // The VM says it cannot be snapshotted before anyone counts: a different code from the cap.
     [Theory]
     [InlineData(VmState.Error)]
     [InlineData(null)]
-    public void AddSnapshot_OnAVmNotSnapshottable_IsRefusedBeforeTheQuota(VmState? status)
+    public void AddSnapshot_OnAVmNotSnapshottable_IsRefused(VmState? status)
     {
-        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vm = Vm.Create(TenantIdOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (status != null)
         {
             vm.MarkRunning("vm42", "10.0.0.5");
             vm.MarkObserved(status.Value, null);
         }
 
-        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot(TenantWithSnapshotCap(0), "nightly"));
+        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot("nightly"));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);
@@ -112,7 +93,7 @@ public class VmSnapshotChildTests
         var vm = RunningVm();
         vm.RequestStop();
 
-        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot(TenantWithSnapshotCap(3), "nightly"));
+        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot("nightly"));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);

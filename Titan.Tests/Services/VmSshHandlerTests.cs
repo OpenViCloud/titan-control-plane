@@ -28,7 +28,7 @@ public class VmSshHandlerTests
 
     private Vm SeedVm(Titan.Domain.Aggregates.Tenant.Tenant owner, bool running)
     {
-        Vm vm = Vm.Create(owner, 0, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
+        Vm vm = Vm.Create(owner.Id, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
         vm.MarkCreated("vmabc");
         vm.MarkObserved(running ? VmState.Running : VmState.Stopped, running ? "10.0.0.5" : null);
         _vms.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);

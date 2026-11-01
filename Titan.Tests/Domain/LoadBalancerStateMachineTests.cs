@@ -19,13 +19,13 @@ public class LoadBalancerStateMachineTests
 
     private static Vm VmOnIncus(Guid? networkId = null, Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vm = Vm.Create(owner ?? Owner, 0, networkId ?? NetworkId, $"vm-{Guid.NewGuid():N}", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create((owner ?? Owner).Id, networkId ?? NetworkId, $"vm-{Guid.NewGuid():N}", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning($"vm{Guid.NewGuid():N}"[..28], "10.0.0.5");
         return vm;
     }
 
     private static LoadBalancer NewLoadBalancer(params Vm[] backends) =>
-        LoadBalancer.Create(Owner, 0, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), [Http],
+        LoadBalancer.Create(Owner.Id, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), [Http],
             backends.Length == 0 ? [VmOnIncus()] : backends);
 
     private static LoadBalancer OnIncus(params Vm[] backends)
@@ -60,20 +60,6 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void Create_AtTheCap_Refuses_BelowIt_Creates()
-    {
-        Tenant capped = TestTenant.WithRoomToSpare();
-        capped.UpdateQuota(TenantQuota.Create(9, 9, 9, 9, 9, 9, 9, 9, 2));
-        Vm vm = VmOnIncus(owner: capped);
-
-        var ex = Assert.Throws<BusinessException>(() => LoadBalancer.Create(
-            capped, 2, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), [Http], [vm]));
-
-        Assert.Equal("LOAD_BALANCER_QUOTA_EXCEEDED", ex.Code);
-        Assert.NotNull(LoadBalancer.Create(capped, 1, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), [Http], [vm]));
-    }
-
-    [Fact]
     public void Create_WithAnotherTenantsVm_IsRefused()
     {
         Vm foreign = VmOnIncus(owner: TestTenant.WithRoomToSpare());
@@ -94,7 +80,7 @@ public class LoadBalancerStateMachineTests
     [Fact]
     public void Create_WithAVmIncusDoesNotHaveYet_IsRefused()
     {
-        var vm = Vm.Create(Owner, 0, NetworkId, "vm-new", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create(Owner.Id, NetworkId, "vm-new", "m", "tpl", "cluster-a", 20);
 
         var ex = Assert.Throws<BusinessException>(() => NewLoadBalancer(vm));
 
@@ -130,7 +116,7 @@ public class LoadBalancerStateMachineTests
         Vm[] vms = Enumerable.Range(0, backendCount).Select(_ => VmOnIncus()).ToArray();
 
         var ex = Assert.Throws<BusinessException>(() => LoadBalancer.Create(
-            Owner, 0, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), listeners, vms));
+            Owner.Id, "web", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1), listeners, vms));
 
         Assert.True(ex.Code == "INVALID_LOAD_BALANCER_SPEC", why);
     }
@@ -148,7 +134,7 @@ public class LoadBalancerStateMachineTests
     [Fact]
     public void TheSamePortOnTcpAndUdp_IsFine()
     {
-        LoadBalancer lb = LoadBalancer.Create(Owner, 0, "dns", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1),
+        LoadBalancer lb = LoadBalancer.Create(Owner.Id, "dns", NetworkId, "net-ext", Subnet, "cluster-a", LoadBalancerVip.For(Subnet, 1),
             [Dns, new(LoadBalancerProtocol.TCP, 53, 53)], [VmOnIncus()]);
 
         Assert.Equal(2, lb.DesiredListeners.Count());

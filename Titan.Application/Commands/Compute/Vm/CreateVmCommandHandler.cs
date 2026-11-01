@@ -1,5 +1,6 @@
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Options;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
@@ -31,27 +32,15 @@ public class CreateVmCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        // The handler counts; the tenant decides inside Vm.Create, so the check cannot be skipped
-        // (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
+        // The handler counts; the gate decides (titan-ops architecture/code-structure.md#quota-gate).
         var activeVmCount = await repo.CountActiveByTenantAsync(callerId, ct);
 
         // No money gate here, on purpose: neither DebtCeiling nor an overdue invoice stops creation
         // (titan-ops architecture/money-and-wallet.md#postpaid-no-brake). Quota is the only create-time brake.
 
-        // Constructed before the name/network/offering/template lookups on purpose: the quota refusal
-        // lives in the factory, so calling it late would report VM_NAME_TAKEN or NETWORK_NOT_FOUND to a
-        // tenant who is out of quota. Nothing is persisted until repo.Add, so an early construction that
-        // a later check rejects costs nothing.
-        var vm = VmAggregate.Create(
-            tenant,
-            activeVmCount,
-            req.NetworkId,
-            req.Name,
-            req.VmOfferingId,
-            req.TemplateId,
-            req.ClusterId,
-            req.DiskSizeGb ?? 0,
-            req.UserData);
+        // Before the name/network/offering/template lookups on purpose: a tenant out of quota hears that, not
+        // VM_NAME_TAKEN or NETWORK_NOT_FOUND.
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Vm, activeVmCount);
 
         clusters.ClusterOf(req.ClusterId);
 
@@ -89,6 +78,15 @@ public class CreateVmCommandHandler(
 
         string? vendorData = await VendorDataForKeysAsync(callerId, req.SshKeyIds, ct);
 
+        var vm = VmAggregate.Create(
+            tenant.Id,
+            req.NetworkId,
+            req.Name,
+            req.VmOfferingId,
+            req.TemplateId,
+            req.ClusterId,
+            req.DiskSizeGb ?? 0,
+            req.UserData);
         repo.Add(vm);
         activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (titan-ops architecture/intent-and-observation.md#intent-has-identity)
 

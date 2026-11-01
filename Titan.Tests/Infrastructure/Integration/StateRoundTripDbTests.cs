@@ -21,7 +21,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     [Fact]
     public async Task WaitingStop_SurvivesAReload_AndResendsTheSameId()
     {
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
         VmIntentTicket ticket = vm.RequestStop();
 

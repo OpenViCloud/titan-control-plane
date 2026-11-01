@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Application.Services.Compute;
@@ -34,15 +35,16 @@ public class RestoreVolumeSnapshotCommandHandler(
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(sourceVolume, command.SnapshotId);
 
         // Restoring a snapshot creates a NEW volume, so it spends volume quota, not snapshot quota.
-        // The factory decides; the handler only counts.
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
         var activeVolumeCount = await volumeRepo.CountActiveByTenantAsync(callerId, ct);
 
+        // A snapshot that cannot be restored answers that first, whatever the quota.
+        var externalSnapshotId = sourceVolume.BeginSnapshotRestore(snapshot.Id);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Volume, activeVolumeCount);
         var newVolume = VolumeAggregate.Create(
-            tenant, activeVolumeCount, command.Name, sourceVolume.ClusterId,
+            tenant.Id, command.Name, sourceVolume.ClusterId,
             sourceVolume.VolumeOfferingId, sourceVolume.SizeGb, snapshot);
-        var externalSnapshotId = sourceVolume.BeginSnapshotRestore(snapshot.Id); // same rule, and hands over the id
         volumeRepo.Add(newVolume);
         // The restore's result is a new volume, so the request is recorded against it; its outcome is
         // the "volume.created" the volume callback records (titan-ops features/activity/design.md#outcome-source).

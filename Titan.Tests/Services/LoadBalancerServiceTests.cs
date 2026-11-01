@@ -55,7 +55,7 @@ public class LoadBalancerServiceTests
 
     private Network NetworkWithoutIpv6()
     {
-        var network = Network.Create(_tenant, 0, 0, NetworkName.Parse("plain"), "cluster-1", null, wantsPublicIpv6: false);
+        var network = Network.Create(_tenant.Id, NetworkName.Parse("plain"), "cluster-1", null, wantsPublicIpv6: false);
         network.MarkActive("net-plain", "10.0.0.0/24", "10.0.0.1");
         _networks.Setup(r => r.FindByIdAsync(network.Id, It.IsAny<CancellationToken>())).ReturnsAsync(network);
         return network;
@@ -63,7 +63,7 @@ public class LoadBalancerServiceTests
 
     private Vm VmOn(Network network, Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vm = Vm.Create(owner ?? _tenant, 0, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "cluster-1", 20);
+        var vm = Vm.Create((owner ?? _tenant).Id, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "cluster-1", 20);
         vm.MarkRunning($"vm{_knownVms.Count:D26}", "10.0.0.5");
         _knownVms.Add(vm);
         return vm;

@@ -37,7 +37,7 @@ public class ComputeMeterServiceTests
 
     private static Vm RunningVm(string offeringId = OfferingId)
     {
-        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", offeringId, "tmpl-1", "cluster-1", 40);
+        var vm = Vm.Create(TenantIdOwner.Id, Guid.NewGuid(), "web-01", offeringId, "tmpl-1", "cluster-1", 40);
         vm.MarkRunning("ext-1", "10.0.0.1");
         return vm;
     }

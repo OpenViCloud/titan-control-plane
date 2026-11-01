@@ -166,6 +166,25 @@ public class VolumeSnapshotServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // The handler asks about quota before the volume checks itself (titan-ops architecture/code-structure.md#quota-gate).
+    [Fact]
+    public async Task Create_AtTheCap_OnAVolumeNotResting_AnswersTheQuota()
+    {
+        SetupCurrentUser(TenantId);
+        var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
+        SetupVolume(volume);
+        for (int i = 0; i < 3; i++)
+        {
+            volume.WithSnapshot($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
+        }
+        volume.MarkNotFound();
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(volume.Id, new CreateVolumeSnapshotBody("snap-over"), default));
+
+        Assert.Equal("VOLUME_SNAPSHOT_QUOTA_EXCEEDED", ex.Code);
+    }
+
     // A snapshot whose delete is waiting stopped counting the moment it was asked for (DCS-Q1), so the cap is not full.
     [Fact]
     public async Task Create_AtTheCapWithOneSnapshotBeingDeleted_IsAccepted()
@@ -409,6 +428,23 @@ public class VolumeSnapshotServiceTests
                 new RestoreVolumeSnapshotBody("vol-restore"), default));
 
         Assert.Equal("VOLUME_QUOTA_EXCEEDED", ex.Code);
+    }
+
+    // A snapshot that cannot be restored answers that first, whatever the quota.
+    [Fact]
+    public async Task Restore_OfASnapshotNotRestorable_AtTheVolumeCap_AnswersTheSnapshot()
+    {
+        SetupCurrentUser(TenantId);
+        var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
+        SetupVolume(volume);
+        var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
+        _volumeRepo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(10);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().RestoreAsync(volume.Id, snapshot.Id,
+                new RestoreVolumeSnapshotBody("vol-restore"), default));
+
+        Assert.Equal("VOLUME_SNAPSHOT_INVALID_STATE", ex.Code);
     }
 
     [Fact]
@@ -708,9 +744,9 @@ public class VolumeSnapshotServiceTests
 
     private static Volume MakeVolume(VolSeed status, string? csId = null, Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vol = Volume.Create(owner ?? TenantIdOwner, 0, "vol-01", "cluster-1", "offering-1", 50);
+        var vol = Volume.Create((owner ?? TenantIdOwner).Id, "vol-01", "cluster-1", "offering-1", 50);
         var effectiveId = csId ?? "cs-vol-default";
-        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TenantIdOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("cs-vm-1", "10.0.0.5");
         switch (status)
         {

@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 using Titan.Application.Services.Compute.LoadBalancer;
 using Titan.Application.Services.Networking.Network;
@@ -43,8 +44,8 @@ public class CreateLoadBalancerCommandHandler(
         var vip = LoadBalancerVip.FirstFree(subnet, taken)
             ?? throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "This network has no free load balancer address left.");
 
-        // Quota refuses inside the factory — see CreateVmCommandHandler.
-        var loadBalancer = LoadBalancerAggregate.Create(tenant, activeCount, req.Name, network.Id, externalNetworkId,
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.LoadBalancer, activeCount);
+        var loadBalancer = LoadBalancerAggregate.Create(tenant.Id, req.Name, network.Id, externalNetworkId,
             subnet, network.ClusterId, vip, listeners, backends);
         repo.Add(loadBalancer);
         activity.Stage("load_balancer.create_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);

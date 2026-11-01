@@ -20,7 +20,7 @@ public class StateFieldJsonTests
     [Fact]
     public void Vm_StatesAreSentAsTheirNames_AndNoInstanceIsNull()
     {
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
         var waiting = Json(VmQueryResult.From(vm));
         Assert.Equal(JsonValueKind.Null, waiting.GetProperty("currentState").ValueKind);

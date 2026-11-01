@@ -52,7 +52,7 @@ public class VmEndpointBindingTests
     private static VmAggregate SampleVm()
     {
         // The VM has to belong to THIS TenantId, the one _currentUser reports.
-        var vm = VmAggregate.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "cluster-1", 20);
+        var vm = VmAggregate.Create(TenantIdOwner.Id, Guid.NewGuid(), "web-01", "offering-1", Guid.NewGuid().ToString(), "cluster-1", 20);
         vm.MarkRunning("one-42", "10.0.0.5", null);
         return vm;
     }

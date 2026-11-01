@@ -63,9 +63,9 @@ public class BackupTargetEndpointTests
     [Fact]
     public async Task ListBackups_ReturnsPostgres_ThenTheVmsAndVolumes()
     {
-        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
+        var vm = Titan.Domain.Aggregates.Vm.Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-1", "m", "tpl-1", "mock", 20);
         vm.MarkRunning("vm-a", "10.0.0.2");
-        var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TestTenant.WithRoomToSpare(), 0, "data-1", "mock", "std", 10);
+        var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TestTenant.WithRoomToSpare().Id, "data-1", "mock", "std", 10);
         volume.MarkCreated("vol-a");
         var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler([vm], [volume]));
 

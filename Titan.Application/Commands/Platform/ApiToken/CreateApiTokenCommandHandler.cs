@@ -1,4 +1,5 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Platform.ApiToken.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -19,8 +20,11 @@ public class CreateApiTokenCommandHandler(
         Guid tenantId = currentUser.RequireTenantId();
         int tokenCount = await repo.CountByTenantAsync(tenantId, ct);
 
+        // Expired tokens count too.
+        TenantQuotaGate.EnsureApiTokenRoom(tokenCount);
+
         ApiTokenAggregate token = ApiTokenAggregate.Create(
-            tenantId, currentUser.KeycloakUserId, tokenCount, command.Name, command.Token, command.ExpiresInDays,
+            tenantId, currentUser.KeycloakUserId, command.Name, command.Token, command.ExpiresInDays,
             clock.GetUtcNow());
 
         bool nameTaken = await repo.ExistsByNameAsync(tenantId, token.Name, ct);

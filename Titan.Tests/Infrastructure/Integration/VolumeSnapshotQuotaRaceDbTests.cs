@@ -25,7 +25,7 @@ public class VolumeSnapshotQuotaRaceDbTests(PostgresFixture pg)
     {
         Tenant tenant = TestTenant.Active($"vs-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vs-race@titan.local");
         string offeringId = await SeedOfferingAsync();
-        Volume volume = Volume.Create(tenant, 0, $"vol-{Guid.NewGuid():N}"[..12], "cluster-1", offeringId, 20);
+        Volume volume = Volume.Create(tenant.Id, $"vol-{Guid.NewGuid():N}"[..12], "cluster-1", offeringId, 20);
         volume.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
         int cap = tenant.Quota.MaxVolumeSnapshotsPerVolume;
         for (int i = 0; i < cap - 1; i++)

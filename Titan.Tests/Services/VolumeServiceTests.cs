@@ -210,7 +210,7 @@ public class VolumeServiceTests
         // Volume.Attach(vm) takes the VM, so the VM lookup comes first and a missing VM wins with 404.
         // Seeding a real VM isolates the rule this test is named after instead of leaning on error
         // precedence.
-        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TenantIdOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm", "10.0.0.5");
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -926,7 +926,7 @@ public class VolumeServiceTests
         Titan.Domain.Aggregates.Tenant.Tenant? owner = null,
         Vm? attachTo = null)
     {
-        var vol = Volume.Create(owner ?? TenantIdOwner, 0, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
+        var vol = Volume.Create((owner ?? TenantIdOwner).Id, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
         var externalId = externalVolumeId ?? "cs-vol-default";
         Vm target = attachTo ?? MakeVm(VmState.Running, clusterId: clusterId, owner: owner);
         switch (status)
@@ -970,7 +970,7 @@ public class VolumeServiceTests
         string? externalVmId = null,
         Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vm = Vm.Create(owner ?? TenantIdOwner, 0,
+        var vm = Vm.Create((owner ?? TenantIdOwner).Id,
             Guid.NewGuid(),
             "test-vm",
             "offering-1",

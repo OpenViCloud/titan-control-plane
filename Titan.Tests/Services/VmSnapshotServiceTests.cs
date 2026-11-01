@@ -153,6 +153,24 @@ public class VmSnapshotServiceTests
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Never);
     }
 
+    // The handler asks about quota before the VM checks itself (titan-ops architecture/code-structure.md#quota-gate).
+    [Fact]
+    public async Task Create_AtTheCap_OnAVmNotSnapshottable_AnswersTheQuota()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = Given(MakeRunningVm());
+        for (int i = 0; i < 3; i++)
+        {
+            vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
+        }
+        vm.MarkObserved(VmState.Error, null);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("test"), default));
+
+        Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", ex.Code);
+    }
+
     // ── What does not count toward the cap ──────────────────
 
     [Fact]
@@ -774,7 +792,7 @@ public class VmSnapshotServiceTests
     }
 
     private static Vm MakeVmForTenant(Titan.Domain.Aggregates.Tenant.Tenant owner) =>
-        Vm.Create(owner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+        Vm.Create(owner.Id, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
     public enum Snap { Creating, CreateFailed, Ready, RevertRequested, DeleteRequested, Deleted }
 

@@ -1,6 +1,6 @@
-namespace Titan.Domain.Aggregates.Tenant;
+namespace Titan.Application.Services.Platform.Tenant;
 
-/// What a tenant's quota caps (titan-ops architecture/tenancy-and-admin.md#tenant-quota).
+/// What the tenant's quota caps. A handler names the kind it is creating when it asks TenantQuotaGate.
 public enum TenantQuotaKind
 {
     Vm,

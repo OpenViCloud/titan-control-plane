@@ -32,16 +32,10 @@ public class ApiToken : AggregateRoot
 
     private ApiToken() { }
 
-    /// tokenCount is how many tokens the tenant already has, expired ones included.
     public static ApiToken Create(
-        Guid tenantId, string keycloakUserId, int tokenCount, string name, string secret, int? expiresInDays,
+        Guid tenantId, string keycloakUserId, string name, string secret, int? expiresInDays,
         DateTimeOffset now)
     {
-        if (tokenCount >= MaxPerTenant)
-        {
-            throw new BusinessException("API_TOKEN_QUOTA_EXCEEDED", $"API token limit reached (max {MaxPerTenant}).");
-        }
-
         string trimmedName = name.Trim();
         if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
         {

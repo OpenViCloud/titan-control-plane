@@ -17,7 +17,7 @@ public class ApiTokenDbTests(PostgresFixture pg)
     private const string OtherSecret = "ovc_Zz39Xk2LmP0aZ8yT4rWbN6cJ1dF5gH7sE9uIoK2pQwA";
 
     private static ApiToken New(Guid tenantId, string name, string secret, int? days = 90) =>
-        ApiToken.Create(tenantId, "kc-1", 0, name, secret, days, ApiTokenTests.Now);
+        ApiToken.Create(tenantId, "kc-1", name, secret, days, ApiTokenTests.Now);
 
     // Every test makes its own secret: the hash index spans all tenants, and the database outlives one test.
     private static string FreshSecret() =>

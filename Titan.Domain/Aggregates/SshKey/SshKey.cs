@@ -1,7 +1,5 @@
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Domain.Aggregates.SshKey;
 
@@ -23,12 +21,8 @@ public class SshKey : AggregateRoot
 
     private SshKey() { }
 
-    /// keyCount is how many keys the tenant already has; the tenant decides
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
-    public static SshKey Create(TenantAggregate tenant, int keyCount, string name, string publicKeyText)
+    public static SshKey Create(Guid tenantId, string name, string publicKeyText)
     {
-        tenant.EnsureHasRoom(TenantQuotaKind.SshKey, keyCount);
-
         string trimmedName = name.Trim();
         if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
         {
@@ -39,7 +33,7 @@ public class SshKey : AggregateRoot
         return new SshKey
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
+            TenantId = tenantId,
             Name = trimmedName,
             Type = key.Type,
             PublicKey = key.Line,

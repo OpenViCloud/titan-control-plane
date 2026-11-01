@@ -1,5 +1,6 @@
 using VmSnapshotTicket = Titan.Domain.Aggregates.Vm.VmSnapshotTicket;
 using Titan.Application.Abstractions;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
@@ -33,8 +34,10 @@ public class CreateVmSnapshotCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        // The VM checks itself (snapshottable), checks the cap and adds the snapshot in one call.
-        VmSnapshotTicket ticket = vm.AddSnapshot(tenant, command.Name);
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.VmSnapshot, vm.SnapshotQuotaUsage);
+
+        // The VM checks itself (snapshottable) and adds the snapshot in one call.
+        VmSnapshotTicket ticket = vm.AddSnapshot(command.Name);
         VmSnapshotEntity snapshot = ticket.Snapshot;
         string externalVmId = ticket.ExternalVmId;
         activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with the save

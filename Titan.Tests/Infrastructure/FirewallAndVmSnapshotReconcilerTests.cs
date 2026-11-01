@@ -77,7 +77,7 @@ public class FirewallAndVmSnapshotReconcilerTests
     public async Task VmSnapshotEndpoint_WithToken_ReturnsSnapshotsWithTheirVm_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
         var snapshot = vm.WithSnapshot("snap");
         snapshot.MarkCreated("42:3");

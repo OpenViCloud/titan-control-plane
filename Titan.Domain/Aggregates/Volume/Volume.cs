@@ -1,8 +1,6 @@
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
-using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Domain.Aggregates.Volume;
 
@@ -84,12 +82,10 @@ public class Volume : AggregateRoot
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    /// Quota is checked inside the factory (titan-ops architecture/code-structure.md#tenant-typed-edge). A volume
-    /// restored from a snapshot spends volume quota, not snapshot quota: the thing being created is a volume. The
-    /// snapshot's readiness is an invariant of that creation (titan-ops features/volume/design.md#volume-restore-is-a-new-volume);
+    /// A volume restored from a snapshot: the snapshot's readiness is an invariant of the creation (titan-ops features/volume/design.md#volume-restore-is-a-new-volume);
     /// sizing and cluster come from the source volume, which the caller resolves.
     public static Volume Create(
-        TenantAggregate tenant, int activeVolumeCount,
+        Guid tenantId,
         string name, string clusterId, string volumeOfferingId, int sizeGb,
         VolumeSnapshot? restoredFrom = null)
     {
@@ -97,11 +93,10 @@ public class Volume : AggregateRoot
         {
             restoredFrom.EnsureRestorable();
         }
-        tenant.EnsureHasRoom(TenantQuotaKind.Volume, activeVolumeCount);
         return new Volume
         {
             Id = Guid.NewGuid(),
-            TenantId = tenant.Id,
+            TenantId = tenantId,
             Name = name,
             ClusterId = clusterId,
             VolumeOfferingId = volumeOfferingId,
@@ -218,17 +213,14 @@ public class Volume : AggregateRoot
         PendingIntentId = null;
     }
 
-    // ---- Snapshots: the volume keeps the per-volume cap and routes each call to the snapshot it names
+    // ---- Snapshots: the volume counts its snapshots and routes each call to the snapshot it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on VolumeSnapshot; this is the way in.
 
-    /// Intent: a new snapshot of this volume. The volume must rest on Incus (EnsureSnapshottable) and the tenant's
-    /// cap is checked here on what this volume holds (titan-ops architecture/code-structure.md#tenant-typed-edge); the
-    /// handler locks the volume row first so two requests cannot both count below the cap. The create request is
-    /// the snapshot's own PendingIntentId.
-    public VolumeSnapshotTicket AddSnapshot(TenantAggregate tenant, string name)
+    /// Intent: a new snapshot of this volume. The volume must rest on Incus (EnsureSnapshottable). The create request
+    /// is the snapshot's own PendingIntentId.
+    public VolumeSnapshotTicket AddSnapshot(string name)
     {
         EnsureSnapshottable();
-        tenant.EnsureHasRoom(TenantQuotaKind.VolumeSnapshot, SnapshotQuotaUsage);
         VolumeSnapshot snapshot = VolumeSnapshot.Create(Id, TenantId, name);
         _snapshots.Add(snapshot);
         return new VolumeSnapshotTicket(snapshot, RequireExternalId());

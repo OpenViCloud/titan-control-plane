@@ -12,7 +12,7 @@ public class GroupBRepeatRefusedTests
 {
     private static Vm RunningVm()
     {
-        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl", "cluster-a", 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("vm-ext", "10.0.0.5");
         return vm;
     }
@@ -26,7 +26,7 @@ public class GroupBRepeatRefusedTests
 
     private static Volume AllocatedVolume()
     {
-        var volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, "vol-1", "cluster-a", "std", 10);
+        var volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "vol-1", "cluster-a", "std", 10);
         volume.MarkCreated("vol-ext");
         return volume;
     }

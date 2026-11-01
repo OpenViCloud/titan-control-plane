@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.Vm;
 
 /// One snapshot of a VM: an instance snapshot on Incus named under the instance
 /// (titan-ops features/vm/design.md#vm-snapshot). A child of Vm (titan-ops architecture/code-structure.md#child-entity):
-/// the per-VM cap, "no VM delete while a snapshot command runs" and "the VM's delete takes its snapshots" are the
+/// "no VM delete while a snapshot command runs" and "the VM's delete takes its snapshots" are the
 /// VM's invariants, so only the root reaches the methods below, and handlers go through Vm.AddSnapshot,
 /// RevertSnapshot, RequestSnapshotDelete and MarkSnapshot*.
 public class VmSnapshot : ChildEntity
@@ -69,8 +69,7 @@ public class VmSnapshot : ChildEntity
     /// delete no-ops once the VM is gone.
     public bool BlocksVmDelete => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
 
-    /// Called by Vm.AddSnapshot after the VM checked itself and the tenant's cap
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Called by Vm.AddSnapshot after the VM checked itself.
     internal static VmSnapshot Create(Guid vmId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),

@@ -24,7 +24,7 @@ public class VmRepositoryStateTests
     // Every shape, named; the name is what the assertions list.
     private static List<Vm> EveryShape()
     {
-        Vm New(string name) => Vm.Create(TenantOwner, 0, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
+        Vm New(string name) => Vm.Create(TenantOwner.Id, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
         Vm Seen(string name, VmState state)
         {
             Vm vm = New(name);

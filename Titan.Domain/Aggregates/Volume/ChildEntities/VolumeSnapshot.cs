@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.Volume;
 
 /// One snapshot of a volume: a copy on Incus named under the volume
 /// (titan-ops features/volume/design.md#volume-snapshot). A child of Volume (titan-ops architecture/code-structure.md#child-entity):
-/// the per-volume cap, "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
+/// "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
 /// are the volume's invariants, so only the root reaches the methods below, and handlers go through
 /// Volume.AddSnapshot, RequestSnapshotDelete, BeginSnapshotRestore and MarkSnapshot*.
 public class VolumeSnapshot : ChildEntity
@@ -59,8 +59,7 @@ public class VolumeSnapshot : ChildEntity
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Called by Volume.AddSnapshot after the volume checked itself and the tenant's cap
-    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    /// Called by Volume.AddSnapshot after the volume checked itself.
     internal static VolumeSnapshot Create(Guid volumeId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),
