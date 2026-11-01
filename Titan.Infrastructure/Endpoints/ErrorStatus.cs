@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Titan.Domain.Aggregates.ClusterIpv6Pool;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Exceptions;
 
@@ -35,6 +36,8 @@ public record ErrorStatus(int Status, string Code)
         DbUpdateConcurrencyException e when TouchesAProviderCommand(e) => new ErrorStatus(409, RequestInProgressCode),
         DbUpdateException e when IsProviderCommandKeyClash(e) => new ErrorStatus(409, RequestInProgressCode),
         DbUpdateException e when IsUniqueViolationOf(e, Persistence.NetworkConfiguration.PublicIpv6IndexName) => new ErrorStatus(409, Ipv6AllocationConflictCode),
+        DbUpdateConcurrencyException e when TouchesAnIpv6Pool(e) => new ErrorStatus(409, Ipv6AllocationConflictCode),
+        DbUpdateException e when IsAnIpv6PoolClash(e) => new ErrorStatus(409, Ipv6AllocationConflictCode),
         DbUpdateException e when IsUniqueViolationOf(e, Persistence.LoadBalancerConfiguration.VipIndexName) => new ErrorStatus(409, LoadBalancerVipConflictCode),
         _                              => new ErrorStatus(500, InternalErrorCode)
     };
@@ -44,6 +47,17 @@ public record ErrorStatus(int Status, string Code)
         ex.Entries.Any(entry => entry.Entity is ProviderCommand);
 
     private static bool IsProviderCommandKeyClash(DbUpdateException ex) => IsUniqueViolationOf(ex, ProviderCommandKeyIndex);
+
+    // Two requests loaded one cluster's pool at the same version; the later commit finds it moved.
+    private static bool TouchesAnIpv6Pool(DbUpdateConcurrencyException ex) =>
+        ex.Entries.Any(entry => entry.Entity is ClusterIpv6Pool);
+
+    // The first block given in a cluster created the pool row, or two requests wrote the same block, or one network
+    // would hold two: all of them lose to the commit that came first, and asking again picks another block.
+    private static bool IsAnIpv6PoolClash(DbUpdateException ex) =>
+        IsUniqueViolationOf(ex, Persistence.ClusterIpv6PoolConfiguration.ClusterIndexName)
+        || IsUniqueViolationOf(ex, Persistence.Ipv6Block64HoldingConfiguration.HoldingKeyName)
+        || IsUniqueViolationOf(ex, Persistence.Ipv6Block64HoldingConfiguration.HolderIndexName);
 
     private static bool IsUniqueViolationOf(DbUpdateException ex, string indexName)
     {

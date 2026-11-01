@@ -105,6 +105,7 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<INetworkRepository, NetworkRepository>();
+builder.Services.AddScoped<IClusterIpv6PoolRepository, ClusterIpv6PoolRepository>();
 builder.Services.AddScoped<IFirewallRuleRepository, FirewallRuleRepository>();
 builder.Services.AddScoped<ISshKeyRepository, SshKeyRepository>();
 builder.Services.AddScoped<IApiTokenRepository, ApiTokenRepository>();

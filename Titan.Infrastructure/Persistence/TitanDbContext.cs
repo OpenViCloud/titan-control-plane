@@ -30,6 +30,8 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<Member> Members => Set<Member>();
     public DbSet<Network> Networks => Set<Network>();
     public DbSet<FirewallRule> FirewallRules => Set<FirewallRule>();
+    public DbSet<Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool> ClusterIpv6Pools =>
+        Set<Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool>();
     public DbSet<Vm> Vms => Set<Vm>();
     public DbSet<SshKey> SshKeys => Set<SshKey>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
