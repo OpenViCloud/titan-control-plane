@@ -87,7 +87,8 @@ public class CreateNetworkCommandHandler(
         return block56;
     }
 
-    // The pool and the network commit in one save. Two creates that load the pool at once meet at its version, not here.
+    // The pool and the network commit in one save. Two creates that load the pool at once meet at its version, or at its
+    // unique cluster row when it is the cluster's first, not here.
     private async Task GiveBlock64Async(NetworkAggregate network, string block56, CancellationToken ct)
     {
         PoolAggregate pool = await pools.FindOrAddAsync(network.ClusterId, ct);

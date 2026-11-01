@@ -8,7 +8,8 @@ namespace Titan.Infrastructure.Migrations
     /// Which network holds each /64 block of a cluster, and when each was given back, moves from the networks table to
     /// one pool per cluster (titan-ops features/network/design.md#ipv6-public). The columns on networks stay for now:
     /// the code before this migration still reads them, and the drop comes in a later migration, after a release has
-    /// carried this one. Down drops the pool tables; the networks table still holds everything they were filled from.
+    /// carried this one. Down drops the pool tables. The columns on networks are no longer written, so a network that got its block after this
+    /// migration ran is not in them: Down after such a network exists loses which block it held.
     public partial class ClusterIpv6Pool : Migration
     {
         /// One pool per cluster that has a network row with a number. A block held by a network that is not Deleted is

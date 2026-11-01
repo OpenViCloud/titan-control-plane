@@ -102,8 +102,9 @@ public class Network : AggregateRoot
         return network;
     }
 
-    /// The /64 block the cluster's pool handed over for this network, which has its own id only once created
-    /// (titan-ops features/network/design.md#ipv6-public). Once, and only while the create is waiting.
+    /// The /64 block the cluster's pool handed over for this network. The pool keeps who holds a block by the network's
+    /// id, so the block comes after Create (titan-ops features/network/design.md#ipv6-public): once, and only while the
+    /// create is waiting.
     public void ReceivePublicIpv6(string subnet, string routerAddress)
     {
         if (HasPublicIpv6)
