@@ -10,11 +10,12 @@ namespace Titan.Tests.Domain;
 // every rule with it when its own delete is confirmed.
 public class NetworkFirewallRuleTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
 
     private static Network UsableNetwork()
     {
-        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -27,7 +28,7 @@ public class NetworkFirewallRuleTests
     }
 
     private static FirewallRule Rule(Network network, int port) =>
-        network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, port, port, "0.0.0.0/0");
+        network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, port, port, "0.0.0.0/0");
 
     // The same five situations the repository count once measured (titan-ops features/network/design.md#firewall-rule-quota-counting):
     // creating and held by Incus count; a delete in flight, a Deleted row and a failed create with nothing on Incus do not.
@@ -75,7 +76,7 @@ public class NetworkFirewallRuleTests
         var network = NetworkWithEveryRuleSituation(); // usage 2
         var tenant = TenantWithRuleCap(3);
 
-        FirewallRule rule = network.AddFirewallRule(tenant, FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8"));
+        FirewallRule rule = network.AddFirewallRule(tenant, FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8")).Rule;
 
         Assert.Contains(rule, network.FirewallRules);
         Assert.Equal(network.Id, rule.NetworkId);
@@ -88,7 +89,7 @@ public class NetworkFirewallRuleTests
     [Fact]
     public void AddFirewallRule_OnANetworkNotUsable_IsRefusedBeforeTheQuota()
     {
-        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // Creating
+        var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1"); // Creating
         var tenant = TenantWithRuleCap(0);
 
         var ex = Assert.Throws<BusinessException>(
@@ -155,15 +156,15 @@ public class NetworkFirewallRuleTests
 
     // A rule the network does not have answers like a missing one (titan-ops features/network/design.md#firewall-rule-soft-delete).
     [Fact]
-    public void RequireFirewallRule_OfAnotherNetworksRule_IsNotFound()
+    public void ARuleOfAnotherNetwork_IsNotFound()
     {
         var network = UsableNetwork();
         var other = UsableNetwork();
         var foreign = Rule(other, 22);
         Rule(network, 23);
 
-        Assert.Null(network.FirewallRuleOrNull(foreign.Id));
-        var ex = Assert.Throws<NotFoundException>(() => network.RequireFirewallRule(foreign.Id));
+        Assert.DoesNotContain(network.FirewallRules, r => r.Id == foreign.Id);
+        var ex = Assert.Throws<NotFoundException>(() => network.DeleteFirewallRuleLocally(foreign.Id));
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.RequestFirewallRuleDelete(foreign.Id)).Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.MarkFirewallRuleDeleted(foreign.Id)).Code);

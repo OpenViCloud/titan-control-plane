@@ -27,12 +27,12 @@ public class ApiTokenAuthenticationHandler(
             return AuthenticateResult.NoResult();
         }
 
-        if (!ApiToken.IsWellFormed(secret))
+        if (!ApiTokenSecret.IsWellFormed(secret))
         {
             return AuthenticateResult.Fail("Malformed API token.");
         }
 
-        ApiToken? token = await tokens.FindBySecretHashAsync(ApiToken.HashOf(secret), Context.RequestAborted);
+        ApiToken? token = await tokens.FindBySecretHashAsync(ApiTokenSecret.HashOf(secret), Context.RequestAborted);
         if (token == null)
         {
             return AuthenticateResult.Fail("Unknown API token.");

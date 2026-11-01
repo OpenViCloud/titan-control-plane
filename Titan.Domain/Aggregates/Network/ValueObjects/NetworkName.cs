@@ -25,23 +25,12 @@ public sealed record NetworkName : ValueObject
 
     public static NetworkName Parse(string? value)
     {
-        if (!TryParse(value, out NetworkName? name))
+        if (value == null || value.Length == 0 || value.Length > MaxLength || !Shape.IsMatch(value))
         {
             throw new BusinessException("INVALID_NETWORK_NAME",
                 $"A network name is 1 to {MaxLength} letters, digits, hyphens or underscores, starting with a letter or digit.");
         }
-        return name;
-    }
-
-    public static bool TryParse(string? value, [NotNullWhen(true)] out NetworkName? name)
-    {
-        name = null;
-        if (value == null || value.Length == 0 || value.Length > MaxLength || !Shape.IsMatch(value))
-        {
-            return false;
-        }
-        name = new NetworkName { Value = value };
-        return true;
+        return new NetworkName { Value = value };
     }
 
     public override string ToString() => Value;

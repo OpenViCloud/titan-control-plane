@@ -18,9 +18,6 @@ public class Tenant : AggregateRoot
 
     /// The tenant's Incus project, the same on every cluster (titan-ops architecture/tenancy-and-admin.md#project-name).
     /// Derived from the id so a rebuilt cluster gets the same name back.
-    public string ProjectName => ProjectNameFor(Id);
-
-    /// For a handler that holds the tenant's id but not the tenant.
     public static string ProjectNameFor(Guid tenantId) => "t-" + tenantId.ToString("N");
 
     private readonly List<Member> _members = [];
@@ -101,49 +98,31 @@ public class Tenant : AggregateRoot
     // (titan-ops architecture/code-structure.md#tenant-typed-edge). `internal`, called only from the factories of the
     // things being created, so the compiler stops Titan.Application from skipping the check.
 
-    internal void EnsureCanCreateVm(int activeVmCount)
-        => Refuse(activeVmCount, Quota.MaxVms, "VM_QUOTA_EXCEEDED", "VM quota exceeded.");
-
-    internal void EnsureCanCreateNetwork(int activeNetworkCount)
-        => Refuse(activeNetworkCount, Quota.MaxNetworks, "NETWORK_QUOTA_EXCEEDED", "Network quota exceeded.");
-
-    internal void EnsureCanCreateVolume(int activeVolumeCount)
-        => Refuse(activeVolumeCount, Quota.MaxVolumes, "VOLUME_QUOTA_EXCEEDED",
-            $"Volume quota exceeded (max {Quota.MaxVolumes}).");
-
-    /// activeSnapshotCount is the count on one VM: the cap is per VM, not per tenant.
-    internal void EnsureCanCreateVmSnapshot(int activeSnapshotCount)
-        => Refuse(activeSnapshotCount, Quota.MaxVmSnapshotsPerVm, "VM_SNAPSHOT_QUOTA_EXCEEDED",
-            $"VM snapshot quota exceeded (max {Quota.MaxVmSnapshotsPerVm}).");
-
-    /// activeSnapshotCount is the count on one volume: the cap is per volume.
-    internal void EnsureCanCreateVolumeSnapshot(int activeSnapshotCount)
-        => Refuse(activeSnapshotCount, Quota.MaxVolumeSnapshotsPerVolume, "VOLUME_SNAPSHOT_QUOTA_EXCEEDED",
-            $"Snapshot quota exceeded (max {Quota.MaxVolumeSnapshotsPerVolume} per volume).");
-
-    /// ruleCount is the count on one network: the cap is per network.
-    internal void EnsureCanCreateFirewallRule(int ruleCount)
-        => Refuse(ruleCount, Quota.MaxFirewallRulesPerNetwork, "FIREWALL_QUOTA_EXCEEDED",
-            $"Firewall rule quota of {Quota.MaxFirewallRulesPerNetwork} per network has been reached.");
-
-    internal void EnsureCanCreateSshKey(int keyCount)
-        => Refuse(keyCount, Quota.MaxSshKeys, "SSH_KEY_QUOTA_EXCEEDED",
-            $"SSH key quota exceeded (max {Quota.MaxSshKeys}).");
-
-    internal void EnsureCanCreateLoadBalancer(int activeLoadBalancerCount)
-        => Refuse(activeLoadBalancerCount, Quota.MaxLoadBalancers, "LOAD_BALANCER_QUOTA_EXCEEDED",
-            $"Load balancer quota exceeded (max {Quota.MaxLoadBalancers}).");
-
-    internal void EnsureCanEnablePublicIpv6(int activeIpv6Count)
-        => Refuse(activeIpv6Count, Quota.MaxPublicIpv6, "IPV6_QUOTA_EXCEEDED",
-            $"Public IPv6 quota exceeded (max {Quota.MaxPublicIpv6}).");
-
-    // `>=`: the count is what already exists, so a cap of 0 refuses the first one
-    // (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none). Reading 0 as "unlimited" would grant infinite
-    // resources at the moment an admin tried to cut them off.
-    private static void Refuse(int current, int cap, string code, string message)
+    /// count is what already exists: per tenant for most kinds, on one VM, volume or network for the three kinds whose
+    /// cap is per parent. `>=`, so a cap of 0 refuses the first one (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none):
+    /// reading 0 as "unlimited" would grant infinite resources at the moment an admin tried to cut them off.
+    internal void EnsureHasRoom(TenantQuotaKind kind, int count)
     {
-        if (current >= cap)
+        (int cap, string code, string message) = kind switch
+        {
+            TenantQuotaKind.Vm => (Quota.MaxVms, "VM_QUOTA_EXCEEDED", "VM quota exceeded."),
+            TenantQuotaKind.Network => (Quota.MaxNetworks, "NETWORK_QUOTA_EXCEEDED", "Network quota exceeded."),
+            TenantQuotaKind.Volume => (Quota.MaxVolumes, "VOLUME_QUOTA_EXCEEDED", $"Volume quota exceeded (max {Quota.MaxVolumes})."),
+            TenantQuotaKind.VmSnapshot => (Quota.MaxVmSnapshotsPerVm, "VM_SNAPSHOT_QUOTA_EXCEEDED",
+                $"VM snapshot quota exceeded (max {Quota.MaxVmSnapshotsPerVm})."),
+            TenantQuotaKind.VolumeSnapshot => (Quota.MaxVolumeSnapshotsPerVolume, "VOLUME_SNAPSHOT_QUOTA_EXCEEDED",
+                $"Snapshot quota exceeded (max {Quota.MaxVolumeSnapshotsPerVolume} per volume)."),
+            TenantQuotaKind.FirewallRule => (Quota.MaxFirewallRulesPerNetwork, "FIREWALL_QUOTA_EXCEEDED",
+                $"Firewall rule quota of {Quota.MaxFirewallRulesPerNetwork} per network has been reached."),
+            TenantQuotaKind.SshKey => (Quota.MaxSshKeys, "SSH_KEY_QUOTA_EXCEEDED", $"SSH key quota exceeded (max {Quota.MaxSshKeys})."),
+            TenantQuotaKind.LoadBalancer => (Quota.MaxLoadBalancers, "LOAD_BALANCER_QUOTA_EXCEEDED",
+                $"Load balancer quota exceeded (max {Quota.MaxLoadBalancers})."),
+            TenantQuotaKind.PublicIpv6 => (Quota.MaxPublicIpv6, "IPV6_QUOTA_EXCEEDED", $"Public IPv6 quota exceeded (max {Quota.MaxPublicIpv6})."),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "A quota kind this tenant has no cap for."),
+        };
+        if (count >= cap)
+        {
             throw new Titan.Domain.Exceptions.BusinessException(code, message);
+        }
     }
 }

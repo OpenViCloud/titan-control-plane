@@ -18,12 +18,13 @@ namespace Titan.Tests.Services;
 
 public class NetworkServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
 
     private readonly Mock<INetworkRepository> _repo = new();
     private readonly Mock<IClusterIpv6RouteRepository> _routes = new();
     // The cluster's routes, as the repository hands them out: the real aggregate, so the tests see the real policy.
-    private List<ClusterIpv6Route> _routeRows = Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.CreateUnchecked("cluster-1", n)).ToList();
+    private List<ClusterIpv6Route> _routeRows = Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.Create("cluster-1", n)).ToList();
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
@@ -213,7 +214,7 @@ public class NetworkServiceTests
     public async Task List_ReturnsTenantNetworks()
     {
         SetupCurrentUser(TenantId);
-        var networks = new List<Network> { Network.CreateUnchecked(TenantId, "net-1", "cluster-1") };
+        var networks = new List<Network> { TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1") };
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(networks);
 
         var result = await CreateService().ListAsync(default);
@@ -250,7 +251,7 @@ public class NetworkServiceTests
     public async Task Get_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenantId
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "other-net", "cluster-1"); // different tenantId
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -334,7 +335,7 @@ public class NetworkServiceTests
     public async Task Delete_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenantId
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "other-net", "cluster-1"); // different tenantId
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -367,7 +368,7 @@ public class NetworkServiceTests
     {
         // The create gave up before Incus had the network — nothing on Incus, so delete locally and send nothing.
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         network.MarkRequestFailed("reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
@@ -452,7 +453,7 @@ public class NetworkServiceTests
         // WHY: cross-tenant isolation — a tenant must not rename (or even confirm existence of)
         // another tenant's network.
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "other-net", "cluster-1"); // different tenant
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "other-net", "cluster-1"); // different tenant
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -483,7 +484,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_CreatedThenObservedCreated_KeepsTheIdAndAddress_AndRecordsTheIncusWord()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-id", "10.0.0.0/24", "10.0.0.1"), default);
@@ -563,11 +564,11 @@ public class NetworkServiceTests
     public async Task UpdateStatus_Deleted_MarksEveryLiveRuleOfTheNetworkDeleted()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var enabled = Rule(network);
         var deleting = Rule(network);
         deleting.RequestDelete();
+        network.RequestDelete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -583,11 +584,11 @@ public class NetworkServiceTests
     public async Task UpdateStatus_Deleted_RecordsTheOutcomeOfARuleWhoseOwnDeleteWasWaiting_Only()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var enabled = Rule(network);
         var deleting = Rule(network);
         deleting.RequestDelete();
+        network.RequestDelete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -634,7 +635,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_CreateReportWithoutCidr_StillProvisions_AndRecordsCreated()
     {
-        var network = Network.CreateUnchecked(TenantId, "no-cidr", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "no-cidr", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-9", null, null));
@@ -693,7 +694,7 @@ public class NetworkServiceTests
     [InlineData("Error")]
     public async Task UpdateStatus_AReportTheWorkerNoLongerSends_ThrowsBadRequestException(string report)
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BadRequestException>(
@@ -719,7 +720,7 @@ public class NetworkServiceTests
     // The tenant SetupTenant built; every provider call carries its Incus project
     // (titan-ops architecture/tenancy-and-admin.md#project-name).
     private Tenant? _tenant;
-    private string TenantProject => _tenant!.ProjectName;
+    private string TenantProject => Tenant.ProjectNameFor(_tenant!.Id);
 
     // ── Activity recording ──────────────────────────────────────
 
@@ -757,7 +758,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_FirstCreated_RecordsNetworkCreated_ForTheNetworksTenant_Once()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net", "10.0.0.0/24", "10.0.0.1"));
 
@@ -808,7 +809,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_ErroredWhileACreateWaits_EndsTheCreate_AndRecordsNothing()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("13", "10.0.0.0/24", "10.0.0.1"));
 
@@ -822,7 +823,7 @@ public class NetworkServiceTests
     [Fact]
     public async Task UpdateStatus_Created_StoresTheIdAndAddress_AndTheCreateKeepsWaiting()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-id", "10.0.0.0/24", "10.0.0.1"));
@@ -840,7 +841,7 @@ public class NetworkServiceTests
     public async Task Delete_AfterCreatedThenRequestFailed_GoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
@@ -875,7 +876,7 @@ public class NetworkServiceTests
     [Fact] // the create report was lost, the give-up report carries the id
     public async Task UpdateStatus_RequestFailedCarryingTheId_KeepsTheProviderId_AndTheReason()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1"));
@@ -891,7 +892,7 @@ public class NetworkServiceTests
     public async Task Delete_NeverProvisionedNetwork_RecordsRequestAndOutcomeTogether()
     {
         SetupCurrentUser(TenantId);
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         network.MarkRequestFailed("reason", "detail");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
@@ -959,7 +960,7 @@ public class NetworkServiceTests
     private ClusterIpv6Route RouteRow(int number) => _routeRows.Single(route => route.Number == number);
 
     private void EveryRouteHeld() =>
-        _routeRows = Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.CreateUnchecked("cluster-1", n, Guid.NewGuid())).ToList();
+        _routeRows.ForEach(route => route.HandTo(Guid.NewGuid()));
 
     private void TheRouteRowsHoldNothing() => Assert.All(_routeRows, route => Assert.True(route.IsFree));
 
@@ -970,7 +971,8 @@ public class NetworkServiceTests
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
-        _routeRows[0] = ClusterIpv6Route.CreateUnchecked("cluster-1", 1, null, DateTimeOffset.UtcNow);
+        _routeRows[0].HandTo(Guid.NewGuid());
+        _routeRows[0].TakeBack(DateTimeOffset.UtcNow);
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
@@ -1217,14 +1219,14 @@ public class NetworkServiceTests
     // A rule of the network, as Incus holds it (titan-ops architecture/code-structure.md#child-entity).
     private static FirewallRule Rule(Network network)
     {
-        var rule = network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
+        var rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
         rule.MarkActive($"acl/{Guid.NewGuid()}");
         return rule;
     }
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(TenantId, "my-net", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

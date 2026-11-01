@@ -11,8 +11,20 @@ public class ClusterIpv6RouteTests
     private const string Block56 = "2001:41d0:d00:d400::/56";
     private static readonly DateTimeOffset Noon = new(2026, 11, 1, 12, 0, 0, TimeSpan.Zero);
 
-    private static ClusterIpv6Route Route(int number, Guid? networkId = null, DateTimeOffset? releasedAt = null) =>
-        ClusterIpv6Route.CreateUnchecked("singapore01", number, networkId, releasedAt);
+    private static ClusterIpv6Route Route(int number, Guid? networkId = null, DateTimeOffset? releasedAt = null)
+    {
+        ClusterIpv6Route route = ClusterIpv6Route.Create("singapore01", number);
+        if (networkId != null)
+        {
+            route.HandTo(networkId.Value);
+        }
+        if (releasedAt != null)
+        {
+            route.HandTo(Guid.NewGuid());
+            route.TakeBack(releasedAt.Value);
+        }
+        return route;
+    }
 
     [Theory]
     [InlineData(1, "2001:41d0:d00:d401::/64", "2001:41d0:d00:d400::101")]
@@ -113,17 +125,6 @@ public class ClusterIpv6RouteTests
     }
 
     [Fact]
-    public void TakeBack_WithoutATime_StampsNow()
-    {
-        ClusterIpv6Route route = Route(1, Guid.NewGuid());
-        DateTimeOffset before = DateTimeOffset.UtcNow;
-
-        route.TakeBack();
-
-        Assert.True(route.ReleasedAt >= before);
-    }
-
-    [Fact]
     public void TakeBack_OfAFreeRoute_Throws()
     {
         Assert.Throws<InvalidOperationException>(() => Route(1).TakeBack(Noon));
@@ -133,8 +134,8 @@ public class ClusterIpv6RouteTests
     [Theory]
     [InlineData(0)]
     [InlineData(256)]
-    public void CreateUnchecked_RefusesANumberOutsideOneTo255(int number)
+    public void Create_RefusesANumberOutsideOneTo255(int number)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => ClusterIpv6Route.CreateUnchecked("singapore01", number));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ClusterIpv6Route.Create("singapore01", number));
     }
 }

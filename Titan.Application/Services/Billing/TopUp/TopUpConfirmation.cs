@@ -39,7 +39,7 @@ public static class TopUpConfirmation
         var wallet = await walletRepo.GetByTenantForUpdateAsync(topUp.TenantId, ct)
             ?? throw new NotFoundException("WALLET_NOT_FOUND",
                 $"Tenant {topUp.TenantId} has no wallet; it should have been opened at activation.");
-        var mutation = WalletMutation.ForCredit(wallet.Id, topUp.Amount, "TopUp", topUp.Id);
+        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, topUp.Amount, "TopUp", topUp.Id);
         mutationRepo.Add(mutation);
 
         try

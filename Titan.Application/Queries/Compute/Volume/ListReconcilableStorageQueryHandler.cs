@@ -33,8 +33,10 @@ public class ListReconcilableStorageQueryHandler(
             {
                 attachedExternalVmId = attachedVm.ExternalId;
             }
+            // The repository lists only volumes with a provider id, so a missing one here is a broken query.
+            string externalId = volume.ExternalId ?? throw new InvalidOperationException($"Volume {volume.Id} has no provider id and cannot be reconciled.");
             volumeResults.Add(new ReconcilableVolumeQueryResult(
-                volume.Id, volume.RequireExternalId(), volume.CurrentExistence.ToString(), attachedExternalVmId,
+                volume.Id, externalId, volume.CurrentExistence.ToString(), attachedExternalVmId,
                 volume.CurrentAttachedElsewhere));
         }
 

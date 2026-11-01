@@ -104,7 +104,7 @@ public class ProviderCommand : AggregateRoot
         return true;
     }
 
-    public bool IsClaimable(DateTimeOffset now)
+    internal bool IsClaimable(DateTimeOffset now)
     {
         bool pendingAndDue = Status == ProviderCommandStatus.Pending && AvailableAt <= now;
         bool leaseRanOut = Status == ProviderCommandStatus.Leased && LeaseUntil != null && LeaseUntil.Value <= now;
@@ -164,7 +164,7 @@ public class ProviderCommand : AggregateRoot
         FinishedAt = now;
     }
 
-    public static TimeSpan BackoffAfter(int attempts)
+    internal static TimeSpan BackoffAfter(int attempts)
     {
         TimeSpan backoff = FirstBackoff;
         for (int i = 1; i < attempts; i++)
@@ -178,7 +178,7 @@ public class ProviderCommand : AggregateRoot
         return backoff;
     }
 
-    public bool IsHeldBy(Guid leaseId) => Status == ProviderCommandStatus.Leased && LeaseId == leaseId;
+    private bool IsHeldBy(Guid leaseId) => Status == ProviderCommandStatus.Leased && LeaseId == leaseId;
 
     private ConflictException LeaseLost(Guid leaseId) =>
         new("PROVIDER_COMMAND_LEASE_LOST", $"Lease {leaseId} does not hold provider command {Id}.");

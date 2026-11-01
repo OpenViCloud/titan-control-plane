@@ -30,8 +30,7 @@ public class VmStateMachineTests
         Deleted
     }
 
-    private static Vm NewVm() => Vm.CreateUnchecked(
-        Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+    private static Vm NewVm() => Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
 
     private static Vm VmIn(Seed seed)
     {
@@ -860,7 +859,7 @@ public class VmStateMachineTests
     [InlineData(Seed.Frozen)]
     public void SnapshotAndAttach_FromEveryStatusIncusAllows_HandOutTheId(Seed from)
     {
-        Assert.Equal("42", VmIn(from).BeginSnapshot());
+        Assert.Equal("42", VmIn(from).AddSnapshot(TestTenant.WithRoomToSpare(), "s").ExternalVmId);
         Assert.Equal("42", VmIn(from).BeginVolumeAttach());
     }
 
@@ -872,7 +871,7 @@ public class VmStateMachineTests
     [InlineData(Seed.Deleted)]
     public void SnapshotAndAttach_FromAnythingElse_Throw(Seed from)
     {
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).BeginSnapshot()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot(TestTenant.WithRoomToSpare(), "s")).Code);
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).BeginVolumeAttach()).Code);
     }
 
@@ -884,7 +883,7 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.Running);
         if (waiting == VmIntent.Stop) vm.RequestStop(); else vm.RequestDelete();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.BeginSnapshot()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.AddSnapshot(TestTenant.WithRoomToSpare(), "s")).Code);
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.BeginVolumeAttach()).Code);
     }
 

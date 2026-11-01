@@ -125,7 +125,7 @@ public class ApiTokenTests
     [Fact]
     public void HashOf_IsTheHashCreateStores()
     {
-        Assert.Equal(Create().SecretHash, ApiToken.HashOf(Secret));
-        Assert.NotEqual(ApiToken.HashOf(Secret), ApiToken.HashOf(Secret.Replace('A', 'B')));
+        Assert.Equal(Create().SecretHash, ApiTokenSecret.HashOf(Secret));
+        Assert.NotEqual(ApiTokenSecret.HashOf(Secret), ApiTokenSecret.HashOf(Secret.Replace('A', 'B')));
     }
 }

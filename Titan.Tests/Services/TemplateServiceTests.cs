@@ -125,7 +125,7 @@ public class TemplateServiceTests
 
     private static string Shape(VmTemplate t, string clusterId)
     {
-        VmTemplateCluster? cluster = t.ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId);
         if (cluster == null)
         {
             return "none";
@@ -424,7 +424,7 @@ public class TemplateServiceTests
         await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Equal("tpl-205", t.ClusterOrNull(Mock)!.ExternalTemplateId);
+        Assert.Equal("tpl-205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
         Assert.True(repo.Saved);
         Assert.Single(await svc.ListAsync(Mock));
     }
@@ -452,7 +452,7 @@ public class TemplateServiceTests
             svc.UpdateStatusAsync(t.Id, Report("Created", extId: "9", clusterId: "vn-hcm-1")));
 
         Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
-        Assert.Null(t.ClusterOrNull("vn-hcm-1"));
+        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == "vn-hcm-1"));
         Assert.False(repo.Saved);
     }
 
@@ -479,8 +479,8 @@ public class TemplateServiceTests
         await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "Template image has the wrong architecture.", detail: "x86_64 on aarch64"));
 
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
-        Assert.Equal("Template image has the wrong architecture.", t.ClusterOrNull(Mock)!.RequestFailureReason);
-        Assert.Equal("x86_64 on aarch64", t.ClusterOrNull(Mock)!.RequestFailureDetail);
+        Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
+        Assert.Equal("x86_64 on aarch64", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureDetail);
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
@@ -494,7 +494,7 @@ public class TemplateServiceTests
         await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: false));
 
         Assert.Equal("NotFound/Exists/-", Shape(t, Mock));
-        Assert.Equal("205", t.ClusterOrNull(Mock)!.ExternalTemplateId);
+        Assert.Equal("205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
         Assert.True(repo.Saved);
         Assert.Empty(await svc.ListAsync(Mock));
     }
@@ -654,12 +654,12 @@ public class TemplateServiceTests
         var t = FailedTemplate("a", "boom");
         var (svc, _, wf) = Make(t);
         await svc.SyncAllAsync();
-        Guid? firstRequest = t.ClusterOrNull(Mock)!.PendingIntentId;
+        Guid? firstRequest = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId;
 
         await svc.SyncAllAsync();
 
         Assert.NotNull(firstRequest);
-        Assert.Equal(firstRequest, t.ClusterOrNull(Mock)!.PendingIntentId);
+        Assert.Equal(firstRequest, t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId);
         VerifySync(wf, Times.Exactly(4)); // two runs × two clusters
     }
 
@@ -709,7 +709,7 @@ public class TemplateServiceTests
             Task.FromResult(_items.Where(t => t.Clusters.Any(z => z.CurrentExistence == CurrentExistence.Exists)).ToList());
 
         public Task<List<VmTemplate>> ListReconcilableInClusterAsync(string clusterId, CancellationToken ct = default) =>
-            Task.FromResult(_items.Where(t => t.ClusterOrNull(clusterId) != null && t.ClusterOrNull(clusterId)!.ExternalTemplateId != null).ToList());
+            Task.FromResult(_items.Where(t => t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId) != null && t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId)!.ExternalTemplateId != null).ToList());
 
         public Task<List<VmTemplate>> ListAllAsync(CancellationToken ct = default) =>
             Task.FromResult(_items.OrderBy(t => t.Name).ToList());

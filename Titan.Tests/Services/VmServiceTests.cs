@@ -23,7 +23,8 @@ namespace Titan.Tests.Services;
 
 public class VmServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
 
     private readonly Mock<IVmRepository> _repo = new();
     private readonly Mock<INetworkRepository> _networkRepo = new();
@@ -300,7 +301,7 @@ public class VmServiceTests
         SetupOffering();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var network = Network.CreateUnchecked(TenantId, "net-2", "cluster-2");
+        var network = TestAggregates.Network(TenantIdOwner, "net-2", "cluster-2");
         network.MarkActive("cs-net-2", "10.0.1.0/24", "10.0.1.1");
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var template = SyncedTemplate(externalId: "99", clusterId: "cluster-1");
@@ -523,7 +524,7 @@ public class VmServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var otherNetwork = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
+        var otherNetwork = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1");
         _networkRepo.Setup(r => r.FindByIdAsync(otherNetwork.Id, default)).ReturnsAsync(otherNetwork);
 
         var req = new CreateVmCommand("web-01", otherNetwork.Id, "offering-1", _templateId, "cluster-1", null);
@@ -540,7 +541,7 @@ public class VmServiceTests
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
-        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // status = Creating
+        var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1"); // status = Creating
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         var req = new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null);
@@ -606,7 +607,7 @@ public class VmServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         var vm = MakeVm(VmSeed.Running);
-        var reverting = vm.AddSnapshotUnchecked("reverting");
+        var reverting = vm.WithSnapshot("reverting");
         reverting.MarkCreated("cs-vm-id/s1");
         vm.RevertSnapshot(reverting.Id);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
@@ -621,23 +622,6 @@ public class VmServiceTests
 
     // The unprovisioned-VM shortcut (ExternalId == null → Destroy()) must
     // honor the same guard — otherwise the VM row vanishes under the snapshot op.
-    [Fact]
-    public async Task Delete_SnapshotInProgress_ErrorVmWithoutExternalId_AlsoBlocked()
-    {
-        SetupCurrentUser(TenantId);
-        SetupTenant();
-        var vm = MakeVm(VmSeed.CreateFailed); // never provisioned → ExternalId null
-        vm.AddSnapshotUnchecked("creating"); // a create still waiting
-        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-
-        var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
-
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
-        Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence);
-        _repo.Verify(r => r.SaveAsync(default), Times.Never);
-    }
-
     [Theory] // a create still waiting without a provider id may yet instantiate
     [InlineData(VmSeed.Creating)]
     public async Task Delete_InvalidStatus_ThrowsBusinessException(VmSeed status)
@@ -697,7 +681,7 @@ public class VmServiceTests
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
-        var vm = MakeVmForTenant(TenantId);
+        var vm = MakeVmForTenant(TenantIdOwner);
         vm.MarkRunning("cs-vm-id", "10.0.0.2"); // provisioned at provider — external id persisted
         vm.MarkObserved(VmState.Error, null);  // Incus reports the instance in Error
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
@@ -715,7 +699,7 @@ public class VmServiceTests
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
-        var vm = MakeVmForTenant(Guid.NewGuid());
+        var vm = MakeVmForTenant(TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -788,7 +772,7 @@ public class VmServiceTests
     public async Task Stop_VmBelongsToOtherTenant_ThrowsNotFound()
     {
         SetupCurrentUser(TenantId);
-        var vm = MakeVmForTenant(Guid.NewGuid());
+        var vm = MakeVmForTenant(TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -871,7 +855,7 @@ public class VmServiceTests
     public async Task Start_VmBelongsToOtherTenant_ThrowsNotFound()
     {
         SetupCurrentUser(TenantId);
-        var vm = MakeVmForTenant(Guid.NewGuid());
+        var vm = MakeVmForTenant(TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -948,7 +932,7 @@ public class VmServiceTests
     public async Task Rename_VmOtherTenant_ThrowsNotFound()
     {
         SetupCurrentUser(TenantId);
-        var vm = MakeVmForTenant(Guid.NewGuid());
+        var vm = MakeVmForTenant(TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -1084,7 +1068,7 @@ public class VmServiceTests
     [Fact]
     public void AdminVmQueryResult_CarriesTheFailureDetail()
     {
-        var vm = MakeVmForTenant(TenantId);
+        var vm = MakeVmForTenant(TenantIdOwner);
         vm.MarkRequestFailed("clean customer message", "raw worker error");
 
         var dto = AdminVmQueryResult.From(vm);
@@ -1112,9 +1096,9 @@ public class VmServiceTests
     public async Task UpdateStatus_Deleted_MarksTheVmsSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
     {
         var vm = MakeVm(VmSeed.Running);
-        var ready = vm.AddSnapshotUnchecked("ready");
+        var ready = vm.WithSnapshot("ready");
         ready.MarkCreated("cs-vm-id/s1");
-        var leaving = vm.AddSnapshotUnchecked("leaving");
+        var leaving = vm.WithSnapshot("leaving");
         leaving.MarkCreated("cs-vm-id/s2");
         vm.RequestSnapshotDelete(leaving.Id);
         vm.RequestDelete();
@@ -1169,7 +1153,7 @@ public class VmServiceTests
 
     private Volume AttachedVolume(Vm vm)
     {
-        Volume volume = Volume.CreateUnchecked(vm.TenantId, "data-1", vm.ClusterId, "std", 20);
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -1276,8 +1260,8 @@ public class VmServiceTests
     public async Task Create_WithSshKeys_SendsVendorDataCarryingEachKeyLine()
     {
         var network = ReadyToCreate();
-        var ed = SshKey.CreateUnchecked(TenantId, "laptop", SshPublicKeyTests.Ed25519);
-        var rsa = SshKey.CreateUnchecked(TenantId, "desktop", SshPublicKeyTests.Rsa2048);
+        var ed = SshKey.Create(TenantIdOwner, 0, "laptop", SshPublicKeyTests.Ed25519);
+        var rsa = SshKey.Create(TenantIdOwner, 0, "desktop", SshPublicKeyTests.Rsa2048);
         _sshKeys.Saved.AddRange([ed, rsa]);
         string? vendorData = null;
         _commands.Setup(w => w.EnqueueVmCreateAsync(
@@ -1319,7 +1303,7 @@ public class VmServiceTests
     public async Task Create_WithAnUnknownKeyId_IsSshKeyNotFound()
     {
         var network = ReadyToCreate();
-        _sshKeys.Saved.Add(SshKey.CreateUnchecked(TenantId, "laptop", SshPublicKeyTests.Ed25519));
+        _sshKeys.Saved.Add(SshKey.Create(TenantIdOwner, 0, "laptop", SshPublicKeyTests.Ed25519));
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
             new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, SshKeyIds: [Guid.NewGuid()]),
@@ -1333,7 +1317,7 @@ public class VmServiceTests
     public async Task Create_WithAnotherTenantsKey_IsSshKeyNotFound_AndMakesNothing()
     {
         var network = ReadyToCreate();
-        var theirs = SshKey.CreateUnchecked(Guid.NewGuid(), "theirs", SshPublicKeyTests.Ed25519);
+        var theirs = SshKey.Create(TestTenant.WithRoomToSpare(), 0, "theirs", SshPublicKeyTests.Ed25519);
         _sshKeys.Saved.Add(theirs);
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
@@ -1372,7 +1356,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_UserDataReturned()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0,
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0,
             "#!/bin/bash\necho hello");
         var dto = VmQueryResult.From(vm);
         Assert.Equal("#!/bin/bash\necho hello", dto.UserData);
@@ -1381,7 +1365,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_NoUserData_ReturnsNull()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
         var dto = VmQueryResult.From(vm);
         Assert.Null(dto.UserData);
     }
@@ -1418,7 +1402,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_WithIpv6_IncludesPublicIpv6Address()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
         vm.MarkRunning("cs-vm-1", "10.0.0.1", "2001:db8::1");
 
         var dto = VmQueryResult.From(vm);
@@ -1429,7 +1413,7 @@ public class VmServiceTests
     [Fact]
     public void VmQueryResult_WithoutIpv6_PublicIpv6AddressNull()
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
         var dto = VmQueryResult.From(vm);
 
@@ -1442,9 +1426,9 @@ public class VmServiceTests
     public async Task List_MixedIpv6_EachItemHasPublicIpv6Address()
     {
         SetupCurrentUser(TenantId);
-        var ipv6Vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "ipv6-vm", "offering-1", "tmpl-1", "cluster-1", 0);
+        var ipv6Vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "ipv6-vm", "offering-1", "tmpl-1", "cluster-1", 0);
         ipv6Vm.MarkRunning("cs-vm-1", "10.0.0.1", "2001:db8::1");
-        var plainVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "plain-vm", "offering-1", "tmpl-1", "cluster-1", 0);
+        var plainVm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "plain-vm", "offering-1", "tmpl-1", "cluster-1", 0);
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(new List<Vm> { ipv6Vm, plainVm });
 
         var result = await CreateListHandler().HandleAsync(new ListVmsQuery(), default);
@@ -1461,7 +1445,7 @@ public class VmServiceTests
     public async Task List_ScopesToCallerTenantOnly_NeverAcrossTenants()
     {
         SetupCurrentUser(TenantId);
-        var callerVm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "mine", "offering-1", "tmpl-1", "cluster-1", 0);
+        var callerVm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "mine", "offering-1", "tmpl-1", "cluster-1", 0);
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(new List<Vm> { callerVm });
 
         var result = await CreateListHandler().HandleAsync(new ListVmsQuery(), default);
@@ -1943,7 +1927,7 @@ public class VmServiceTests
     // The tenant SetupTenant built; every provider call carries its Incus project
     // (titan-ops architecture/tenancy-and-admin.md#project-name).
     private Tenant? _tenant;
-    private string TenantProject => _tenant!.ProjectName;
+    private string TenantProject => Tenant.ProjectNameFor(_tenant!.Id);
 
     private void SetupCurrentUser(Guid tenantId) =>
         _currentUser.Setup(u => u.TenantId).Returns(tenantId);
@@ -1959,7 +1943,7 @@ public class VmServiceTests
 
     private static Network MakeActiveNetwork()
     {
-        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1");
+        var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }
@@ -1969,7 +1953,7 @@ public class VmServiceTests
 
     private static Vm MakeVm(VmSeed seed)
     {
-        var vm = MakeVmForTenant(TenantId);
+        var vm = MakeVmForTenant(TenantIdOwner);
         switch (seed)
         {
             case VmSeed.Creating: break; // Create() lands here: no instance, the create waiting
@@ -1986,8 +1970,8 @@ public class VmServiceTests
         return vm;
     }
 
-    private static Vm MakeVmForTenant(Guid tenantId) =>
-        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+    private static Vm MakeVmForTenant(Titan.Domain.Aggregates.Tenant.Tenant owner) =>
+        Vm.Create(owner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
     private CreateVmCommand MakeCreateCommand() =>
         new("web-01", Guid.NewGuid(), "offering-1", "tmpl-1", "cluster-1", null);

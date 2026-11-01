@@ -11,7 +11,7 @@ public record ReconcilableTemplateQueryResult(Guid Id, string ExternalTemplateId
     // query, not a row to skip quietly.
     public static ReconcilableTemplateQueryResult From(VmTemplateAggregate t, string clusterId)
     {
-        VmTemplateCluster? cluster = t.ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId);
         string? externalTemplateId = null;
         if (cluster != null)
         {

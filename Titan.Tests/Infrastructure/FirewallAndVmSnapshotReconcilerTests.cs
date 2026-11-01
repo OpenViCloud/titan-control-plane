@@ -52,8 +52,8 @@ public class FirewallAndVmSnapshotReconcilerTests
     public async Task FirewallEndpoint_WithToken_ReturnsRulesWithTheirNetwork_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net", Cluster);
-        var rule = FirewallRule.CreateUnchecked(network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net", Cluster);
+        var rule = FirewallRule.Create(network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         rule.MarkActive("sg-7");
         rule.RequestDelete();
         db.Networks.Add(network);
@@ -77,9 +77,9 @@ public class FirewallAndVmSnapshotReconcilerTests
     public async Task VmSnapshotEndpoint_WithToken_ReturnsSnapshotsWithTheirVm_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        var vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
-        var snapshot = vm.AddSnapshotUnchecked("snap");
+        var snapshot = vm.WithSnapshot("snap");
         snapshot.MarkCreated("42:3");
         vm.RevertSnapshot(snapshot.Id);
         db.Vms.Add(vm); // the snapshot comes with the VM

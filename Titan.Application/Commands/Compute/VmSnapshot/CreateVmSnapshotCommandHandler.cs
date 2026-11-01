@@ -1,3 +1,4 @@
+using VmSnapshotTicket = Titan.Domain.Aggregates.Vm.VmSnapshotTicket;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Services.Compute;
@@ -32,10 +33,10 @@ public class CreateVmSnapshotCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        // The VM checks itself (snapshottable), checks the cap and adds the snapshot in one call; the provider id is
-        // read after, from a VM that just said it is snapshottable.
-        VmSnapshotEntity snapshot = vm.AddSnapshot(tenant, command.Name);
-        var externalVmId = vm.BeginSnapshot();
+        // The VM checks itself (snapshottable), checks the cap and adds the snapshot in one call.
+        VmSnapshotTicket ticket = vm.AddSnapshot(tenant, command.Name);
+        VmSnapshotEntity snapshot = ticket.Snapshot;
+        string externalVmId = ticket.ExternalVmId;
         activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
         await commands.EnqueueVmSnapshotCreateAsync(snapshot.Id, vmId, externalVmId, command.Name, projectName,

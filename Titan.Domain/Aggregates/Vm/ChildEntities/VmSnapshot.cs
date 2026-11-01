@@ -69,9 +69,9 @@ public class VmSnapshot : ChildEntity
     /// delete no-ops once the VM is gone.
     public bool BlocksVmDelete => PendingIntentId != null && DesiredExistence == DesiredExistence.Exists;
 
-    /// Called by Vm.AddSnapshot after the VM checked itself and the tenant's cap. Also the test seam: `internal`,
-    /// reachable only from Titan.Tests (titan-ops architecture/code-structure.md#tenant-typed-edge).
-    internal static VmSnapshot CreateUnchecked(Guid vmId, Guid tenantId, string name) => new()
+    /// Called by Vm.AddSnapshot after the VM checked itself and the tenant's cap
+    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    internal static VmSnapshot Create(Guid vmId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),
         VmId = vmId,

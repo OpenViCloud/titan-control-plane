@@ -14,7 +14,8 @@ namespace Titan.Tests.Infrastructure;
 // Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it).
 public class VmSnapshotFirewallRepositoryStateTests
 {
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid Tenant = TenantOwner.Id;
 
     private static TitanDbContext NewDb() =>
         new(new DbContextOptionsBuilder<TitanDbContext>()
@@ -23,14 +24,14 @@ public class VmSnapshotFirewallRepositoryStateTests
 
     private static Vm RunningVm(string cluster = "vn-hcm-1")
     {
-        var vm = Vm.CreateUnchecked(Tenant, Guid.NewGuid(), "vm-1", "m", "tpl-1", cluster, 20);
+        var vm = Vm.Create(TenantOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", cluster, 20);
         vm.MarkRunning("42", "10.0.0.5");
         return vm;
     }
 
     private static VmSnapshot Ready(Vm vm, string name)
     {
-        var s = vm.AddSnapshotUnchecked(name);
+        var s = vm.WithSnapshot(name);
         s.MarkCreated($"42:{name}");
         return s;
     }
@@ -39,7 +40,7 @@ public class VmSnapshotFirewallRepositoryStateTests
     private static Vm VmWithEverySnapshotSituation(string cluster = "vn-hcm-1")
     {
         var vm = RunningVm(cluster);
-        vm.AddSnapshotUnchecked("creating");
+        vm.WithSnapshot("creating");
         Ready(vm, "ready");
         Ready(vm, "reverting").Revert();
         Ready(vm, "deleting").RequestDelete();
@@ -47,7 +48,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         deleted.RequestDelete();
         deleted.MarkDeleted();
         Ready(vm, "lost").MarkNotFound();
-        vm.AddSnapshotUnchecked("failed").MarkRequestFailed("could not create", "raw");
+        vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
         return vm;
     }
 
@@ -97,11 +98,11 @@ public class VmSnapshotFirewallRepositoryStateTests
     // Rules are seeded through their network: they are its child entities (titan-ops architecture/code-structure.md#child-entity),
     // and the foreign key refuses a rule with no network on Postgres.
     private static FirewallRule Rule(Network network, string cidr) =>
-        network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, cidr);
+        network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, cidr);
 
     private static Network UsableNetwork(string name, string cluster)
     {
-        var network = Network.CreateUnchecked(Tenant, name, cluster);
+        var network = TestAggregates.Network(TenantOwner, name, cluster);
         network.MarkActive($"ext-{name}", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

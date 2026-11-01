@@ -29,36 +29,21 @@ public class WalletTransaction : ChildEntity
 
     private WalletTransaction() { }
 
-    public static WalletTransaction ForTopUp(Guid walletId, long amount, Guid topUpId, long balanceAfter) =>
-        MoneyIn(walletId, amount, WalletTransactionType.TopUp, topUpId, balanceAfter);
-
-    public static WalletTransaction ForPromo(Guid walletId, long amount, Guid promotionalCreditId, long balanceAfter) =>
-        MoneyIn(walletId, amount, WalletTransactionType.Promo, promotionalCreditId, balanceAfter);
-
-    /// Takes the positive invoice total and records it negative.
-    public static WalletTransaction ForInvoicePayment(Guid walletId, long amount, Guid invoiceId, long balanceAfter)
+    /// Takes the positive amount of money and applies the type's sign.
+    public static WalletTransaction Create(
+        WalletTransactionType type, Guid walletId, long amount, Guid refId, long balanceAfter)
     {
-        Require(amount);
-        return Create(walletId, -amount, WalletTransactionType.InvoicePayment, invoiceId, balanceAfter);
-    }
-
-    private static WalletTransaction MoneyIn(
-        Guid walletId, long amount, WalletTransactionType type, Guid refId, long balanceAfter)
-    {
-        Require(amount);
-        return Create(walletId, amount, type, refId, balanceAfter);
-    }
-
-    /// A zero movement or a negative "money in" would both reconcile fine and both be wrong.
-    private static void Require(long amount)
-    {
+        // A zero movement or a negative "money in" would both reconcile fine and both be wrong.
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(
                 nameof(amount), amount, "A wallet movement must be a positive amount of money.");
-    }
-
-    private static WalletTransaction Create(
-        Guid walletId, long signedAmount, WalletTransactionType type, Guid refId, long balanceAfter) => new()
+        long signedAmount = type switch
+        {
+            WalletTransactionType.TopUp or WalletTransactionType.Promo => amount,
+            WalletTransactionType.InvoicePayment => -amount,
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "A wallet movement of a type with no sign."),
+        };
+        return new WalletTransaction
         {
             Id = Guid.NewGuid(),
             WalletId = walletId,
@@ -68,4 +53,5 @@ public class WalletTransaction : ChildEntity
             BalanceAfter = balanceAfter,
             CreatedAt = DateTimeOffset.UtcNow
         };
+    }
 }

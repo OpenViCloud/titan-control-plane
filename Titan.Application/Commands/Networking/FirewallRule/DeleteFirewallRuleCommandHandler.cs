@@ -3,7 +3,6 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
@@ -25,11 +24,7 @@ public class DeleteFirewallRuleCommandHandler(
         NetworkAggregate network = await NetworkOwnership.RequireNetworkAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
 
         // A rule of another network answers like a missing one (titan-ops features/network/design.md#firewall-rule-soft-delete).
-        FirewallRuleEntity? rule = network.FirewallRuleOrNull(ruleId);
-        if (rule == null)
-        {
-            throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
-        }
+        FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, ruleId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).

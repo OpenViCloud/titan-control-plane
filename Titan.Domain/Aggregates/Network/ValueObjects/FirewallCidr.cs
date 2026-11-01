@@ -18,26 +18,11 @@ public sealed record FirewallCidr : ValueObject
 
     public static FirewallCidr Parse(string? value)
     {
-        if (!TryParse(value, out FirewallCidr? cidr))
+        if (value == null || (!Ipv4Cidr.IsValid(value) && !IsIpv6Cidr(value)))
         {
             throw new BusinessException("INVALID_CIDR", "A firewall CIDR is an IPv4 CIDR like 0.0.0.0/0 or an IPv6 CIDR like ::/0.");
         }
-        return cidr;
-    }
-
-    public static bool TryParse(string? value, [NotNullWhen(true)] out FirewallCidr? cidr)
-    {
-        cidr = null;
-        if (value == null)
-        {
-            return false;
-        }
-        if (!Ipv4Cidr.TryParse(value, out _) && !IsIpv6Cidr(value))
-        {
-            return false;
-        }
-        cidr = new FirewallCidr { Value = value };
-        return true;
+        return new FirewallCidr { Value = value };
     }
 
     private static bool IsIpv6Cidr(string value)

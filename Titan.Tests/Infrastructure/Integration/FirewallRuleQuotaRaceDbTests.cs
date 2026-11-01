@@ -27,12 +27,12 @@ public class FirewallRuleQuotaRaceDbTests(PostgresFixture pg)
     public async Task TwoCreatesOneBelowTheCap_OneIs201_TheOtherIsQuotaExceeded_AndTheCapHolds()
     {
         Tenant tenant = TestTenant.Active($"fw-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "fw-race@titan.local");
-        Network network = Network.CreateUnchecked(tenant.Id, $"net-{Guid.NewGuid():N}"[..12], "cluster-1");
+        Network network = TestAggregates.Network(tenant, $"net-{Guid.NewGuid():N}"[..12], "cluster-1");
         network.MarkActive($"net{Guid.NewGuid():N}"[..20], "10.0.0.0/24", "10.0.0.1");
         int cap = tenant.Quota.MaxFirewallRulesPerNetwork;
         for (int i = 0; i < cap - 1; i++)
         {
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
                 .MarkActive($"acl/rule-{i}");
         }
         await using (TitanDbContext seed = pg.NewDbContext())
@@ -66,11 +66,10 @@ public class FirewallRuleQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ARuleWhoseNetworkDoesNotExist_IsRefusedByTheDatabase()
     {
-        Network orphanHolder = Network.CreateUnchecked(Guid.NewGuid(), $"gone-{Guid.NewGuid():N}"[..12], "cluster-1");
-        FirewallRule orphan = orphanHolder.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        FirewallRule orphan = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
         await using TitanDbContext db = pg.NewDbContext();
-        db.FirewallRules.Add(orphan); // the network itself is never added
+        db.FirewallRules.Add(orphan); // no such network
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }

@@ -61,9 +61,9 @@ public class LoadBalancerServiceTests
         return network;
     }
 
-    private Vm VmOn(Network network, Guid? tenantId = null)
+    private Vm VmOn(Network network, Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
     {
-        var vm = Vm.CreateUnchecked(tenantId ?? TenantId, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "cluster-1", 20);
+        var vm = Vm.Create(owner ?? _tenant, 0, network.Id, $"vm-{_knownVms.Count}", "m", "tpl", "cluster-1", 20);
         vm.MarkRunning($"vm{_knownVms.Count:D26}", "10.0.0.5");
         _knownVms.Add(vm);
         return vm;
@@ -165,7 +165,7 @@ public class LoadBalancerServiceTests
     public async Task Create_WithAnotherTenantsVm_OrAMissingOne_IsRefusedAlike()
     {
         Network network = NetworkWithIpv6();
-        Vm foreign = VmOn(network, tenantId: Guid.NewGuid());
+        Vm foreign = VmOn(network, owner: TestTenant.WithRoomToSpare());
 
         string foreignCode = await CodeOf(() => CreateHandler().HandleAsync(new CreateLoadBalancerCommand("web", network.Id, [Http], Backends(foreign))));
         string missingCode = await CodeOf(() => CreateHandler().HandleAsync(new CreateLoadBalancerCommand("web", network.Id, [Http], [new(Guid.NewGuid())])));

@@ -42,18 +42,18 @@ public class ListDiskBackupsQueryTests
     }
 
     private void Backup(string kind, Guid id, Guid tenantId, TimeSpan age, long size = 100) =>
-        _records.Rows.Add(BackupRecord.CreateForTenant(kind, id.ToString(), tenantId, $"k{age.Ticks}", Now - age, size, Now));
+        _records.Rows.Add(BackupRecord.Create(kind, id.ToString(), $"k{age.Ticks}", Now - age, size, BackupRecordStatus.Complete, Now, tenantId));
 
     private static Vm RunningVm(string name)
     {
-        Vm vm = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), name, "m", "tpl-1", "mock", 20);
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), name, "m", "tpl-1", "mock", 20);
         vm.MarkRunning("vm-" + name, "10.0.0.2");
         return vm;
     }
 
     private static Volume CreatedVolume(string name)
     {
-        Volume volume = Volume.CreateUnchecked(Guid.NewGuid(), name, "mock", "std", 10);
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare(), 0, name, "mock", "std", 10);
         volume.MarkCreated("vol-" + name);
         return volume;
     }
@@ -144,7 +144,7 @@ public class ListDiskBackupsQueryTests
     [Fact]
     public async Task AVmNotOnIncus_IsNotListed()
     {
-        Vm creating = Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
+        Vm creating = Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
         Vm gone = RunningVm("web-3");
         gone.MarkDeleted();
         Holds([creating, gone], []);

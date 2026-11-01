@@ -22,14 +22,14 @@ public class ClusterIpv6Route : AggregateRoot
 
     private ClusterIpv6Route() { }
 
-    /// Test seam — internal, reachable only from Titan.Tests. The rows themselves come from the repository.
-    internal static ClusterIpv6Route CreateUnchecked(string clusterId, int number, Guid? networkId = null, DateTimeOffset? releasedAt = null)
+    /// A free route, for a test. The rows themselves come from the repository, in one statement per cluster.
+    internal static ClusterIpv6Route Create(string clusterId, int number)
     {
         if (number < FirstNumber || number > LastNumber)
         {
             throw new ArgumentOutOfRangeException(nameof(number), number, "The first /64 holds OVH's gateway and the routers.");
         }
-        return new ClusterIpv6Route { ClusterId = clusterId, Number = number, NetworkId = networkId, ReleasedAt = releasedAt };
+        return new ClusterIpv6Route { ClusterId = clusterId, Number = number };
     }
 
     /// The route a new network gets, out of the free routes of its cluster. A router re-created on the address of one
@@ -56,12 +56,7 @@ public class ClusterIpv6Route : AggregateRoot
         ReleasedAt = null;
     }
 
-    public void TakeBack()
-    {
-        TakeBack(DateTimeOffset.UtcNow);
-    }
-
-    internal void TakeBack(DateTimeOffset at)
+    public void TakeBack(DateTimeOffset at)
     {
         if (IsFree)
         {

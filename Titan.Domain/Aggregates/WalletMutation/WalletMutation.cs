@@ -40,15 +40,9 @@ public class WalletMutation : AggregateRoot
 
     private WalletMutation() { }
 
-    public static WalletMutation ForCredit(Guid walletId, long amount, string refType, Guid refId) =>
-        Create(walletId, WalletMutationType.Credit, amount, refType, refId);
-
     /// The non-negative balance rule stays in Wallet.Debit; this only records the request.
-    public static WalletMutation ForDebit(Guid walletId, long amount, string refType, Guid refId) =>
-        Create(walletId, WalletMutationType.Debit, amount, refType, refId);
-
-    private static WalletMutation Create(
-        Guid walletId, WalletMutationType type, long amount, string refType, Guid refId)
+    public static WalletMutation Create(
+        WalletMutationType type, Guid walletId, long amount, string refType, Guid refId)
     {
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(

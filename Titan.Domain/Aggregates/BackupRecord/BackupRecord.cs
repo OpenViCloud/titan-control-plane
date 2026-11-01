@@ -34,7 +34,7 @@ public class BackupRecord : AggregateRoot
 
     public static BackupRecord Create(
         string kind, string resourceName, string backupKey, DateTimeOffset takenAt, long sizeBytes,
-        BackupRecordStatus status, DateTimeOffset observedAt)
+        BackupRecordStatus status, DateTimeOffset observedAt, Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(resourceName) || string.IsNullOrWhiteSpace(backupKey))
         {
@@ -47,18 +47,8 @@ public class BackupRecord : AggregateRoot
         return new BackupRecord
         {
             Id = Guid.NewGuid(), Kind = kind, ResourceName = resourceName, BackupKey = backupKey,
-            TakenAt = takenAt, SizeBytes = sizeBytes, Status = status, ObservedAt = observedAt,
+            TakenAt = takenAt, SizeBytes = sizeBytes, Status = status, ObservedAt = observedAt, TenantId = tenantId,
         };
-    }
-
-    /// A VM's or volume's archive: always complete, since the bucket shows an upload only once it has finished.
-    public static BackupRecord CreateForTenant(
-        string kind, string resourceName, Guid tenantId, string backupKey, DateTimeOffset takenAt, long sizeBytes,
-        DateTimeOffset observedAt)
-    {
-        BackupRecord record = Create(kind, resourceName, backupKey, takenAt, sizeBytes, BackupRecordStatus.Complete, observedAt);
-        record.TenantId = tenantId;
-        return record;
     }
 
     public void Observe(DateTimeOffset takenAt, long sizeBytes, BackupRecordStatus status, DateTimeOffset observedAt)

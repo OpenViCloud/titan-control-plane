@@ -28,7 +28,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
     private static WalletMutation FailedDebit(Guid walletId, Guid invoiceId, long amount = 100_000L, int attempts = 0)
     {
-        var mutation = WalletMutation.ForDebit(walletId, amount, WalletMutationConsumer.InvoiceRefType, invoiceId);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, walletId, amount, WalletMutationConsumer.InvoiceRefType, invoiceId);
         for (var i = 0; i < attempts; i++)
         {
             mutation.RecordAttempt("transient failure (test)");
@@ -67,7 +67,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.ForDebit(walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             AssertRefIndexRefused(ex);
         }
@@ -82,13 +82,13 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
         var invoiceId = Guid.NewGuid();
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.ForDebit(walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
             await db.SaveChangesAsync();
         }
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.ForDebit(walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             AssertRefIndexRefused(ex);
         }
@@ -102,7 +102,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
         var topUpId = Guid.NewGuid();
         await using (var db = pg.NewDbContext())
         {
-            var failed = WalletMutation.ForCredit(walletId, 100_000L, "TopUp", topUpId);
+            var failed = WalletMutation.Create(WalletMutationType.Credit, walletId, 100_000L, "TopUp", topUpId);
             failed.MarkFailed("Gave up (test).");
             db.WalletMutations.Add(failed);
             await db.SaveChangesAsync();
@@ -110,7 +110,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.ForCredit(walletId, 100_000L, "TopUp", topUpId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Credit, walletId, 100_000L, "TopUp", topUpId));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             AssertRefIndexRefused(ex);
         }

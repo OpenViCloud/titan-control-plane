@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
@@ -26,13 +27,8 @@ public class SshKey : AggregateRoot
     /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
     public static SshKey Create(TenantAggregate tenant, int keyCount, string name, string publicKeyText)
     {
-        tenant.EnsureCanCreateSshKey(keyCount);
-        return CreateUnchecked(tenant.Id, name, publicKeyText);
-    }
+        tenant.EnsureHasRoom(TenantQuotaKind.SshKey, keyCount);
 
-    /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
-    internal static SshKey CreateUnchecked(Guid tenantId, string name, string publicKeyText)
-    {
         string trimmedName = name.Trim();
         if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
         {
@@ -43,7 +39,7 @@ public class SshKey : AggregateRoot
         return new SshKey
         {
             Id = Guid.NewGuid(),
-            TenantId = tenantId,
+            TenantId = tenant.Id,
             Name = trimmedName,
             Type = key.Type,
             PublicKey = key.Line,

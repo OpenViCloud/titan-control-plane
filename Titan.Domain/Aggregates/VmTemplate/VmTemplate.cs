@@ -59,7 +59,7 @@ public class VmTemplate : AggregateRoot
         };
     }
 
-    public VmTemplateCluster? ClusterOrNull(string clusterId)
+    private VmTemplateCluster? ClusterOrNull(string clusterId)
     {
         foreach (VmTemplateCluster cluster in _clusters)
         {

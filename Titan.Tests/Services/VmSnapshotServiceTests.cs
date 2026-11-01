@@ -18,7 +18,8 @@ namespace Titan.Tests.Services;
 // through IVmRepository. The snapshot repository is read side only, so only the list query asks it.
 public class VmSnapshotServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     // The tenant's Incus project, as titan-ops architecture/tenancy-and-admin.md#project-name spells it.
     private static string Project => "t-" + TenantId.ToString("N");
 
@@ -89,7 +90,7 @@ public class VmSnapshotServiceTests
         // titan-ops architecture/http-contract.md#create-returns-id: the response carries only the id, so the
         // status and name are asserted on the snapshot the VM now holds, saved with it.
         Assert.NotEqual(Guid.Empty, result.SnapshotId);
-        VmSnapshot created = vm.RequireSnapshot(result.SnapshotId);
+        VmSnapshot created = vm.Snapshots.Single(s => s.Id == result.SnapshotId);
         Assert.Equal("NotCreated/Exists/Creating", Shape(created));
         Assert.Equal("before-upgrade", created.Name);
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
@@ -109,7 +110,7 @@ public class VmSnapshotServiceTests
 
         var result = await CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("locked"), default);
 
-        Assert.NotNull(vm.SnapshotOrNull(result.SnapshotId));
+        Assert.Contains(vm.Snapshots, s => s.Id == result.SnapshotId);
         _vmRepo.Verify(r => r.FindByIdForUpdateAsync(vm.Id, default), Times.Once);
         _vmRepo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -141,7 +142,7 @@ public class VmSnapshotServiceTests
         var vm = Given(MakeRunningVm());
         for (int i = 0; i < 3; i++)
         {
-            vm.AddSnapshotUnchecked($"s{i}").MarkCreated($"cs-vm-id/s{i}");
+            vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
         }
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -159,13 +160,13 @@ public class VmSnapshotServiceTests
     {
         SetupCurrentUser(TenantId);
         var vm = Given(MakeRunningVm());
-        vm.AddSnapshotUnchecked("a").MarkCreated("cs-vm-id/a");
-        vm.AddSnapshotUnchecked("b").MarkCreated("cs-vm-id/b");
-        vm.AddSnapshotUnchecked("failed").MarkRequestFailed("could not create", "raw");
+        vm.WithSnapshot("a").MarkCreated("cs-vm-id/a");
+        vm.WithSnapshot("b").MarkCreated("cs-vm-id/b");
+        vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
 
         var result = await CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("test"), default);
 
-        Assert.Equal(VmSnapshotTransition.Creating, vm.RequireSnapshot(result.SnapshotId).Transition);
+        Assert.Equal(VmSnapshotTransition.Creating, vm.Snapshots.Single(s => s.Id == result.SnapshotId).Transition);
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
@@ -176,13 +177,13 @@ public class VmSnapshotServiceTests
         var vm = Given(MakeRunningVm());
         for (int i = 0; i < 3; i++)
         {
-            vm.AddSnapshotUnchecked($"s{i}").MarkCreated($"cs-vm-id/s{i}");
+            vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
         }
         vm.RequestSnapshotDelete(vm.Snapshots.First().Id);
 
         var result = await CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("fourth"), default);
 
-        Assert.NotNull(vm.SnapshotOrNull(result.SnapshotId));
+        Assert.Contains(vm.Snapshots, s => s.Id == result.SnapshotId);
         Assert.Equal(4, vm.Snapshots.Count);
     }
 
@@ -204,7 +205,7 @@ public class VmSnapshotServiceTests
     public async Task Create_VmBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        var vm = Given(MakeVmForTenant(Guid.NewGuid()));
+        var vm = Given(MakeVmForTenant(TestTenant.WithRoomToSpare()));
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("test"), default));
@@ -228,9 +229,9 @@ public class VmSnapshotServiceTests
     {
         SetupCurrentUser(TenantId);
         var vm = Given(MakeRunningVm());
-        var ready = vm.AddSnapshotUnchecked("ready");
+        var ready = vm.WithSnapshot("ready");
         ready.MarkCreated("cs-vm-id/ready");
-        var creating = vm.AddSnapshotUnchecked("creating");
+        var creating = vm.WithSnapshot("creating");
         _snapshotRepo.Setup(r => r.FindByVmIdAsync(vm.Id, default)).ReturnsAsync([ready, creating]);
 
         var result = await CreateService().ListAsync(vm.Id, default);
@@ -291,8 +292,9 @@ public class VmSnapshotServiceTests
     public async Task Revert_VmInError_ThrowsBusinessException()
     {
         SetupCurrentUser(TenantId);
-        var vm = Given(MakeVmWithStatus(VmState.Error));
+        var vm = Given(MakeVmWithStatus(VmState.Running));
         var snap = MakeSnapshot(vm, Snap.Ready);
+        vm.MarkObserved(VmState.Error, null);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().RevertAsync(vm.Id, snap.Id, default));
@@ -747,21 +749,21 @@ public class VmSnapshotServiceTests
     {
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
         _vmRepo.Setup(r => r.FindByIdForUpdateAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
-        _vmRepo.Setup(r => r.FindBySnapshotIdAsync(It.Is<Guid>(id => vm.SnapshotOrNull(id) != null), It.IsAny<CancellationToken>()))
+        _vmRepo.Setup(r => r.FindBySnapshotIdAsync(It.Is<Guid>(id => vm.Snapshots.Any(s => s.Id == id)), It.IsAny<CancellationToken>()))
             .ReturnsAsync(vm);
         return vm;
     }
 
     private static Vm MakeRunningVm()
     {
-        var vm = MakeVmForTenant(TenantId);
+        var vm = MakeVmForTenant(TenantIdOwner);
         vm.MarkRunning("cs-vm-id", "10.0.0.1");
         return vm;
     }
 
     private static Vm MakeVmWithStatus(VmState status)
     {
-        var vm = MakeVmForTenant(TenantId);
+        var vm = MakeVmForTenant(TenantIdOwner);
         switch (status)
         {
             case VmState.Running:  vm.MarkRunning("cs-vm-id", "10.0.0.1"); break;
@@ -771,15 +773,15 @@ public class VmSnapshotServiceTests
         return vm;
     }
 
-    private static Vm MakeVmForTenant(Guid tenantId) =>
-        Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
+    private static Vm MakeVmForTenant(Titan.Domain.Aggregates.Tenant.Tenant owner) =>
+        Vm.Create(owner, 0, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
     public enum Snap { Creating, CreateFailed, Ready, RevertRequested, DeleteRequested, Deleted }
 
     // A snapshot of this VM in the given situation, through the VM's test seam: it is the VM's child entity.
     private static VmSnapshot MakeSnapshot(Vm vm, Snap seed)
     {
-        var snap = vm.AddSnapshotUnchecked("test-snap");
+        var snap = vm.WithSnapshot("test-snap");
         switch (seed)
         {
             case Snap.Ready:           snap.MarkCreated("cs-snap-abc"); break;

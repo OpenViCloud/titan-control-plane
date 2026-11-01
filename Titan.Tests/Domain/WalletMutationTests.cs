@@ -11,11 +11,11 @@ public class WalletMutationTests
     private static readonly Guid Wallet = Guid.NewGuid();
 
     [Fact]
-    public void ForCredit_IsPendingCreditFromItsSource()
+    public void Create_Credit_IsPendingCreditFromItsSource()
     {
         var topUpId = Guid.NewGuid();
 
-        var cmd = WalletMutation.ForCredit(Wallet, 500_000L, "TopUp", topUpId);
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 500_000L, "TopUp", topUpId);
 
         Assert.Equal(Wallet, cmd.WalletId);
         Assert.Equal(WalletMutationType.Credit, cmd.Type);
@@ -30,11 +30,11 @@ public class WalletMutationTests
     }
 
     [Fact]
-    public void ForDebit_IsPendingDebitFromItsSource()
+    public void Create_Debit_IsPendingDebitFromItsSource()
     {
         var invoiceId = Guid.NewGuid();
 
-        var cmd = WalletMutation.ForDebit(Wallet, 30_000L, "Invoice", invoiceId);
+        var cmd = WalletMutation.Create(WalletMutationType.Debit, Wallet, 30_000L, "Invoice", invoiceId);
 
         Assert.Equal(WalletMutationType.Debit, cmd.Type);
         Assert.Equal(30_000L, cmd.Amount);               // positive — Debit takes a positive amount too
@@ -51,9 +51,9 @@ public class WalletMutationTests
         // The amount is always positive; a negative "credit" would be a debit wearing the wrong label,
         // exactly what WalletTransaction refuses one layer down.
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            WalletMutation.ForCredit(Wallet, bad, "TopUp", Guid.NewGuid()));
+            WalletMutation.Create(WalletMutationType.Credit, Wallet, bad, "TopUp", Guid.NewGuid()));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
-            WalletMutation.ForDebit(Wallet, bad, "Invoice", Guid.NewGuid()));
+            WalletMutation.Create(WalletMutationType.Debit, Wallet, bad, "Invoice", Guid.NewGuid()));
     }
 
     [Theory]
@@ -64,7 +64,7 @@ public class WalletMutationTests
         // (RefType, RefId) is the idempotency key; a blank discriminator would collapse distinct
         // sources onto one key.
         Assert.Throws<ArgumentException>(() =>
-            WalletMutation.ForCredit(Wallet, 1_000L, bad, Guid.NewGuid()));
+            WalletMutation.Create(WalletMutationType.Credit, Wallet, 1_000L, bad, Guid.NewGuid()));
     }
 
     // ── the consumer's transition (titan-ops architecture/intent-and-observation.md#observation-converges) ──────────────────────────
@@ -76,7 +76,7 @@ public class WalletMutationTests
     [Fact]
     public void Pending_IsNotTerminal_Applied_Is()
     {
-        var cmd = WalletMutation.ForCredit(Wallet, 100_000L, "TopUp", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 100_000L, "TopUp", Guid.NewGuid());
         Assert.False(cmd.IsTerminal);   // a Pending mutation is still work to do
 
         cmd.MarkApplied();
@@ -87,7 +87,7 @@ public class WalletMutationTests
     [Fact]
     public void MarkApplied_FromPending_BecomesApplied_AndStampsAppliedAt()
     {
-        var cmd = WalletMutation.ForCredit(Wallet, 100_000L, "TopUp", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 100_000L, "TopUp", Guid.NewGuid());
 
         cmd.MarkApplied();
 
@@ -102,7 +102,7 @@ public class WalletMutationTests
     [Fact]
     public void MarkFailed_RecordsTheReason_AndIsTerminal()
     {
-        var cmd = WalletMutation.ForDebit(Wallet, 100_000L, "Invoice", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Debit, Wallet, 100_000L, "Invoice", Guid.NewGuid());
 
         cmd.MarkFailed("Wallet holds 0; the debit needs 100000.");
 
@@ -120,7 +120,7 @@ public class WalletMutationTests
         // The absorb is what makes a redelivered notify or a second sweep safe on a DEAD mutation:
         // nothing about it may change, least of all back to Pending, which would re-open a debit that
         // was already reported failed to the customer.
-        var cmd = WalletMutation.ForDebit(Wallet, 100_000L, "Invoice", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Debit, Wallet, 100_000L, "Invoice", Guid.NewGuid());
         cmd.MarkFailed("first reason");
 
         cmd.MarkApplied();
@@ -137,7 +137,7 @@ public class WalletMutationTests
         // The mirror of the test above, and the one that matters for money: a mutation that already
         // moved the balance must not be talked into Failed by a late sweep, or the customer is told a
         // payment failed that in fact went through.
-        var cmd = WalletMutation.ForCredit(Wallet, 500_000L, "TopUp", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 500_000L, "TopUp", Guid.NewGuid());
         cmd.MarkApplied();
 
         cmd.MarkFailed("a late sweeper decided this was poison");
@@ -153,7 +153,7 @@ public class WalletMutationTests
         // The sweeper bumps this on every failed pass. It stays Pending: one bad attempt is not a
         // verdict, it is a retry. Only crossing MaxAttempts (a policy the sweeper owns, not the
         // aggregate) turns into MarkFailed.
-        var cmd = WalletMutation.ForCredit(Wallet, 500_000L, "TopUp", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 500_000L, "TopUp", Guid.NewGuid());
 
         cmd.RecordAttempt("connection reset");
         cmd.RecordAttempt("connection reset again");
@@ -167,7 +167,7 @@ public class WalletMutationTests
     [Fact]
     public void RecordAttempt_OnATerminalMutation_ChangesNothing()
     {
-        var cmd = WalletMutation.ForCredit(Wallet, 500_000L, "TopUp", Guid.NewGuid());
+        var cmd = WalletMutation.Create(WalletMutationType.Credit, Wallet, 500_000L, "TopUp", Guid.NewGuid());
         cmd.MarkApplied();
 
         cmd.RecordAttempt("a sweeper that should not have picked this up");
@@ -181,7 +181,7 @@ public class WalletMutationTests
     [Fact]
     public void ReopenFailedDebit_MakesItPendingAgain_WithAFreshQueueTime_AndNoAttemptsSpent()
     {
-        var debit = WalletMutation.ForDebit(Wallet, 300_000L, "Invoice", Guid.NewGuid());
+        var debit = WalletMutation.Create(WalletMutationType.Debit, Wallet, 300_000L, "Invoice", Guid.NewGuid());
         for (var i = 0; i < 5; i++)
         {
             debit.RecordAttempt("database unreachable");
@@ -203,9 +203,9 @@ public class WalletMutationTests
     }
 
     [Fact]
-    public void ForDebit_QueuesAtCreation()
+    public void Create_Debit_QueuesAtCreation()
     {
-        var debit = WalletMutation.ForDebit(Wallet, 300_000L, "Invoice", Guid.NewGuid());
+        var debit = WalletMutation.Create(WalletMutationType.Debit, Wallet, 300_000L, "Invoice", Guid.NewGuid());
 
         Assert.Equal(debit.CreatedAt, debit.QueuedAt);
     }
@@ -213,7 +213,7 @@ public class WalletMutationTests
     [Fact]
     public void ReopenFailedDebit_OnAPendingDebit_Throws()
     {
-        var debit = WalletMutation.ForDebit(Wallet, 300_000L, "Invoice", Guid.NewGuid());
+        var debit = WalletMutation.Create(WalletMutationType.Debit, Wallet, 300_000L, "Invoice", Guid.NewGuid());
 
         Assert.Throws<InvalidOperationException>(() => debit.ReopenFailedDebit());
         Assert.Equal(WalletMutationStatus.Pending, debit.Status);
@@ -222,7 +222,7 @@ public class WalletMutationTests
     [Fact]
     public void ReopenFailedDebit_OnAnAppliedDebit_Throws()
     {
-        var debit = WalletMutation.ForDebit(Wallet, 300_000L, "Invoice", Guid.NewGuid());
+        var debit = WalletMutation.Create(WalletMutationType.Debit, Wallet, 300_000L, "Invoice", Guid.NewGuid());
         debit.MarkApplied();
 
         Assert.Throws<InvalidOperationException>(() => debit.ReopenFailedDebit());
@@ -233,7 +233,7 @@ public class WalletMutationTests
     [Fact]
     public void ReopenFailedDebit_OnAFailedCredit_Throws()
     {
-        var credit = WalletMutation.ForCredit(Wallet, 500_000L, "TopUp", Guid.NewGuid());
+        var credit = WalletMutation.Create(WalletMutationType.Credit, Wallet, 500_000L, "TopUp", Guid.NewGuid());
         credit.MarkFailed("Given up.");
 
         Assert.Throws<InvalidOperationException>(() => credit.ReopenFailedDebit());

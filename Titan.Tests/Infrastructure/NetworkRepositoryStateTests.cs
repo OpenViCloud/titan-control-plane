@@ -13,7 +13,8 @@ namespace Titan.Tests.Infrastructure;
 // is pinned by NetworkConfiguration and exercised only on Postgres in CI.
 public class NetworkRepositoryStateTests
 {
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid Tenant = TenantOwner.Id;
 
     private static TitanDbContext NewDb() =>
         new(new DbContextOptionsBuilder<TitanDbContext>()
@@ -22,13 +23,13 @@ public class NetworkRepositoryStateTests
 
     private static Network Active(string name, string? cidr)
     {
-        var network = Network.CreateUnchecked(Tenant, name, "vn-hcm-1");
+        var network = TestAggregates.Network(TenantOwner, name, "vn-hcm-1");
         network.MarkActive($"ext-{name}", cidr, "10.0.0.1");
         return network;
     }
 
     private static Network CreateWaiting(string name, string requestedCidr) =>
-        Network.CreateUnchecked(Tenant, name, "vn-hcm-1", requestedCidr: requestedCidr);
+        TestAggregates.Network(TenantOwner, name, "vn-hcm-1", requestedCidr: requestedCidr);
 
     private static Task<bool> Overlaps(TitanDbContext db, string cidr) =>
         new NetworkRepository(db).HasCidrOverlapAsync(Tenant, Ipv4Cidr.Parse(cidr));
@@ -51,10 +52,10 @@ public class NetworkRepositoryStateTests
         errored.MarkObserved(NetworkStatus.Errored);
         var lost = Active("lost", "10.4.0.0/24");
         lost.MarkNotFound();
-        var failed = Network.CreateUnchecked(Tenant, "failed", "vn-hcm-1");
+        var failed = TestAggregates.Network(TenantOwner, "failed", "vn-hcm-1");
         failed.MarkRequestFailed("reason", "detail");
         db.Networks.AddRange(
-            Network.CreateUnchecked(Tenant, "creating", "vn-hcm-1"),
+            TestAggregates.Network(TenantOwner, "creating", "vn-hcm-1"),
             Active("active", "10.1.0.0/24"),
             DeleteRequested("leaving", "10.2.0.0/24"),
             errored, lost, failed);

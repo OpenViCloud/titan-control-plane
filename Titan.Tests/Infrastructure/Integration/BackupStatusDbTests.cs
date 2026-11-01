@@ -138,8 +138,8 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         Guid vmId = Guid.NewGuid();
         await using (TitanDbContext db = pg.NewDbContext())
         {
-            db.Backups.Add(BackupRecord.CreateForTenant(BackupRecord.VmKind, vmId.ToString(), tenantId, "20261026T020709Z",
-                Ago(TimeSpan.FromHours(1)), 667, DateTimeOffset.UtcNow));
+            db.Backups.Add(BackupRecord.Create(BackupRecord.VmKind, vmId.ToString(), "20261026T020709Z",
+                Ago(TimeSpan.FromHours(1)), 667, BackupRecordStatus.Complete, DateTimeOffset.UtcNow, tenantId));
             db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromHours(1)), 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
             await db.SaveChangesAsync();
         }
@@ -191,7 +191,7 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
             before.Wallets.Add(wallet);
             await before.SaveChangesAsync();
             before.WalletTransactions.Add(
-                Titan.Domain.Aggregates.Wallet.WalletTransaction.ForTopUp(wallet.Id, 1000, Guid.NewGuid(), 1000));
+                Titan.Domain.Aggregates.Wallet.WalletTransaction.Create(Titan.Domain.Aggregates.Wallet.WalletTransactionType.TopUp, wallet.Id, 1000, Guid.NewGuid(), 1000));
             await before.SaveChangesAsync();
         }
         (int wallets, int transactions, int mutations) = await WalletCountsAsync();

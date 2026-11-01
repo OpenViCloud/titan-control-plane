@@ -17,7 +17,8 @@ public class VmSshHandlerTests
     private readonly Mock<IVmRepository> _vms = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly FakeActivityRecorder _activity = new();
-    private readonly Guid _tenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant _tenantIdOwner = TestTenant.WithRoomToSpare();
+    private readonly Guid _tenantId = _tenantIdOwner.Id;
 
     public VmSshHandlerTests()
     {
@@ -25,9 +26,9 @@ public class VmSshHandlerTests
         _currentUser.SetupGet(u => u.KeycloakUserId).Returns("kc-1");
     }
 
-    private Vm SeedVm(Guid tenantId, bool running)
+    private Vm SeedVm(Titan.Domain.Aggregates.Tenant.Tenant owner, bool running)
     {
-        Vm vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
+        Vm vm = Vm.Create(owner, 0, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
         vm.MarkCreated("vmabc");
         vm.MarkObserved(running ? VmState.Running : VmState.Stopped, running ? "10.0.0.5" : null);
         _vms.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
@@ -44,7 +45,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Request_OnARunningVm_RecordsTheRequestAsTheCaller()
     {
-        Vm vm = SeedVm(_tenantId, running: true);
+        Vm vm = SeedVm(_tenantIdOwner, running: true);
 
         await RequestAsync(vm.Id);
 
@@ -61,7 +62,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Request_OnAnotherTenantsVm_IsNotFound_AndRecordsNothing()
     {
-        Vm vm = SeedVm(Guid.NewGuid(), running: true);
+        Vm vm = SeedVm(TestTenant.WithRoomToSpare(), running: true);
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => RequestAsync(vm.Id));
 
@@ -72,7 +73,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Request_OnAStoppedVm_IsInvalidStatus_AndRecordsNothing()
     {
-        Vm vm = SeedVm(_tenantId, running: false);
+        Vm vm = SeedVm(_tenantIdOwner, running: false);
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => RequestAsync(vm.Id));
 
@@ -83,7 +84,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Target_OfARunningVm_IsItsClusterProjectAndInstance()
     {
-        Vm vm = SeedVm(_tenantId, running: true);
+        Vm vm = SeedVm(_tenantIdOwner, running: true);
 
         VmShellTargetQueryResult target = await TargetAsync(vm.Id);
 
@@ -95,7 +96,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Target_OfAnotherTenantsVm_IsNotFound()
     {
-        Vm vm = SeedVm(Guid.NewGuid(), running: true);
+        Vm vm = SeedVm(TestTenant.WithRoomToSpare(), running: true);
 
         Assert.Equal("VM_NOT_FOUND", (await Assert.ThrowsAsync<NotFoundException>(() => TargetAsync(vm.Id))).Code);
     }
@@ -103,7 +104,7 @@ public class VmSshHandlerTests
     [Fact]
     public async Task Target_OfAStoppedVm_IsInvalidStatus()
     {
-        Vm vm = SeedVm(_tenantId, running: false);
+        Vm vm = SeedVm(_tenantIdOwner, running: false);
 
         Assert.Equal("VM_INVALID_STATUS", (await Assert.ThrowsAsync<BusinessException>(() => TargetAsync(vm.Id))).Code);
     }

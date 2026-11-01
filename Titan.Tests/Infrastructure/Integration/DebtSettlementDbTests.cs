@@ -120,7 +120,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"UPDATE core.wallets SET available_amount = {amount} WHERE id = {wallet.Id}");
         db.WalletTransactions.Add(
-            WalletTransaction.ForTopUp(wallet.Id, amount, Guid.NewGuid(), amount));
+            WalletTransaction.Create(WalletTransactionType.TopUp, wallet.Id, amount, Guid.NewGuid(), amount));
         await db.SaveChangesAsync();
     }
 

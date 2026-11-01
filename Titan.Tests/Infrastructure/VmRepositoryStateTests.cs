@@ -12,7 +12,8 @@ namespace Titan.Tests.Infrastructure;
 // unique index itself is VmNameUniquenessDbTests.
 public class VmRepositoryStateTests
 {
-    private static readonly Guid Tenant = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid Tenant = TenantOwner.Id;
     private static readonly Guid NetworkId = Guid.NewGuid();
 
     private static TitanDbContext NewDb() =>
@@ -23,7 +24,7 @@ public class VmRepositoryStateTests
     // Every shape, named; the name is what the assertions list.
     private static List<Vm> EveryShape()
     {
-        Vm New(string name) => Vm.CreateUnchecked(Tenant, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
+        Vm New(string name) => Vm.Create(TenantOwner, 0, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
         Vm Seen(string name, VmState state)
         {
             Vm vm = New(name);

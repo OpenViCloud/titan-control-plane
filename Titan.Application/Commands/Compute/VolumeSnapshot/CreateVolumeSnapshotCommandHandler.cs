@@ -1,3 +1,4 @@
+using VolumeSnapshotTicket = Titan.Domain.Aggregates.Volume.VolumeSnapshotTicket;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Domain.Exceptions;
@@ -31,10 +32,10 @@ public class CreateVolumeSnapshotCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        // The volume checks itself (resting on Incus), checks the cap and adds the snapshot in one call; the provider
-        // id is read after, from a volume that just said it is snapshottable.
-        VolumeSnapshotEntity snapshot = volume.AddSnapshot(tenant, command.Name);
-        var externalVolumeId = volume.BeginSnapshot();
+        // The volume checks itself (resting on Incus), checks the cap and adds the snapshot in one call.
+        VolumeSnapshotTicket ticket = volume.AddSnapshot(tenant, command.Name);
+        VolumeSnapshotEntity snapshot = ticket.Snapshot;
+        string externalVolumeId = ticket.ExternalVolumeId;
         activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, volumeId, externalVolumeId, projectName,

@@ -26,19 +26,21 @@ namespace Titan.Tests.Services;
 // pinned by VmServiceTests/NetworkServiceTests.
 public class AdminResourceServiceTests
 {
-    private static readonly Guid TenantA = Guid.NewGuid();
-    private static readonly Guid TenantB = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantAOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantA = TenantAOwner.Id;
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantBOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantB = TenantBOwner.Id;
 
-    private static Vm RunningVm(Guid tenantId, string name)
+    private static Vm RunningVm(Titan.Domain.Aggregates.Tenant.Tenant owner, string name)
     {
-        var vm = Vm.CreateUnchecked(tenantId, Guid.NewGuid(), name, "s", "tmpl-1", "vn-hcm-1", 20);
+        var vm = Vm.Create(owner, 0, Guid.NewGuid(), name, "s", "tmpl-1", "vn-hcm-1", 20);
         vm.MarkRunning("one-123", "10.0.0.5");
         return vm;
     }
 
-    private static Network NetFor(Guid tenantId, string name)
+    private static Network NetFor(Titan.Domain.Aggregates.Tenant.Tenant owner, string name)
     {
-        var net = Network.CreateUnchecked(tenantId, name, "vn-hcm-1");
+        var net = TestAggregates.Network(owner, name, "vn-hcm-1");
         net.MarkActive("one-net-9", "10.0.0.0/24", "10.0.0.1");
         return net;
     }
@@ -84,7 +86,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListVms_ReturnsEveryTenantsVms_EachCarryingTenantId()
     {
-        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web"), RunningVm(TenantB, "b-db")));
+        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantAOwner, "a-web"), RunningVm(TenantBOwner, "b-db")));
 
         var dtos = await svc.ListVmsAsync(null);
 
@@ -97,7 +99,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListVms_ForwardsTenantFilterToRepo_Untouched()
     {
-        var repo = new StubVmRepo(RunningVm(TenantA, "a-web"));
+        var repo = new StubVmRepo(RunningVm(TenantAOwner, "a-web"));
         var (svc, _, _) = Build(repo);
 
         await svc.ListVmsAsync(TenantA);
@@ -109,7 +111,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListVms_MapsDomainFieldsOntoDto()
     {
-        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantA, "a-web")));
+        var (svc, _, _) = Build(new StubVmRepo(RunningVm(TenantAOwner, "a-web")));
 
         var dto = Assert.Single(await svc.ListVmsAsync(null));
 
@@ -123,7 +125,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_ReturnsEveryTenantsNetworks_EachCarryingTenantId()
     {
-        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net"), NetFor(TenantB, "b-net")));
+        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantAOwner, "a-net"), NetFor(TenantBOwner, "b-net")));
 
         var dtos = await svc.ListNetworksAsync(null);
 
@@ -135,7 +137,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_ForwardsTenantFilterToRepo_Untouched()
     {
-        var repo = new StubNetworkRepo(NetFor(TenantA, "a-net"));
+        var repo = new StubNetworkRepo(NetFor(TenantAOwner, "a-net"));
         var (svc, _, _) = Build(new StubVmRepo(), repo);
 
         await svc.ListNetworksAsync(TenantB);
@@ -147,7 +149,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_MapsDomainFieldsOntoDto()
     {
-        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantA, "a-net")));
+        var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(NetFor(TenantAOwner, "a-net")));
 
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
 
@@ -161,7 +163,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task ListNetworks_CarriesTheFailureDetail_TheTenantNeverSees()
     {
-        var failed = Network.CreateUnchecked(TenantA, "failed-net", "vn-hcm-1");
+        var failed = TestAggregates.Network(TenantAOwner, "failed-net", "vn-hcm-1");
         failed.MarkRequestFailed("Network creation failed.", "create network: project t-1 not found");
         var (svc, _, _) = Build(new StubVmRepo(), new StubNetworkRepo(failed));
 
@@ -179,7 +181,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_RunningVmWithExternalId_EnqueuesTheDeleteCommand_AcrossTenant()
     {
-        var vm = RunningVm(TenantB, "victim");                       // owned by a DIFFERENT tenant
+        var vm = RunningVm(TenantBOwner, "victim");                       // owned by a DIFFERENT tenant
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
@@ -203,8 +205,8 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
     {
-        var vm = RunningVm(TenantB, "victim");
-        var volume = Titan.Domain.Aggregates.Volume.Volume.CreateUnchecked(TenantB, "data-1", vm.ClusterId, "std", 20);
+        var vm = RunningVm(TenantBOwner, "victim");
+        var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TenantBOwner, 0, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);
@@ -220,7 +222,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_Repeated_AuditsOnce_AndResendsTheCommand()
     {
-        var vm = RunningVm(TenantB, "victim");
+        var vm = RunningVm(TenantBOwner, "victim");
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
@@ -235,7 +237,7 @@ public class AdminResourceServiceTests
     [Fact] // deleting a VM that is already gone is done, not an error, and audits nothing
     public async Task DeleteVm_AlreadyDeleted_IsANoOp()
     {
-        var vm = RunningVm(TenantB, "gone");
+        var vm = RunningVm(TenantBOwner, "gone");
         vm.RequestDelete();
         vm.MarkDeleted();
         var repo = new StubVmRepo(vm);
@@ -262,7 +264,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_InvalidStatus_Throws_NoCommand()
     {
-        var vm = Vm.CreateUnchecked(TenantB, Guid.NewGuid(), "starting", "s", "t", "z", 10); // Starting — not deletable
+        var vm = Vm.Create(TenantBOwner, 0, Guid.NewGuid(), "starting", "s", "t", "z", 10); // Starting — not deletable
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
@@ -276,8 +278,8 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_SnapshotInProgress_Throws_NoCommand()
     {
-        var vm = RunningVm(TenantB, "busy");
-        vm.AddSnapshotUnchecked("creating"); // a snapshot command still touching the instance: the VM's own child
+        var vm = RunningVm(TenantBOwner, "busy");
+        vm.WithSnapshot("creating"); // a snapshot command still touching the instance: the VM's own child
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
@@ -291,7 +293,7 @@ public class AdminResourceServiceTests
     [Fact]
     public async Task DeleteVm_OfACreateRefusedBeforeProvisioning_DeletesLocally_NoCommand()
     {
-        var vm = Vm.CreateUnchecked(TenantB, Guid.NewGuid(), "orphan", "s", "t", "z", 10);
+        var vm = Vm.Create(TenantBOwner, 0, Guid.NewGuid(), "orphan", "s", "t", "z", 10);
         vm.MarkRequestFailed("never provisioned", null);            // the create gave up, no ExternalId
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);

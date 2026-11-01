@@ -20,7 +20,6 @@ public class NetworkValueObjectTests
     public void NetworkName_RefusesALeadingHyphen_AForeignCharacter_AndEmpty(string name)
     {
         Assert.Equal("INVALID_NETWORK_NAME", Assert.Throws<BusinessException>(() => NetworkName.Parse(name)).Code);
-        Assert.False(NetworkName.TryParse(name, out _));
     }
 
     [Fact]
@@ -39,7 +38,7 @@ public class NetworkValueObjectTests
     public void NetworkName_AcceptsLettersDigitsHyphenUnderscore(string name)
     {
         Assert.Equal(name, NetworkName.Parse(name).Value);
-        Assert.True(NetworkName.TryParse(name, out NetworkName? parsed));
+        NetworkName parsed = NetworkName.Parse(name);
         Assert.Equal(name, parsed!.Value);
     }
 
@@ -56,7 +55,6 @@ public class NetworkValueObjectTests
     public void Ipv4Cidr_RefusesAPrefixOver32_AnOctetOver255_AndNotACidr(string cidr)
     {
         Assert.Equal("INVALID_CIDR", Assert.Throws<BusinessException>(() => Ipv4Cidr.Parse(cidr)).Code);
-        Assert.False(Ipv4Cidr.TryParse(cidr, out _));
     }
 
     // The address need not be the first of its range: the /v1 contract takes 10.0.0.5/24, and the worker masks it and
@@ -69,7 +67,7 @@ public class NetworkValueObjectTests
     public void Ipv4Cidr_AcceptsAnyAddressWithAPrefixUpTo32(string cidr)
     {
         Assert.Equal(cidr, Ipv4Cidr.Parse(cidr).Value);
-        Assert.True(Ipv4Cidr.TryParse(cidr, out _));
+        Assert.Equal(cidr, Ipv4Cidr.Parse(cidr).Value);
     }
 
     // Same table as CreateNetworkValidatorTests: inside one of the three private ranges, with a prefix at least as
@@ -100,7 +98,7 @@ public class NetworkValueObjectTests
     public void FirewallCidr_AcceptsIpv4AndIpv6(string cidr)
     {
         Assert.Equal(cidr, FirewallCidr.Parse(cidr).Value);
-        Assert.True(FirewallCidr.TryParse(cidr, out _));
+        Assert.Equal(cidr, FirewallCidr.Parse(cidr).Value);
     }
 
     // Written as the range's first address; not ::ffff:a.b.c.d, an IPv4 range whose ICMP family the worker would guess.
@@ -115,7 +113,6 @@ public class NetworkValueObjectTests
     public void FirewallCidr_RefusesV4Mapped_AHostBitIpv6_AnOctetOver255_AndNotACidr(string cidr)
     {
         Assert.Equal("INVALID_CIDR", Assert.Throws<BusinessException>(() => FirewallCidr.Parse(cidr)).Code);
-        Assert.False(FirewallCidr.TryParse(cidr, out _));
     }
 
     // ---- PortRange
@@ -128,7 +125,6 @@ public class NetworkValueObjectTests
     public void PortRange_RefusesOutside1To65535_AndStartAfterEnd(int start, int end)
     {
         Assert.Equal("INVALID_PORT_RANGE", Assert.Throws<BusinessException>(() => PortRange.Of(start, end)).Code);
-        Assert.False(PortRange.TryOf(start, end, out _));
     }
 
     [Theory]
@@ -140,16 +136,6 @@ public class NetworkValueObjectTests
         PortRange range = PortRange.Of(start, end);
         Assert.Equal(start, range.Start);
         Assert.Equal(end, range.End);
-    }
-
-    [Theory]
-    [InlineData(0, false)]
-    [InlineData(1, true)]
-    [InlineData(65535, true)]
-    [InlineData(65536, false)]
-    public void PortRange_IsPort_IsTheSameBoundAsOf(int port, bool isPort)
-    {
-        Assert.Equal(isPort, PortRange.IsPort(port));
     }
 
     // ---- Ipv4Cidr.Overlaps: the range arithmetic behind NetworkRepository.HasCidrOverlapAsync.

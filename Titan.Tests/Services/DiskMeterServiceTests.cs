@@ -16,7 +16,8 @@ namespace Titan.Tests.Services;
 // still bills, and a detached Allocated volume still bills.
 public class DiskMeterServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     private static readonly DateTimeOffset Now = new(2026, 8, 9, 9, 10, 0, TimeSpan.Zero);
     private const string OfferingId = "vo-std";
     // The tier's own price column (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
@@ -34,7 +35,7 @@ public class DiskMeterServiceTests
         Options.Create(new BillingMeterOptions { IntervalMinutes = intervalMinutes }));
 
     private static Volume MakeVolume(int sizeGb = 40, string offeringId = OfferingId) =>
-        Volume.CreateUnchecked(TenantId, "data-vol", "cluster-1", offeringId, sizeGb);
+        Volume.Create(TenantIdOwner, 0, "data-vol", "cluster-1", offeringId, sizeGb);
 
     private void SeedVolumes(params Volume[] volumes) =>
         _volumeRepo.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>()))
@@ -67,7 +68,7 @@ public class DiskMeterServiceTests
     {
         var volume = MakeVolume(80);
         volume.MarkCreated("ext-vol-2");
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-1", 20);
         vm.MarkRunning("ext-vm-1", "10.0.0.5");
         volume.Attach(vm);
         volume.MarkObserved(vm.Id, false);

@@ -30,7 +30,7 @@ public class VmReconcilerTests
             .Options);
 
     private static Vm VmIn(string cluster, string name) =>
-        Vm.CreateUnchecked(Guid.NewGuid(), Guid.NewGuid(), name, "m", "tpl-1", cluster, 20);
+        Vm.Create(TestTenant.WithRoomToSpare(), 0, Guid.NewGuid(), name, "m", "tpl-1", cluster, 20);
 
     private static ListReconcilableVmsEndpoint Endpoint(TitanDbContext db, ReconcilerHeartbeat heartbeat, string token) =>
         Factory.Create<ListReconcilableVmsEndpoint>(

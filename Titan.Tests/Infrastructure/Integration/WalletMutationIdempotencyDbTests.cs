@@ -37,14 +37,14 @@ public class WalletMutationIdempotencyDbTests(PostgresFixture pg)
 
         await using (var db1 = pg.NewDbContext())
         {
-            db1.WalletMutations.Add(WalletMutation.ForCredit(walletId, 500_000L, "TopUp", refId));
+            db1.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Credit, walletId, 500_000L, "TopUp", refId));
             await db1.SaveChangesAsync();
         }
 
         await using (var db2 = pg.NewDbContext())
         {
             // A second mutation from the same source — even a different direction/amount — must not land.
-            db2.WalletMutations.Add(WalletMutation.ForDebit(walletId, 1L, "TopUp", refId));
+            db2.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 1L, "TopUp", refId));
             await Assert.ThrowsAsync<DbUpdateException>(() => db2.SaveChangesAsync());
         }
 
@@ -60,8 +60,8 @@ public class WalletMutationIdempotencyDbTests(PostgresFixture pg)
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.ForCredit(walletId, 10_000L, "TopUp", refId));
-            db.WalletMutations.Add(WalletMutation.ForDebit(walletId, 10_000L, "Invoice", refId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Credit, walletId, 10_000L, "TopUp", refId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 10_000L, "Invoice", refId));
             await db.SaveChangesAsync();
         }
 
@@ -83,8 +83,8 @@ public class WalletMutationIdempotencyDbTests(PostgresFixture pg)
 
             await using var dbA = pg.NewDbContext();
             await using var dbB = pg.NewDbContext();
-            dbA.WalletMutations.Add(WalletMutation.ForCredit(walletId, 100L, "TopUp", refId));
-            dbB.WalletMutations.Add(WalletMutation.ForCredit(walletId, 100L, "TopUp", refId));
+            dbA.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Credit, walletId, 100L, "TopUp", refId));
+            dbB.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Credit, walletId, 100L, "TopUp", refId));
 
             var outcomes = await Task.WhenAll(SaveIgnoringDuplicate(dbA), SaveIgnoringDuplicate(dbB));
 

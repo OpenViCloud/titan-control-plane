@@ -27,7 +27,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
     public async Task ANewDelete_FindingTheOpenCommandOfAnotherRequest_Is409_AndRecordsNothing()
     {
         Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}", "race@titan.local");
-        Vm vm = Vm.CreateUnchecked(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
+        Vm vm = Vm.Create(tenant, 0, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
         vm.MarkObserved(VmState.Running, "10.0.0.5");
         await using (TitanDbContext seed = pg.NewDbContext())

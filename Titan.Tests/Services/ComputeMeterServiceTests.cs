@@ -19,7 +19,9 @@ public class ComputeMeterServiceTests
     private const string OfferingId = "m";
     private const decimal Price = 311.256m;
 
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     private static readonly DateTimeOffset Now = new(2026, 8, 9, 9, 10, 0, TimeSpan.Zero);
 
     private readonly Mock<IVmRepository> _vmRepo = new();
@@ -35,7 +37,7 @@ public class ComputeMeterServiceTests
 
     private static Vm RunningVm(string offeringId = OfferingId)
     {
-        var vm = Vm.CreateUnchecked(TenantId, Guid.NewGuid(), "web-01", offeringId, "tmpl-1", "cluster-1", 40);
+        var vm = Vm.Create(TenantIdOwner, 0, Guid.NewGuid(), "web-01", offeringId, "tmpl-1", "cluster-1", 40);
         vm.MarkRunning("ext-1", "10.0.0.1");
         return vm;
     }

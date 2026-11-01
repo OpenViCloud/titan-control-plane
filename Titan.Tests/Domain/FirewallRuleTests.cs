@@ -10,7 +10,7 @@ public class FirewallRuleTests
     [Fact]
     public void Create_FillsAllFields()
     {
-        var rule = FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
+        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
 
         Assert.NotEqual(Guid.Empty, rule.Id);
         Assert.Equal(NetworkId, rule.NetworkId);
@@ -27,7 +27,7 @@ public class FirewallRuleTests
     [Fact]
     public void Create_IcmpRule_HasNullPorts()
     {
-        var rule = FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.ICMP, null, null, "10.0.0.0/8");
+        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.ICMP, null, null, "10.0.0.0/8");
 
         Assert.Null(rule.StartPort);
         Assert.Null(rule.EndPort);
@@ -36,7 +36,7 @@ public class FirewallRuleTests
     [Fact]
     public void MarkActive_SetsExternalId()
     {
-        var rule = FirewallRule.CreateUnchecked(NetworkId, TenantId, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0");
+        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0");
 
         rule.MarkActive("cs-rule-abc");
 
@@ -49,7 +49,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_DefaultPoliciesAreAllow()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1");
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1");
 
         Assert.Equal(FirewallPolicy.Allow, network.DefaultIngressPolicy);
         Assert.Equal(FirewallPolicy.Allow, network.DefaultEgressPolicy);
@@ -58,7 +58,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_WithDenyEgressPolicy_SetsEgressPolicy()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1",
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1",
             defaultIngressPolicy: FirewallPolicy.Deny,
             defaultEgressPolicy: FirewallPolicy.Deny);
 
@@ -69,7 +69,7 @@ public class NetworkFirewallPolicyTests
     [Fact]
     public void Create_MixedPolicies_SetsIndependently()
     {
-        var network = Network.CreateUnchecked(Guid.NewGuid(), "net-1", "cluster-1",
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1",
             defaultIngressPolicy: FirewallPolicy.Deny,
             defaultEgressPolicy: FirewallPolicy.Allow);
 

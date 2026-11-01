@@ -1,5 +1,6 @@
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -12,8 +13,8 @@ namespace Titan.Application.Services.Compute;
 /// Every lookup here answers <b>404</b> when the resource belongs to another tenant — never 403, which
 /// would tell a caller about resources they cannot see (titan-ops architecture/http-contract.md#tenant-scoping).
 /// A missing resource and a foreign one are indistinguishable, down to the error code and the message.
-/// ComputeOwnershipTests pins it. A VM's or a volume's snapshot is reached through its parent
-/// (Vm.RequireSnapshot, Volume.RequireSnapshot): a child entity, not a lookup of its own.
+/// ComputeOwnershipTests pins it. A snapshot is a child entity: it is found on the VM or volume already loaded
+/// (titan-ops architecture/code-structure.md#child-entity), and one of another parent answers like a missing one.
 /// </summary>
 public static class ComputeOwnership
 {
@@ -65,5 +66,29 @@ public static class ComputeOwnership
             throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         return volume;
+    }
+
+    public static VmSnapshot RequireVmSnapshot(VmAggregate vm, Guid snapshotId)
+    {
+        foreach (VmSnapshot snapshot in vm.Snapshots)
+        {
+            if (snapshot.Id == snapshotId)
+            {
+                return snapshot;
+            }
+        }
+        throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
+    }
+
+    public static VolumeSnapshot RequireVolumeSnapshot(Volume volume, Guid snapshotId)
+    {
+        foreach (VolumeSnapshot snapshot in volume.Snapshots)
+        {
+            if (snapshot.Id == snapshotId)
+            {
+                return snapshot;
+            }
+        }
+        throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
     }
 }

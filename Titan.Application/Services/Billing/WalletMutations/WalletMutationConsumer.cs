@@ -46,7 +46,7 @@ public class WalletMutationConsumer(
             case WalletMutationType.Credit:
                 wallet.Credit(mutation.Amount);
                 walletRepo.AddTransaction(
-                    WalletTransaction.ForTopUp(wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
+                    WalletTransaction.Create(WalletTransactionType.TopUp, wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
                 mutation.MarkApplied();
                 break;
 
@@ -88,7 +88,7 @@ public class WalletMutationConsumer(
 
                 wallet.Debit(mutation.Amount);
                 walletRepo.AddTransaction(
-                    WalletTransaction.ForInvoicePayment(wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
+                    WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
                 if (invoice != null)
                 {
                     // The invoice reaches SettledByWallet in the debit's transaction, not at the button:

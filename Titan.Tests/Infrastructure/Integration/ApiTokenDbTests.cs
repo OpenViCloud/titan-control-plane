@@ -51,9 +51,9 @@ public class ApiTokenDbTests(PostgresFixture pg)
         Assert.Equal(1, await repo.CountByTenantAsync(tenant));
         Assert.True(await repo.ExistsByNameAsync(tenant, "terraform"));
 
-        ApiToken? found = await repo.FindBySecretHashAsync(ApiToken.HashOf(secret));
+        ApiToken? found = await repo.FindBySecretHashAsync(ApiTokenSecret.HashOf(secret));
         Assert.Equal(token.Id, found?.Id);
-        Assert.Null(await repo.FindBySecretHashAsync(ApiToken.HashOf(OtherSecret)));
+        Assert.Null(await repo.FindBySecretHashAsync(ApiTokenSecret.HashOf(OtherSecret)));
     }
 
     [Fact]

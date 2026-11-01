@@ -14,8 +14,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Collection(PostgresCollection.Name)]
 public class VmNameUniquenessDbTests(PostgresFixture pg)
 {
-    private static Vm NewVm(Guid tenant, string name) =>
-        Vm.CreateUnchecked(tenant, Guid.NewGuid(), name, "m", "tpl", "cluster-a", 20);
+    private static Vm NewVm(Titan.Domain.Aggregates.Tenant.Tenant owner, string name) =>
+        Vm.Create(owner, 0, Guid.NewGuid(), name, "m", "tpl", "cluster-a", 20);
 
     private async Task SaveAsync(Vm vm)
     {
@@ -36,15 +36,16 @@ public class VmNameUniquenessDbTests(PostgresFixture pg)
     [Fact]
     public async Task TheNameOfADeletedVm_CanBeUsedAgain()
     {
-        var tenant = Guid.NewGuid();
-        Vm gone = NewVm(tenant, "shared-name");
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        Vm gone = NewVm(tenantOwner, "shared-name");
         gone.MarkRunning("41", "10.0.0.5");
         gone.RequestDelete();
         gone.MarkDeleted();
         await SaveAsync(gone);
         bool takenBefore = await NameTakenAsync(tenant, "shared-name");
 
-        await SaveAsync(NewVm(tenant, "shared-name"));
+        await SaveAsync(NewVm(tenantOwner, "shared-name"));
 
         Assert.False(takenBefore);
         Assert.True(await NameTakenAsync(tenant, "shared-name"));
@@ -54,25 +55,27 @@ public class VmNameUniquenessDbTests(PostgresFixture pg)
     [Fact]
     public async Task TheNameOfAVmInError_StaysTaken()
     {
-        var tenant = Guid.NewGuid();
-        Vm errored = NewVm(tenant, "held-name");
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        Vm errored = NewVm(tenantOwner, "held-name");
         errored.MarkRequestFailed("failed before provisioning", null);
         await SaveAsync(errored);
 
         Assert.True(await NameTakenAsync(tenant, "held-name"));
-        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => SaveAsync(NewVm(tenant, "held-name")));
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => SaveAsync(NewVm(tenantOwner, "held-name")));
         AssertUniqueViolation(ex);
     }
 
     [Fact]
     public async Task RenamingToTheNameOfADeletedVm_Succeeds()
     {
-        var tenant = Guid.NewGuid();
-        Vm gone = NewVm(tenant, "old-name");
+        var tenantOwner = TestTenant.WithRoomToSpare();
+        var tenant = tenantOwner.Id;
+        Vm gone = NewVm(tenantOwner, "old-name");
         gone.MarkRunning("42", "10.0.0.6");
         gone.RequestDelete();
         gone.MarkDeleted();
-        Vm live = NewVm(tenant, "live-name");
+        Vm live = NewVm(tenantOwner, "live-name");
         await SaveAsync(gone);
         await SaveAsync(live);
 
@@ -93,8 +96,8 @@ public class VmNameUniquenessDbTests(PostgresFixture pg)
     [Fact]
     public async Task TheSameName_InTwoTenants_IsAllowed()
     {
-        await SaveAsync(NewVm(Guid.NewGuid(), "same-name"));
+        await SaveAsync(NewVm(TestTenant.WithRoomToSpare(), "same-name"));
 
-        await SaveAsync(NewVm(Guid.NewGuid(), "same-name"));
+        await SaveAsync(NewVm(TestTenant.WithRoomToSpare(), "same-name"));
     }
 }

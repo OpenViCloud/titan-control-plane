@@ -16,7 +16,7 @@ public sealed record LoadBalancerVip : ValueObject
 
     private LoadBalancerVip() { }
 
-    public static LoadBalancerVip For(string subnet, int index)
+    internal static LoadBalancerVip For(string subnet, int index)
     {
         if (index < FirstIndex || index > LastIndex)
         {

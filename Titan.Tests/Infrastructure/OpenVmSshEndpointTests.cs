@@ -29,13 +29,14 @@ public class OpenVmSshEndpointTests
     private readonly FakeActivityRecorder _activity = new();
     private readonly ShellSessionLimiter _limiter = new();
     private readonly ClusterOptions _clusters = new();
-    private readonly Guid _tenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant _tenantIdOwner = TestTenant.WithRoomToSpare();
+    private readonly Guid _tenantId = _tenantIdOwner.Id;
     private readonly Vm _vm;
 
     public OpenVmSshEndpointTests()
     {
         _currentUser.SetupGet(u => u.TenantId).Returns(_tenantId);
-        _vm = Vm.CreateUnchecked(_tenantId, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
+        _vm = Vm.Create(_tenantIdOwner, 0, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
         _vm.MarkCreated("vmabc");
         _vm.MarkObserved(VmState.Running, "10.0.0.5");
         _vms.Setup(r => r.FindByIdAsync(_vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_vm);

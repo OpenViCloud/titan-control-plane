@@ -17,6 +17,9 @@ public class DomainBaseClassTests
     {
         ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, RequestUpdate and HasDesiredSpec; the listener it becomes is the child entity",
         ["VmIntentTicket"] = "result of a Vm intent call, read by the handler that enqueues the command",
+        ["VmSnapshotTicket"] = "result of Vm.AddSnapshot, read by the handler that enqueues the command",
+        ["VolumeSnapshotTicket"] = "result of Volume.AddSnapshot, read by the handler that enqueues the command",
+        ["FirewallRuleTicket"] = "result of Network.AddFirewallRule, read by the handler that enqueues the command",
         ["VolumeAttachProviderIds"] = "result of Volume attach, the provider ids the attach command carries",
         ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
         ["VolumeDeletionOutcome"] = "result of Volume.MarkDeleted: the volume's own outcome and the snapshots whose delete it finished",

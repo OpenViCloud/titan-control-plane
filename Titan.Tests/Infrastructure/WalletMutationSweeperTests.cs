@@ -52,8 +52,8 @@ public class WalletMutationSweeperTests
     private async Task<(Wallet Wallet, WalletMutation First, WalletMutation Second)> SeedAsync()
     {
         var wallet = Wallet.Open(Guid.NewGuid(), "VND");
-        var first = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
-        var second = WalletMutation.ForCredit(wallet.Id, 50_000L, "TopUp", Guid.NewGuid());
+        var first = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
+        var second = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 50_000L, "TopUp", Guid.NewGuid());
         await using var db = NewDb();
         db.Wallets.Add(wallet);
         db.WalletMutations.Add(first);

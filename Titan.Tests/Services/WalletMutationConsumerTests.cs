@@ -94,7 +94,7 @@ public class WalletMutationConsumerTests
     {
         var wallet = OpenWallet();
         var topUpId = Guid.NewGuid();
-        var mutation = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", topUpId);
+        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", topUpId);
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));
 
@@ -113,7 +113,7 @@ public class WalletMutationConsumerTests
     public async Task Apply_AlreadyAppliedMutation_IsNoOp_NoCreditNoLedgerNoSave()
     {
         var wallet = OpenWallet();
-        var mutation = WalletMutation.ForCredit(wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
+        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
         mutation.MarkApplied();                            // a prior delivery already applied it
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));
@@ -132,7 +132,7 @@ public class WalletMutationConsumerTests
         wallet.Credit(50_000L);                           // fund it so the debit fits
         var invoice = TestInvoice(20_000L);
         var invoiceId = invoice.Id;
-        var mutation = WalletMutation.ForDebit(wallet.Id, 20_000L, "Invoice", invoiceId);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 20_000L, "Invoice", invoiceId);
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
 
@@ -169,7 +169,7 @@ public class WalletMutationConsumerTests
         var wallet = OpenWallet();
         wallet.Credit(40_000L);
         var invoiceId = Guid.NewGuid();
-        var mutation = WalletMutation.ForDebit(wallet.Id, 100_000L, "Invoice", invoiceId);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 100_000L, "Invoice", invoiceId);
         var walletRepo = new RecordingWalletRepo(wallet);
         var invoice = TestInvoice(100_000L);
         var consumer = new WalletMutationConsumer(
@@ -197,7 +197,7 @@ public class WalletMutationConsumerTests
     {
         var wallet = OpenWallet();
         wallet.Credit(500_000L);
-        var mutation = WalletMutation.ForDebit(wallet.Id, 300_000L, "Invoice", Guid.NewGuid());
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 300_000L, "Invoice", Guid.NewGuid());
         var walletRepo = new RecordingWalletRepo(wallet);
         var invoice = TestInvoice(300_000L);
         var consumer = new WalletMutationConsumer(
@@ -229,7 +229,7 @@ public class WalletMutationConsumerTests
         wallet.Credit(500_000L);
         var invoice = TestInvoice(300_000L);
         invoice.MarkPaid(DateTimeOffset.UtcNow, "admin-1");
-        var mutation = WalletMutation.ForDebit(wallet.Id, 300_000L, "Invoice", invoice.Id);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 300_000L, "Invoice", invoice.Id);
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(
             new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
@@ -249,7 +249,7 @@ public class WalletMutationConsumerTests
     {
         var wallet = OpenWallet();
         wallet.Credit(500_000L);
-        var mutation = WalletMutation.ForDebit(wallet.Id, 300_000L, "Invoice", Guid.NewGuid());
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 300_000L, "Invoice", Guid.NewGuid());
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(
             new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));

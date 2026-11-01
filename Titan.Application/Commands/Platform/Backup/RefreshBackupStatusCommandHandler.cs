@@ -138,8 +138,9 @@ public class RefreshBackupStatusCommandHandler(
             BackupRecord? existing = known.FirstOrDefault(r => IsRowOf(r, key));
             if (existing is null)
             {
-                records.Add(BackupRecord.CreateForTenant(
-                    key.Kind, key.ResourceId.ToString(), key.TenantId, key.BackupKey, key.TakenAt, size, now));
+                // A VM's or volume's archive is always complete: the bucket shows an upload only once it has finished.
+                records.Add(BackupRecord.Create(
+                    key.Kind, key.ResourceId.ToString(), key.BackupKey, key.TakenAt, size, BackupRecordStatus.Complete, now, key.TenantId));
             }
             else
             {

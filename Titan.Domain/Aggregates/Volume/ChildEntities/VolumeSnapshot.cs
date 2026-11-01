@@ -59,9 +59,9 @@ public class VolumeSnapshot : ChildEntity
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && PendingIntentId != null));
 
-    /// Called by Volume.AddSnapshot after the volume checked itself and the tenant's cap. Also the test seam:
-    /// `internal`, reachable only from Titan.Tests (titan-ops architecture/code-structure.md#tenant-typed-edge).
-    internal static VolumeSnapshot CreateUnchecked(Guid volumeId, Guid tenantId, string name) => new()
+    /// Called by Volume.AddSnapshot after the volume checked itself and the tenant's cap
+    /// (titan-ops architecture/code-structure.md#tenant-typed-edge).
+    internal static VolumeSnapshot Create(Guid volumeId, Guid tenantId, string name) => new()
     {
         Id = Guid.NewGuid(),
         VolumeId = volumeId,
@@ -85,7 +85,7 @@ public class VolumeSnapshot : ChildEntity
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Restore creates a new volume and leaves this snapshot alone, so the check is called from
-    /// Volume.CreateFromSnapshot and Volume.BeginSnapshotRestore, never from a handler.
+    /// Volume.Create and Volume.BeginSnapshotRestore, never from a handler.
     internal void EnsureRestorable()
     {
         if (!RestsOnIncus)
@@ -137,12 +137,12 @@ public class VolumeSnapshot : ChildEntity
         PendingIntentId = null;
     }
 
-    /// Volume.CreateFromSnapshot checks the same rule; this hands out the id, and the caller needs both,
+    /// Volume.Create checks the same rule; this hands out the id, and the caller needs both,
     /// so neither can be skipped. Reached through Volume.BeginSnapshotRestore.
     internal string BeginRestore()
     {
         EnsureRestorable();
-        return RequireExternalId();
+        return ExternalId ?? throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
     }
 
     /// Throws rather than let a caller assert the id

@@ -18,7 +18,8 @@ namespace Titan.Tests.Services;
 // repository is read side only, so only the list query asks it.
 public class FirewallServiceTests
 {
-    private static readonly Guid TenantId = Guid.NewGuid();
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
+    private static readonly Guid TenantId = TenantIdOwner.Id;
     private static readonly string Project = Titan.Domain.Aggregates.Tenant.Tenant.ProjectNameFor(TenantId);
     private static readonly Guid NetworkId = Guid.NewGuid();
 
@@ -152,7 +153,7 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         for (int i = 0; i < 20; i++)
         {
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
                 .MarkActive($"cs-rule-{i}");
         }
 
@@ -176,7 +177,7 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         for (int i = 0; i < 20; i++)
         {
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
                 .MarkActive($"cs-rule-{i}");
         }
         network.FirewallRules.First().RequestDelete();
@@ -191,7 +192,7 @@ public class FirewallServiceTests
     public async Task Create_NetworkNotActive_ThrowsBusinessException()
     {
         SetupCurrentUser();
-        var network = Network.CreateUnchecked(TenantId, "net-1", "cluster-1"); // status = Creating
+        var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1"); // status = Creating
         _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -205,7 +206,7 @@ public class FirewallServiceTests
     public async Task Create_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser();
-        var network = MakeActiveNetwork(Guid.NewGuid()); // different tenant
+        var network = MakeActiveNetwork(TestTenant.WithRoomToSpare()); // different tenant
         _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -233,9 +234,9 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         var rules = new List<FirewallRule>
         {
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"),
-            network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 443, 443, "0.0.0.0/0"),
-            network.AddFirewallRuleUnchecked(FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0"),
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0"),
+            network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 443, 443, "0.0.0.0/0"),
+            network.WithFirewallRule(FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0"),
         };
         _repo.Setup(r => r.ListByNetworkAsync(NetworkId, default)).ReturnsAsync(rules);
 
@@ -248,7 +249,7 @@ public class FirewallServiceTests
     public async Task List_NetworkBelongsToOtherTenant_ThrowsNotFoundException()
     {
         SetupCurrentUser();
-        var network = MakeActiveNetwork(Guid.NewGuid());
+        var network = MakeActiveNetwork(TestTenant.WithRoomToSpare());
         _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -265,7 +266,7 @@ public class FirewallServiceTests
     public async Task Delete_NetworkBelongsToOtherTenant_ThrowsNotFound_AndNeverReadsTheRule()
     {
         SetupCurrentUser();
-        var network = MakeActiveNetwork(Guid.NewGuid()); // different tenant
+        var network = MakeActiveNetwork(TestTenant.WithRoomToSpare()); // different tenant
         _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -401,7 +402,7 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         SetupActiveNetwork();
-        Network otherNetwork = MakeActiveNetwork(TenantId);
+        Network otherNetwork = MakeActiveNetwork(TenantIdOwner);
         FirewallRule rule = MakeRule(otherNetwork, Seed.Active);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -420,7 +421,7 @@ public class FirewallServiceTests
     /// callback. One instance, so a test reads the handler's writes off it.
     private Network SetupActiveNetwork()
     {
-        Network network = MakeActiveNetwork(TenantId);
+        Network network = MakeActiveNetwork(TenantIdOwner);
         _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
         _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
         _networkRepo.Setup(r => r.FindByFirewallRuleIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(network);
@@ -431,7 +432,7 @@ public class FirewallServiceTests
 
     private static FirewallRule MakeRule(Network network, Seed seed)
     {
-        FirewallRule rule = network.AddFirewallRuleUnchecked(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
         switch (seed)
         {
             case Seed.Creating:
@@ -470,11 +471,11 @@ public class FirewallServiceTests
         return $"{state}/{r.CurrentExistence}/{r.DesiredExistence}/{transition}";
     }
 
-    /// Network.CreateUnchecked picks its own id: the repository mock answers the route id NetworkId with this network,
+    /// The factory picks the network's own id: the repository mock answers the route id NetworkId with this network,
     /// and a rule it adds carries the network's real id.
-    private static Network MakeActiveNetwork(Guid tenantId)
+    private static Network MakeActiveNetwork(Titan.Domain.Aggregates.Tenant.Tenant owner)
     {
-        var network = Network.CreateUnchecked(tenantId, "net-1", "cluster-1");
+        var network = TestAggregates.Network(owner, "net-1", "cluster-1");
         network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1");
         return network;
     }

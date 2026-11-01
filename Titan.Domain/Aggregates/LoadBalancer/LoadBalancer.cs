@@ -1,3 +1,4 @@
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -88,7 +89,7 @@ public class LoadBalancer : AggregateRoot
         string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
         IReadOnlyList<Vm.Vm> backends)
     {
-        tenant.EnsureCanCreateLoadBalancer(activeLoadBalancerCount);
+        tenant.EnsureHasRoom(TenantQuotaKind.LoadBalancer, activeLoadBalancerCount);
         var loadBalancer = new LoadBalancer
         {
             Id = Guid.NewGuid(),
@@ -115,12 +116,19 @@ public class LoadBalancer : AggregateRoot
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool HasDesiredSpec(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Guid> backendVmIds)
     {
+        return ListenersAre(listeners) && BackendsAre(backendVmIds);
+    }
+
+    private bool ListenersAre(IReadOnlyList<LoadBalancerListenerSpec> listeners)
+    {
         var desiredListeners = DesiredListeners.ToList();
+        return desiredListeners.Count == listeners.Count && listeners.All(spec => desiredListeners.Any(l => l.Is(spec)));
+    }
+
+    private bool BackendsAre(IReadOnlyList<Guid> backendVmIds)
+    {
         var desiredVmIds = DesiredBackends.Select(b => b.VmId).ToHashSet();
-        bool sameListeners = desiredListeners.Count == listeners.Count
-                             && listeners.All(spec => desiredListeners.Any(l => l.Is(spec)));
-        bool sameBackends = desiredVmIds.Count == backendVmIds.Count && backendVmIds.All(desiredVmIds.Contains);
-        return sameListeners && sameBackends;
+        return desiredVmIds.Count == backendVmIds.Count && backendVmIds.All(desiredVmIds.Contains);
     }
 
     /// Returns the new request's id: the update command is keyed on it.
@@ -131,7 +139,7 @@ public class LoadBalancer : AggregateRoot
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE",
                 "Load balancer must be on Incus, with nothing waiting, to change.");
         }
-        if (HasDesiredSpec(listeners, backends.Select(vm => vm.Id).ToList()))
+        if (ListenersAre(listeners) && BackendsAre(backends.Select(vm => vm.Id).ToList()))
         {
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer already has this configuration.");
         }

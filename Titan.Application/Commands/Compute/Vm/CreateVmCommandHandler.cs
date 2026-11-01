@@ -1,3 +1,4 @@
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Services.Compute;
@@ -103,7 +104,7 @@ public class CreateVmCommandHandler(
             externalTemplateId,
             vm.ClusterId,
             externalNetworkId,
-            tenant.ProjectName,
+            TenantAggregate.ProjectNameFor(tenant.Id),
             vm.DiskSizeGb,
             vm.UserData,
             vendorData,

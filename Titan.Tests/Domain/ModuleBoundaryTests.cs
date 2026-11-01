@@ -109,7 +109,6 @@ public class ModuleBoundaryTests
         ["Vm.Create(tenant) -> Tenant"] =
             "the VM factory asks the tenant about VM quota, so forgetting the check means having no VM",
         ["Volume.Create(tenant) -> Tenant"] = "volume quota",
-        ["Volume.CreateFromSnapshot(tenant) -> Tenant"] = "a restore creates a volume, so it spends VOLUME quota",
         ["Vm.AddSnapshot(tenant) -> Tenant"] = "per-VM snapshot quota, counted on the snapshots the VM holds (its child entities)",
         ["Volume.AddSnapshot(tenant) -> Tenant"] = "per-volume snapshot quota, counted on the snapshots the volume holds (its child entities)",
         ["Network.Create(tenant) -> Tenant"] = "network and public-IPv6 quota",

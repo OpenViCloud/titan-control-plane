@@ -1,3 +1,4 @@
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Commands.Networking.Network.Contracts;
@@ -66,7 +67,7 @@ public class CreateNetworkCommandHandler(
         {
             heldCidr = network.RequestedCidr.Value;
         }
-        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name.Value, network.ClusterId, tenant.ProjectName, heldCidr,
+        await commands.EnqueueNetworkCreateAsync(network.Id, network.Name.Value, network.ClusterId, TenantAggregate.ProjectNameFor(tenant.Id), heldCidr,
             network.DefaultIngressPolicy.ToString(), network.DefaultEgressPolicy.ToString(),
             network.PublicIpv6Subnet, routerAddress, ct);
         await repo.SaveAsync(ct);
