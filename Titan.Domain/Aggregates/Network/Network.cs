@@ -35,9 +35,9 @@ public class Network : AggregateRoot
     public DateTimeOffset CreatedAt { get; private set; }
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
-    // The /64 block the cluster's pool gave the network and the router address OVH routes it to; null = no public IPv6
-    // (titan-ops infra/incus/design.md#ipv6-address-plan). Which block number it is, and when it is given back,
-    // is the pool's to know (ClusterIpv6Pool).
+    // The /64 block the cluster's pool gave the network, and the router address OVH routes it to
+    // (titan-ops infra/incus/design.md#ipv6-address-plan); null = no public IPv6. Which block number it is, and when it
+    // is given back, is the pool's to know (ClusterIpv6Pool).
     public string? PublicIpv6Subnet { get; private set; }
     public string? PublicIpv6RouterAddress { get; private set; }
 

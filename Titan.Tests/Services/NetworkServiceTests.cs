@@ -934,7 +934,7 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Public IPv6: one /64 block of the cluster per network (titan-ops infra/incus/design.md#ipv6-address-plan) ──
+    // ── Public IPv6: one /64 block of the cluster per network ──
 
     private const string Block56 = "2001:41d0:d00:d400::/56";
 

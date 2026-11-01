@@ -16,8 +16,8 @@ public record ErrorStatus(int Status, string Code)
     public const string RequestInProgressCode = "REQUEST_IN_PROGRESS";
     public const string ProviderCommandKeyIndex = "IX_provider_commands_key";
 
-    /// Two network creates in one cluster loaded the cluster's /64 pool at the same instant; the second commit finds its
-    /// version moved or a key taken. Asking again picks another /64.
+    /// Two requests that give or take back a /64 in one cluster loaded the cluster's pool at the same instant; the second
+    /// commit finds its version moved or a key taken. Asking again picks another /64, and the worker retries a report.
     public const string Ipv6AllocationConflictCode = "IPV6_ALLOCATION_CONFLICT";
 
     /// Two load balancer creates on one network picked the same free VIP at the same instant

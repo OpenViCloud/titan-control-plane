@@ -191,6 +191,7 @@ public class NetworkBlock64Tests
         network.DeleteLocally();
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.False(network.HasPublicIpv6);
     }
 
     [Fact]
