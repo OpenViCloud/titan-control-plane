@@ -42,10 +42,10 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             .IsRequired()
             .HasDefaultValue(FirewallPolicy.Allow);
         builder.Property(n => n.PublicIpv6Subnet).HasColumnName("public_ipv6_subnet");
-        builder.Property(n => n.PublicIpv6RouterAddress).HasColumnName("public_ipv6_router_address");
         builder.Ignore(n => n.HasPublicIpv6);
-        // Columns the pool replaces, kept in the model without a property until a later migration drops them: the image
-        // that runs before a release carries the pool still reads and writes them. Nothing here writes them.
+        // Columns the route table replaces, kept in the model without a property until a later migration drops them: the
+        // image that runs before a release carries the route table still reads and writes them. Nothing here writes them.
+        builder.Property<string?>("PublicIpv6RouterAddress").HasColumnName("public_ipv6_router_address");
         builder.Property<int?>("PublicIpv6Index").HasColumnName("public_ipv6_index");
         builder.Property<DateTimeOffset?>("PublicIpv6ReleasedAt").HasColumnName("public_ipv6_released_at");
 

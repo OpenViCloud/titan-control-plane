@@ -48,7 +48,7 @@ public class ModuleBoundaryTests
         ["IVmSnapshotRepository"] = "Compute",
         ["IVolumeRepository"] = "Compute",
         ["IVolumeSnapshotRepository"] = "Compute",
-        ["IClusterIpv6PoolRepository"] = "Networking",
+        ["IClusterIpv6RouteRepository"] = "Networking",
         ["IFirewallRuleRepository"] = "Networking",
         ["INetworkRepository"] = "Networking",
         ["IAcceptanceRepository"] = "Platform",

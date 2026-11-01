@@ -105,7 +105,7 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<INetworkRepository, NetworkRepository>();
-builder.Services.AddScoped<IClusterIpv6PoolRepository, ClusterIpv6PoolRepository>();
+builder.Services.AddScoped<IClusterIpv6RouteRepository, ClusterIpv6RouteRepository>();
 builder.Services.AddScoped<IFirewallRuleRepository, FirewallRuleRepository>();
 builder.Services.AddScoped<ISshKeyRepository, SshKeyRepository>();
 builder.Services.AddScoped<IApiTokenRepository, ApiTokenRepository>();
@@ -278,6 +278,7 @@ builder.Services.AddMeters();
 builder.Services.AddScoped<CatTemplateCmd.SyncTemplatesCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListClustersWithNeverAskedTemplatesQueryHandler>();
 builder.Services.AddHostedService<Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService>();
+builder.Services.AddHostedService<Titan.Infrastructure.Hosting.ClusterIpv6RouteSeedService>();
 builder.Services.AddScoped<CatTemplateCmd.UpdateTemplateStatusCommandHandler>();
 builder.Services.AddScoped<CatOfferingCmd.UpdateVmOfferingPriceCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListTemplatesQueryHandler>();

@@ -30,8 +30,8 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<Member> Members => Set<Member>();
     public DbSet<Network> Networks => Set<Network>();
     public DbSet<FirewallRule> FirewallRules => Set<FirewallRule>();
-    public DbSet<Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool> ClusterIpv6Pools =>
-        Set<Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool>();
+    public DbSet<Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route> ClusterIpv6Routes =>
+        Set<Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route>();
     public DbSet<Vm> Vms => Set<Vm>();
     public DbSet<SshKey> SshKeys => Set<SshKey>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
@@ -116,12 +116,19 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
         {
             return;
         }
+        await BeginLockTransactionAsync(ct);
+        await Database.ExecuteSqlInterpolatedAsync(lockStatement, ct);
+    }
+
+    /// Opens the transaction a lock lives in, for a caller whose one statement both locks and reads. The next
+    /// SaveChangesAsync commits it.
+    public async Task BeginLockTransactionAsync(CancellationToken ct)
+    {
         if (Database.CurrentTransaction == null)
         {
             await Database.BeginTransactionAsync(ct);
             _ownsTransaction = true;
         }
-        await Database.ExecuteSqlInterpolatedAsync(lockStatement, ct);
     }
 
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken ct = default)

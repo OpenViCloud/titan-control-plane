@@ -6,7 +6,7 @@ using Titan.Application.Queries.Networking.Network;
 using Titan.Application.Queries.Networking.Network.Contracts;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.Network;
-using Titan.Domain.Aggregates.ClusterIpv6Pool;
+using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -21,9 +21,9 @@ public class NetworkServiceTests
     private static readonly Guid TenantId = Guid.NewGuid();
 
     private readonly Mock<INetworkRepository> _repo = new();
-    private readonly Mock<IClusterIpv6PoolRepository> _pools = new();
-    // The cluster's pool, as the repository hands it out: the real aggregate, so the tests see the real policy.
-    private ClusterIpv6Pool _pool = ClusterIpv6Pool.Create("cluster-1");
+    private readonly Mock<IClusterIpv6RouteRepository> _routes = new();
+    // The cluster's routes, as the repository hands them out: the real aggregate, so the tests see the real policy.
+    private List<ClusterIpv6Route> _routeRows = Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.CreateUnchecked("cluster-1", n)).ToList();
     private readonly Mock<ITenantRepository> _tenantRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly Mock<IProviderCommandQueue> _commands = new();
@@ -31,14 +31,15 @@ public class NetworkServiceTests
 
     public NetworkServiceTests()
     {
-        _pools.Setup(p => p.FindOrAddAsync("cluster-1", default)).ReturnsAsync(() => _pool);
-        _pools.Setup(p => p.FindAsync("cluster-1", default)).ReturnsAsync(() => _pool);
+        _routes.Setup(r => r.LockFreeAsync("cluster-1", default)).ReturnsAsync(() => _routeRows.Where(route => route.IsFree).ToList());
+        _routes.Setup(r => r.FindHeldByAsync(It.IsAny<Guid>(), default))
+            .ReturnsAsync((Guid networkId, CancellationToken _) => _routeRows.SingleOrDefault(route => route.NetworkId == networkId));
     }
 
     // Facade over the network command and query handlers so the tests keep one call shape; it proves
     // nothing on its own — the handlers underneath are the real ones.
     private NetworkFacade CreateService() =>
-        new(_repo.Object, _pools.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
+        new(_repo.Object, _routes.Object, _tenantRepo.Object, _clusters, _currentUser.Object, _commands.Object, _activity);
 
     private readonly Titan.Application.Options.ClusterOptions _clusters = new()
     {
@@ -46,12 +47,12 @@ public class NetworkServiceTests
     };
 
     private sealed class NetworkFacade(
-        INetworkRepository repo, IClusterIpv6PoolRepository pools, ITenantRepository tenantRepo,
+        INetworkRepository repo, IClusterIpv6RouteRepository routes, ITenantRepository tenantRepo,
         Titan.Application.Options.ClusterOptions clusters,
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateNetworkCommandResult> CreateAsync(CreateNetworkCommand req, CancellationToken ct = default)
-            => new CreateNetworkCommandHandler(repo, pools, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
+            => new CreateNetworkCommandHandler(repo, routes, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
 
         public Task<List<NetworkQueryResult>> ListAsync(CancellationToken ct = default)
             => new ListNetworksQueryHandler(repo, currentUser).HandleAsync(new ListNetworksQuery(), ct);
@@ -67,7 +68,7 @@ public class NetworkServiceTests
                 .HandleAsync(new DeleteNetworkCommand(networkId), ct);
 
         public Task UpdateStatusAsync(Guid networkId, UpdateNetworkStatusRequest req, CancellationToken ct = default)
-            => new UpdateNetworkStatusCommandHandler(repo, pools, activity)
+            => new UpdateNetworkStatusCommandHandler(repo, routes, activity)
                 .HandleAsync(new UpdateNetworkStatusCommand(networkId, req.Report, req.Exists, req.Status, req.ExternalId,
                     req.Cidr, req.Gateway, req.Reason, req.Detail), ct);
     }
@@ -934,7 +935,7 @@ public class NetworkServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // ── Public IPv6: one /64 block of the cluster per network ──
+    // ── Public IPv6: one route of the cluster per network ──
 
     private const string Block56 = "2001:41d0:d00:d400::/56";
 
@@ -955,14 +956,21 @@ public class NetworkServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
     }
 
+    private ClusterIpv6Route RouteRow(int number) => _routeRows.Single(route => route.Number == number);
+
+    private void EveryRouteHeld() =>
+        _routeRows = Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.CreateUnchecked("cluster-1", n, Guid.NewGuid())).ToList();
+
+    private void TheRouteRowsHoldNothing() => Assert.All(_routeRows, route => Assert.True(route.IsFree));
+
     // A /64 given back minutes ago would put the new network's router where OVH still sees the old one
-    // (titan-ops features/network/design.md#ipv6-public): the pool gives a block never held first.
+    // (titan-ops features/network/design.md#ipv6-public): a route never used comes first.
     [Fact]
-    public async Task Create_WithPublicIpv6_SkipsABlock64JustGivenBack_WhileOneWasNeverUsed()
+    public async Task Create_WithPublicIpv6_SkipsARouteJustGivenBack_WhileOneWasNeverUsed()
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
-        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1", (1, false, DateTimeOffset.UtcNow));
+        _routeRows[0] = ClusterIpv6Route.CreateUnchecked("cluster-1", 1, null, DateTimeOffset.UtcNow);
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
@@ -970,15 +978,16 @@ public class NetworkServiceTests
 
         Assert.NotNull(added);
         Assert.Equal("2001:41d0:d00:d402::/64", added!.PublicIpv6Subnet);
-        Assert.True(_pool.IsBlock64HeldBy(added.Id));
+        Assert.Equal(added.Id, RouteRow(2).NetworkId);
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_TakesTheLowestFreeBlock64_AndSendsItsRouter()
+    public async Task Create_WithPublicIpv6_TakesTheLowestFreeRoute_AndSendsItsRouter()
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
-        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1", (1, true, null), (2, true, null));
+        RouteRow(1).HandTo(Guid.NewGuid());
+        RouteRow(2).HandTo(Guid.NewGuid());
         Network? added = null;
         _repo.Setup(r => r.Add(It.IsAny<Network>())).Callback<Network>(n => added = n);
 
@@ -986,7 +995,7 @@ public class NetworkServiceTests
 
         Assert.NotNull(added);
         Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
-        Assert.True(_pool.IsBlock64HeldBy(added.Id));
+        Assert.Equal(added.Id, RouteRow(3).NetworkId);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
             added.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
             "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
@@ -1006,7 +1015,7 @@ public class NetworkServiceTests
 
         Assert.Equal("IPV6_NOT_AVAILABLE", ex.Code);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Never);
-        Assert.Empty(_pool.Holdings);
+        TheRouteRowsHoldNothing();
         _commands.VerifyNoOtherCalls();
     }
 
@@ -1022,12 +1031,11 @@ public class NetworkServiceTests
     }
 
     [Fact]
-    public async Task Create_WithPublicIpv6_WhenEveryBlock64IsHeld_IsRefused_AndNothingIsStaged()
+    public async Task Create_WithPublicIpv6_WhenEveryRouteIsHeld_IsRefused_AndNothingIsStaged()
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
-        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1",
-            Enumerable.Range(1, 255).Select(number => (number, true, (DateTimeOffset?)null)).ToArray());
+        EveryRouteHeld();
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
@@ -1038,10 +1046,10 @@ public class NetworkServiceTests
         _commands.VerifyNoOtherCalls();
     }
 
-    // The cap counts the caller's networks with a /64; the factory refuses at it (QuotaInFactoryTests), before the
-    // pool gives anything away.
+    // The cap counts the caller's networks with a /64; the factory refuses at it (QuotaInFactoryTests), before any
+    // route is locked.
     [Fact]
-    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused_AndThePoolGivesNothing()
+    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_IsRefused_AndNoRouteIsLocked()
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
@@ -1051,18 +1059,17 @@ public class NetworkServiceTests
             () => CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", EnablePublicIpv6: true), default));
 
         Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
-        Assert.Empty(_pool.Holdings);
-        _pools.Verify(p => p.FindOrAddAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        TheRouteRowsHoldNothing();
+        _routes.Verify(r => r.LockFreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // The caller over their IPv6 cap hears the cap, whatever the pool holds: the quota is checked before a block is given.
+    // The caller over their IPv6 cap hears the cap, whatever the routes hold: the quota is checked before a route is given.
     [Fact]
-    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_WhileEveryBlock64IsHeld_AnswersTheQuota()
+    public async Task Create_WithPublicIpv6_AtTheTenantsIpv6Cap_WhileEveryRouteIsHeld_AnswersTheQuota()
     {
         SetupFreshCreate();
         SetupCluster("ovnup", Block56);
-        _pool = ClusterIpv6Pool.CreateUnchecked("cluster-1",
-            Enumerable.Range(1, 255).Select(number => (number, true, (DateTimeOffset?)null)).ToArray());
+        EveryRouteHeld();
         _repo.Setup(r => r.CountPublicIpv6ActiveByTenantAsync(TenantId, default)).ReturnsAsync(10);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -1071,111 +1078,93 @@ public class NetworkServiceTests
         Assert.Equal("IPV6_QUOTA_EXCEEDED", ex.Code);
     }
 
-    // Without IPv6 the pool is not asked: a cluster with no public IPv6 still makes networks.
+    // Without IPv6 no route is asked for: a cluster with no public IPv6 still makes networks.
     [Fact]
-    public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_AsksThePoolForNothing()
+    public async Task Create_WithoutPublicIpv6_InAClusterWithNoIpv6_LocksNoRoute()
     {
         SetupFreshCreate();
 
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1"), default);
 
-        _pools.Verify(p => p.FindOrAddAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        Assert.Empty(_pool.Holdings);
+        _routes.Verify(r => r.LockFreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        TheRouteRowsHoldNothing();
     }
 
-    // ── The block goes back to the pool in the same save as the network that let go of it ──
+    // ── The route goes back in the same save as the network that let go of it ──
 
-    // A network whose create waits and that holds a block the pool gave it, as the create handler leaves them.
-    private Network CreatingNetworkHoldingBlock64()
+    // A network whose create waits and that holds route 1, as the create handler leaves them.
+    private Network CreatingNetworkHoldingARoute()
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
-        GrantedBlock64 granted = _pool.GiveBlock64To(network.Id, Block56);
-        network.ReceivePublicIpv6(granted.Subnet, granted.RouterAddress);
+        RouteRow(1).HandTo(network.Id);
+        network.ReceivePublicIpv6(RouteRow(1).SubnetIn(Block56));
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         return network;
     }
 
     [Fact]
-    public async Task UpdateStatus_CreateGivesUpBeforeIncus_TakesTheBlock64Back_AtTheBackOfTheLine()
+    public async Task UpdateStatus_CreateGivesUpBeforeIncus_TakesTheRouteBack_AtTheBackOfTheLine()
     {
-        Network network = CreatingNetworkHoldingBlock64();
+        Network network = CreatingNetworkHoldingARoute();
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed."));
 
         Assert.False(network.HasPublicIpv6);
-        Assert.False(_pool.IsBlock64HeldBy(network.Id));
-        Assert.NotNull(_pool.Holdings.Single().GivenBackAt);
-        // A block never held still comes before the one just given back.
-        Assert.Equal(2, _pool.GiveBlock64To(Guid.NewGuid(), Block56).Number);
+        Assert.True(RouteRow(1).IsFree);
+        Assert.NotNull(RouteRow(1).ReleasedAt);
+        // A route never used still comes before the one just given back.
+        Assert.Equal(2, ClusterIpv6Route.NextToGive("cluster-1", _routeRows.Where(route => route.IsFree).ToList()).Number);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
     [Fact]
-    public async Task UpdateStatus_CreateGivesUpAfterIncusHadIt_KeepsTheBlock64()
+    public async Task UpdateStatus_CreateGivesUpAfterIncusHadIt_KeepsTheRoute()
     {
-        Network network = CreatingNetworkHoldingBlock64();
-        int versionBefore = _pool.Version;
+        Network network = CreatingNetworkHoldingARoute();
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed.", id: "net-x"));
 
         Assert.True(network.HasPublicIpv6);
-        Assert.True(_pool.IsBlock64HeldBy(network.Id));
-        Assert.Equal(versionBefore, _pool.Version);
+        Assert.Equal(network.Id, RouteRow(1).NetworkId);
     }
 
     [Fact]
-    public async Task UpdateStatus_DeletedReport_TakesTheBlock64Back()
+    public async Task UpdateStatus_DeletedReport_TakesTheRouteBack()
     {
-        Network network = CreatingNetworkHoldingBlock64();
+        Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
 
-        Assert.False(_pool.IsBlock64HeldBy(network.Id));
-        Assert.NotNull(_pool.Holdings.Single().GivenBackAt);
+        Assert.True(RouteRow(1).IsFree);
+        Assert.NotNull(RouteRow(1).ReleasedAt);
     }
 
     // The worker repeats a report it could not confirm was received: the second one finds nothing left to take back.
     [Fact]
-    public async Task UpdateStatus_DeletedReportTwice_TakesTheBlock64BackOnce()
+    public async Task UpdateStatus_DeletedReportTwice_TakesTheRouteBackOnce()
     {
-        Network network = CreatingNetworkHoldingBlock64();
+        Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
-        int versionAfterTheFirst = _pool.Version;
-        DateTimeOffset? givenBackAt = _pool.Holdings.Single().GivenBackAt;
+        DateTimeOffset? releasedAt = RouteRow(1).ReleasedAt;
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
 
-        Assert.Equal(versionAfterTheFirst, _pool.Version);
-        Assert.Equal(givenBackAt, _pool.Holdings.Single().GivenBackAt);
+        Assert.Equal(releasedAt, RouteRow(1).ReleasedAt);
     }
 
+    // A report must not stay unanswerable because the two halves drifted apart: no route row names the network that says
+    // it has a subnet, so the network is deleted all the same and the rows are left as they are.
     [Fact]
-    public async Task UpdateStatus_DeletedReport_WhenTheClusterHasNoPool_StillRecordsTheDelete()
-    {
-        Network network = CreatingNetworkHoldingBlock64();
-        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
-        network.MarkObserved(NetworkStatus.Created);
-        network.RequestDelete();
-        _pools.Setup(p => p.FindAsync("cluster-1", default)).ReturnsAsync((ClusterIpv6Pool?)null);
-
-        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
-
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-    }
-
-    // A report must not stay unanswerable because the two halves drifted apart: the pool has no holding for the block the
-    // network says it has, so the network is deleted all the same and the pool is left as it is.
-    [Fact]
-    public async Task UpdateStatus_DeletedReport_WhenThePoolDoesNotHoldTheBlock_StillRecordsTheDelete()
+    public async Task UpdateStatus_DeletedReport_WhenNoRouteNamesTheNetwork_StillRecordsTheDelete()
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare(), 0, 0, NetworkName.Parse("holder"), "cluster-1", null, wantsPublicIpv6: true);
-        network.ReceivePublicIpv6("2001:41d0:d00:d405::/64", "2001:41d0:d00:d400::105");
+        network.ReceivePublicIpv6("2001:41d0:d00:d405::/64");
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
@@ -1184,36 +1173,33 @@ public class NetworkServiceTests
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Empty(_pool.Holdings);
+        TheRouteRowsHoldNothing();
     }
 
     [Fact]
-    public async Task UpdateStatus_ADeleteIncusRefused_KeepsTheBlock64()
+    public async Task UpdateStatus_ADeleteIncusRefused_KeepsTheRoute()
     {
-        Network network = CreatingNetworkHoldingBlock64();
+        Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
         network.RequestDelete();
-        int versionBefore = _pool.Version;
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network deletion failed."));
 
-        Assert.True(_pool.IsBlock64HeldBy(network.Id));
-        Assert.Equal(versionBefore, _pool.Version);
+        Assert.Equal(network.Id, RouteRow(1).NetworkId);
     }
 
     [Fact]
-    public async Task UpdateStatus_ObservedReports_LeaveThePoolAlone()
+    public async Task UpdateStatus_ObservedReports_LeaveTheRouteAlone()
     {
-        Network network = CreatingNetworkHoldingBlock64();
+        Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
-        int versionBefore = _pool.Version;
 
         await CreateService().UpdateStatusAsync(network.Id, Observed("Created"));
         await CreateService().UpdateStatusAsync(network.Id, NotFoundReport);
 
-        Assert.Equal(versionBefore, _pool.Version);
-        Assert.True(_pool.IsBlock64HeldBy(network.Id));
+        Assert.Equal(network.Id, RouteRow(1).NetworkId);
+        Assert.Null(RouteRow(1).ReleasedAt);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

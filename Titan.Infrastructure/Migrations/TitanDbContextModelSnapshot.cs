@@ -314,58 +314,31 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("backups", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool", b =>
+            modelBuilder.Entity("Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
                     b.Property<string>("ClusterId")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("cluster_id");
 
-                    b.Property<int>("Version")
-                        .IsConcurrencyToken()
-                        .HasColumnType("integer")
-                        .HasColumnName("version");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClusterId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_cluster_ipv6_pools_cluster_id");
-
-                    b.ToTable("cluster_ipv6_pools", "core");
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.ClusterIpv6Pool.Ipv6Block64Holding", b =>
-                {
-                    b.Property<Guid>("PoolId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pool_id");
-
                     b.Property<int>("Number")
                         .HasColumnType("integer")
-                        .HasColumnName("block64_number");
+                        .HasColumnName("number");
 
-                    b.Property<DateTimeOffset?>("GivenBackAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("given_back_at");
-
-                    b.Property<Guid?>("HolderNetworkId")
+                    b.Property<Guid?>("NetworkId")
                         .HasColumnType("uuid")
-                        .HasColumnName("holder_network_id");
+                        .HasColumnName("network_id");
 
-                    b.HasKey("PoolId", "Number")
-                        .HasName("pk_cluster_ipv6_block64_holdings");
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at");
 
-                    b.HasIndex("HolderNetworkId")
+                    b.HasKey("ClusterId", "Number");
+
+                    b.HasIndex("NetworkId")
                         .IsUnique()
-                        .HasDatabaseName("ix_cluster_ipv6_block64_holdings_holder_network_id")
-                        .HasFilter("holder_network_id IS NOT NULL");
+                        .HasFilter("network_id IS NOT NULL");
 
-                    b.ToTable("cluster_ipv6_block64_holdings", "core");
+                    b.ToTable("cluster_ipv6_routes", "core");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
@@ -2081,15 +2054,6 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.ClusterIpv6Pool.Ipv6Block64Holding", b =>
-                {
-                    b.HasOne("Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool", null)
-                        .WithMany("Holdings")
-                        .HasForeignKey("PoolId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)
@@ -2192,11 +2156,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasForeignKey("VolumeId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool", b =>
-                {
-                    b.Navigation("Holdings");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>

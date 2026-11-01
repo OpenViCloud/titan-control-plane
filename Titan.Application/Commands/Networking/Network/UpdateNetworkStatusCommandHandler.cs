@@ -6,7 +6,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
-using PoolAggregate = Titan.Domain.Aggregates.ClusterIpv6Pool.ClusterIpv6Pool;
+using RouteAggregate = Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -16,7 +16,7 @@ namespace Titan.Application.Commands.Networking.Network;
 // (titan-ops features/activity/design.md#outcome-source).
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
-    IClusterIpv6PoolRepository pools,
+    IClusterIpv6RouteRepository routes,
     IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateNetworkStatusCommand command, CancellationToken ct = default)
@@ -54,7 +54,7 @@ public class UpdateNetworkStatusCommandHandler(
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
         string? outcome = null;
-        bool letGoOfBlock64 = false;
+        bool routeGoesBack = false;
         switch (req.Report)
         {
             case "Observed":
@@ -89,7 +89,7 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 else
                 {
-                    letGoOfBlock64 = network.MarkRequestFailed(req.Reason, req.Detail);
+                    routeGoesBack = network.MarkRequestFailed(req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
@@ -97,7 +97,7 @@ public class UpdateNetworkStatusCommandHandler(
                 // the ones whose own delete was waiting: their own delete command will only find them already Deleted,
                 // so their outcome is recorded now.
                 NetworkDeletionOutcome deletion = network.MarkDeleted();
-                letGoOfBlock64 = deletion.LetGoOfBlock64;
+                routeGoesBack = true;
                 if (deletion.FulfilledNetworkDelete)
                 {
                     outcome = "network.deleted";
@@ -115,27 +115,22 @@ public class UpdateNetworkStatusCommandHandler(
             activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name.Value);
         }
 
-        if (letGoOfBlock64)
+        if (routeGoesBack)
         {
-            await TakeBlock64BackAsync(network, ct);
+            await TakeRouteBackAsync(network, ct);
         }
 
         await repo.SaveAsync(ct);
     }
 
-    // The block goes back to the cluster's pool in the same save as the network that let go of it. A report must not
-    // fail because the pool and the network disagree (no pool, or a pool that does not hold the block): there is
-    // nothing to take back.
-    private async Task TakeBlock64BackAsync(NetworkAggregate network, CancellationToken ct)
+    // The route goes back in the same save as the network that let go of it. No route names a network without public
+    // IPv6, or one whose route already went back with an earlier report: there is nothing to take back.
+    private async Task TakeRouteBackAsync(NetworkAggregate network, CancellationToken ct)
     {
-        PoolAggregate? pool = await pools.FindAsync(network.ClusterId, ct);
-        if (pool == null)
+        RouteAggregate? route = await routes.FindHeldByAsync(network.Id, ct);
+        if (route != null)
         {
-            return;
-        }
-        if (pool.IsBlock64HeldBy(network.Id))
-        {
-            pool.TakeBlock64BackFrom(network.Id);
+            route.TakeBack();
         }
     }
 
