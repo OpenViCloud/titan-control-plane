@@ -6,14 +6,12 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
 
-// A network's public /64 block (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
-// MaxPublicIpv6 by the factory, handed over by the cluster's pool (ClusterIpv6PoolTests) and let go of when the create
-// gives up before Incus had the network or when the delete is confirmed. The network keeps the two addresses; the
-// pool keeps the number, so each call that lets the block go says so and the caller takes it back in the pool.
-public class NetworkBlock64Tests
+// A network's public /64 (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
+// MaxPublicIpv6 by the factory, given with the route the cluster has free (ClusterIpv6RouteTests) and let go of when the
+// create gives up before Incus had the network. The network keeps the subnet; the route table keeps who holds which.
+public class NetworkPublicIpv6Tests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
-    private const string Router = "2001:41d0:d00:d400::105";
 
     private static Tenant TenantWith(int maxNetworks = 9, int maxIpv6 = 9)
     {
@@ -22,13 +20,13 @@ public class NetworkBlock64Tests
         return t;
     }
 
-    private static Network WantingBlock64(string cluster = "singapore01") =>
+    private static Network WantingPublicIpv6(string cluster = "singapore01") =>
         Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), cluster, null, wantsPublicIpv6: true);
 
-    private static Network HoldingBlock64()
+    private static Network HoldingASubnet()
     {
-        Network network = WantingBlock64();
-        network.ReceivePublicIpv6(Subnet, Router);
+        Network network = WantingPublicIpv6();
+        network.ReceivePublicIpv6(Subnet);
         return network;
     }
 
@@ -40,18 +38,17 @@ public class NetworkBlock64Tests
     }
 
     [Fact]
-    public void Create_WantingPublicIpv6_HasNoBlockUntilThePoolHandsOneOver()
+    public void Create_WantingPublicIpv6_HasNoSubnetUntilARouteIsGiven()
     {
-        Network network = WantingBlock64();
+        Network network = WantingPublicIpv6();
 
         Assert.False(network.HasPublicIpv6);
         Assert.Null(network.PublicIpv6Subnet);
 
-        network.ReceivePublicIpv6(Subnet, Router);
+        network.ReceivePublicIpv6(Subnet);
 
         Assert.True(network.HasPublicIpv6);
         Assert.Equal(Subnet, network.PublicIpv6Subnet);
-        Assert.Equal(Router, network.PublicIpv6RouterAddress);
     }
 
     [Fact]
@@ -61,25 +58,24 @@ public class NetworkBlock64Tests
 
         Assert.False(network.HasPublicIpv6);
         Assert.Null(network.PublicIpv6Subnet);
-        Assert.Null(network.PublicIpv6RouterAddress);
     }
 
     [Fact]
     public void ReceivePublicIpv6_Twice_Throws()
     {
-        Network network = HoldingBlock64();
+        Network network = HoldingASubnet();
 
-        Assert.Throws<InvalidOperationException>(() => network.ReceivePublicIpv6("2001:41d0:d00:d406::/64", "2001:41d0:d00:d400::106"));
+        Assert.Throws<InvalidOperationException>(() => network.ReceivePublicIpv6("2001:41d0:d00:d406::/64"));
         Assert.Equal(Subnet, network.PublicIpv6Subnet);
     }
 
     [Fact]
     public void ReceivePublicIpv6_AfterTheCreateEnded_Throws()
     {
-        Network network = WantingBlock64();
+        Network network = WantingPublicIpv6();
         network.MarkRequestFailed("Network creation failed.", null);
 
-        Assert.Throws<InvalidOperationException>(() => network.ReceivePublicIpv6(Subnet, Router));
+        Assert.Throws<InvalidOperationException>(() => network.ReceivePublicIpv6(Subnet));
     }
 
     // The cap pair (QuotaInFactoryTests): at the cap the factory refuses, and only when IPv6 is asked for.
@@ -105,23 +101,22 @@ public class NetworkBlock64Tests
     }
 
     [Fact]
-    public void CreateGivesUpBeforeIncusHadIt_LetsGoOfTheBlock_AndSaysSo()
+    public void CreateGivesUpBeforeIncusHadIt_LetsGoOfTheSubnet_AndSaysSo()
     {
-        Network network = HoldingBlock64();
+        Network network = HoldingASubnet();
 
         bool letGo = network.MarkRequestFailed("Network creation failed.", "detail");
 
         Assert.True(letGo);
         Assert.False(network.HasPublicIpv6);
         Assert.Null(network.PublicIpv6Subnet);
-        Assert.Null(network.PublicIpv6RouterAddress);
     }
 
-    // Incus has the network, router and all: the block stays until the delete is confirmed.
+    // Incus has the network, router and all: the subnet stays until the delete is confirmed.
     [Fact]
-    public void CreateGivesUpAfterIncusHadIt_KeepsTheBlock_AndSaysNothingWasLetGo()
+    public void CreateGivesUpAfterIncusHadIt_KeepsTheSubnet_AndSaysNothingWasLetGo()
     {
-        Network network = HoldingBlock64();
+        Network network = HoldingASubnet();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
 
         bool letGo = network.MarkRequestFailed("Network creation failed.", "detail");
@@ -131,75 +126,45 @@ public class NetworkBlock64Tests
     }
 
     [Fact]
-    public void CreateGivesUp_OfANetworkWithoutABlock_SaysNothingWasLetGo()
+    public void CreateGivesUp_OfANetworkWithoutASubnet_SaysNothingWasLetGo()
     {
         var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
 
         Assert.False(network.MarkRequestFailed("Network creation failed.", "detail"));
     }
 
-    // A give-up with no create waiting is stale and records nothing: the block it might hold is not its to let go of.
+    // A give-up with no create waiting is stale and records nothing: the route it might hold is not its to let go of.
     [Fact]
     public void ARepeatedGiveUp_SaysNothingWasLetGo()
     {
-        Network network = HoldingBlock64();
+        Network network = HoldingASubnet();
         network.MarkRequestFailed("Network creation failed.", "detail");
 
         Assert.False(network.MarkRequestFailed("Network creation failed.", "detail"));
     }
 
     [Fact]
-    public void DeleteConfirmed_OfANetworkHoldingABlock_SaysItWasLetGo_AndKeepsTheAddresses()
+    public void DeleteConfirmed_KeepsTheSubnet()
     {
-        Network network = Existing(HoldingBlock64());
+        Network network = Existing(HoldingASubnet());
         network.RequestDelete();
 
-        NetworkDeletionOutcome outcome = network.MarkDeleted();
+        network.MarkDeleted();
 
-        Assert.True(outcome.LetGoOfBlock64);
         Assert.Equal(Subnet, network.PublicIpv6Subnet);
     }
 
-    [Fact]
-    public void DeleteConfirmed_OfANetworkWithoutABlock_LetsGoOfNothing()
-    {
-        var network = Network.Create(TenantWith(), 0, 0, NetworkName.Parse("net-1"), "mock", null, wantsPublicIpv6: false);
-        Existing(network).RequestDelete();
-
-        Assert.False(network.MarkDeleted().LetGoOfBlock64);
-    }
-
-    // Deleted absorbs: a repeated Deleted report must not take the block back a second time.
-    [Fact]
-    public void DeleteConfirmedTwice_LetsGoOfTheBlockOnce()
-    {
-        Network network = Existing(HoldingBlock64());
-        network.RequestDelete();
-        Assert.True(network.MarkDeleted().LetGoOfBlock64);
-
-        Assert.False(network.MarkDeleted().LetGoOfBlock64);
-    }
-
     // The only other way a network row ends is a local delete of a failed create that has no provider id; a give-up
-    // before Incus had the network already let the block go (the first assertion), so the local delete has none to keep.
+    // before Incus had the network already let the subnet go (the first assertion), so the local delete has none to keep.
     [Fact]
-    public void DeleteLocally_OfACreateThatGaveUpBeforeIncus_EndsDeleted_WithNoBlockLeftToKeep()
+    public void DeleteLocally_OfACreateThatGaveUpBeforeIncus_EndsDeleted_WithNoSubnetLeftToKeep()
     {
-        Network network = HoldingBlock64();
+        Network network = HoldingASubnet();
         Assert.True(network.MarkRequestFailed("Network creation failed.", null));
 
         network.DeleteLocally();
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.False(network.HasPublicIpv6);
-    }
-
-    [Fact]
-    public void DeleteConfirmed_AfterTheCreateGaveUpBeforeIncus_LetsGoOfNothingMore()
-    {
-        Network network = HoldingBlock64();
-        Assert.True(network.MarkRequestFailed("Network creation failed.", null));
-
-        Assert.False(network.MarkDeleted().LetGoOfBlock64);
     }
 }

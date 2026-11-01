@@ -35,11 +35,9 @@ public class Network : AggregateRoot
     public DateTimeOffset CreatedAt { get; private set; }
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
-    // The /64 block the cluster's pool gave the network, and the router address OVH routes it to
-    // (titan-ops infra/incus/design.md#ipv6-address-plan); null = no public IPv6. Which block number it is, and when it
-    // is given back, is the pool's to know (ClusterIpv6Pool).
+    // The /64 of the route the network was given (titan-ops infra/incus/design.md#ipv6-address-plan); null = no public
+    // IPv6. Which route it is, and when it goes back, is the route's to know (ClusterIpv6Route).
     public string? PublicIpv6Subnet { get; private set; }
-    public string? PublicIpv6RouterAddress { get; private set; }
 
     public bool HasPublicIpv6 => PublicIpv6Subnet != null;
 
@@ -102,20 +100,19 @@ public class Network : AggregateRoot
         return network;
     }
 
-    /// The /64 block the cluster's pool handed over for this network. The pool keeps who holds a block by the network's
-    /// id, so the block comes after Create: once, and only while the create is waiting.
-    public void ReceivePublicIpv6(string subnet, string routerAddress)
+    /// The /64 of the route given to this network. The route keeps who holds it by the network's id, so the /64 comes
+    /// after Create: once, and only while the create is waiting.
+    public void ReceivePublicIpv6(string subnet)
     {
         if (HasPublicIpv6)
         {
-            throw new InvalidOperationException($"Network {Id} already has a public IPv6 /64 block.");
+            throw new InvalidOperationException($"Network {Id} already has a public IPv6 /64.");
         }
         if (!CreateIsWaiting)
         {
-            throw new InvalidOperationException($"Network {Id} is not waiting for its create, so it takes no new /64 block.");
+            throw new InvalidOperationException($"Network {Id} is not waiting for its create, so it takes no new /64.");
         }
         PublicIpv6Subnet = subnet;
-        PublicIpv6RouterAddress = routerAddress;
     }
 
     /// Test seam — internal, reachable only from Titan.Tests. See Vm.CreateUnchecked.
@@ -231,10 +228,9 @@ public class Network : AggregateRoot
     {
         if (IsTerminal)
         {
-            return new NetworkDeletionOutcome(false, [], false);
+            return new NetworkDeletionOutcome(false, []);
         }
         bool fulfilled = DeleteIsWaiting;
-        bool holdsBlock64 = HasPublicIpv6;
         CurrentExistence = CurrentExistence.Deleted;
         CurrentState = null;
         PendingIntentId = null;
@@ -247,12 +243,12 @@ public class Network : AggregateRoot
                 rulesWhoseDeleteWasFulfilled.Add(rule);
             }
         }
-        return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled, holdsBlock64);
+        return new NetworkDeletionOutcome(fulfilled, rulesWhoseDeleteWasFulfilled);
     }
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale and records nothing; a delete's give-up is
-    /// AbandonRequest. True when the network let go of its /64 block, which the caller takes back in the cluster's pool.
+    /// AbandonRequest. True when the network let go of its /64, whose route the caller takes back.
     public bool MarkRequestFailed(string? reason, string? detail)
     {
         if (IsTerminal || !CreateIsWaiting)
@@ -269,7 +265,6 @@ public class Network : AggregateRoot
         if (incusNeverHadIt && HasPublicIpv6)
         {
             PublicIpv6Subnet = null;
-            PublicIpv6RouterAddress = null;
             return true;
         }
         return false;
