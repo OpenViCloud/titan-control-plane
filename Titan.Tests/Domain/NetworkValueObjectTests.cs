@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Network;
 namespace Titan.Tests.Domain;
 
 // The shape rules of a network's name, CIDR and port range live in the Domain, so no path — the API, a handler, a
-// test seam — builds a network or rule Incus or the portal cannot handle (titan-ops architecture/code-structure.md#logic-placement).
+// test — builds a network or rule Incus or the portal cannot handle (titan-ops architecture/code-structure.md#logic-placement).
 // The validators translate the same rules to 400 with their own wording (CreateNetworkValidatorTests,
 // CreateFirewallRuleValidatorTests).
 public class NetworkValueObjectTests

@@ -8,8 +8,8 @@ namespace Titan.Tests.Domain;
 // whether a call lands on the member's own class, and how visible the target is, needs the semantic model.
 public class DomainMethodShapeTests
 {
-    // The Domain has more files than this; a walk that finds fewer is looking in the wrong place.
-    private const int FewestDomainFiles = 100;
+    // Each tree has more files than this; a walk that finds fewer is looking in the wrong place.
+    private const int FewestFilesInATree = 100;
 
     // Regex source generators do not run here, so a [GeneratedRegex] partial has no implementation part.
     private const string GeneratedRegexHasNoImplementation = "CS8795";
@@ -64,7 +64,7 @@ public class DomainMethodShapeTests
                 }
             }
         }
-        Assert.True(scanned > FewestDomainFiles, $"Only {scanned} test files under {testsDir}.");
+        Assert.True(scanned > FewestFilesInATree, $"Only {scanned} test files under {testsDir}.");
         Assert.True(offenders.Count == 0, $"{offenders.Count} uses:\n{string.Join("\n", offenders)}");
     }
 
@@ -251,7 +251,7 @@ public class DomainMethodShapeTests
         return calls;
     }
 
-    // `Call()` and `Call() ?? throw …`; anything else is an expression with content of its own.
+    // `Call()`, `await Call()` and `Call() ?? throw …`; anything else is an expression with content of its own.
     private static ExpressionSyntax? CallOf(ExpressionSyntax expression)
     {
         if (expression is AwaitExpressionSyntax awaited)
@@ -338,7 +338,7 @@ public class DomainMethodShapeTests
                 trees.Add(CSharpSyntaxTree.ParseText(File.ReadAllText(file), path: file));
             }
         }
-        Assert.True(trees.Count > FewestDomainFiles, $"Only {trees.Count} files under {domainDir}.");
+        Assert.True(trees.Count > FewestFilesInATree, $"Only {trees.Count} files under {domainDir}.");
 
         CSharpCompilation compilation = Compile(trees);
         List<Diagnostic> errors = compilation.GetDiagnostics()

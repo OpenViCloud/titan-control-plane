@@ -285,8 +285,7 @@ public class Vm : AggregateRoot
     }
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the VM reconciler's
-    /// read model.
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
 

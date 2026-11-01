@@ -8,7 +8,7 @@ public class Tenant : AggregateRoot
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
     public TenantStatus Status { get; private set; }
-    /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by the EnsureCan* rules below.
+    /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by EnsureHasRoom below.
     public TenantQuota Quota { get; private set; } = TenantQuota.Default;
 
     /// Whole VND. A reference number the admin reads at month-end close; it blocks nothing
@@ -95,8 +95,8 @@ public class Tenant : AggregateRoot
             "INVALID_QUOTA", "Quota must be provided.");
 
     // The caller counts (a repository query, not part of this aggregate); the tenant decides
-    // (titan-ops architecture/code-structure.md#tenant-typed-edge). `internal`, called only from the factories of the
-    // things being created, so the compiler stops Titan.Application from skipping the check.
+    // (titan-ops architecture/code-structure.md#tenant-typed-edge). `internal`, called only from what creates the
+    // things being counted, so the compiler stops Titan.Application from skipping the check.
 
     /// count is what already exists: per tenant for most kinds, on one VM, volume or network for the three kinds whose
     /// cap is per parent. `>=`, so a cap of 0 refuses the first one (titan-ops architecture/tenancy-and-admin.md#quota-zero-means-none):

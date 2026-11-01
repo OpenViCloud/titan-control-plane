@@ -778,7 +778,7 @@ public class VmSnapshotServiceTests
 
     public enum Snap { Creating, CreateFailed, Ready, RevertRequested, DeleteRequested, Deleted }
 
-    // A snapshot of this VM in the given situation, through the VM's test seam: it is the VM's child entity.
+    // A snapshot of this VM in the given situation, through TestAggregates.WithSnapshot: it is the VM's child entity.
     private static VmSnapshot MakeSnapshot(Vm vm, Snap seed)
     {
         var snap = vm.WithSnapshot("test-snap");

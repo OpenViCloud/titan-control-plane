@@ -5,7 +5,7 @@ using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.Network;
 
-/// A network's name as the customer typed it. The shape rule lives here so no path — API, handler or test seam —
+/// A network's name as the customer typed it. The shape rule lives here so no path — API, handler or test —
 /// builds a network with a name the /v1 contract never allowed (titan-ops architecture/code-structure.md#logic-placement); the
 /// validator reads Pattern and MaxLength and answers 400 in its own words. Also runs when EF materialises a row, so a
 /// stored name that breaks the rule fails loudly at load instead of being served.

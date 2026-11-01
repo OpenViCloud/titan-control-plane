@@ -278,8 +278,7 @@ public class Volume : AggregateRoot
         RequireSnapshot(snapshotId).MarkRequestFailed(reason, detail);
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the storage
-    /// reconciler's read model.
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("VOLUME_INVALID_STATE", "Volume has no provider resource yet.");
 

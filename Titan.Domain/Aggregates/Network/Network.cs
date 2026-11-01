@@ -398,8 +398,7 @@ public class Network : AggregateRoot
         && DesiredExistence == DesiredExistence.Exists
         && PendingIntentId == null;
 
-    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it. Public for the
-    /// reconciler's read model.
+    /// Created implies MarkCreated set the id; this throws rather than let a caller assert it.
     private string RequireExternalId() =>
         ExternalId ?? throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
 

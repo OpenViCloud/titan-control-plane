@@ -8,7 +8,7 @@ using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 namespace Titan.Tests;
 
 // A test that is not about creation still builds through the real factories, the same way the handlers do. A state a
-// factory cannot reach is reached by the same steps the provider's reports take (ProvisionedOnTheProvider).
+// factory cannot reach is reached by the same steps the provider's reports take (Fakes/ProvisionedOnTheProvider.cs).
 internal static class TestAggregates
 {
     private const int MoreThanAnyTestAdds = 1000;
