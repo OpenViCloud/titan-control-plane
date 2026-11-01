@@ -37,7 +37,7 @@ public class ClusterIpv6Route : AggregateRoot
     /// never used comes first (the lowest number), then the one given back longest ago.
     public static ClusterIpv6Route NextToGive(string clusterId, IReadOnlyCollection<ClusterIpv6Route> free)
     {
-        // Null sorts first: a route never used.
+        // Null sorts first: no release on record.
         ClusterIpv6Route? next = free.OrderBy(r => r.ReleasedAt).ThenBy(r => r.Number).FirstOrDefault();
         if (next == null)
         {
