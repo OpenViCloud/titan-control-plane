@@ -15,7 +15,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 // enqueues ONE credit WalletMutation guarded by UNIQUE(ref_type, ref_id), and the single-writer consumer
 // applies it later (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Two concurrent confirms of
 // the same top-up must leave EXACTLY ONE mutation (WalletRepository translates the loser's unique
-// violation to ConcurrencyConflictException, which the confirm rule catches), and DRAINING it must credit the wallet exactly once.
+// violation to ConcurrencyConflictException, which TopUpConfirmation catches), and DRAINING it must credit the wallet exactly once.
 // The ledger UNIQUE(type, ref_id) stays as defense-in-depth on the consumer path; only its declaration is
 // pinned (WalletSchemaTests.WalletTransactionTypeRefId_IsUnique, titan-ops features/billing/wallet/design.md#wallet-debts).
 //
@@ -26,10 +26,10 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class WalletLedgerIdempotencyDbTests(PostgresFixture pg)
 {
     private const int Iterations = 150;
-    // The confirm rule both channels share (TopUpConfirmation), over real repositories.
-    private static ConfirmRule NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);
+    // What both channels share (TopUpConfirmation, TopUpCredit), over real repositories.
+    private static Confirmation NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);
 
-    private sealed class ConfirmRule(TitanDbContext db, IWalletMutationPublisher bus)
+    private sealed class Confirmation(TitanDbContext db, IWalletMutationPublisher bus)
     {
         public Task ConfirmAsync(Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef)
             => TopUpConfirmation.ConfirmAsync(
@@ -87,7 +87,7 @@ public class WalletLedgerIdempotencyDbTests(PostgresFixture pg)
             catch (Exception ex)
             {
                 // A confirm must never surface a raw exception to a caller — a duplicate is recovered
-                // inside the confirm rule. An escaping exception (e.g. a unique violation not translated, or
+                // inside TopUpConfirmation. An escaping exception (e.g. a unique violation not translated, or
                 // a deadlock) IS a regression; name the iteration and the type.
                 Assert.Fail($"iter {i}: ConfirmAsync threw {ex.GetType().Name}: {ex.Message}");
                 throw; // unreachable, keeps the compiler happy

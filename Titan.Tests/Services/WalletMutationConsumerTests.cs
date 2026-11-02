@@ -166,8 +166,8 @@ public class WalletMutationConsumerTests
     public async Task Apply_DebitAWalletCannotCover_FailsTheMutation_LeavesBalanceUntouched()
     {
         // The pre-check at the button read a balance nothing had been debited from yet. By the time
-        // this mutation is applied, an earlier one has drained the wallet. This is the ONLY place that
-        // can be caught, which is why the check lives here and not at the request.
+        // this mutation is applied, an earlier one has drained the wallet. Applying is the ONLY place that
+        // can be caught, which is why the check lives in WalletMutationApply and not at the request.
         var wallet = OpenWallet();
         wallet.Credit(40_000L);
         var invoiceId = Guid.NewGuid();

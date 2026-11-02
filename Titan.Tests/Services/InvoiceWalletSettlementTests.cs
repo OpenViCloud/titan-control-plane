@@ -12,8 +12,8 @@ using InvoiceAggregate = Titan.Domain.Aggregates.Invoice.Invoice;
 
 namespace Titan.Tests.Services;
 
-// A press that passed the repeat check and then finds another press's debit (titan-ops
-// architecture/intent-and-observation.md#domain-refuses-a-repeat). The fake repository of InvoiceServiceTests answers both
+// A press that passed the repeat check and then finds another press's debit
+// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). The fake repository of InvoiceServiceTests answers both
 // reads from one dictionary, so a row cannot change between them there. Silent about real timing:
 // InvoiceDebitRetryDbTests runs two presses on Postgres.
 public class InvoiceWalletSettlementTests
