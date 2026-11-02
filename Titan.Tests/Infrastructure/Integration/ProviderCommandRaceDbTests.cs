@@ -15,17 +15,18 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// Two identical requests at once where the first commits before the second reads the command key
-/// (titan-ops architecture/provider-and-worker.md#provider-command-key). The second read the resource before that commit, so
-/// it took the request as new; the open row it then finds is the other request's work. Category=Integration — its own
-/// CI step; needs real Postgres; no doubles (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
+/// Two identical requests at once, on Postgres. Since REQUEST-END phase 1 a VM's keys carry the request id
+/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request), so the race of CC-01 — the second delete reading the
+/// VM before the first committed — is settled by the row lock (PendingRequestsDbTests.TwoStops_AtOnce…), not by the key.
+/// What is left to show here is the rollout seam: a VM whose delete row still carries the old key, from the image before
+/// this one, takes a new delete as its own request, not as 409. Category=Integration — its own CI step; needs real
+/// Postgres; no doubles (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ProviderCommandRaceDbTests(PostgresFixture pg)
 {
-    // CC-01 of https://github.com/OpenViCloud/titan-regression/blob/main/plan.md: the second of two deletes answered 202 and recorded a second vm.delete_requested.
     [Fact]
-    public async Task ANewDelete_FindingTheOpenCommandOfAnotherRequest_Is409_AndRecordsNothing()
+    public async Task ANewVmDelete_BesideAnOpenRowUnderTheOldKey_GetsItsOwnRow_AndIsNotRefused()
     {
         Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}", "race@titan.local");
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
@@ -48,15 +49,14 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
                 new VolumeRepository(db), new ActivityRecorder(new ActivityEventRepository(db), caller),
                 new VmDeletion(new LoadBalancerRepository(db)));
 
-            ConflictException refused = await Assert.ThrowsAsync<ConflictException>(
-                () => handler.HandleAsync(new DeleteVmCommand(vm.Id)));
-
-            Assert.Equal(ErrorStatus.RequestInProgressCode, refused.Code);
+            await handler.HandleAsync(new DeleteVmCommand(vm.Id));
         }
 
         await using TitanDbContext read = pg.NewDbContext();
-        Assert.Equal(0, await read.ActivityEvents.CountAsync(e => e.ResourceId == vm.Id));
         Vm stored = await read.Vms.SingleAsync(v => v.Id == vm.Id);
-        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
+        Assert.Equal(VmRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(1, await read.ActivityEvents.CountAsync(e => e.ResourceId == vm.Id && e.Action == "vm.delete_requested"));
+        Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == $"vm-delete-{vm.Id}-{stored.Pending.Id}"));
+        Assert.Equal(2, await read.ProviderCommands.CountAsync(c => c.Key.StartsWith($"vm-delete-{vm.Id}")));
     }
 }

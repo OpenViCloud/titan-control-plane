@@ -44,8 +44,8 @@ public sealed class VmPendingRequestMigrationTests : IAsyncLifetime
         Guid? intent = waiting ? Guid.NewGuid() : null;
         await using TitanDbContext db = NewDbContext();
         await db.Database.ExecuteSqlInterpolatedAsync($@"
-INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour, is_active)
-VALUES ('m-mig', 'm', 1, 2, 4096, 311.256, true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour)
+VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING;
 INSERT INTO core.vms (id, tenant_id, network_id, name, current_state, desired_state, current_existence, desired_existence,
                       external_id, has_been_running, create_finished, vm_offering_id, template_id, cluster_id, disk_size_gb,
                       created_at, pending_intent_id)
@@ -89,7 +89,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await using (TitanDbContext db = NewDbContext())
         {
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour, is_active) VALUES ('m-mig', 'm', 1, 2, 4096, 311.256, true) ON CONFLICT (id) DO NOTHING");
+                "INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
             db.Vms.Add(vm);
             await db.SaveChangesAsync();
         }
