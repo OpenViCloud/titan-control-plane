@@ -41,7 +41,7 @@ public class StateTransitionOwnershipTests
         ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the alias exists",
         ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the alias is missing from the sync command's report",
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|Invalid status"] = "parse: unknown enum value from the admin request",
-        // Provisioning/PendingApproval parse as TenantStatus but are not admin targets.
+        // PendingApproval parses as TenantStatus but is not an admin target.
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|A tenant can only be set to"] = "parse: only Active and Suspended are admin targets",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM report"] = "parse: unknown report kind from the worker callback",
