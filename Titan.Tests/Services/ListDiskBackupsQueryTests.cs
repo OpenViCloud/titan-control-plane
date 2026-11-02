@@ -146,6 +146,7 @@ public class ListDiskBackupsQueryTests
     {
         Vm creating = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
         Vm gone = RunningVm("web-3");
+        gone.RequestDelete();
         gone.MarkDeleted();
         Holds([creating, gone], []);
         ReadMinutesAgo(1);

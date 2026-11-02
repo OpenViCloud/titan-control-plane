@@ -1,41 +1,41 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm.Contracts;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
-// A worker callback like UpdateVmStatusCommandHandler: an observation (the provider refused the action on
-// every retry), authenticated by X-Internal-Token at the endpoint, acting for no user. Without it a failed
-// stop would leave its intent waiting forever (titan-ops features/vm/design.md#intent-failed-callback).
-//
-// The failure is the request's outcome (titan-ops features/activity/design.md#request-and-outcome-names), recorded
-// once: the aggregate returns the intent only when it actually cleared it.
-public class MarkVmIntentFailedCommandHandler(IVmRepository repo, IActivityRecorder activity)
+// The old give-up route of vm.stop / vm.start, alive until rollout phase 6
+// (titan-ops architecture/resource-lifecycle.md#callback-routes): the route names the request, the body carries no
+// reason, so the fixed reason of the request's kind is recorded. The same ending as a Failed on the request route.
+public class MarkVmIntentFailedCommandHandler(
+    IVmRepository repo,
+    IVolumeRepository volumeRepo,
+    IActivityRecorder activity)
 {
-    private static readonly Dictionary<VmIntent, string> FailedAction = new()
-    {
-        [VmIntent.Stop] = "vm.stop_failed",
-        [VmIntent.Start] = "vm.start_failed",
-    };
-
     public async Task HandleAsync(MarkVmIntentFailedCommand command, CancellationToken ct = default)
     {
-        Domain.Aggregates.Vm.Vm? vm = await repo.FindByIdAsync(command.VmId, ct);
-        if (vm == null)
-        {
-            throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
-        }
+        Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
+            ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        VmIntent? failed = vm.AbandonRequest(command.IntentId);
-        bool clearedAWaitingRequest = failed != null;
-        if (!clearedAWaitingRequest)
+        PendingRequest<VmRequestKind>? waiting = vm.Pending;
+        bool namesTheWaitingRequest = waiting != null && waiting.Id == command.IntentId;
+        if (!namesTheWaitingRequest)
         {
             return;
         }
 
-        activity.StageOutcome(vm.TenantId, FailedAction[failed!.Value], "vm", vm.Id, vm.Name);
+        VmRequestEnd failed = VmRequestEnd.Failed(null, null, VmReports.ReasonFor(waiting!.Kind), null);
+        VmRequestEnded? ended = vm.EndRequest(command.IntentId, failed);
+        if (ended == null)
+        {
+            return;
+        }
+
+        await VmReports.RecordEndedAsync(vm, ended, RequestOutcome.Failed, activity, volumeRepo, ct);
         await repo.SaveAsync(ct);
     }
 }

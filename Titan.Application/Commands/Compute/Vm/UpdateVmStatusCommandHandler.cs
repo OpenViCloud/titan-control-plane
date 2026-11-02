@@ -1,45 +1,29 @@
 using Titan.Application.Abstractions;
+using Titan.Application.Commands.Compute.Vm.Contracts;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using Titan.Application.Commands.Compute.Vm.Contracts;
-using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
-using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
+using Titan.Domain.Values;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
-
-// The worker's callback: an observation of what the provider already did, not an intent
-// (titan-ops architecture/intent-and-observation.md#intent-versus-observation), so it is a command though nobody
-// clicks it.
-//
-// No ICurrentUser on purpose: the reconciler acts for no tenant. The caller is authenticated by
-// X-Internal-Token at the endpoint, so there is no ownership check here and there must never be a route
-// to this handler from a customer path.
-//
-// Outcomes are recorded here (titan-ops features/activity/design.md#request-and-outcome-names), once per request:
-// the aggregate says which waiting intent the observation fulfilled, so Running reported every cycle, or a
-// guest-OS shutdown nobody asked for, fulfils nothing.
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): a
+// worker that predates the request routes reports the reconciler's observation and the create and delete commands'
+// results here, none of them naming a request. Each report is mapped onto the request the VM is waiting on, so the
+// VM ends up as the new routes would leave it. No ICurrentUser on purpose: authenticated by X-Internal-Token at the
+// endpoint, acting for no tenant.
 public class UpdateVmStatusCommandHandler(
     IVmRepository repo,
     IVolumeRepository volumeRepo,
     IActivityRecorder activity)
 {
-    private static readonly Dictionary<VmIntent, string> OutcomeAction = new()
-    {
-        [VmIntent.Create] = "vm.created",
-        [VmIntent.Start] = "vm.started",
-        [VmIntent.Stop] = "vm.stopped",
-        [VmIntent.Delete] = "vm.deleted",
-    };
-
     public async Task HandleAsync(UpdateVmStatusCommand command, CancellationToken ct = default)
     {
         var req = command;   // the command IS the callback payload (titan-ops architecture/code-structure.md#contracts)
-        var vmId = command.VmId;
 
         // Parsed before the VM is loaded: a malformed report is the worker's bug, whatever the VM.
-        VmState? observedState = null;
+        VmObservation? observed = null;
         switch (req.Report)
         {
             case "Observed":
@@ -49,7 +33,7 @@ public class UpdateVmStatusCommandHandler(
                 }
                 if (req.Exists == true)
                 {
-                    observedState = ParseIncusStatus(req.Status);
+                    observed = new VmObservation(VmReports.ParseIncusStatus(req.Status), req.IpAddress, req.PublicIpv6Address);
                 }
                 break;
             case "Created":
@@ -65,74 +49,62 @@ public class UpdateVmStatusCommandHandler(
                 throw new BadRequestException("INVALID_STATUS", $"Unknown VM report: '{req.Report}'");
         }
 
-        var vm = await repo.FindByIdAsync(vmId, ct)
+        Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        VmIntent? fulfilled = null;
+        PendingRequest<VmRequestKind>? waiting = vm.Pending;
+        VmRequestEnded? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
-                if (observedState == null)
+                if (observed == null)
                 {
                     vm.MarkNotFound();
                 }
                 else
                 {
-                    fulfilled = vm.MarkObserved(observedState.Value, req.IpAddress, req.PublicIpv6Address);
+                    vm.MarkObserved(observed);
                 }
+                // Temporary allowlist, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached).
+                ended = VmReports.EndStopOrStartTheObservationReached(vm);
                 break;
             case "Created":
-                vm.MarkCreated(req.ExternalId!);
+                // The old create command reports the instance name as soon as Incus holds it: that is the create's Done
+                // (titan-ops architecture/resource-lifecycle.md#kinds). Running comes later as an observation.
+                if (waiting is { Kind: VmRequestKind.Create })
+                {
+                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Done(req.ExternalId, null));
+                }
                 break;
             case "RequestFailed":
-                // The give-up report carries the provider id when Incus had created the instance and the Created
-                // report never arrived; without it the delete would forget a VM that still runs.
-                bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && vm.ExternalId == null;
-                if (carriesAnIdNotYetStored)
+                // The give-up carries the provider id when Incus had created the instance and the Created report never
+                // arrived; without it the delete would forget a VM that still runs.
+                outcome = RequestOutcome.Failed;
+                if (waiting is { Kind: VmRequestKind.Create })
                 {
-                    vm.MarkCreated(req.ExternalId!);
+                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Failed(req.ExternalId, null, req.Reason, req.Detail));
                 }
-                // A failed create records nothing: the request was the create, and a failure is not its outcome.
-                vm.MarkRequestFailed(req.Reason, req.Detail);
                 break;
             case "Deleted":
-                // The VM takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot) and names the ones whose
-                // own delete was waiting: their delete command will only find them already Deleted, so their outcome
-                // is recorded now.
-                VmDeletionOutcome deletion = vm.MarkDeleted();
-                fulfilled = deletion.Fulfilled;
-                foreach (VmSnapshotEntity snapshot in deletion.SnapshotsWhoseDeleteWasFulfilled)
+                // The delete command saw the instance gone after Titan's own delete. With no delete waiting the VM is
+                // still gone from Incus, which is what NotFound records; only a delete's own report ends a VM.
+                if (waiting is { Kind: VmRequestKind.Delete })
                 {
-                    activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
+                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Done(null, null));
                 }
-                // The provider kept the VM's volumes and detached them (titan-ops features/volume/design.md#vm-delete-releases-volumes).
-                List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmAsync(vmId, ct);
-                foreach (VolumeAggregate volume in attachedVolumes)
+                else
                 {
-                    volume.MarkDetachedByVmDelete(vmId);
+                    vm.MarkNotFound();
                 }
                 break;
         }
 
-        if (fulfilled != null)
+        if (ended != null)
         {
-            activity.StageOutcome(vm.TenantId, OutcomeAction[fulfilled.Value], "vm", vm.Id, vm.Name);
+            await VmReports.RecordEndedAsync(vm, ended, outcome, activity, volumeRepo, ct);
         }
 
         await repo.SaveAsync(ct);
-    }
-
-    // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-    // Matched by name, exactly: Enum.TryParse would also take "1" or "running".
-    private static VmState ParseIncusStatus(string? status)
-    {
-        foreach (VmState known in Enum.GetValues<VmState>())
-        {
-            if (known.ToString() == status)
-            {
-                return known;
-            }
-        }
-        throw new BadRequestException("INVALID_STATUS", $"Unknown VM status: '{status}'");
     }
 }

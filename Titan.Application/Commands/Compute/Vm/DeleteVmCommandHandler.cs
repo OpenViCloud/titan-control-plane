@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
+using Titan.Domain.Values;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Domain.Aggregates.Volume;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
@@ -32,21 +33,12 @@ public class DeleteVmCommandHandler(
         var vm = await ComputeOwnership.RequireVmForUpdateAsync(repo, callerId, command.VmId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-        // Already deleted: answer like the first request — nothing recorded, nothing sent.
-        if (vm.IsTerminal)
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted, or a delete still
+        // waiting: answer like the first request — nothing recorded, nothing sent
+        // (titan-ops architecture/resource-lifecycle.md#repeat).
+        bool deleteIsWaiting = vm.Pending?.Kind == VmRequestKind.Delete;
+        if (vm.IsTerminal || deleteIsWaiting)
         {
-            return;
-        }
-
-        // A delete still waiting: enqueue it again under the same key. An open command absorbs it, a failed one
-        // reopens (titan-ops architecture/provider-and-worker.md#provider-command-table); the save persists the reopen.
-        bool deleteIsWaiting = vm.PendingIntent == VmIntent.Delete;
-        if (deleteIsWaiting)
-        {
-            VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Delete);
-            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
-            await repo.SaveAsync(ct);
             return;
         }
 
@@ -54,7 +46,7 @@ public class DeleteVmCommandHandler(
         // snapshot command would act on an instance being deleted (titan-ops architecture/code-structure.md#child-entity).
         // A load balancer still sending to it refuses too, rather than editing the load balancer behind the customer's
         // back (titan-ops features/load-balancer/design.md#lb-and-vm-network).
-        VmIntentTicket ticket = await deletion.RequestAsync(vm, ct);
+        RequestTicket? ticket = await deletion.RequestAsync(vm, ct);
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
@@ -72,14 +64,15 @@ public class DeleteVmCommandHandler(
 
         // Never reached the provider — no external resource, no reconciler running. The request and
         // its outcome happen here at once, so both rows go in the SaveChanges with the local delete.
-        if (ticket.Outcome == VmIntentOutcome.FinishLocally)
+        bool finishedLocally = ticket == null;
+        if (finishedLocally)
         {
             activity.StageOutcome(vm.TenantId, "vm.deleted", "vm", vm.Id, vm.Name);
             await repo.SaveAsync(ct);
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
-        await repo.SaveAsync(ct); // intent, request event and provider command together
+        await commands.EnqueueVmDeleteAsync(vm.Id, ticket!.RequestId, ticket.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
+        await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

@@ -1280,10 +1280,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("cluster_id");
 
-                    b.Property<bool>("CreateFinished")
-                        .HasColumnType("boolean")
-                        .HasColumnName("create_finished");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1315,10 +1311,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("external_id");
 
-                    b.Property<bool>("HasBeenRunning")
-                        .HasColumnType("boolean")
-                        .HasColumnName("has_been_running");
-
                     b.Property<string>("IpAddress")
                         .HasColumnType("text")
                         .HasColumnName("ip_address");
@@ -1332,9 +1324,17 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
-                    b.Property<Guid?>("PendingIntentId")
+                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingRequestId")
                         .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingRequestKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<string>("PublicIpv6Address")
                         .HasColumnType("text")
@@ -1887,48 +1887,6 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("wallets", "core");
                 });
 
-            modelBuilder.Entity("Titan.Domain.Aggregates.Wallet.WalletTransaction", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<long>("Amount")
-                        .HasColumnType("bigint")
-                        .HasColumnName("amount");
-
-                    b.Property<long>("BalanceAfter")
-                        .HasColumnType("bigint")
-                        .HasColumnName("balance_after");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("RefId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ref_id");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("type");
-
-                    b.Property<Guid>("WalletId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("wallet_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Type", "RefId")
-                        .IsUnique();
-
-                    b.HasIndex("WalletId", "CreatedAt");
-
-                    b.ToTable("wallet_transactions", "core");
-                });
-
             modelBuilder.Entity("Titan.Domain.Aggregates.WalletMutation.WalletMutation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1997,6 +1955,48 @@ namespace Titan.Infrastructure.Migrations
                     b.HasIndex("WalletId", "Status");
 
                     b.ToTable("wallet_mutations", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.WalletTransaction.WalletTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("Amount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("amount");
+
+                    b.Property<long>("BalanceAfter")
+                        .HasColumnType("bigint")
+                        .HasColumnName("balance_after");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("RefId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ref_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<Guid>("WalletId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("wallet_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Type", "RefId")
+                        .IsUnique();
+
+                    b.HasIndex("WalletId", "CreatedAt");
+
+                    b.ToTable("wallet_transactions", "core");
                 });
 
             modelBuilder.Entity("Titan.Infrastructure.Persistence.IdempotencyRecord", b =>

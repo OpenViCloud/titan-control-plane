@@ -26,8 +26,8 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(v => v.RequestFailedAt).HasColumnName("request_failed_at");
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
-        builder.Property(v => v.HasBeenRunning).HasColumnName("has_been_running").IsRequired();
-        builder.Property(v => v.CreateFinished).HasColumnName("create_finished").IsRequired();
+        // has_been_running and create_finished stay in the table with DEFAULT false until rollout phase 6
+        // (titan-ops architecture/resource-lifecycle.md#rollout); the model no longer reads them.
         builder.Property(v => v.IpAddress).HasColumnName("ip_address");
         builder.Property(v => v.VmOfferingId).HasColumnName("vm_offering_id").IsRequired();
         // titan-ops features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.
@@ -42,10 +42,12 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
-        // titan-ops architecture/intent-and-observation.md#intent-has-identity. The intent's kind is not stored: it follows
-        // from the desired columns (Vm.PendingIntent), so the two cannot disagree.
-        builder.Property(v => v.PendingIntentId).HasColumnName("pending_intent_id");
-        builder.Ignore(v => v.PendingIntent);
+        // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
+        // Vm.Pending is built from them on read. Private properties, mapped by name.
+        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
+        builder.Property<VmRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Ignore(v => v.Pending);
         builder.Ignore(v => v.Transition);
 
         // Same condition as VmRepository.ExistsByNameAsync: the name is free again only once the VM is Deleted.

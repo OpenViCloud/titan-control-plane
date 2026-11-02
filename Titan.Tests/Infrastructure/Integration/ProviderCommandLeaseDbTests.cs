@@ -94,7 +94,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         await using (TitanDbContext first = pg.NewDbContext())
         {
             await new ProviderCommandQueue(new ProviderCommandRepository(first), TimeProvider.System)
-                .EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
+                .EnqueueVmDeleteAsync(vmId, Guid.NewGuid(), "vm-x", "t-1", "mock");
             await first.SaveChangesAsync();
         }
         await using (TitanDbContext second = pg.NewDbContext())
@@ -133,8 +133,8 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         var queueA = new ProviderCommandQueue(new ProviderCommandRepository(dbA), TimeProvider.System);
         var queueB = new ProviderCommandQueue(new ProviderCommandRepository(dbB), TimeProvider.System);
 
-        await queueA.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
-        await queueB.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
+        await queueA.EnqueueVmDeleteAsync(vmId, Guid.NewGuid(), "vm-x", "t-1", "mock");
+        await queueB.EnqueueVmDeleteAsync(vmId, Guid.NewGuid(), "vm-x", "t-1", "mock");
         await dbA.SaveChangesAsync();
         DbUpdateConcurrencyException lost = await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync());
 

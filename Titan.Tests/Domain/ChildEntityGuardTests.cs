@@ -192,6 +192,8 @@ public class ChildEntityGuardTests
         ["FirewallRule"] = "a child with its own routes and callback; the handlers load and save its Network",
         ["VolumeSnapshot"] = "a child with its own routes and callback; the handlers load and save its Volume",
         ["VmSnapshot"] = "a child with its own routes and callback; the handlers load and save its Vm",
+        ["Request"] = "no aggregate: a read of core.pending_requests, the view over every lifecycle table's waiting request "
+            + "(titan-ops architecture/resource-lifecycle.md#lost-and-stale)",
     };
 
     [Fact]

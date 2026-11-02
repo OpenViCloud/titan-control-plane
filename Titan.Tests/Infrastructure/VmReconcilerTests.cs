@@ -73,11 +73,11 @@ public class VmReconcilerTests
         Assert.Equal(new[] { "creating", "failed", "lost", "running" }, listed.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 
-    // A create that gave up after the provider had the instance is not observed: observing it would turn a create
-    // that gave up into a running VM, billed and counted (Tôn Chủ, 2026-09-30). Its delete still reaches the
-    // provider through the delete command, which reports Deleted itself.
+    // A create that gave up after the provider had the instance IS observed: Incus holds an instance, and one that runs
+    // is billed whether or not its create ended well (titan-ops architecture/resource-lifecycle.md#reconciler, Tôn Chủ
+    // 2026-11-02). Its delete reaches the provider through the delete command.
     [Fact]
-    public async Task List_LeavesOutACreateThatGaveUp_AfterTheProviderIdArrived()
+    public async Task List_IncludesACreateThatGaveUp_AfterTheProviderIdArrived()
     {
         using var db = NewDb();
         Vm refused = VmIn(Cluster, "gave-up");
@@ -91,7 +91,7 @@ public class VmReconcilerTests
 
         Assert.Equal("The VM could not be created.", refused.RequestFailureReason);
         Assert.Equal("45", refused.ExternalId);
-        Assert.DoesNotContain(listed, v => v.Id == refused.Id);
+        Assert.Contains(listed, v => v.Id == refused.Id);
     }
 
     [Fact]

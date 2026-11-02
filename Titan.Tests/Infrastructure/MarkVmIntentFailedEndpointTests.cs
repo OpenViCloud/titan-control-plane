@@ -24,14 +24,14 @@ public class MarkVmIntentFailedEndpointTests
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        intentId = vm.RequestStop().IntentId;
+        intentId = vm.RequestStop().RequestId;
         return vm;
     }
 
     private static MarkVmIntentFailedEndpoint EndpointFor(Vm vm, Guid intentId, string? token)
     {
         Mock<IVmRepository> repo = new();
-        repo.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
+        repo.Setup(r => r.FindByIdForUpdateAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
 
         return Factory.Create<MarkVmIntentFailedEndpoint>(
             ctx =>
@@ -43,7 +43,7 @@ public class MarkVmIntentFailedEndpointTests
                 ctx.Request.RouteValues["vmId"] = vm.Id.ToString();
                 ctx.Request.RouteValues["intentId"] = intentId.ToString();
             },
-            new MarkVmIntentFailedCommandHandler(repo.Object, Mock.Of<IActivityRecorder>()),
+            new MarkVmIntentFailedCommandHandler(repo.Object, Mock.Of<IVolumeRepository>(), Mock.Of<IActivityRecorder>()),
             ConfigWithToken("secret"));
     }
 
@@ -55,7 +55,7 @@ public class MarkVmIntentFailedEndpointTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Null(vm.PendingIntent);
+        Assert.Null(vm.Pending);
         Assert.Equal(StatusCodes.Status204NoContent, ep.HttpContext.Response.StatusCode);
     }
 
@@ -67,7 +67,7 @@ public class MarkVmIntentFailedEndpointTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Equal(VmIntent.Stop, vm.PendingIntent);
+        Assert.Equal(VmRequestKind.Stop, vm.Pending?.Kind);
         Assert.Equal(StatusCodes.Status401Unauthorized, ep.HttpContext.Response.StatusCode);
     }
 }

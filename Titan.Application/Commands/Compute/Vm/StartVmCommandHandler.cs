@@ -2,14 +2,15 @@ using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
 
-// The mirror of StopVm: the reconciler observes RUNNING, reports Running, and that observation fulfils
-// the start intent — nothing here writes a status.
+// The mirror of StopVm: the start command's own report ends the request and records "vm.started" — nothing here
+// writes a status.
 public class StartVmCommandHandler(
     IVmRepository repo,
     ICurrentUser currentUser,
@@ -19,34 +20,26 @@ public class StartVmCommandHandler(
     public async Task HandleAsync(StartVmCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var vm = await ComputeOwnership.RequireVmAsync(repo, callerId, command.VmId, ct);
+        // Locked, as StopVmCommandHandler (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+        var vm = await ComputeOwnership.RequireVmForUpdateAsync(repo, callerId, command.VmId, ct);
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-        // A start still waiting: enqueue it again with the SAME intent id (see StopVmCommandHandler).
-        bool startIsWaiting = vm.PendingIntent == VmIntent.Start;
-        if (startIsWaiting)
-        {
-            VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Start);
-            await commands.EnqueueVmStartAsync(vm.Id, waiting.IntentId, waiting.ProviderId, projectName, vm.ClusterId, ct);
-            await repo.SaveAsync(ct);
-            return;
-        }
-
-        // Already running (Ready is running with a guest that said so) and nothing else asked of it: answer
-        // like the first request.
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A start still waiting, or already
+        // running (Ready is running with a guest that said so) and nothing else asked of it: answer like the first
+        // request (titan-ops architecture/resource-lifecycle.md#repeat).
+        bool startIsWaiting = vm.Pending?.Kind == VmRequestKind.Start;
         bool instanceRuns = vm.CurrentState == VmState.Running || vm.CurrentState == VmState.Ready;
-        bool alreadyRunning = vm.PendingIntent == null && instanceRuns;
-        if (alreadyRunning)
+        bool alreadyRunning = vm.Pending == null && instanceRuns;
+        if (startIsWaiting || alreadyRunning)
         {
             return;
         }
 
-        VmIntentTicket ticket = vm.RequestStart();
+        RequestTicket ticket = vm.RequestStart();
 
         activity.Stage("vm.start_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStartAsync(vm.Id, ticket.IntentId, ticket.ProviderId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStartAsync(vm.Id, ticket.RequestId, ticket.ProviderId, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

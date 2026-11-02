@@ -117,7 +117,7 @@ public class VmSnapshotChildTests
         var ex = Assert.Throws<BusinessException>(() => vm.RequestDelete());
 
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
-        Assert.Null(vm.PendingIntent);
+        Assert.Null(vm.Pending);
         Assert.Equal(DesiredExistence.Exists, vm.DesiredExistence);
     }
 
@@ -154,10 +154,10 @@ public class VmSnapshotChildTests
         gone.MarkDeleted();
         vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
 
-        VmIntentTicket ticket = vm.RequestDelete();
+        RequestTicket? ticket = vm.RequestDelete();
 
-        Assert.Equal(VmIntentOutcome.Dispatch, ticket.Outcome);
-        Assert.Equal(VmIntent.Delete, vm.PendingIntent);
+        Assert.NotNull(ticket);
+        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
     }
 
     // The VM's delete took its snapshots with it (titan-ops features/vm/design.md#vm-snapshot). Only a snapshot whose own
@@ -177,13 +177,13 @@ public class VmSnapshotChildTests
         alreadyGone.MarkDeleted();
         vm.RequestDelete();
 
-        VmDeletionOutcome outcome = vm.MarkDeleted();
+        VmRequestEnded? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmIntent.Delete, outcome.Fulfilled);
+        Assert.Equal(VmRequestKind.Delete, outcome!.Request.Kind);
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
-        Assert.Equal([leaving.Id], outcome.SnapshotsWhoseDeleteWasFulfilled.Select(s => s.Id));
+        Assert.Equal([leaving.Id], outcome.SnapshotsWhoseDeleteEnded.Select(s => s.Id));
     }
 
     [Fact]
@@ -192,10 +192,10 @@ public class VmSnapshotChildTests
         var vm = RunningVm();
         vm.RequestDelete();
 
-        VmDeletionOutcome outcome = vm.MarkDeleted();
+        VmRequestEnded? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmIntent.Delete, outcome.Fulfilled);
-        Assert.Empty(outcome.SnapshotsWhoseDeleteWasFulfilled);
+        Assert.Equal(VmRequestKind.Delete, outcome!.Request.Kind);
+        Assert.Empty(outcome.SnapshotsWhoseDeleteEnded);
     }
 
     // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
@@ -209,10 +209,9 @@ public class VmSnapshotChildTests
         vm.RequestDelete();
         vm.MarkDeleted();
 
-        VmDeletionOutcome repeat = vm.MarkDeleted();
+        VmRequestEnded? repeat = vm.MarkDeleted();
 
-        Assert.Null(repeat.Fulfilled);
-        Assert.Empty(repeat.SnapshotsWhoseDeleteWasFulfilled);
+        Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing and names nothing
     }
 
     // A snapshot the VM does not have answers like a missing one.

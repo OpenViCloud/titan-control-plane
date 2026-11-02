@@ -29,15 +29,46 @@ namespace Titan.Domain.Aggregates.Network
 
 namespace Titan.Domain.Aggregates.Vm
 {
+    /// A VM's requests end by their own command's report (titan-ops architecture/resource-lifecycle.md#shape); these replay
+    /// the worker's reports under the one-call names test setups used before, through the real EndRequest and
+    /// MarkObserved. A replay for a request the VM is not waiting on does nothing, like the report it stands for.
     public static class VmProvisionedOnTheProvider
     {
-        /// The create command's id, then the reconciler's Running.
-        public static VmIntent? MarkRunning(this Vm vm, string externalId, string? ipAddress, string? publicIpv6Address = null)
+        /// The create command's Done with the instance name, then the reconciler's Running.
+        public static void MarkRunning(this Vm vm, string externalId, string? ipAddress, string? publicIpv6Address = null)
         {
             vm.MarkCreated(externalId);
-            return vm.MarkObserved(VmState.Running, ipAddress, publicIpv6Address);
+            vm.MarkObserved(VmState.Running, ipAddress, publicIpv6Address);
         }
 
-        public static VmIntent? MarkStopped(this Vm vm) => vm.MarkObserved(VmState.Stopped, null);
+        public static void MarkStopped(this Vm vm) => vm.MarkObserved(VmState.Stopped, null);
+
+        /// The create command's Done, carrying only the instance name: existence, no status yet.
+        public static void MarkCreated(this Vm vm, string externalId)
+        {
+            if (vm.Pending is { Kind: VmRequestKind.Create } create)
+            {
+                vm.EndRequest(create.Id, VmRequestEnd.Done(externalId, null));
+            }
+        }
+
+        /// The reconciler's observation, by its parts.
+        public static void MarkObserved(this Vm vm, VmState state, string? ipAddress, string? publicIpv6Address = null) =>
+            vm.MarkObserved(new VmObservation(state, ipAddress, publicIpv6Address));
+
+        /// The delete command's Done.
+        public static VmRequestEnded? MarkDeleted(this Vm vm) =>
+            vm.Pending is { Kind: VmRequestKind.Delete } delete
+                ? vm.EndRequest(delete.Id, VmRequestEnd.Done(null, null))
+                : null;
+
+        /// The create command's give-up.
+        public static void MarkRequestFailed(this Vm vm, string? reason, string? detail, string? externalId = null)
+        {
+            if (vm.Pending is { Kind: VmRequestKind.Create } create)
+            {
+                vm.EndRequest(create.Id, VmRequestEnd.Failed(externalId, null, reason, detail));
+            }
+        }
     }
 }

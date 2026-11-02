@@ -47,47 +47,45 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
             new { ruleId, networkId, externalRuleId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVmCreateAsync(Guid vmId, string name, string vmOfferingId, decimal cpuUnits, int vcpuCount,
-        int memoryMb, string templateId, string clusterId, string externalNetworkId, string projectName, int diskSizeGb,
-        string? userData, string? vendorData, CancellationToken ct = default) =>
-        EnqueueAsync($"vm-provision-{vmId}", ProviderCommandKinds.VmCreate, clusterId,
+    // VM: one row per request, the key carries the request id, so no key is ever reused and the rerun rule never
+    // applies (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The payload carries requestId for the
+    // worker's report; stop and start also carry it as intentId, which a worker from before the request routes reads
+    // for its give-up (titan-ops architecture/resource-lifecycle.md#rollout, removed in phase 6).
+    public Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId, decimal cpuUnits,
+        int vcpuCount, int memoryMb, string templateId, string clusterId, string externalNetworkId, string projectName,
+        int diskSizeGb, string? userData, string? vendorData, CancellationToken ct = default) =>
+        EnqueueAsync(VmCreateKey(vmId, requestId), ProviderCommandKinds.VmCreate, clusterId,
             new
             {
-                vmId, name, vmOfferingId, cpuUnits, vcpuCount, memoryMb, templateId, clusterId, externalNetworkId,
+                vmId, requestId, name, vmOfferingId, cpuUnits, vcpuCount, memoryMb, templateId, clusterId, externalNetworkId,
                 projectName, diskSizeGb, userData = userData ?? "", vendorData = vendorData ?? ""
             },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // AfterFailureOnly: a delete that already happened must not run again; one that gave up may.
-    public Task EnqueueVmDeleteAsync(Guid vmId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmDeleteAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
-        EnqueueRequestAsync($"vm-delete-{vmId}", ProviderCommandKinds.VmDelete, clusterId,
-            new { vmId, externalVmId, projectName, clusterId },
-            ProviderCommandRerun.AfterFailureOnly, ct);
+        EnqueueAsync(VmDeleteKey(vmId, requestId), ProviderCommandKinds.VmDelete, clusterId,
+            new { vmId, requestId, externalVmId, projectName, clusterId },
+            ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // The handler's own repeat of a delete still waiting: the open row is that delete, and absorbs it.
-    public Task ResendVmDeleteAsync(Guid vmId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmStopAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
-        EnqueueAsync($"vm-delete-{vmId}", ProviderCommandKinds.VmDelete, clusterId,
-            new { vmId, externalVmId, projectName, clusterId },
-            ProviderCommandRerun.AfterFailureOnly, ct);
+        EnqueueAsync(VmStopKey(vmId, requestId), ProviderCommandKinds.VmStop, clusterId,
+            new { vmId, requestId, intentId = requestId, externalVmId, projectName, clusterId },
+            ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // The key carries the intent (titan-ops architecture/intent-and-observation.md#intent-has-identity): a repeat of an open
-    // or finished intent is absorbed, a failed one runs again, and stop→start→stop gets a new key.
-    public Task EnqueueVmStopAsync(Guid vmId, Guid intentId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmStartAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmStopKey(vmId, intentId), ProviderCommandKinds.VmStop, clusterId,
-            new { vmId, intentId, externalVmId, projectName, clusterId },
-            ProviderCommandRerun.AfterFailureOnly, ct);
+        EnqueueAsync(VmStartKey(vmId, requestId), ProviderCommandKinds.VmStart, clusterId,
+            new { vmId, requestId, intentId = requestId, externalVmId, projectName, clusterId },
+            ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVmStartAsync(Guid vmId, Guid intentId, string externalVmId, string projectName, string clusterId,
-        CancellationToken ct = default) =>
-        EnqueueAsync(VmStartKey(vmId, intentId), ProviderCommandKinds.VmStart, clusterId,
-            new { vmId, intentId, externalVmId, projectName, clusterId },
-            ProviderCommandRerun.AfterFailureOnly, ct);
-
-    internal static string VmStopKey(Guid vmId, Guid intentId) => $"vm-stop-{vmId}-{intentId}";
-    internal static string VmStartKey(Guid vmId, Guid intentId) => $"vm-start-{vmId}-{intentId}";
+    // `vm-{kind}-{vmId}-{requestId}`: the stuck-request query rebuilds the key from the VM's waiting request
+    // (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string VmCreateKey(Guid vmId, Guid requestId) => $"vm-create-{vmId}-{requestId}";
+    internal static string VmDeleteKey(Guid vmId, Guid requestId) => $"vm-delete-{vmId}-{requestId}";
+    internal static string VmStopKey(Guid vmId, Guid requestId) => $"vm-stop-{vmId}-{requestId}";
+    internal static string VmStartKey(Guid vmId, Guid requestId) => $"vm-start-{vmId}-{requestId}";
 
     public Task EnqueueVmSnapshotCreateAsync(Guid snapshotId, Guid vmId, string externalVmId, string name,
         string projectName, string clusterId, CancellationToken ct = default) =>

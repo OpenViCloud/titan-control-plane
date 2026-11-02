@@ -43,11 +43,11 @@ public class VmDeletionTests
     {
         Vm vm = OnIncus();
 
-        VmIntentTicket ticket = await Deletion().RequestAsync(vm);
+        RequestTicket? ticket = await Deletion().RequestAsync(vm);
 
-        Assert.Equal(VmIntentOutcome.Dispatch, ticket.Outcome);
-        Assert.Equal("vm-ext", ticket.ProviderId);
-        Assert.Equal(VmIntent.Delete, vm.PendingIntent);
+        Assert.NotNull(ticket);
+        Assert.Equal("vm-ext", ticket!.ProviderId);
+        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
     }
 
     [Fact]
@@ -56,9 +56,9 @@ public class VmDeletionTests
         Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
         vm.MarkRequestFailed("create gave up", null);
 
-        VmIntentTicket ticket = await Deletion().RequestAsync(vm);
+        RequestTicket? ticket = await Deletion().RequestAsync(vm);
 
-        Assert.Equal(VmIntentOutcome.FinishLocally, ticket.Outcome);
+        Assert.Null(ticket); // nothing on the provider: no command, deleted here
         Assert.True(vm.IsTerminal);
     }
 

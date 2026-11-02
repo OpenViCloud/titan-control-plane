@@ -36,7 +36,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             v => v.TenantId == tenantId &&
                  v.DesiredExistence == DesiredExistence.Exists &&
                  (v.CurrentExistence == CurrentExistence.Exists
-                  || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingIntentId != null)), ct);
+                  || (v.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(v, "PendingRequestId") != null)), ct);
 
     // The same condition as the unique index's filter (VmConfiguration): a narrower check would let the index 500.
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
@@ -45,12 +45,13 @@ public class VmRepository(TitanDbContext db) : IVmRepository
                  v.Name == name &&
                  v.CurrentExistence != CurrentExistence.Deleted, ct);
 
+    // Every VM Incus may hold, a create that gave up included: an instance that runs is billed whether or not its
+    // create ended well (titan-ops architecture/resource-lifecycle.md#reconciler).
     public async Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.ClusterId == clusterId
                         && v.ExternalId != null
-                        && v.CurrentExistence != CurrentExistence.Deleted
-                        && (v.HasBeenRunning || v.RequestFailureReason == null))
+                        && v.CurrentExistence != CurrentExistence.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 
