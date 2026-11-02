@@ -194,7 +194,7 @@ public class AdminResourceServiceTests
         wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, It.IsAny<Guid>(), "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
 
         // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write — the audit row is flushed by the VM
-        // repo's SaveAsync together with the pending delete intent and the provider command (same DbContext).
+        // repo's SaveAsync together with the waiting delete and the provider command (same DbContext).
         audit.Verify(a => a.Add(It.Is<AdminAuditLog>(e =>
             e.Action == "vm.delete.cross_tenant" && e.ActorKeycloakUserId == "admin-1"
             && e.ResourceType == "vm" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);

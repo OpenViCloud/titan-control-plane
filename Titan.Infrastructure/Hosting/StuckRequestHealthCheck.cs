@@ -9,7 +9,7 @@ namespace Titan.Infrastructure.Hosting;
 /// The line of /healthz/reconcilers that says whether a request has waited past the threshold
 /// (titan-ops architecture/resource-lifecycle.md#lost-and-stale). Degraded while the command row is still open — the
 /// worker is slow or absent, which the reconciler liveness line says more precisely; Unhealthy when a row is Done,
-/// Failed or missing — the request can never end and the control plane has a bug. Not an alert: nothing polls this.
+/// Failed or missing — no command will report the request. Not an alert: nothing polls this.
 /// </summary>
 public sealed class StuckRequestHealthCheck(
     IPendingRequestReader requests,
@@ -35,7 +35,7 @@ public sealed class StuckRequestHealthCheck(
         {
             return HealthCheckResult.Unhealthy(
                 $"{neverEnding} request(s) waiting longer than {thresholdMinutes} min whose command row is closed or missing — " +
-                "nothing will end them (GET /v1/admin/requests/stuck)");
+                "no command will report them (GET /v1/admin/requests/stuck)");
         }
 
         return HealthCheckResult.Degraded(

@@ -3,7 +3,7 @@ using Titan.Application.Abstractions;
 namespace Titan.Application.Queries.Admin.Request.Contracts;
 
 // One request waiting past the threshold (titan-ops architecture/resource-lifecycle.md#lost-and-stale). CommandStatus null:
-// no command row carries this request's key — a control-plane bug, not a slow worker.
+// no command row carries this request's key — not a slow worker, see IPendingRequestReader.
 public record StuckRequestQueryResult(
     string Resource,
     Guid Id,

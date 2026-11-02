@@ -9,14 +9,15 @@ namespace Titan.Infrastructure.Migrations
     /// (titan-ops architecture/resource-lifecycle.md#shape). The id column is the old pending_intent_id renamed; the kind of
     /// a request already waiting is read from the columns it used to be derived from, in the order Vm.PendingIntent read
     /// them. Written by hand on the scaffold: the scaffold dropped create_finished and has_been_running, which the model
-    /// no longer reads, but an image rolled back after this migration still reads them, so they stay with a default
-    /// until a release has carried this one (titan-ops architecture/resource-lifecycle.md#rollout, phase 6 drops them).
+    /// no longer reads; they stay with a default so that Down brings back the values of the rows it did not touch, until
+    /// a release has carried this one (titan-ops architecture/resource-lifecycle.md#rollout, phase 6 drops them). The rename
+    /// stops an image from before this migration on every VM read: rolling one back needs this migration's Down first.
     /// The view core.pending_requests is what the stuck-request query reads; each later phase adds its table to it.
     public partial class VmPendingRequest : Migration
     {
         /// A delete whose command already gave up stayed waiting before this migration, and the next press reopened its
-        /// row. A repeat now sends nothing, so it would wait for ever: it ends here as a Failed would. Same reason text as
-        /// VmReports. An open row keeps its delete waiting; its worker reports on the old route.
+        /// row. A repeat now sends nothing, so it would wait for ever: it ends here as a Failed would, with no activity row
+        /// because no report arrived. Same reason text as VmReports. An open row keeps its delete waiting; its worker reports on the old route.
         private const string EndTheDeletesWhoseCommandFailedSql = @"
 UPDATE core.vms v SET
     desired_existence = 'Exists',

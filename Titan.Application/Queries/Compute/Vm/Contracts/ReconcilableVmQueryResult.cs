@@ -4,8 +4,9 @@ using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 namespace Titan.Application.Queries.Compute.Vm.Contracts;
 
 // What the reconciler needs to find a VM on the provider and to report only what changed: what Titan last
-// recorded — the Incus status (null when none), whether the instance exists, and the addresses. Every
-// observation that completes a waiting request changes one of them, so comparing never drops one. Internal
+// recorded — the Incus status (null when none), whether the instance exists, and the addresses. An
+// observation that ends a waiting stop or start (temporary, rollout phase 6 removes it) changes one of them, so
+// comparing never drops one. Internal
 // only — never on a customer path.
 public record ReconcilableVmQueryResult(
     Guid Id,

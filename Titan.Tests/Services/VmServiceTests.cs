@@ -601,7 +601,7 @@ public class VmServiceTests
 
         Assert.Equal(VmState.Running, vm.CurrentState); // reconciler handles transition, not CP
         Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -750,7 +750,7 @@ public class VmServiceTests
 
         Assert.Equal(VmState.Running, vm.CurrentState); // reconciler writes Stopped, not CP
         var intentId = Assert.IsType<Guid>(vm.Pending?.Id);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmStopAsync(
             vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -1570,7 +1570,7 @@ public class VmServiceTests
         var e = Assert.Single(_activity.Events);
         Assert.Equal("vm.delete_requested", e.Action); // titan-ops architecture/intent-and-observation.md#intent-has-identity: the request, not the outcome
         Assert.Equal(vm.Id, e.ResourceId);
-        Assert.False(e.Saved); // staged, flushed with the pending intent and the provider command
+        Assert.False(e.Saved); // staged, flushed with the waiting request and the provider command
     }
 
     [Fact]

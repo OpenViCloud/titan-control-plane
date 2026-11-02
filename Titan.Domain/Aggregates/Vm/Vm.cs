@@ -11,7 +11,8 @@ public class Vm : AggregateRoot
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
     // Only an observation (Mark*) or a request's own report (EndRequest) writes CurrentState and CurrentExistence; only
-    // a request writes DesiredState and DesiredExistence (titan-ops architecture/desired-and-current.md#desired-and-current).
+    // a request, or a failed request's report putting it back, writes DesiredState and DesiredExistence
+    // (titan-ops architecture/desired-and-current.md#desired-and-current).
     // CurrentState is the Incus status word for word, null while Incus has no instance
     // (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     public VmState? CurrentState { get; private set; }
@@ -35,7 +36,7 @@ public class Vm : AggregateRoot
     public DateTimeOffset CreatedAt { get; private set; }
 
     // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
-    // set, written only through SetPending. Pending is the shape callers see.
+    // set, written by the factory and SetPending. Pending is the shape callers see.
     private Guid? PendingRequestId { get; set; }
     private VmRequestKind? PendingRequestKind { get; set; }
     private DateTimeOffset? PendingRequestAskedAt { get; set; }

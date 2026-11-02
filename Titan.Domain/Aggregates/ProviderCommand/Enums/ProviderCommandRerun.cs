@@ -7,7 +7,7 @@ public enum ProviderCommandRerun
     /// A finished row (Done or Failed) runs again: attach/detach/revert reuse one key per resource.
     AfterAnyFinish,
 
-    /// Only a Failed row runs again; a Done one absorbs the repeat. VM stop/start/delete: a repeat of an intent that
-    /// already happened must not happen twice.
+    /// Only a Failed row runs again; a Done one absorbs the repeat. load-balancer.update and the two backups: a repeat of
+    /// what already happened must not happen twice.
     AfterFailureOnly
 }

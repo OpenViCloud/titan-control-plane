@@ -9,7 +9,8 @@ using Titan.Domain.Values;
 namespace Titan.Application.Commands.Compute.Vm;
 
 // The reconciler's observation of one VM (titan-ops architecture/resource-lifecycle.md#callback-routes): what Incus has,
-// written to current and nothing else (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated by
+// written to current (titan-ops architecture/resource-lifecycle.md#invariants), and until rollout phase 6 the one
+// temporary exception below. Authenticated by
 // X-Internal-Token at the endpoint, acting for no tenant. Locked like every lifecycle handler, so an observation and a
 // request on the same VM take turns.
 public class ObserveVmCommandHandler(

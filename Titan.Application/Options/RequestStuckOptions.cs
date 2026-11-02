@@ -7,8 +7,8 @@ public class RequestStuckOptions
 
     /// <summary>
     /// A request waiting longer than this is listed by GET /v1/admin/requests/stuck and turns /healthz/reconcilers.
-    /// 15: a command gets at most 5 leases of 60 s with backoff up to 2 min between them, so a request still waiting
-    /// after 15 minutes has outlived every retry.
+    /// 15: a chosen threshold, not a retry budget. One run of a VM command may itself take that long, so a row still open
+    /// past it can be a slow worker as well as an absent one.
     /// </summary>
     public int ThresholdMinutes { get; set; } = 15;
 }

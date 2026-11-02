@@ -8,7 +8,8 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Infrastructure.ProviderCommands;
 
 // titan-ops architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
-// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes.
+// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes; a VM's keys carry the request
+// id (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
 public class ProviderCommandQueueTests
 {
     private readonly FakeProviderCommandRepository _repo = new();

@@ -13,7 +13,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // The two request routes of titan-ops architecture/resource-lifecycle.md#callback-routes at the handler: a report ends the
-// request it names and records its outcome once; an observation writes current and ends nothing. The old routes'
+// request it names and records its outcome once; an observation writes current and ends nothing, but for the temporary exception pinned at the end of this file. The old routes'
 // mapping onto the same shape is in VmServiceTests (UpdateStatus_* and IntentFailed_*).
 public class VmRequestHandlerTests
 {

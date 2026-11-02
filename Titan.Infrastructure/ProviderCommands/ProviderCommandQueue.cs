@@ -11,7 +11,7 @@ namespace Titan.Infrastructure.ProviderCommands;
 
 /// Stages provider commands in the scope's DbContext (titan-ops architecture/provider-and-worker.md#provider-command-table).
 /// Keys are the former workflow ids, so the repeat rules of titan-ops architecture/intent-and-observation.md#intent-has-identity
-/// keep their shape; payload property names are what the worker reads.
+/// keep their shape, except the VM's, which carry the request id; payload property names are what the worker reads.
 public class ProviderCommandQueue(IProviderCommandRepository repository, TimeProvider clock) : IProviderCommandQueue
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -165,7 +165,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
     private static string BackupDay(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-    // The update is keyed on its intent and runs again only after a failure, like stop and start: an update that
+    // The update is keyed on its intent and runs again only after a failure: an update that
     // already happened must not run twice, and a second update gets its own key.
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, string projectName, CancellationToken ct = default) =>
         EnqueueAsync($"load-balancer-create-{loadBalancer.Id}", ProviderCommandKinds.LoadBalancerCreate,

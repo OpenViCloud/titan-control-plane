@@ -15,7 +15,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// Two identical requests at once, on Postgres. Since REQUEST-END phase 1 a VM's keys carry the request id
+/// The race of two identical requests, on Postgres. Since REQUEST-END phase 1 a VM's keys carry the request id
 /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request), so the race of CC-01 — the second delete reading the
 /// VM before the first committed — is settled by the row lock (PendingRequestsDbTests.TwoStops_AtOnce…), not by the key.
 /// What is left to show here is the rollout seam: a VM whose delete row still carries the old key, from the image before
