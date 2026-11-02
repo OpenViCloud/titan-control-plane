@@ -272,7 +272,7 @@ public class VmStateMachineTests
         Assert.Equal("42", ticket.ProviderId);
         Assert.Equal(VmRequestKind.Stop, vm.Pending!.Kind);
         Assert.Equal(vm.Pending.Id, ticket.RequestId);
-        Assert.Equal(before, vm.CurrentState); // a request never writes CurrentState
+        Assert.Equal(before, vm.CurrentState); // RequestStop does not write CurrentState
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
         Assert.Equal(VmTransition.Stopping, vm.Transition);
     }
