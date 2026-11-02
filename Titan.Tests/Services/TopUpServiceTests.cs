@@ -166,7 +166,7 @@ public class TopUpServiceTests
         _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Once);
     }
 
-    // A provisioned tenant always has a wallet; a missing one is a broken invariant, so
+    // An Active tenant always has a wallet; a missing one is a broken invariant, so
     // confirm refuses rather than opening lazily. Nothing enqueued, credited, saved or notified.
     [Fact]
     public async Task Confirm_NoWallet_ThrowsWalletNotFound_CreditsNothing()
