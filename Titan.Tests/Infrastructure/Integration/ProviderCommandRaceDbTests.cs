@@ -15,12 +15,13 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// The race of two identical requests, on Postgres. A VM's keys carry the request id
-/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request), so the race of CC-01 — the second delete reading the
-/// VM before the first committed — is settled by the row lock (PendingRequestsDbTests.TwoStops_AtOnce…), not by the key.
-/// What is left to show here is the rollout seam: a VM whose delete gave up under the old key, from the image before this
-/// one, takes a new delete as its own request, not as 409 or a reopened row. Category=Integration — its own CI step; needs real
-/// Postgres; no doubles (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
+/// The race of two identical requests, on Postgres. The keys of a VM's create, start, stop and delete carry the request id
+/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request), so the race of CC-01 of
+/// https://github.com/OpenViCloud/titan-regression/blob/main/plan.md — the second delete reading the VM before the first
+/// committed — is settled by the row lock (PendingRequestsDbTests.TwoStops_AtOnce…), not by the key. What is left to show
+/// here is the rollout seam: a VM whose delete gave up under the key from before the request id takes a new delete as its
+/// own request, not as 409 or a reopened row. Category=Integration — its own CI step; needs real Postgres; no doubles
+/// (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ProviderCommandRaceDbTests(PostgresFixture pg)
