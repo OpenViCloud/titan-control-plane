@@ -6,6 +6,7 @@ using Titan.Application.Commands.Billing.PaymentGatewayTransaction.Contracts;
 using Titan.Domain.Aggregates.PaymentGatewayTransaction;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using PaymentGatewayTransactionAggregate =
     Titan.Domain.Aggregates.PaymentGatewayTransaction.PaymentGatewayTransaction;
 
@@ -18,7 +19,7 @@ public partial class ReceiveSePayPaymentCommandHandler(
     IPaymentGatewayTransactionRepository payments,
     ICreditRepository credit,
     IWalletRepository walletRepo,
-    IWalletMutationRepository mutationRepo,
+    TopUpCredit topUpCredit,
     IWalletMutationPublisher walletBus,
     ILogger<ReceiveSePayPaymentCommandHandler> logger)
 {
@@ -68,7 +69,7 @@ public partial class ReceiveSePayPaymentCommandHandler(
 
         // Stamped at the payment's own transactionDate, not the webhook arrival time.
         await TopUpConfirmation.ConfirmAsync(
-            credit, walletRepo, mutationRepo, walletBus,
+            credit, walletRepo, topUpCredit, walletBus,
             topUp.Id, TopUpSource.SePay, $"sepay:{p.Id}", p.Id, p.TransactionDate, ct);
         await RecordAsync(p, PaymentGatewayTransactionStatus.Matched, topUp.TenantId, topUp.Id, ct);
         return SePayWebhookOutcome.Matched;

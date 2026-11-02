@@ -1,23 +1,21 @@
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.TopUp;
-using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Application.Services.Billing.TopUp;
 
-// An admin (ConfirmTopUpCommandHandler) and the SePay webhook (ReceiveSePayPaymentCommandHandler) both
-// confirm a TopUp, and handlers may not call each other
-// (ReadWriteSeparationTests.Handlers_DoNotReferenceOtherHandlers), so the rule lives here
-// (titan-ops architecture/code-structure.md#services-branch).
+// An admin (ConfirmTopUpCommandHandler) and the SePay webhook (ReceiveSePayPaymentCommandHandler) both confirm a TopUp,
+// and handlers may not call each other (ReadWriteSeparationTests.Handlers_DoNotReferenceOtherHandlers), so what surrounds
+// the rule lives here: the repeat, the save, the notify. The rule is TopUpCredit.
 public static class TopUpConfirmation
 {
-    /// Money is in. The credit is enqueued, not applied (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
     /// Not tenant-scoped: an admin or the SePay webhook calls it.
     public static async Task ConfirmAsync(
         ICreditRepository repo,
         IWalletRepository walletRepo,
-        IWalletMutationRepository mutationRepo,
+        TopUpCredit topUpCredit,
         IWalletMutationPublisher walletBus,
         Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef,
         DateTimeOffset? confirmedAt, CancellationToken ct)
@@ -28,19 +26,8 @@ public static class TopUpConfirmation
         // A retry of an already-confirmed top-up credits nothing more: double webhook, double click.
         if (topUp.Status == TopUpStatus.Confirmed) return;
 
-        // Throws TOPUP_INVALID_STATE for a Failed top-up. confirmedAt lets the SePay webhook stamp the
-        // payment's own transactionDate; null means now. topUp is tracked, so the SaveChanges below persists it.
-        topUp.Confirm(source, confirmedBy, paymentTxnRef, confirmedAt);
-
-        // The credit is deferred to the single-writer consumer (titan-ops architecture/money-and-wallet.md#single-writer-outbox):
-        // crediting here would let two confirms of one top-up race on the balance. The mutation commits
-        // with the Confirmed status, and UNIQUE(ref_type, ref_id) stops a second confirm from enqueueing a
-        // second credit. The wallet is only read to name it in the mutation.
-        var wallet = await walletRepo.GetByTenantForUpdateAsync(topUp.TenantId, ct)
-            ?? throw new NotFoundException("WALLET_NOT_FOUND",
-                $"Tenant {topUp.TenantId} has no wallet; it should have been opened at activation.");
-        var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, topUp.Amount, "TopUp", topUp.Id);
-        mutationRepo.Add(mutation);
+        // topUp is tracked, so the SaveChanges below persists it.
+        var mutation = await topUpCredit.ConfirmAsync(topUp, source, confirmedBy, paymentTxnRef, confirmedAt, ct);
 
         try
         {
@@ -62,7 +49,7 @@ public static class TopUpConfirmation
         // re-drives Pending ones, so a bus error must not fail a confirm the customer's money backs.
         try
         {
-            await walletBus.PublishAsync(new WalletMutationNotification(mutation.Id, wallet.Id), ct);
+            await walletBus.PublishAsync(new WalletMutationNotification(mutation.Id, mutation.WalletId), ct);
         }
         catch
         {

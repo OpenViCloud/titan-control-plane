@@ -3,6 +3,7 @@ using Titan.Application.Services.Billing.Invoice;
 using Titan.Application.Commands.Billing.Invoice.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 
@@ -13,6 +14,7 @@ public class PayInvoiceFromWalletCommandHandler(
     IWalletRepository walletRepo,
     IWalletMutationRepository mutationRepo,
     IWalletMutationPublisher walletBus,
+    InvoiceWalletPayment payment,
     ICurrentUser currentUser)
 {
     public async Task HandleAsync(PayInvoiceFromWalletCommand command, CancellationToken ct = default)
@@ -34,6 +36,6 @@ public class PayInvoiceFromWalletCommandHandler(
             return;
         }
 
-        await InvoiceWalletSettlement.SettleAsync(walletRepo, mutationRepo, walletBus, invoice, ct);
+        await InvoiceWalletSettlement.SettleAsync(payment, walletRepo, mutationRepo, walletBus, invoice, ct);
     }
 }

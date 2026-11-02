@@ -34,7 +34,8 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
         public Task ConfirmAsync(
             Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef, DateTimeOffset? confirmedAt = null)
             => TopUpConfirmation.ConfirmAsync(
-                new CreditRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus,
+                new CreditRepository(db), new WalletRepository(db),
+                new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new CreditRepository(db), new WalletLedger(new WalletTransactionRepository(db))), bus,
                 topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, CancellationToken.None);
     }
 
@@ -80,7 +81,7 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
     private async Task DrainAsync(Guid mutationId)
     {
         await using var db = pg.NewDbContext();
-        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))
+        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))))
             .ApplyAsync(mutationId);
     }
 

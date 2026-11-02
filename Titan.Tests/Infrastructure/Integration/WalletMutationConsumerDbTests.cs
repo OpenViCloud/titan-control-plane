@@ -24,8 +24,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class WalletMutationConsumerDbTests(PostgresFixture pg)
 {
     private static WalletMutationConsumer NewConsumer(TitanDbContext db) =>
-        new(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db),
-            new WalletLedger(new WalletTransactionRepository(db)));
+        new(new WalletMutationRepository(db), new WalletRepository(db),
+            new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))));
 
     private async Task<Wallet> SeedWalletAsync(Guid tenantId)
     {

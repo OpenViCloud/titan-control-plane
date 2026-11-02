@@ -58,7 +58,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
         public async Task<InvoiceQueryResult> SettleFromWalletAsAdminAsync(Guid invoiceId, CancellationToken ct)
         {
             await new SettleInvoiceFromWalletCommandHandler(
-                    new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus,
+                    new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus, new InvoiceWalletPayment(new WalletRepository(db), new WalletMutationRepository(db)),
                     new AdminAuditLogRepository(db), Admin())
                 .HandleAsync(new SettleInvoiceFromWalletCommand(invoiceId), ct);
             // titan-ops architecture/http-contract.md#commands-return-no-data: the command returns nothing; read the invoice back the way the admin list does.
@@ -163,8 +163,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
             await using var db = pg.NewDbContext();
             await new WalletMutationConsumer(
                 new WalletMutationRepository(db),
-                new WalletRepository(db),
-                new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))).ApplyAsync(id);
+                new WalletRepository(db), new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))).ApplyAsync(id);
         }
     }
 

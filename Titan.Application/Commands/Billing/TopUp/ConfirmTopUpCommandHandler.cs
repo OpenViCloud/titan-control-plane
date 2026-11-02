@@ -3,6 +3,7 @@ using Titan.Application.Services.Billing.TopUp;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Application.Commands.Billing.TopUp;
 
@@ -12,13 +13,13 @@ namespace Titan.Application.Commands.Billing.TopUp;
 public class ConfirmTopUpCommandHandler(
     ICreditRepository repo,
     IWalletRepository walletRepo,
-    IWalletMutationRepository mutationRepo,
+    TopUpCredit topUpCredit,
     IWalletMutationPublisher walletBus,
     ICurrentUser currentUser)
 {
     public Task HandleAsync(ConfirmTopUpCommand command, CancellationToken ct = default) =>
         TopUpConfirmation.ConfirmAsync(
-            repo, walletRepo, mutationRepo, walletBus,
+            repo, walletRepo, topUpCredit, walletBus,
             command.TopUpId, TopUpSource.Manual, currentUser.KeycloakUserId, command.PaymentTxnRef,
             confirmedAt: null, ct);
 }

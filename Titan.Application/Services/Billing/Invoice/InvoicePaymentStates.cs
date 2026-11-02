@@ -1,4 +1,3 @@
-using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Repositories;
@@ -16,7 +15,7 @@ public static class InvoicePaymentStates
         IWalletMutationRepository mutationRepo, IReadOnlyCollection<Guid> invoiceIds, CancellationToken ct)
     {
         var mutations = await mutationRepo.GetForRefsAsync(
-            WalletMutationConsumer.InvoiceRefType, invoiceIds, ct);
+            WalletMutation.InvoiceRefType, invoiceIds, ct);
 
         return mutations.ToDictionary(kv => kv.Key, kv => From(kv.Value.Status));
     }

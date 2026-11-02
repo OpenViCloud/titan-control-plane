@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Billing.Invoice;
-using Titan.Application.Services.Billing.WalletMutations;
+using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Application.Queries.Billing.Invoice.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -22,7 +22,7 @@ public class GetTenantInvoiceQueryHandler(
             throw new NotFoundException("INVOICE_NOT_FOUND", $"Invoice {id} not found.");
 
         var mutation = await mutationRepo.GetForRefAsync(
-            WalletMutationConsumer.InvoiceRefType, invoice.Id, ct);
+            WalletMutation.InvoiceRefType, invoice.Id, ct);
 
         return InvoiceDetailQueryResult.From(
             invoice, DateTimeOffset.UtcNow, mutation is null ? null : InvoicePaymentStates.From(mutation.Status));

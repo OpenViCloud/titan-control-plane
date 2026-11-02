@@ -1,20 +1,17 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
-using TopUpAggregate = Titan.Domain.Aggregates.TopUp.TopUp;
 
 namespace Titan.Application.Commands.Billing.TopUp;
 
 /// Free credit, effective immediately: a TopUp born Confirmed with Source=PromotionalCredit, crediting
 /// the wallet with a Promo ledger movement.
 public class GrantTopUpCommandHandler(
-    ICreditRepository repo,
     IWalletRepository walletRepo,
-    WalletLedger ledger,
+    TopUpCredit topUpCredit,
     ICurrentUser currentUser,
     CreditOptions options)
 {
@@ -28,15 +25,7 @@ public class GrantTopUpCommandHandler(
             throw new BusinessException("GRANT_AMOUNT_EXCEEDS_MAX",
                 $"A single promotional credit may not exceed {options.MaxGrantAmount:N0} {options.Currency}.");
 
-        var topUp = TopUpAggregate.GrantPromo(tenantId, amount, options.Currency, reason, currentUser.KeycloakUserId);
-
-        // The grant row and the money commit in one SaveChanges. A Promo ledger movement keeps free credit
-        // separable from real money (titan-ops architecture/money-and-wallet.md#tax-legal-posture).
-        var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, ct)
-            ?? throw new NotFoundException("WALLET_NOT_FOUND",
-                $"Tenant {tenantId} has no wallet; it should have been opened at activation.");
-        ledger.Credit(wallet, WalletTransactionType.Promo, amount, topUp.Id);
-        repo.AddTopUp(topUp);
+        var topUp = await topUpCredit.GrantPromoAsync(tenantId, amount, options.Currency, reason, currentUser.KeycloakUserId, ct);
         try
         {
             await walletRepo.SaveChangesAsync(ct);

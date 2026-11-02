@@ -25,13 +25,14 @@ public class SePayWebhookDbTests(PostgresFixture pg)
 
     private static ReceiveSePayPaymentCommandHandler NewService(TitanDbContext db, IWalletMutationPublisher bus) =>
         new(new PaymentGatewayTransactionRepository(db), new CreditRepository(db), new WalletRepository(db),
-            new WalletMutationRepository(db), bus, NullLogger<ReceiveSePayPaymentCommandHandler>.Instance);
+            new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new CreditRepository(db), new WalletLedger(new WalletTransactionRepository(db))),
+            bus, NullLogger<ReceiveSePayPaymentCommandHandler>.Instance);
 
     // Applies a mutation exactly as the single-writer consumer would — drain, no bus.
     private async Task DrainAsync(Guid mutationId)
     {
         await using var db = pg.NewDbContext();
-        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))
+        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))))
             .ApplyAsync(mutationId);
     }
 

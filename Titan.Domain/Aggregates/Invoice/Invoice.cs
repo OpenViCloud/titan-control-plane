@@ -82,7 +82,7 @@ public class Invoice : AggregateRoot
 
     /// A person pressed pay (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
     /// DueAt does not matter — overdue only reminds (titan-ops architecture/money-and-wallet.md#postpaid-no-brake).
-    public void SettleFromWallet(DateTimeOffset paidAt)
+    internal void SettleFromWallet(DateTimeOffset paidAt)
     {
         if (Status != InvoiceStatus.New)
             throw new BusinessException("INVOICE_INVALID_STATE",

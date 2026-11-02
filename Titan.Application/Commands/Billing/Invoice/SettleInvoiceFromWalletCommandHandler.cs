@@ -4,6 +4,7 @@ using Titan.Application.Commands.Billing.Invoice.Contracts;
 using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Application.Commands.Billing.Invoice;
 
@@ -14,6 +15,7 @@ public class SettleInvoiceFromWalletCommandHandler(
     IWalletRepository walletRepo,
     IWalletMutationRepository mutationRepo,
     IWalletMutationPublisher walletBus,
+    InvoiceWalletPayment payment,
     IAdminAuditLogRepository auditLog,
     ICurrentUser currentUser)
 {
@@ -38,6 +40,6 @@ public class SettleInvoiceFromWalletCommandHandler(
         auditLog.Add(AdminAuditLog.Create(
             "invoice.settle_from_wallet", currentUser.KeycloakUserId, "invoice", invoice.Id, invoice.TenantId));
 
-        await InvoiceWalletSettlement.SettleAsync(walletRepo, mutationRepo, walletBus, invoice, ct);
+        await InvoiceWalletSettlement.SettleAsync(payment, walletRepo, mutationRepo, walletBus, invoice, ct);
     }
 }

@@ -1,7 +1,6 @@
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.Invoice.Contracts;
-using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -31,7 +30,7 @@ public class MarkInvoicePaidCommandHandler(
         // A waiting debit keeps the invoice New until the consumer applies it, so Invoice.MarkPaid would accept
         // it and the wallet would then pay the same invoice again.
         WalletMutation? debit = await mutationRepo.GetForRefAsync(
-            WalletMutationConsumer.InvoiceRefType, invoice.Id, ct);
+            WalletMutation.InvoiceRefType, invoice.Id, ct);
         bool walletDebitIsWaiting = debit != null && debit.Status == WalletMutationStatus.Pending;
         if (walletDebitIsWaiting)
         {

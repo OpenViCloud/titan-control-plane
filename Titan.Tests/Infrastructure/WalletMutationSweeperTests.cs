@@ -42,6 +42,7 @@ public class WalletMutationSweeperTests
         services.AddScoped<IInvoiceRepository>(sp => new InvoiceRepository(sp.GetRequiredService<TitanDbContext>()));
         services.AddScoped<IWalletTransactionRepository>(sp => new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>()));
         services.AddScoped<WalletLedger>();
+        services.AddScoped<WalletMutationApply>();
         return services;
     }
 
@@ -125,8 +126,10 @@ public class WalletMutationSweeperTests
             new WalletMutationConsumer(
                 sp.GetRequiredService<IWalletMutationRepository>(),
                 new WalletRepository(sp.GetRequiredService<TitanDbContext>()),
-                sp.GetRequiredService<IInvoiceRepository>(),
-                new WalletLedger(new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>())))));
+                new WalletMutationApply(
+                    new WalletRepository(sp.GetRequiredService<TitanDbContext>()),
+                    sp.GetRequiredService<IInvoiceRepository>(),
+                    new WalletLedger(new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>()))))));
         ServiceProvider root = services.BuildServiceProvider();
 
         int swept = await SweepAsync(Sweeper(root), root);
