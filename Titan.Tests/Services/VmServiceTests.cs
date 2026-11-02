@@ -57,6 +57,12 @@ public class VmServiceTests
     // Any other id resolves to null (Moq default), which the unknown-* tests rely on.
     public VmServiceTests()
     {
+        // The create and the delete lock the rows they read (titan-ops architecture/domain-services.md#cross-aggregate-lock);
+        // a mock has no rows, so the locked read answers what the plain one does.
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _repo.Object.FindByIdAsync(id, ct));
+        _networkRepo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _networkRepo.Object.FindByIdAsync(id, ct));
         SetupOffering();
         SetupDefaultTemplate();
     }
@@ -76,7 +82,7 @@ public class VmServiceTests
 
     private DeleteVmCommandHandler CreateDeleteHandler() =>
         new(_repo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object,
-            _volumeRepo.Object, _loadBalancerRepo.Object, _activity);
+            _volumeRepo.Object, _activity, new Titan.Domain.Services.VmDeletion(_loadBalancerRepo.Object));
 
     private StopVmCommandHandler CreateStopHandler() =>
         new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
@@ -635,8 +641,8 @@ public class VmServiceTests
             It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // The unprovisioned-VM shortcut (ExternalId == null → Destroy()) must
-    // honor the same guard — otherwise the VM row vanishes under the snapshot op.
+    // The unprovisioned-VM shortcut (ExternalId == null → VmDeletion deletes it locally) must
+    // honor the same guard — otherwise the VM row vanishes while its create may yet instantiate.
     [Theory] // a create still waiting without a provider id may yet instantiate
     [InlineData(VmSeed.Creating)]
     public async Task Delete_InvalidStatus_ThrowsBusinessException(VmSeed status)

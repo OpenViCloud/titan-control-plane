@@ -47,7 +47,7 @@ public class AdminResourceServiceTests
 
     private static (AdminFacade svc, Mock<IProviderCommandQueue> wf, Mock<IAdminAuditLogRepository> audit)
         Build(IVmRepository vmRepo, INetworkRepository? netRepo = null,
-            List<Titan.Domain.Aggregates.Volume.Volume>? attachedVolumes = null)
+            List<Titan.Domain.Aggregates.Volume.Volume>? attachedVolumes = null, bool isLoadBalancerBackend = false)
     {
         var wf = new Mock<IProviderCommandQueue>();
         wf.SetReturnsDefault(Task.CompletedTask);
@@ -60,7 +60,9 @@ public class AdminResourceServiceTests
             new ListAdminVmsQueryHandler(vmRepo),
             new ListAdminNetworksQueryHandler(netRepo ?? new StubNetworkRepo()),
             new DeleteAdminVmCommandHandler(
-                vmRepo, volumes.Object, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance));
+                vmRepo, volumes.Object, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance,
+                new Titan.Domain.Services.VmDeletion(Mock.Of<ILoadBalancerRepository>(
+                    r => r.IsBackendAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()) == Task.FromResult(isLoadBalancerBackend)))));
         return (svc, wf, audit);
     }
 
@@ -290,6 +292,21 @@ public class AdminResourceServiceTests
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
     }
 
+    // An admin is refused as the tenant is, rather than leaving a load balancer sending to a deleted VM
+    // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+    [Fact]
+    public async Task DeleteVm_ALoadBalancerBackend_IsRefused_NoAudit_NoCommand()
+    {
+        var vm = RunningVm(TenantBOwner, "behind-lb");
+        var repo = new StubVmRepo(vm);
+        var (svc, wf, audit) = Build(repo, isLoadBalancerBackend: true);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
+        Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
+    }
+
     [Fact]
     public async Task DeleteVm_OfACreateRefusedBeforeProvisioning_DeletesLocally_NoCommand()
     {
@@ -330,7 +347,7 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
 
     public Task SaveAsync(CancellationToken ct = default) { SaveCalled = true; return Task.CompletedTask; }
 
-    public Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default) => FindByIdAsync(id, ct);
     public Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) => throw new NotSupportedException();
 
     public Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();

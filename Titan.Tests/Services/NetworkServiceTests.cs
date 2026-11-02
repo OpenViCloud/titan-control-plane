@@ -32,6 +32,10 @@ public class NetworkServiceTests
 
     public NetworkServiceTests()
     {
+        // The delete locks the network row (titan-ops architecture/domain-services.md#cross-aggregate-lock); a mock has no
+        // rows, so the locked read answers what the plain one does.
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _repo.Object.FindByIdAsync(id, ct));
         _routes.Setup(r => r.LockFreeAsync("cluster-1", default)).ReturnsAsync(() => _routeRows.Where(route => route.IsFree).ToList());
         _routes.Setup(r => r.FindHeldByAsync(It.IsAny<Guid>(), default))
             .ReturnsAsync((Guid networkId, CancellationToken _) => _routeRows.SingleOrDefault(route => route.NetworkId == networkId));
@@ -65,7 +69,7 @@ public class NetworkServiceTests
             => new RenameNetworkCommandHandler(repo, currentUser).HandleAsync(new RenameNetworkCommand(networkId, req.Name), ct);
 
         public Task DeleteAsync(Guid networkId, CancellationToken ct = default)
-            => new DeleteNetworkCommandHandler(repo, currentUser, commands, activity)
+            => new DeleteNetworkCommandHandler(repo, currentUser, commands, activity, new Titan.Domain.Services.NetworkDeletion(repo))
                 .HandleAsync(new DeleteNetworkCommand(networkId), ct);
 
         public Task UpdateStatusAsync(Guid networkId, UpdateNetworkStatusRequest req, CancellationToken ct = default)

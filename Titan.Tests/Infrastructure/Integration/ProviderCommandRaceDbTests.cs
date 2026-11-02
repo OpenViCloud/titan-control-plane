@@ -6,6 +6,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Services;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.Persistence;
@@ -44,8 +45,8 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
             var caller = Callers.TenantMember(tenant.Id);
             var handler = new DeleteVmCommandHandler(new VmRepository(db), new TenantRepository(db), caller,
                 new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
-                new VolumeRepository(db), new LoadBalancerRepository(db),
-                new ActivityRecorder(new ActivityEventRepository(db), caller));
+                new VolumeRepository(db), new ActivityRecorder(new ActivityEventRepository(db), caller),
+                new VmDeletion(new LoadBalancerRepository(db)));
 
             ConflictException refused = await Assert.ThrowsAsync<ConflictException>(
                 () => handler.HandleAsync(new DeleteVmCommand(vm.Id)));

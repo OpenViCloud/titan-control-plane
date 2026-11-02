@@ -4,6 +4,7 @@ using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Networking.Network;
@@ -12,13 +13,16 @@ public class DeleteNetworkCommandHandler(
     INetworkRepository repo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
-    IActivityRecorder activity)
+    IActivityRecorder activity,
+    NetworkDeletion deletion)
 {
     public async Task HandleAsync(DeleteNetworkCommand command, CancellationToken ct = default)
     {
         var networkId = command.NetworkId;
 
-        var network = await NetworkOwnership.RequireNetworkAsync(repo, currentUser.RequireTenantId(), networkId, ct);
+        // Locked, so a VM or load balancer create onto this network waits for this request and then sees it
+        // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        var network = await NetworkOwnership.RequireNetworkForUpdateAsync(repo, currentUser.RequireTenantId(), networkId, ct);
 
         // The aggregate refuses a repeat, so it is recognised here first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete was already requested, or
@@ -30,28 +34,19 @@ public class DeleteNetworkCommandHandler(
             return;
         }
 
-        if (await repo.HasActiveVmsAsync(networkId, ct))
-            throw new BusinessException("NETWORK_NOT_EMPTY", "Cannot delete a network that still has VMs.");
-        if (await repo.HasLiveLoadBalancersAsync(networkId, ct))
-            throw new BusinessException("NETWORK_NOT_EMPTY", "Cannot delete a network that still has load balancers.");
-
-        // The create failed before Incus had it — nothing to clean up on Incus, and no rule can exist on a network
-        // that never reached Created. Delete locally so the tenant can reclaim the name, and enqueue no command.
-        bool neverReachedTheProvider = network.ExternalId is null && network.Transition == null;
-        if (neverReachedTheProvider)
+        // Null: the create failed before Incus had it, so the network is gone here, the tenant can reclaim the name,
+        // and no command is enqueued.
+        string? externalNetworkId = await deletion.RequestAsync(network, ct);
+        if (externalNetworkId is null)
         {
-            network.DeleteLocally();
             // Never provisioned: the request and its outcome happen here at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
-            activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with DeleteLocally
+            activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the local delete
             activity.StageOutcome(network.TenantId, "network.deleted", "network", network.Id, network.Name.Value);
             await repo.SaveAsync(ct);
             return;
         }
 
-        // RequestDelete validates AND yields the provider id: no `network.ExternalId!` below.
-        string externalNetworkId = network.RequestDelete();
-
-        activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with RequestDelete
+        activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the delete request
         await commands.EnqueueNetworkDeleteAsync(
             network.Id, externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Deleted

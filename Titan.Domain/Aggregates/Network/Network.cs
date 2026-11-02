@@ -252,8 +252,9 @@ public class Network : AggregateRoot
     /// Intent. Follows Incus: whatever its word, even not found, a network with a provider id is deleted through
     /// Incus, which answers. The current pair waits for the delete command
     /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a repeat
-    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public string RequestDelete()
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Internal: NetworkDeletion is the only way in
+    /// (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+    internal string RequestDelete()
     {
         if (DeleteIsWaiting)
         {
@@ -405,7 +406,7 @@ public class Network : AggregateRoot
 
     /// Intent: a network that never reached Incus has no command and no observation coming, so this writes the
     /// current pair itself (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteLocally()
+    internal void DeleteLocally()
     {
         bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
         if (!neverReachedIncus)

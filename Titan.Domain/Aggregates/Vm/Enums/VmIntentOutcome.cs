@@ -6,7 +6,7 @@ public enum VmIntentOutcome
 {
     Dispatch,
 
-    /// Delete of a VM that never reached the provider. The caller calls Destroy() after its own
-    /// preconditions, which is why RequestDelete() does not destroy it.
+    /// Delete of a VM that never reached the provider. VmDeletion calls DeleteLocally() after its own
+    /// preconditions, which is why RequestDelete() does not delete it.
     FinishLocally
 }
