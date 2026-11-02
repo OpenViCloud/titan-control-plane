@@ -15,8 +15,8 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.TenantId).HasColumnName("tenant_id");
         builder.Property(v => v.NetworkId).HasColumnName("network_id");
         builder.Property(v => v.Name).HasColumnName("name").IsRequired();
-        // titan-ops architecture/desired-and-current.md#desired-and-current: observation writes current_*, request
-        // writes desired_*. current_state holds the Incus status word for word (the enum names ARE the Incus
+        // titan-ops architecture/desired-and-current.md#desired-and-current: what the worker reports writes current_*, a
+        // request writes desired_*. current_state holds the Incus status word for word (the enum names ARE the Incus
         // words), NULL while Incus has no instance.
         builder.Property(v => v.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(v => v.DesiredState).HasColumnName("desired_state").HasConversion<string>().IsRequired();
