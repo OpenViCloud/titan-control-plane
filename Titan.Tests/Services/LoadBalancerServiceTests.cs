@@ -34,6 +34,12 @@ public class LoadBalancerServiceTests
 
     public LoadBalancerServiceTests()
     {
+        // The handlers lock the rows they read (titan-ops architecture/domain-services.md#cross-aggregate-lock); a mock has no
+        // rows, so the locked read answers what the plain one does.
+        _networks.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _networks.Object.FindByIdAsync(id, ct));
+        _vms.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Guid id, CancellationToken _) => _knownVms.FirstOrDefault(v => v.Id == id));
         _currentUser.Setup(u => u.TenantId).Returns(() => TenantId);
         _tenants.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid id, CancellationToken _) => id == TenantId ? _tenant : null);

@@ -31,7 +31,9 @@ public class CreateLoadBalancerCommandHandler(
             throw new ConflictException("LOAD_BALANCER_NAME_TAKEN", $"A load balancer named '{req.Name}' already exists.");
         }
 
-        var network = await NetworkOwnership.RequireNetworkAsync(networkRepo, callerId, req.NetworkId, ct);
+        // Locked before the VMs (network first, then VMs by id), so a delete of the network waits and then sees this
+        // load balancer (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        var network = await NetworkOwnership.RequireNetworkForUpdateAsync(networkRepo, callerId, req.NetworkId, ct);
         // titan-ops features/load-balancer/design.md#lb-needs-public-ipv6: the VIP lives in the network's /64.
         string externalNetworkId = network.BeginLoadBalancer();
         string subnet = network.PublicIpv6Subnet!;

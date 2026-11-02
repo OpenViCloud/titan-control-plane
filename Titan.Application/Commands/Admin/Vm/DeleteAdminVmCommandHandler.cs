@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Domain.Aggregates.Volume;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
@@ -13,7 +14,7 @@ namespace Titan.Application.Commands.Admin.Vm;
 
 // The only cross-tenant write on a tenant resource (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write):
 // a platform admin deletes any tenant's VM. Bypasses tenant scope but not lifecycle rules — the same
-// deletable-state and snapshot-in-progress guards as DeleteVmCommandHandler apply here.
+// deletable-state, snapshot-in-progress and load-balancer-backend guards as DeleteVmCommandHandler apply here (VmDeletion).
 //
 // A separate admin handler, not a flag on the tenant one (titan-ops architecture/tenancy-and-admin.md#no-bypass-flag),
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.
@@ -23,13 +24,16 @@ public class DeleteAdminVmCommandHandler(
     IAdminAuditLogRepository auditLog,
     IProviderCommandQueue commands,
     ICurrentUser currentUser,
-    ILogger<DeleteAdminVmCommandHandler> logger)
+    ILogger<DeleteAdminVmCommandHandler> logger,
+    VmDeletion deletion)
 {
     public async Task HandleAsync(DeleteAdminVmCommand command, CancellationToken ct = default)
     {
         var vmId = command.VmId;
 
-        var vm = await vms.FindByIdAsync(vmId, ct)
+        // Locked, as the tenant's delete, so a load balancer naming this VM waits and then sees it
+        // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        var vm = await vms.FindByIdForUpdateAsync(vmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
         // The aggregate refuses a repeat, so it is recognised here first, whoever sent it
@@ -52,9 +56,10 @@ public class DeleteAdminVmCommandHandler(
             return;
         }
 
-        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), for an
-        // admin as for the tenant (titan-ops architecture/code-structure.md#child-entity).
-        VmIntentTicket ticket = vm.RequestDelete();
+        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), or while a
+        // load balancer still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
+        // (titan-ops architecture/code-structure.md#child-entity · titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        VmIntentTicket ticket = await deletion.RequestAsync(vm, ct);
 
         // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.
@@ -77,10 +82,9 @@ public class DeleteAdminVmCommandHandler(
         }
 
         // Errored before provisioning — nothing at the provider, no reconciler running. The audit row
-        // and DeleteLocally() persist together in one SaveChanges (same DbContext).
+        // and the local delete persist together in one SaveChanges (same DbContext).
         if (ticket.Outcome == VmIntentOutcome.FinishLocally)
         {
-            vm.DeleteLocally();
             await vms.SaveAsync(ct);
             return;
         }

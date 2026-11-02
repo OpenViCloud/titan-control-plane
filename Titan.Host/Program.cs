@@ -118,6 +118,8 @@ builder.Services.AddScoped<ICreditRepository, CreditRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
 builder.Services.AddScoped<WalletLedger>();
+builder.Services.AddScoped<NetworkDeletion>();
+builder.Services.AddScoped<VmDeletion>();
 builder.Services.AddScoped<IWalletMutationRepository, WalletMutationRepository>();
 builder.Services.AddScoped<IPaymentGatewayTransactionRepository, PaymentGatewayTransactionRepository>();
 builder.Services.AddScoped<IVmSnapshotRepository, VmSnapshotRepository>();

@@ -222,7 +222,7 @@ Khoá lệnh = chuỗi id workflow cũ (`titan-ops architecture/provider-and-wor
 | `LOAD_BALANCER_INVALID_STATE` | 422 | PUT/DELETE từ trạng thái không cho phép, đổi tên khi đang chờ xoá hoặc đã xoá (`titan-ops features/load-balancer/design.md#lb-lifecycle` · `titan-ops features/load-balancer/design.md#lb-rename`); network hết số VIP |
 | `LOAD_BALANCER_VIP_CONFLICT` | 409 | Hai create cùng network chọn cùng VIP cùng lúc; commit sau đụng index unique `(network_id, vip_index)` |
 | `INVALID_LOAD_BALANCER_SPEC` | 422 | Domain từ chối cấu hình (1–10 listener, 1–20 VM, port 1–65535, không lặp). Qua HTTP validator chặn trước ⇒ `400 VALIDATION_ERROR`; 422 này không tới HTTP |
-| `VM_IS_LOAD_BALANCER_BACKEND` | 422 | Xoá VM mà một load balancer chưa `Deleted` còn gửi tới (desired hoặc Incus đang giữ) — gỡ backend trước |
+| `VM_IS_LOAD_BALANCER_BACKEND` | 422 | Khách hay admin xoá VM mà một load balancer chưa `Deleted` còn gửi tới (desired hoặc Incus đang giữ) — gỡ backend trước |
 | `FIREWALL_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxFirewallRulesPerNetwork` (mặc định 20), **per network**; rule đã bấm xoá thôi tính (DCS-Q1) |
 | `IPV6_QUOTA_EXCEEDED` | 422 | Cap `Tenant.Quota.MaxPublicIpv6` (mặc định 10): đếm **network** có `/64` public, như `MaxNetworks`; chỉ kiểm khi tạo network xin IPv6 (`titan-ops features/network/design.md#ipv6-quota`) |
 | `IPV6_NOT_AVAILABLE` | 422 | Tạo network xin IPv6 ở cluster thiếu `ovnUplinkNetwork` hoặc `ipv6Block`, hết route rảnh (255 mỗi cluster), hoặc cluster mới mà control plane chưa tạo được hàng route — không hàng, không lệnh (`titan-ops features/network/design.md#ipv6-public`) |

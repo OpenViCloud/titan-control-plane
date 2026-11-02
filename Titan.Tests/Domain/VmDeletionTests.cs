@@ -1,0 +1,88 @@
+using System.Reflection;
+using Moq;
+using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Exceptions;
+using Titan.Domain.Repositories;
+using Titan.Domain.Services;
+using Titan.Domain.Values;
+
+namespace Titan.Tests.Domain;
+
+// titan-ops architecture/domain-services.md#cross-aggregate-lock: a VM a load balancer still sends to is not deleted, by its
+// tenant or by an admin, and VmDeletion is the only way to delete one. Silent about the lock; VmDeletionRaceDbTests runs
+// the race on Postgres.
+public class VmDeletionTests
+{
+    private readonly Mock<ILoadBalancerRepository> _loadBalancers = new();
+    private readonly Tenant _tenant = TestTenant.Active("vd", "kc-vd", "vd@titan.local");
+
+    private VmDeletion Deletion() => new(_loadBalancers.Object);
+
+    private Vm OnIncus()
+    {
+        Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
+        vm.MarkCreated("vm-ext");
+        vm.MarkObserved(VmState.Running, "10.0.0.5", null);
+        return vm;
+    }
+
+    [Fact]
+    public async Task AVmALoadBalancerSendsTo_IsRefused()
+    {
+        Vm vm = OnIncus();
+        _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
+
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(vm));
+
+        Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
+    }
+
+    [Fact]
+    public async Task AVmOnIncus_NoLoadBalancerSendsTo_IsDispatched_WithItsProviderId()
+    {
+        Vm vm = OnIncus();
+
+        VmIntentTicket ticket = await Deletion().RequestAsync(vm);
+
+        Assert.Equal(VmIntentOutcome.Dispatch, ticket.Outcome);
+        Assert.Equal("vm-ext", ticket.ProviderId);
+        Assert.Equal(VmIntent.Delete, vm.PendingIntent);
+    }
+
+    [Fact]
+    public async Task AVmThatNeverReachedTheProvider_IsDeletedHere()
+    {
+        Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
+        vm.MarkRequestFailed("create gave up", null);
+
+        VmIntentTicket ticket = await Deletion().RequestAsync(vm);
+
+        Assert.Equal(VmIntentOutcome.FinishLocally, ticket.Outcome);
+        Assert.True(vm.IsTerminal);
+    }
+
+    // The VM's own refusal comes before the load balancer's: a snapshot being created answers that, as before.
+    [Fact]
+    public async Task AVmWithASnapshotBeingCreated_IsRefusedForThat_First()
+    {
+        Vm vm = OnIncus();
+        vm.WithSnapshot("creating");
+        _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
+
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(vm));
+
+        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
+    }
+
+    // The compiler keeps Titan.Application off these two, so VmDeletion is the only way to delete a VM.
+    [Fact]
+    public void OnlyVmDeletionDeletesAVm()
+    {
+        const BindingFlags surface = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        string[] publicMethods = [.. typeof(Vm).GetMethods(surface).Select(m => m.Name)];
+        Assert.Contains(nameof(Vm.Rename), publicMethods);
+        Assert.DoesNotContain(nameof(Vm.RequestDelete), publicMethods);
+        Assert.DoesNotContain(nameof(Vm.DeleteLocally), publicMethods);
+    }
+}

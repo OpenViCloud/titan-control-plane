@@ -4,6 +4,7 @@ using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Domain.Aggregates.Volume;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
@@ -17,8 +18,8 @@ public class DeleteVmCommandHandler(
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
     IVolumeRepository volumeRepo,
-    ILoadBalancerRepository loadBalancerRepo,
-    IActivityRecorder activity)
+    IActivityRecorder activity,
+    VmDeletion deletion)
 {
     public async Task HandleAsync(DeleteVmCommand command, CancellationToken ct = default)
     {
@@ -26,7 +27,9 @@ public class DeleteVmCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        var vm = await ComputeOwnership.RequireVmAsync(repo, callerId, command.VmId, ct);
+        // Locked, so a load balancer naming this VM as a backend waits for this request and then sees it
+        // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        var vm = await ComputeOwnership.RequireVmForUpdateAsync(repo, callerId, command.VmId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -49,16 +52,9 @@ public class DeleteVmCommandHandler(
 
         // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS): the
         // snapshot command would act on an instance being deleted (titan-ops architecture/code-structure.md#child-entity).
-        VmIntentTicket ticket = vm.RequestDelete();
-
-        // Refused rather than editing the load balancer behind the customer's back
-        // (titan-ops features/load-balancer/design.md#lb-and-vm-network). Nothing is saved yet, so the intent
-        // RequestDelete recorded in memory is discarded with the request.
-        if (await loadBalancerRepo.IsBackendAsync(command.VmId, ct))
-        {
-            throw new BusinessException("VM_IS_LOAD_BALANCER_BACKEND",
-                "A load balancer still sends to this VM. Remove it from the load balancer first.");
-        }
+        // A load balancer still sending to it refuses too, rather than editing the load balancer behind the customer's
+        // back (titan-ops features/load-balancer/design.md#lb-and-vm-network).
+        VmIntentTicket ticket = await deletion.RequestAsync(vm, ct);
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
@@ -75,10 +71,9 @@ public class DeleteVmCommandHandler(
         }
 
         // Never reached the provider — no external resource, no reconciler running. The request and
-        // its outcome happen here at once, so both rows go in the SaveChanges with DeleteLocally().
+        // its outcome happen here at once, so both rows go in the SaveChanges with the local delete.
         if (ticket.Outcome == VmIntentOutcome.FinishLocally)
         {
-            vm.DeleteLocally();
             activity.StageOutcome(vm.TenantId, "vm.deleted", "vm", vm.Id, vm.Name);
             await repo.SaveAsync(ct);
             return;

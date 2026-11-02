@@ -47,7 +47,9 @@ public class CreateVmCommandHandler(
         if (await repo.ExistsByNameAsync(callerId, req.Name, ct))
             throw new ConflictException("VM_NAME_TAKEN", $"VM name '{req.Name}' is already taken.");
 
-        var network = await networkRepo.FindByIdAsync(req.NetworkId, ct);
+        // Locked, so a delete of the network waits for this request and then sees the VM
+        // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        var network = await networkRepo.FindByIdForUpdateAsync(req.NetworkId, ct);
         if (network is null || network.TenantId != callerId)
             throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 

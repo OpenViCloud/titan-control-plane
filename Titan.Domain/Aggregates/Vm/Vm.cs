@@ -200,9 +200,9 @@ public class Vm : AggregateRoot
 
     /// Any VM with a provider id can be deleted: the worker force-stops whatever status Incus reports and deletes
     /// the instance, and an instance already gone counts as deleted. Without an id there is nothing on the provider
-    /// unless the create is still waiting (it may yet instantiate), so the ticket says FinishLocally and the caller
-    /// calls DeleteLocally().
-    public VmIntentTicket RequestDelete()
+    /// unless the create is still waiting (it may yet instantiate), so the ticket says FinishLocally and VmDeletion
+    /// calls DeleteLocally(). Internal: VmDeletion is the only way in (titan-ops architecture/domain-services.md#cross-aggregate-lock).
+    internal VmIntentTicket RequestDelete()
     {
         if (IsTerminal)
         {
@@ -432,7 +432,7 @@ public class Vm : AggregateRoot
 
     /// Intent: a VM that never reached the provider has no command and no observation coming, so the
     /// aggregate writes the current fields itself (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteLocally()
+    internal void DeleteLocally()
     {
         if (IsTerminal)
             throw new BusinessException("VM_INVALID_STATUS", "VM is already deleted.");
