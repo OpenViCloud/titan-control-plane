@@ -1119,6 +1119,22 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
+    // A Deleted on the old route is not the report of a waiting stop: the stop keeps waiting for its own, and nothing is
+    // recorded as if it had ended (titan-ops architecture/resource-lifecycle.md#invariants).
+    [Fact]
+    public async Task UpdateStatus_Deleted_WhileAStopWaits_IsNotFound_AndTheStopKeepsWaiting()
+    {
+        var vm = MakeVm(VmSeed.Running);
+        RequestTicket stop = vm.RequestStop();
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+
+        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
+        Assert.Empty(_activity.Events);
+    }
+
     // Only a delete's own report ends a VM (titan-ops architecture/resource-lifecycle.md#invariants); a Deleted on the old route
     // with nothing waiting says the instance is gone from Incus, which is what NotFound records.
     [Fact]

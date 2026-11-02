@@ -115,7 +115,8 @@ public class RequestLifecycleShapeTests
             .Cast<Match>().ToList();
         Assert.Equal(4, vmEnqueues.Count);
 
-        var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{[^}]*\brequestId\b")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
+        // A property named requestId, not any mention: stop and start also write `intentId = requestId`.
+        var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "VM command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
     }
 }
