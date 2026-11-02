@@ -191,7 +191,7 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
             before.Wallets.Add(wallet);
             await before.SaveChangesAsync();
             before.WalletTransactions.Add(
-                Titan.Domain.Aggregates.Wallet.WalletTransaction.Create(Titan.Domain.Aggregates.Wallet.WalletTransactionType.TopUp, wallet.Id, 1000, Guid.NewGuid(), 1000));
+                Titan.Domain.Aggregates.WalletTransaction.WalletTransaction.Create(Titan.Domain.Aggregates.WalletTransaction.WalletTransactionType.TopUp, wallet.Id, 1000, Guid.NewGuid(), 1000));
             await before.SaveChangesAsync();
         }
         (int wallets, int transactions, int mutations) = await WalletCountsAsync();

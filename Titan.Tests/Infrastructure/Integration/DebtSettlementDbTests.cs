@@ -8,12 +8,14 @@ using Titan.Application.Queries.Billing.Invoice.Contracts;
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
 using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.WalletMutation;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
@@ -162,7 +164,7 @@ public class DebtSettlementDbTests(PostgresFixture pg)
             await new WalletMutationConsumer(
                 new WalletMutationRepository(db),
                 new WalletRepository(db),
-                new InvoiceRepository(db)).ApplyAsync(id);
+                new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))).ApplyAsync(id);
         }
     }
 

@@ -12,6 +12,7 @@ using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 
@@ -1159,7 +1160,7 @@ public class FakeInvoiceRepository : IInvoiceRepository
 /// Wallet fake: GetByTenantForUpdateAsync hands back a real Wallet holding the seeded balance. Debits are
 /// recorded at COMMIT (not when staged), so a simulated version conflict (RejectNextSave) leaves the
 /// Debits list empty — the same "nothing was charged" a rolled-back transaction gives.
-public class FakeWalletRepository : IWalletRepository
+public class FakeWalletRepository : IWalletRepository, IWalletTransactionRepository
 {
     private readonly Dictionary<Guid, Wallet> _wallets = [];
     private readonly List<WalletTransaction> _staged = [];
@@ -1192,9 +1193,9 @@ public class FakeWalletRepository : IWalletRepository
 
     public void Add(Wallet wallet) => _wallets[wallet.TenantId] = wallet;
 
-    public void AddTransaction(WalletTransaction transaction) => _staged.Add(transaction);
+    public void Add(WalletTransaction transaction) => _staged.Add(transaction);
 
-    public Task<IReadOnlyList<WalletTransaction>> ListTransactionsByTenantAsync(Guid tenantId, CancellationToken ct) =>
+    public Task<IReadOnlyList<WalletTransaction>> ListByTenantAsync(Guid tenantId, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<WalletTransaction>>([]);
 
     public Task SaveChangesAsync(CancellationToken ct)

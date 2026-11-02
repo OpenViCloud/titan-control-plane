@@ -10,6 +10,7 @@ using Titan.Domain.Aggregates.PaymentGatewayTransaction;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.SshKey;

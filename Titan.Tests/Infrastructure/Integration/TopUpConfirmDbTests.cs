@@ -9,6 +9,7 @@ using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
@@ -79,7 +80,7 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
     private async Task DrainAsync(Guid mutationId)
     {
         await using var db = pg.NewDbContext();
-        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db))
+        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))
             .ApplyAsync(mutationId);
     }
 

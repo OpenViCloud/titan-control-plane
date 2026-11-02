@@ -1,5 +1,6 @@
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 
 namespace Titan.Tests.Domain;
 

@@ -1,21 +1,21 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
-using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Repositories;
 
 namespace Titan.Application.Queries.Billing.Wallet;
 
 /// Every movement (TopUp +, promo +, spend −) in chronological order with the balance after each
 /// (titan-ops architecture/money-and-wallet.md#wallet-one-balance).
-public class GetWalletStatementQueryHandler(IWalletRepository walletRepo, ICurrentUser currentUser, CreditOptions options)
+public class GetWalletStatementQueryHandler(IWalletTransactionRepository transactions, ICurrentUser currentUser, CreditOptions options)
 {
     public async Task<WalletStatementQueryResult> HandleAsync(GetWalletStatementQuery query, CancellationToken ct = default)
     {
         var tenantId = currentUser.RequireTenantId();
 
         // One read of the signed ledger: inflows and spending come from the same table.
-        var movements = await walletRepo.ListTransactionsByTenantAsync(tenantId, ct);
+        var movements = await transactions.ListByTenantAsync(tenantId, ct);
 
         var lines = movements
             .Select(m => new WalletStatementLine(m.CreatedAt, Label(m.Type), m.Amount, m.BalanceAfter))

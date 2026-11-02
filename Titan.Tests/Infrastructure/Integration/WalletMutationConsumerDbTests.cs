@@ -3,6 +3,8 @@ using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Services;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -22,7 +24,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 public class WalletMutationConsumerDbTests(PostgresFixture pg)
 {
     private static WalletMutationConsumer NewConsumer(TitanDbContext db) =>
-        new(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db));
+        new(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db),
+            new WalletLedger(new WalletTransactionRepository(db)));
 
     private async Task<Wallet> SeedWalletAsync(Guid tenantId)
     {

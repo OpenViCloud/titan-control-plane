@@ -1,9 +1,11 @@
 using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Services;
 
@@ -68,14 +70,14 @@ public class WalletMutationConsumerTests
 
     // Hands back one real Wallet aggregate (so Credit/Debit run for real) and records what the consumer
     // stages, so a test can assert on the ledger movement and whether anything was committed at all.
-    private sealed class RecordingWalletRepo(Wallet wallet) : IWalletRepository
+    private sealed class RecordingWalletRepo(Wallet wallet) : IWalletRepository, IWalletTransactionRepository
     {
         public List<WalletTransaction> Staged { get; } = [];
         public int SaveCount { get; private set; }
 
         public Task<Wallet?> GetByIdForUpdateAsync(Guid walletId, CancellationToken ct) =>
             Task.FromResult<Wallet?>(wallet);
-        public void AddTransaction(WalletTransaction transaction) => Staged.Add(transaction);
+        public void Add(WalletTransaction transaction) => Staged.Add(transaction);
         public Task SaveChangesAsync(CancellationToken ct) { SaveCount++; return Task.CompletedTask; }
 
         // Not on the consumer's path.
@@ -83,7 +85,7 @@ public class WalletMutationConsumerTests
             throw new NotSupportedException();
         public Task<long> GetBalanceAsync(Guid tenantId, CancellationToken ct) => throw new NotSupportedException();
         public void Add(Wallet w) => throw new NotSupportedException();
-        public Task<IReadOnlyList<WalletTransaction>> ListTransactionsByTenantAsync(Guid tenantId, CancellationToken ct) =>
+        public Task<IReadOnlyList<WalletTransaction>> ListByTenantAsync(Guid tenantId, CancellationToken ct) =>
             throw new NotSupportedException();
     }
 
@@ -96,7 +98,7 @@ public class WalletMutationConsumerTests
         var topUpId = Guid.NewGuid();
         var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", topUpId);
         var walletRepo = new RecordingWalletRepo(wallet);
-        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));
+        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -116,7 +118,7 @@ public class WalletMutationConsumerTests
         var mutation = WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 100_000L, "TopUp", Guid.NewGuid());
         mutation.MarkApplied();                            // a prior delivery already applied it
         var walletRepo = new RecordingWalletRepo(wallet);
-        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));
+        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -134,7 +136,7 @@ public class WalletMutationConsumerTests
         var invoiceId = invoice.Id;
         var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 20_000L, "Invoice", invoiceId);
         var walletRepo = new RecordingWalletRepo(wallet);
-        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
+        var consumer = new WalletMutationConsumer(new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -150,7 +152,7 @@ public class WalletMutationConsumerTests
     public async Task Apply_UnknownMutationId_IsNoOp()
     {
         var walletRepo = new RecordingWalletRepo(OpenWallet());
-        var consumer = new WalletMutationConsumer(new StubMutationRepo(null), walletRepo, new StubInvoiceRepo(null));
+        var consumer = new WalletMutationConsumer(new StubMutationRepo(null), walletRepo, new StubInvoiceRepo(null), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(Guid.NewGuid());
 
@@ -173,7 +175,7 @@ public class WalletMutationConsumerTests
         var walletRepo = new RecordingWalletRepo(wallet);
         var invoice = TestInvoice(100_000L);
         var consumer = new WalletMutationConsumer(
-            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
+            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -201,7 +203,7 @@ public class WalletMutationConsumerTests
         var walletRepo = new RecordingWalletRepo(wallet);
         var invoice = TestInvoice(300_000L);
         var consumer = new WalletMutationConsumer(
-            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
+            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -232,7 +234,7 @@ public class WalletMutationConsumerTests
         var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 300_000L, "Invoice", invoice.Id);
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(
-            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice));
+            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(invoice), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 
@@ -252,7 +254,7 @@ public class WalletMutationConsumerTests
         var mutation = WalletMutation.Create(WalletMutationType.Debit, wallet.Id, 300_000L, "Invoice", Guid.NewGuid());
         var walletRepo = new RecordingWalletRepo(wallet);
         var consumer = new WalletMutationConsumer(
-            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null));
+            new StubMutationRepo(mutation), walletRepo, new StubInvoiceRepo(null), new WalletLedger(walletRepo));
 
         await consumer.ApplyAsync(mutation.Id);
 

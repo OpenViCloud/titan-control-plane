@@ -6,6 +6,7 @@ using Titan.Application.Commands.Billing.Wallet.Contracts;
 using Titan.Application.Queries.Billing.Wallet;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 
@@ -16,6 +17,7 @@ namespace Titan.Tests.Services;
 public class WalletServiceTests
 {
     private readonly Mock<IWalletRepository> _walletRepo = new();
+    private readonly Mock<IWalletTransactionRepository> _transactions = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly CreditOptions _options = new() { MaxGrantAmount = 100_000_000m, Currency = "VND" };
     private static readonly Guid Tenant = Guid.NewGuid();
@@ -25,9 +27,10 @@ public class WalletServiceTests
 
     // Facade over one command and two query handlers: every method forwards to exactly one handler and
     // adds nothing.
-    private WalletFacade CreateService() => new(_walletRepo.Object, _currentUser.Object, _options);
+    private WalletFacade CreateService() => new(_walletRepo.Object, _transactions.Object, _currentUser.Object, _options);
 
-    private sealed class WalletFacade(IWalletRepository walletRepo, ICurrentUser currentUser, CreditOptions options)
+    private sealed class WalletFacade(
+        IWalletRepository walletRepo, IWalletTransactionRepository transactions, ICurrentUser currentUser, CreditOptions options)
     {
         public Task OpenForTenantAsync(Guid tenantId, CancellationToken ct = default)
             => new OpenWalletCommandHandler(walletRepo, options).HandleAsync(new OpenWalletCommand(tenantId), ct);
@@ -36,7 +39,7 @@ public class WalletServiceTests
             => new GetWalletQueryHandler(walletRepo, currentUser, options).HandleAsync(new GetWalletQuery(), ct);
 
         public Task<WalletStatementQueryResult> GetMyStatementAsync(CancellationToken ct = default)
-            => new GetWalletStatementQueryHandler(walletRepo, currentUser, options).HandleAsync(new GetWalletStatementQuery(), ct);
+            => new GetWalletStatementQueryHandler(transactions, currentUser, options).HandleAsync(new GetWalletStatementQuery(), ct);
     }
     private void AsTenant() => _currentUser.SetupGet(u => u.TenantId).Returns(Tenant);
 
@@ -120,7 +123,7 @@ public class WalletServiceTests
         AsTenant();
         var t0 = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var wallet = Guid.NewGuid();
-        _walletRepo.Setup(r => r.ListTransactionsByTenantAsync(Tenant, default)).ReturnsAsync([
+        _transactions.Setup(r => r.ListByTenantAsync(Tenant, default)).ReturnsAsync([
             At(WalletTransaction.Create(WalletTransactionType.Promo, wallet, 100L, Guid.NewGuid(), 100L), t0),
             At(WalletTransaction.Create(WalletTransactionType.TopUp, wallet, 900000L, Guid.NewGuid(), 900100L), t0.AddDays(1)),
             At(WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet, 40L, Guid.NewGuid(), 900060L), t0.AddDays(2)),
@@ -150,7 +153,7 @@ public class WalletServiceTests
         AsTenant();
         var t0 = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var wallet = Guid.NewGuid();
-        _walletRepo.Setup(r => r.ListTransactionsByTenantAsync(Tenant, default)).ReturnsAsync([
+        _transactions.Setup(r => r.ListByTenantAsync(Tenant, default)).ReturnsAsync([
             At(WalletTransaction.Create(WalletTransactionType.TopUp, wallet, 500L, Guid.NewGuid(), 500L), t0),
             At(WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet, 200L, Guid.NewGuid(), 300L), t0.AddDays(4)),
         ]);
@@ -171,7 +174,7 @@ public class WalletServiceTests
     public async Task GetMyStatement_NoActivity_ReturnsZero_Empty_NoError()
     {
         AsTenant();
-        _walletRepo.Setup(r => r.ListTransactionsByTenantAsync(Tenant, default)).ReturnsAsync([]);
+        _transactions.Setup(r => r.ListByTenantAsync(Tenant, default)).ReturnsAsync([]);
 
         var st = await CreateService().GetMyStatementAsync();
 

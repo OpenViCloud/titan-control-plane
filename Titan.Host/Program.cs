@@ -69,6 +69,7 @@ using Titan.Infrastructure.Messaging;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.ProviderCommands;
 using Titan.Infrastructure.Repositories;
+using Titan.Domain.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,6 +116,8 @@ builder.Services.AddScoped<IUsageRecordRepository, UsageRecordRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<ICreditRepository, CreditRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
+builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
+builder.Services.AddScoped<WalletLedger>();
 builder.Services.AddScoped<IWalletMutationRepository, WalletMutationRepository>();
 builder.Services.AddScoped<IPaymentGatewayTransactionRepository, PaymentGatewayTransactionRepository>();
 builder.Services.AddScoped<IVmSnapshotRepository, VmSnapshotRepository>();

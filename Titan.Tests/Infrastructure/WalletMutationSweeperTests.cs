@@ -8,6 +8,7 @@ using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -39,6 +40,8 @@ public class WalletMutationSweeperTests
         services.AddScoped(_ => NewDb());
         services.AddScoped<IWalletMutationRepository>(sp => new WalletMutationRepository(sp.GetRequiredService<TitanDbContext>()));
         services.AddScoped<IInvoiceRepository>(sp => new InvoiceRepository(sp.GetRequiredService<TitanDbContext>()));
+        services.AddScoped<IWalletTransactionRepository>(sp => new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>()));
+        services.AddScoped<WalletLedger>();
         return services;
     }
 
@@ -122,7 +125,8 @@ public class WalletMutationSweeperTests
             new WalletMutationConsumer(
                 sp.GetRequiredService<IWalletMutationRepository>(),
                 new WalletRepository(sp.GetRequiredService<TitanDbContext>()),
-                sp.GetRequiredService<IInvoiceRepository>())));
+                sp.GetRequiredService<IInvoiceRepository>(),
+                new WalletLedger(new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>())))));
         ServiceProvider root = services.BuildServiceProvider();
 
         int swept = await SweepAsync(Sweeper(root), root);
@@ -195,9 +199,6 @@ public class WalletMutationSweeperTests
             inner.GetByIdForUpdateAsync(walletId, ct);
         public Task<long> GetBalanceAsync(Guid tenantId, CancellationToken ct) => inner.GetBalanceAsync(tenantId, ct);
         public void Add(Wallet wallet) => inner.Add(wallet);
-        public void AddTransaction(WalletTransaction transaction) => inner.AddTransaction(transaction);
-        public Task<IReadOnlyList<WalletTransaction>> ListTransactionsByTenantAsync(Guid tenantId, CancellationToken ct) =>
-            inner.ListTransactionsByTenantAsync(tenantId, ct);
 
         public async Task SaveChangesAsync(CancellationToken ct)
         {

@@ -8,9 +8,11 @@ using Titan.Application.Queries.Billing.TopUp;
 using Titan.Application.Queries.Billing.TopUp.Contracts;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Services;
 
@@ -28,6 +30,7 @@ public class TopUpServiceTests
 {
     private readonly Mock<ICreditRepository> _repo = new();
     private readonly Mock<IWalletRepository> _walletRepo = new();
+    private readonly Mock<IWalletTransactionRepository> _transactions = new();
     private readonly Mock<IWalletMutationRepository> _mutationRepo = new();
     private readonly Mock<IWalletMutationPublisher> _bus = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
@@ -48,11 +51,12 @@ public class TopUpServiceTests
     // because these tests drive both channels (SePay and Manual); the admin handler's own job — stamping
     // Manual and the caller — has its own test below.
     private TopUpFacade CreateService() =>
-        new(_repo.Object, _walletRepo.Object, _mutationRepo.Object, _bus.Object, _currentUser.Object, _options);
+        new(_repo.Object, _walletRepo.Object, _transactions.Object, _mutationRepo.Object, _bus.Object, _currentUser.Object, _options);
 
     private sealed class TopUpFacade(
         ICreditRepository repo,
         IWalletRepository walletRepo,
+        IWalletTransactionRepository transactions,
         IWalletMutationRepository mutationRepo,
         IWalletMutationPublisher bus,
         ICurrentUser currentUser,
@@ -68,7 +72,7 @@ public class TopUpServiceTests
                 repo, walletRepo, mutationRepo, bus, topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, ct);
 
         public Task<GrantTopUpCommandResult> GrantAsync(Guid tenantId, long amount, string? reason, CancellationToken ct = default)
-            => new GrantTopUpCommandHandler(repo, walletRepo, currentUser, options)
+            => new GrantTopUpCommandHandler(repo, walletRepo, new WalletLedger(transactions), currentUser, options)
                 .HandleAsync(new GrantTopUpCommand(tenantId, amount, reason), ct);
 
         public Task<IReadOnlyList<TopUpQueryResult>> ListMineAsync(CancellationToken ct = default)
@@ -134,7 +138,7 @@ public class TopUpServiceTests
 
         // Nothing credited synchronously: the consumer is the single writer of the balance.
         Assert.Equal(0L, wallet.AvailableAmount);
-        _walletRepo.Verify(r => r.AddTransaction(It.IsAny<WalletTransaction>()), Times.Never);
+        _transactions.Verify(r => r.Add(It.IsAny<WalletTransaction>()), Times.Never);
 
         _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Once);  // one tx: Confirmed + mutation
         _bus.Verify(b => b.PublishAsync(
@@ -176,7 +180,7 @@ public class TopUpServiceTests
 
         Assert.Equal("WALLET_NOT_FOUND", ex.Code);
         _mutationRepo.Verify(r => r.Add(It.IsAny<WalletMutation>()), Times.Never);
-        _walletRepo.Verify(r => r.AddTransaction(It.IsAny<WalletTransaction>()), Times.Never);
+        _transactions.Verify(r => r.Add(It.IsAny<WalletTransaction>()), Times.Never);
         _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Never);
         _bus.Verify(b => b.PublishAsync(It.IsAny<WalletMutationNotification>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -296,7 +300,7 @@ public class TopUpServiceTests
         TopUp? added = null;
         _repo.Setup(r => r.AddTopUp(It.IsAny<TopUp>())).Callback<TopUp>(t => added = t);
         WalletTransaction? ledger = null;
-        _walletRepo.Setup(r => r.AddTransaction(It.IsAny<WalletTransaction>()))
+        _transactions.Setup(r => r.Add(It.IsAny<WalletTransaction>()))
                    .Callback<WalletTransaction>(t => ledger = t);
 
         var dto = await CreateService().GrantAsync(Tenant, 500_000L, "welcome");
@@ -327,7 +331,7 @@ public class TopUpServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(() => CreateService().GrantAsync(Tenant, 0L, null));
 
-        _walletRepo.Verify(r => r.AddTransaction(It.IsAny<WalletTransaction>()), Times.Never);
+        _transactions.Verify(r => r.Add(It.IsAny<WalletTransaction>()), Times.Never);
         _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Never);
     }
 
@@ -370,7 +374,7 @@ public class TopUpServiceTests
         var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateService().GrantAsync(Tenant, 500_000L, null));
 
         Assert.Equal("WALLET_NOT_FOUND", ex.Code);
-        _walletRepo.Verify(r => r.AddTransaction(It.IsAny<WalletTransaction>()), Times.Never);
+        _transactions.Verify(r => r.Add(It.IsAny<WalletTransaction>()), Times.Never);
         _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Never);
     }
 
