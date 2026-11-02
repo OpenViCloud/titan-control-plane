@@ -44,6 +44,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         services.AddScoped<IWalletTransactionRepository>(sp =>
             new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>()));
         services.AddScoped<WalletLedger>();
+        services.AddScoped<WalletMutationApply>();
         services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
 
         var provider = services.BuildServiceProvider();

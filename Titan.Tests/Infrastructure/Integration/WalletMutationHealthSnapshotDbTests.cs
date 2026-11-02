@@ -99,7 +99,7 @@ public class WalletMutationHealthSnapshotDbTests(PostgresFixture pg)
         await ClearAsync();
         var walletId = Guid.NewGuid();
 
-        // A business failure: the consumer's re-check found the wallet short (titan-ops architecture/money-and-wallet.md#single-writer-outbox). MarkFailed
+        // A business failure: WalletMutationApply's re-check found the wallet short (titan-ops architecture/money-and-wallet.md#single-writer-outbox). MarkFailed
         // is called directly, so Attempts stays 0. Nobody should be paged for this.
         var shortfall = WalletMutation.Create(WalletMutationType.Debit, walletId, 500L, "Invoice", Guid.NewGuid());
         shortfall.MarkFailed("insufficient funds at apply time");

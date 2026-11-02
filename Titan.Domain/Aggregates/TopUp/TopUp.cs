@@ -54,7 +54,7 @@ public class TopUp : AggregateRoot
     /// Born Confirmed: there is no payment to wait for, so nothing for the SePay webhook or Confirm() to act on
     /// later. PaymentRef is still generated as Titan's id for the movement, not a claim that a bank transfer
     /// exists (titan-ops features/billing/topup/design.md#promo-grant).
-    public static TopUp GrantPromo(Guid tenantId, long amount, string currency, string? reason, string grantedBy)
+    internal static TopUp GrantPromo(Guid tenantId, long amount, string currency, string? reason, string grantedBy)
     {
         if (amount <= 0) throw new ArgumentException("amount must be > 0", nameof(amount));
 
@@ -77,7 +77,7 @@ public class TopUp : AggregateRoot
 
     /// Only from Pending: the domain half of no-double-credit. confirmedAt lets the SePay webhook stamp the
     /// bank's transaction date rather than the moment the webhook was processed.
-    public void Confirm(TopUpSource source, string confirmedBy, string? paymentTxnRef, DateTimeOffset? confirmedAt = null)
+    internal void Confirm(TopUpSource source, string confirmedBy, string? paymentTxnRef, DateTimeOffset? confirmedAt = null)
     {
         if (Status != TopUpStatus.Pending)
             throw new BusinessException("TOPUP_INVALID_STATE",

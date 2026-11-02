@@ -24,17 +24,18 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Collection(PostgresCollection.Name)]
 public class TopUpConfirmDbTests(PostgresFixture pg)
 {
-    // The confirm rule both channels share (TopUpConfirmation), over real repositories. It returns nothing
+    // What both channels share (TopUpConfirmation, TopUpCredit), over real repositories. TopUpConfirmation returns nothing
     // (titan-ops architecture/http-contract.md#commands-return-no-data), so these tests read the stored row back
     // through a fresh context — the way the admin list sees it.
-    private static ConfirmRule NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);
+    private static Confirmation NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);
 
-    private sealed class ConfirmRule(TitanDbContext db, IWalletMutationPublisher bus)
+    private sealed class Confirmation(TitanDbContext db, IWalletMutationPublisher bus)
     {
         public Task ConfirmAsync(
             Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef, DateTimeOffset? confirmedAt = null)
             => TopUpConfirmation.ConfirmAsync(
-                new CreditRepository(db), new WalletRepository(db), new WalletMutationRepository(db), bus,
+                new CreditRepository(db), new WalletRepository(db),
+                new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new CreditRepository(db), new WalletLedger(new WalletTransactionRepository(db))), bus,
                 topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, CancellationToken.None);
     }
 
@@ -80,7 +81,7 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
     private async Task DrainAsync(Guid mutationId)
     {
         await using var db = pg.NewDbContext();
-        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))
+        await new WalletMutationConsumer(new WalletMutationRepository(db), new WalletRepository(db), new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))))
             .ApplyAsync(mutationId);
     }
 

@@ -46,8 +46,8 @@ public class TopUpServiceTests
         _currentUser.SetupGet(u => u.KeycloakUserId).Returns("admin-1");
     }
 
-    // Facade over the TopUp handlers and the shared TopUpConfirmation rule; every method forwards to
-    // exactly one target and adds nothing. ConfirmAsync goes to the RULE rather than the admin handler
+    // Facade over the TopUp handlers and the shared TopUpConfirmation; every method forwards to
+    // exactly one target and adds nothing. ConfirmAsync goes to TopUpConfirmation rather than the admin handler
     // because these tests drive both channels (SePay and Manual); the admin handler's own job — stamping
     // Manual and the caller — has its own test below.
     private TopUpFacade CreateService() =>
@@ -69,10 +69,10 @@ public class TopUpServiceTests
             Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef,
             DateTimeOffset? confirmedAt = null, CancellationToken ct = default)
             => TopUpConfirmation.ConfirmAsync(
-                repo, walletRepo, mutationRepo, bus, topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, ct);
+                repo, walletRepo, new TopUpCredit(walletRepo, mutationRepo, repo, new WalletLedger(transactions)), bus, topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, ct);
 
         public Task<GrantTopUpCommandResult> GrantAsync(Guid tenantId, long amount, string? reason, CancellationToken ct = default)
-            => new GrantTopUpCommandHandler(repo, walletRepo, new WalletLedger(transactions), currentUser, options)
+            => new GrantTopUpCommandHandler(walletRepo, new TopUpCredit(walletRepo, mutationRepo, repo, new WalletLedger(transactions)), currentUser, options)
                 .HandleAsync(new GrantTopUpCommand(tenantId, amount, reason), ct);
 
         public Task<IReadOnlyList<TopUpQueryResult>> ListMineAsync(CancellationToken ct = default)
@@ -258,7 +258,7 @@ public class TopUpServiceTests
         _repo.Setup(r => r.GetTopUpForUpdateAsync(topUp.Id, default)).ReturnsAsync(topUp);
         _walletRepo.Setup(r => r.GetByTenantForUpdateAsync(Tenant, default)).ReturnsAsync(Wallet.Open(Tenant, "VND"));
 
-        await new ConfirmTopUpCommandHandler(_repo.Object, _walletRepo.Object, _mutationRepo.Object, _bus.Object, _currentUser.Object)
+        await new ConfirmTopUpCommandHandler(_repo.Object, _walletRepo.Object, new TopUpCredit(_walletRepo.Object, _mutationRepo.Object, _repo.Object, new WalletLedger(_transactions.Object)), _bus.Object, _currentUser.Object)
             .HandleAsync(new ConfirmTopUpCommand(topUp.Id, "BANK-7"));
 
         Assert.Equal(TopUpStatus.Confirmed, topUp.Status);

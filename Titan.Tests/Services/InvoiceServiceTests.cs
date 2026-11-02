@@ -15,6 +15,7 @@ using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Tests.Fakes;
@@ -95,14 +96,14 @@ public class InvoiceServiceTests
 
         public async Task<InvoiceDetailQueryResult> PayFromWalletAsync(Guid id, CancellationToken ct)
         {
-            await new PayInvoiceFromWalletCommandHandler(invoiceRepo, walletRepo, mutationRepo, walletBus, currentUser)
+            await new PayInvoiceFromWalletCommandHandler(invoiceRepo, walletRepo, mutationRepo, walletBus, new InvoiceWalletPayment(walletRepo, mutationRepo), currentUser)
                 .HandleAsync(new PayInvoiceFromWalletCommand(id), ct);
             return await GetTenantInvoiceAsync(id, ct);
         }
 
         public async Task<InvoiceQueryResult> SettleFromWalletAsAdminAsync(Guid id, CancellationToken ct)
         {
-            await new SettleInvoiceFromWalletCommandHandler(invoiceRepo, walletRepo, mutationRepo, walletBus, auditLog, currentUser)
+            await new SettleInvoiceFromWalletCommandHandler(invoiceRepo, walletRepo, mutationRepo, walletBus, new InvoiceWalletPayment(walletRepo, mutationRepo), auditLog, currentUser)
                 .HandleAsync(new SettleInvoiceFromWalletCommand(id), ct);
             return Assert.Single(await ListAllAsync(null, ct), i => i.Id == id);
         }
@@ -513,7 +514,7 @@ public class InvoiceServiceTests
         var invoice = Invoice.Generate(TenantId, 2026, 1, DateTimeOffset.UtcNow,
             [InvoiceItem.Create(UsageResourceType.Compute, VmId, "web-01", 10L, "SGD")], "SGD");
         _invoiceRepo.Seed(invoice);
-        _mutationRepo.Add(WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id));
+        _mutationRepo.Add(WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutation.InvoiceRefType, invoice.Id));
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().MarkPaidAsync(invoice.Id, default));
@@ -530,7 +531,7 @@ public class InvoiceServiceTests
         var invoice = Invoice.Generate(TenantId, 2026, 1, DateTimeOffset.UtcNow,
             [InvoiceItem.Create(UsageResourceType.Compute, VmId, "web-01", 10L, "SGD")], "SGD");
         _invoiceRepo.Seed(invoice);
-        var failed = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var failed = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 10L, WalletMutation.InvoiceRefType, invoice.Id);
         failed.MarkFailed("wallet spent before the debit was applied");
         _mutationRepo.Add(failed);
 
@@ -846,9 +847,9 @@ public class InvoiceServiceTests
         await CreateService().PayFromWalletAsync(invoice.Id, default);
         WalletMutation first = Assert.Single(_mutationRepo.Added);
         first.MarkFailed("insufficient funds at apply time");
-        var stale = WalletMutation.Create(WalletMutationType.Debit, first.WalletId, 299_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var stale = WalletMutation.Create(WalletMutationType.Debit, first.WalletId, 299_000L, WalletMutation.InvoiceRefType, invoice.Id);
         stale.MarkFailed("insufficient funds at apply time");
-        _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = stale;
+        _mutationRepo.ByRef[(WalletMutation.InvoiceRefType, invoice.Id)] = stale;
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().PayFromWalletAsync(invoice.Id, default));
@@ -863,9 +864,9 @@ public class InvoiceServiceTests
         var invoice = MakeOwedInvoice(TenantId, 300_000L, T0);
         _invoiceRepo.Seed(invoice);
         _walletRepo.SeedBalance(TenantId, 500_000L);
-        var foreign = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        var foreign = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutation.InvoiceRefType, invoice.Id);
         foreign.MarkFailed("insufficient funds at apply time");
-        _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = foreign;
+        _mutationRepo.ByRef[(WalletMutation.InvoiceRefType, invoice.Id)] = foreign;
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
             () => CreateService().PayFromWalletAsync(invoice.Id, default));
@@ -895,9 +896,9 @@ public class InvoiceServiceTests
         var invoice = MakeOwedInvoice(TenantId, 300_000L, T0);
         _invoiceRepo.Seed(invoice);
         _walletRepo.SeedBalance(TenantId, 500_000L);
-        WalletMutation winner = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutationConsumer.InvoiceRefType, invoice.Id);
+        WalletMutation winner = WalletMutation.Create(WalletMutationType.Debit, Guid.NewGuid(), 300_000L, WalletMutation.InvoiceRefType, invoice.Id);
         _walletRepo.RejectNextSave = true;
-        _walletRepo.WhenRejecting = () => _mutationRepo.ByRef[(WalletMutationConsumer.InvoiceRefType, invoice.Id)] = winner;
+        _walletRepo.WhenRejecting = () => _mutationRepo.ByRef[(WalletMutation.InvoiceRefType, invoice.Id)] = winner;
 
         await CreateService().PayFromWalletAsync(invoice.Id, default);
 

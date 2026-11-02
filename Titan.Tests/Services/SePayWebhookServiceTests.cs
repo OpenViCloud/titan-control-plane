@@ -8,6 +8,7 @@ using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Services;
 
@@ -35,7 +36,8 @@ public class SePayWebhookServiceTests
     }
 
     private ReceiveSePayPaymentCommandHandler CreateService() =>
-        new(_payments.Object, _credit.Object, _walletRepo.Object, _mutationRepo.Object, _bus.Object,
+        new(_payments.Object, _credit.Object, _walletRepo.Object,
+            new TopUpCredit(_walletRepo.Object, _mutationRepo.Object, _credit.Object, new WalletLedger(new Mock<IWalletTransactionRepository>().Object)), _bus.Object,
             NullLogger<ReceiveSePayPaymentCommandHandler>.Instance);
 
     private void AssertNothingCredited() =>

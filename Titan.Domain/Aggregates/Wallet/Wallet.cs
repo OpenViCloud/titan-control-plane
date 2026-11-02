@@ -53,7 +53,7 @@ public class Wallet : AggregateRoot
         Touch();
     }
 
-    /// The non-negative invariant lives here, whoever is asking. The pay handler's balance read only gives a
+    /// The non-negative invariant lives here, whoever is asking. InvoiceWalletPayment's balance read only gives a
     /// friendlier "short by X"; this is the guard, and with Version it holds against a stale read.
     internal void Debit(long amount)
     {

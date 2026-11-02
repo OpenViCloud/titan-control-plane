@@ -9,6 +9,9 @@ namespace Titan.Domain.Aggregates.WalletMutation;
 /// again reopens its failed debit row (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
 public class WalletMutation : AggregateRoot
 {
+    public const string InvoiceRefType = "Invoice";
+    public const string TopUpRefType = "TopUp";
+
     public Guid Id { get; private set; }
     public Guid WalletId { get; private set; }
     public WalletMutationType Type { get; private set; }
@@ -17,7 +20,7 @@ public class WalletMutation : AggregateRoot
     /// take a positive amount.
     public long Amount { get; private set; }
 
-    /// "TopUp" or "Invoice". The source is identified by the pair (RefType, RefId), and the pair is the
+    /// TopUpRefType or InvoiceRefType. The source is identified by the pair (RefType, RefId), and the pair is the
     /// idempotency key of the mutation.
     public string RefType { get; private set; } = default!;
 
@@ -41,7 +44,7 @@ public class WalletMutation : AggregateRoot
     private WalletMutation() { }
 
     /// The non-negative balance rule stays in Wallet.Debit; this only records the request.
-    public static WalletMutation Create(
+    internal static WalletMutation Create(
         WalletMutationType type, Guid walletId, long amount, string refType, Guid refId)
     {
         if (amount <= 0)
@@ -69,11 +72,14 @@ public class WalletMutation : AggregateRoot
     }
 
     /// Terminal absorbs every later Mark* on this instance (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
-    /// It does not guard the money: the consumer moves it before MarkApplied (titan-ops features/billing/wallet/design.md#wallet-debts).
+    /// It does not guard the money: WalletMutationApply moves it before MarkApplied (titan-ops features/billing/wallet/design.md#wallet-debts).
     public bool IsTerminal => Status is WalletMutationStatus.Applied or WalletMutationStatus.Failed;
 
+    /// A reopen moves QueuedAt; Create sets it equal to CreatedAt.
+    public bool WasReopened => QueuedAt != CreatedAt;
+
     /// An observation (titan-ops architecture/intent-and-observation.md#observation-converges): never throws.
-    public void MarkApplied()
+    internal void MarkApplied()
     {
         if (IsTerminal) return;
         Status = WalletMutationStatus.Applied;
@@ -94,7 +100,7 @@ public class WalletMutation : AggregateRoot
     /// anything but a failed debit; a credit comes from a top-up confirmed once and is never applied again.
     /// The attempt count starts over so a row the sweeper gave up on gets its full retries; LastError stays as
     /// the only trace of why the previous try failed.
-    public void ReopenFailedDebit()
+    internal void ReopenFailedDebit()
     {
         if (Type != WalletMutationType.Debit)
             throw new InvalidOperationException(

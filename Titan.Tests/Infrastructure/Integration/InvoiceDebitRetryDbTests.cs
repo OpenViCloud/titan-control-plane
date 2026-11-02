@@ -29,7 +29,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
     private static WalletMutation FailedDebit(Guid walletId, Guid invoiceId, long amount = 100_000L, int attempts = 0)
     {
-        var mutation = WalletMutation.Create(WalletMutationType.Debit, walletId, amount, WalletMutationConsumer.InvoiceRefType, invoiceId);
+        var mutation = WalletMutation.Create(WalletMutationType.Debit, walletId, amount, WalletMutation.InvoiceRefType, invoiceId);
         for (var i = 0; i < attempts; i++)
         {
             mutation.RecordAttempt("transient failure (test)");
@@ -49,7 +49,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
     {
         await using var db = pg.NewDbContext();
         return await db.WalletMutations.AsNoTracking()
-            .Where(c => c.RefType == WalletMutationConsumer.InvoiceRefType && c.RefId == invoiceId)
+            .Where(c => c.RefType == WalletMutation.InvoiceRefType && c.RefId == invoiceId)
             .ToListAsync();
     }
 
@@ -68,7 +68,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutation.InvoiceRefType, invoiceId));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             AssertRefIndexRefused(ex);
         }
@@ -83,13 +83,13 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
         var invoiceId = Guid.NewGuid();
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutation.InvoiceRefType, invoiceId));
             await db.SaveChangesAsync();
         }
 
         await using (var db = pg.NewDbContext())
         {
-            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutationConsumer.InvoiceRefType, invoiceId));
+            db.WalletMutations.Add(WalletMutation.Create(WalletMutationType.Debit, walletId, 100_000L, WalletMutation.InvoiceRefType, invoiceId));
             var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
             AssertRefIndexRefused(ex);
         }
@@ -123,7 +123,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
     {
         return new PayInvoiceFromWalletCommandHandler(
             new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db),
-            WalletBus.None(), Callers.TenantMember(tenantId));
+            WalletBus.None(), new InvoiceWalletPayment(new WalletRepository(db), new WalletMutationRepository(db)), Callers.TenantMember(tenantId));
     }
 
     /// A tenant whose debit for the invoice failed and who has since topped up: the wallet covers the
@@ -152,7 +152,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
     {
         await using var db = pg.NewDbContext();
         await new WalletMutationConsumer(
-                new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db)))
+                new WalletMutationRepository(db), new WalletRepository(db), new WalletMutationApply(new WalletRepository(db), new InvoiceRepository(db), new WalletLedger(new WalletTransactionRepository(db))))
             .ApplyAsync(mutationId);
     }
 
@@ -243,7 +243,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
         {
             await new SettleInvoiceFromWalletCommandHandler(
                     new InvoiceRepository(db), new WalletRepository(db), new WalletMutationRepository(db),
-                    WalletBus.None(), new AdminAuditLogRepository(db), Callers.Admin("admin-1"))
+                    WalletBus.None(), new InvoiceWalletPayment(new WalletRepository(db), new WalletMutationRepository(db)), new AdminAuditLogRepository(db), Callers.Admin("admin-1"))
                 .HandleAsync(new SettleInvoiceFromWalletCommand(invoice.Id));
         }
 
@@ -301,7 +301,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
 
         await using var dbStale = pg.NewDbContext();
         var staleCopy = await new WalletMutationRepository(dbStale)
-            .GetForRefForUpdateAsync(WalletMutationConsumer.InvoiceRefType, invoice.Id, default);
+            .GetForRefForUpdateAsync(WalletMutation.InvoiceRefType, invoice.Id, default);
         Assert.Equal(WalletMutationStatus.Failed, staleCopy!.Status);
 
         await using (var db = pg.NewDbContext())

@@ -62,12 +62,6 @@ public class StateTransitionOwnershipTests
         ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|Unknown VM snapshot report"] = "parse: unknown report kind from the worker callback",
         ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the snapshot exists",
         ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-
-        // --- PRECONDITIONS that mutate NOTHING: "every mutation validates internally" does not reach
-        // these — there is no mutation to fold them into.
-        ["InvoiceWalletSettlement.cs|INVOICE_INVALID_STATE|is already settled"] =
-            "duplicate pre-check for a better message; the real guard is inside " +
-            "Invoice.SettleFromWallet(), which validates internally already — US-DDD-14",
     };
 
     // Mark* is the OBSERVATION vocabulary (titan-ops architecture/intent-and-observation.md#observation-converges): a report
