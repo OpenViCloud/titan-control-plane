@@ -14,6 +14,21 @@ namespace Titan.Infrastructure.Migrations
     /// The view core.pending_requests is what the stuck-request query reads; each later phase adds its table to it.
     public partial class VmPendingRequest : Migration
     {
+        /// A delete whose command already gave up stayed waiting before this migration, and the next press reopened its
+        /// row. A repeat now sends nothing, so it would wait for ever: it ends here as a Failed would. Same reason text as
+        /// VmReports. An open row keeps its delete waiting; its worker reports on the old route.
+        private const string EndTheDeletesWhoseCommandFailedSql = @"
+UPDATE core.vms v SET
+    desired_existence = 'Exists',
+    pending_request_id = NULL,
+    request_failure_reason = 'The VM could not be deleted. Please try again or contact support.',
+    request_failed_at = now()
+FROM core.provider_commands c
+WHERE v.pending_request_id IS NOT NULL
+  AND v.desired_existence = 'Deleted'
+  AND c.key = 'vm-delete-' || v.id::text
+  AND c.status = 'Failed';";
+
         private const string BackfillTheKindSql = @"
 UPDATE core.vms SET
     pending_request_kind = CASE
@@ -55,6 +70,7 @@ WHERE pending_request_id IS NOT NULL;";
                 type: "text",
                 nullable: true);
 
+            migrationBuilder.Sql(EndTheDeletesWhoseCommandFailedSql);
             migrationBuilder.Sql(BackfillTheKindSql);
 
             // Kept, not dropped: NOT NULL with no default would refuse every insert from a model that no longer

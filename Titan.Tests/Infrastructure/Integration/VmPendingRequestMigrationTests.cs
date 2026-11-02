@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure.Integration;
@@ -79,6 +81,42 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.Equal("Start", (await PendingColumnsAsync(starting)).Kind);
         Assert.NotNull((await PendingColumnsAsync(starting)).AskedAt);
         Assert.Equal((null, null, null), await PendingColumnsAsync(resting));
+    }
+
+    // A delete whose command already gave up: the image before this one kept it waiting and let the next press reopen the
+    // row. A repeat now sends nothing and no report is coming, so it would wait for ever; the migration ends it as Failed
+    // (titan-ops architecture/resource-lifecycle.md#kinds). One whose row is still open keeps waiting: its worker reports.
+    [Fact]
+    public async Task ADeleteWhoseCommandAlreadyFailed_EndsAsFailed_AndOneStillOpenKeepsWaiting()
+    {
+        await MigrateToAsync(MigrationBefore);
+        Guid gaveUp = await SeedVmAsync("Deleted", "Running", true, waiting: true);
+        Guid stillOpen = await SeedVmAsync("Deleted", "Running", true, waiting: true);
+        await using (TitanDbContext seed = NewDbContext())
+        {
+            Guid lease = Guid.NewGuid();
+            ProviderCommand failed = ProviderCommand.Create($"vm-delete-{gaveUp}", ProviderCommandKinds.VmDelete, "cluster-a", "{}",
+                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+            failed.Lease(lease, DateTimeOffset.UtcNow);
+            failed.Fail(lease, "gave up", retryable: false, DateTimeOffset.UtcNow);
+            seed.ProviderCommands.Add(failed);
+            seed.ProviderCommands.Add(ProviderCommand.Create($"vm-delete-{stillOpen}", ProviderCommandKinds.VmDelete, "cluster-a", "{}",
+                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
+            await seed.SaveChangesAsync();
+        }
+
+        await MigrateToLatestAsync();
+
+        await using TitanDbContext read = NewDbContext();
+        Vm ended = await read.Vms.SingleAsync(v => v.Id == gaveUp);
+        Assert.Null(ended.Pending);
+        Assert.Equal(DesiredExistence.Exists, ended.DesiredExistence);
+        Assert.Equal(CurrentExistence.Exists, ended.CurrentExistence);
+        Assert.NotNull(ended.RequestFailureReason);
+        Assert.NotNull(ended.RequestFailedAt);
+        Vm waiting = await read.Vms.SingleAsync(v => v.Id == stillOpen);
+        Assert.Equal(VmRequestKind.Delete, waiting.Pending!.Kind);
+        Assert.Equal(DesiredExistence.Deleted, waiting.DesiredExistence);
     }
 
     [Fact] // the model no longer writes create_finished and has_been_running; the table still has them, with a default
