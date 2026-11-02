@@ -27,9 +27,9 @@ public class WalletConfiguration : IEntityTypeConfiguration<Wallet>
         builder.Property(w => w.CreatedAt).HasColumnName("created_at").IsRequired();
         builder.Property(w => w.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
-        // One wallet per tenant, unfiltered: a wallet is never deleted or closed. This makes
-        // OpenWalletCommandHandler safe under a concurrent open: the loser fails on the index and treats it as
-        // success (WalletSchemaTests.WalletTenantId_IsUnique).
+        // One wallet per tenant, unfiltered: a wallet is never deleted or closed. TenantActivation opens one under the
+        // tenant's row lock, so two activations take turns; the index still refuses a second wallet
+        // (WalletSchemaTests.WalletTenantId_IsUnique).
         builder.HasIndex(w => w.TenantId).IsUnique();
     }
 }

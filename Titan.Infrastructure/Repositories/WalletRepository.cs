@@ -41,9 +41,10 @@ public class WalletRepository(TitanDbContext db) : IWalletRepository
         catch (DbUpdateException ex)
             when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // A racing writer won a unique guard first: wallets(tenant_id), wallet_transactions(type, ref_id) or
-            // wallet_mutations(ref_type, ref_id). The caller re-reads the winner. Detach the losing inserts so a
-            // retry on this scoped context does not resubmit them.
+            // A racing writer won a unique guard first: wallet_transactions(type, ref_id) or wallet_mutations(ref_type,
+            // ref_id), whose caller re-reads the winner; or wallets(tenant_id), which two activations taking turns on the
+            // tenant's row lock do not reach. Detach the losing inserts so a retry on this scoped context does not
+            // resubmit them.
             foreach (var entry in db.ChangeTracker.Entries()
                          .Where(e => e.State == EntityState.Added).ToList())
                 entry.State = EntityState.Detached;

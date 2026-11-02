@@ -6,8 +6,9 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 namespace Titan.Application.Commands.Platform.Tenant;
 
 /// Creates the caller's tenant on first sign-in. Idempotent: a caller who already owns a tenant is a no-op.
-/// Every signup starts PendingApproval; the middleware approves one whose account has the realm role auto-approve in the same request, after
-/// opening its wallet (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
+/// Every signup starts PendingApproval; the middleware approves one whose account has the realm role auto-approve in the
+/// same request, through Billing's ApproveDeclaredAccountCommandHandler, which opens the wallet in the approval's save
+/// (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
 public class BootstrapTenantCommandHandler(ITenantRepository repo)
 {
     public async Task HandleAsync(BootstrapTenantCommand command, CancellationToken ct = default)

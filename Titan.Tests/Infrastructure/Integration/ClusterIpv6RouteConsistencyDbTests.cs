@@ -6,6 +6,7 @@ using Titan.Application.Services.Platform.ActivityEvent;
 using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Services;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.ProviderCommands;
@@ -40,7 +41,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         await using TitanDbContext db = pg.NewDbContext();
         var caller = Callers.TenantMember(tenantId);
         var handler = new CreateNetworkCommandHandler(
-            new NetworkRepository(db), new ClusterIpv6RouteRepository(db), new TenantRepository(db), caller,
+            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)), new TenantRepository(db), caller,
             new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
             new ActivityRecorder(new ActivityEventRepository(db), caller), ClusterWithIpv6(clusterId));
         CreateNetworkCommandResult result = await handler.HandleAsync(
@@ -53,7 +54,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         await using TitanDbContext db = pg.NewDbContext();
         var caller = Callers.TenantMember(Guid.NewGuid());
         var handler = new UpdateNetworkStatusCommandHandler(
-            new NetworkRepository(db), new ClusterIpv6RouteRepository(db),
+            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)),
             new ActivityRecorder(new ActivityEventRepository(db), caller));
         await handler.HandleAsync(report);
     }

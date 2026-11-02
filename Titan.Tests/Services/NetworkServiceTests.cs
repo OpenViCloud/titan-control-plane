@@ -57,7 +57,7 @@ public class NetworkServiceTests
         ICurrentUser currentUser, IProviderCommandQueue commands, IActivityRecorder activity)
     {
         public Task<CreateNetworkCommandResult> CreateAsync(CreateNetworkCommand req, CancellationToken ct = default)
-            => new CreateNetworkCommandHandler(repo, routes, tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
+            => new CreateNetworkCommandHandler(repo, new Titan.Domain.Services.NetworkRoutes(routes), tenantRepo, currentUser, commands, activity, clusters).HandleAsync(req, ct);
 
         public Task<List<NetworkQueryResult>> ListAsync(CancellationToken ct = default)
             => new ListNetworksQueryHandler(repo, currentUser).HandleAsync(new ListNetworksQuery(), ct);
@@ -73,7 +73,7 @@ public class NetworkServiceTests
                 .HandleAsync(new DeleteNetworkCommand(networkId), ct);
 
         public Task UpdateStatusAsync(Guid networkId, UpdateNetworkStatusRequest req, CancellationToken ct = default)
-            => new UpdateNetworkStatusCommandHandler(repo, routes, activity)
+            => new UpdateNetworkStatusCommandHandler(repo, new Titan.Domain.Services.NetworkRoutes(routes), activity)
                 .HandleAsync(new UpdateNetworkStatusCommand(networkId, req.Report, req.Exists, req.Status, req.ExternalId,
                     req.Cidr, req.Gateway, req.Reason, req.Detail), ct);
     }

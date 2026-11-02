@@ -6,9 +6,9 @@ using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Domain;
 
-// A network's public /64 (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, counted against
-// MaxPublicIpv6 by the factory, given with the route the cluster has free (ClusterIpv6RouteTests) and let go of when the
-// create gives up before Incus had the network. The network keeps the subnet; the route table keeps who holds which.
+// A network's public /64 (titan-ops infra/incus/design.md#ipv6-address-plan): asked for at create, given with the route
+// the cluster has free (NetworkRoutesTests, ClusterIpv6RouteTests) and let go of when the create gives up before Incus
+// had the network. The network keeps the subnet; the route table keeps who holds which.
 public class NetworkPublicIpv6Tests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";

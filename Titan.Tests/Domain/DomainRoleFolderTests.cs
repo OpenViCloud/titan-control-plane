@@ -119,11 +119,13 @@ public class DomainRoleFolderTests
         return ReturnedByAnAggregateMethod(type) ? Results : Inputs;
     }
 
+    // Internal counts: a method a domain service calls (Network.MarkDeleted) still hands its result out of the aggregate.
     private static bool ReturnedByAnAggregateMethod(Type type) =>
         typeof(NotFoundException).Assembly.GetExportedTypes()
             // Skip the type's own methods: a record's compiler-generated Clone returns the record, whatever its role.
             .Where(t => t != type && t.Namespace is not null && t.Namespace.StartsWith(Aggregates + ".", StringComparison.Ordinal))
-            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
+            .Where(m => m.IsPublic || m.IsAssembly)
             .Any(m => m.ReturnType == type);
 
     private static List<string> AggregateFolders() => Directory.GetDirectories(AggregatesDir()).ToList();

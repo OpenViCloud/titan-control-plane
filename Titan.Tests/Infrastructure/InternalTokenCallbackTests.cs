@@ -43,7 +43,7 @@ public class InternalTokenCallbackTests
     public async Task UpdateNetworkStatus_WithoutTheToken_Returns401(string? token)
     {
         var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object,
-            new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object, StrictActivity());
+            new Titan.Domain.Services.NetworkRoutes(new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object), StrictActivity());
         var ep = Factory.Create<UpdateNetworkStatusEndpoint>(
             ctx =>
             {

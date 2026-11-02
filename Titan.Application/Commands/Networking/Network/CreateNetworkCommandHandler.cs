@@ -6,14 +6,14 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Services;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
-using RouteAggregate = Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route;
 
 namespace Titan.Application.Commands.Networking.Network;
 
 public class CreateNetworkCommandHandler(
     INetworkRepository repo,
-    IClusterIpv6RouteRepository routes,
+    NetworkRoutes routes,
     ITenantRepository tenantRepo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
@@ -64,7 +64,8 @@ public class CreateNetworkCommandHandler(
         string? routerAddress = null;
         if (block56 != null)
         {
-            routerAddress = await GiveRouteAsync(network, block56, ct);
+            // The route and the network commit in one save; the router address goes out once, in network.create.
+            routerAddress = await routes.GiveAsync(network, block56, ct);
         }
         repo.Add(network);
         activity.Stage("network.create_requested", "network", network.Id, network.Name.Value); // atomic with the network insert
@@ -92,16 +93,5 @@ public class CreateNetworkCommandHandler(
             throw new BusinessException("IPV6_NOT_AVAILABLE", $"Cluster '{clusterId}' has no public IPv6.");
         }
         return block56;
-    }
-
-    // The route and the network commit in one save. A second create waits at the lock until this one commits, and only
-    // then sees which routes are free. The router address is not kept: it goes out once, in network.create.
-    private async Task<string> GiveRouteAsync(NetworkAggregate network, string block56, CancellationToken ct)
-    {
-        IReadOnlyList<RouteAggregate> free = await routes.LockFreeAsync(network.ClusterId, ct);
-        RouteAggregate route = RouteAggregate.NextToGive(network.ClusterId, free);
-        route.HandTo(network.Id);
-        network.ReceivePublicIpv6(route.SubnetIn(block56));
-        return route.RouterAddressIn(block56);
     }
 }

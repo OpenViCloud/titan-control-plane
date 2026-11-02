@@ -175,11 +175,9 @@ public class InvoiceTests
     // ── titan-ops architecture/money-and-wallet.md#human-confirmed-debit — a zero-total invoice settles itself ───────────────
 
     [Fact]
-    public void AutoSettleZeroTotal_FromNew_StampsPaidBySystem_AtIssueTime()
+    public void Generate_ZeroTotal_IsPaidBySystem_AtIssueTime()
     {
         var invoice = Generate([Item(0L)]);
-
-        invoice.AutoSettleZeroTotal();
 
         Assert.Equal(InvoiceStatus.Paid, invoice.Status);
         Assert.Equal("system", invoice.PaidBy);        // nobody paid; no admin recorded anything either
@@ -187,26 +185,26 @@ public class InvoiceTests
         Assert.Equal(InvoiceDisplayStatus.Paid, invoice.DisplayStatus(invoice.DueAt.AddDays(30)));
     }
 
-    // Keeps the zero-total auto-settle from becoming a way around a human-confirmed debit: anything above
-    // zero moves real money and needs a person. Without it, one wrong caller silently pays bills for free.
     [Fact]
-    public void AutoSettleZeroTotal_NonZeroTotal_Throws()
+    public void Generate_NoItems_IsPaidBySystem()
     {
-        var invoice = Generate([Item(100L)]);
+        var invoice = Generate([]);
 
-        var ex = Assert.Throws<BusinessException>(() => invoice.AutoSettleZeroTotal());
-        Assert.Equal("INVOICE_INVALID_STATE", ex.Code);
-        Assert.Equal(InvoiceStatus.New, invoice.Status);
+        Assert.Equal(0L, invoice.Total);
+        Assert.Equal(InvoiceStatus.Paid, invoice.Status);
+        Assert.Equal("system", invoice.PaidBy);
     }
 
+    // A zero-total invoice is settled on arrival, so neither payment path can act on it.
     [Fact]
-    public void AutoSettleZeroTotal_WhenAlreadyTerminal_Throws()
+    public void Generate_ZeroTotal_RefusesBothPayments()
     {
         var invoice = Generate([Item(0L)]);
-        invoice.AutoSettleZeroTotal();
 
         Assert.Equal("INVOICE_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => invoice.AutoSettleZeroTotal()).Code);
+            Assert.Throws<BusinessException>(() => invoice.SettleFromWallet(IssuedAt)).Code);
+        Assert.Equal("INVOICE_ALREADY_PAID",
+            Assert.Throws<BusinessException>(() => invoice.MarkPaid(IssuedAt, "admin")).Code);
     }
 
     // A wallet-settled invoice is terminal — it cannot then be marked paid (no double-settlement).

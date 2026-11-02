@@ -34,7 +34,7 @@ using BillWalletQry = Titan.Application.Queries.Billing.Wallet;
 using BillTopUpQry = Titan.Application.Queries.Billing.TopUp;
 using BillTopUpCmd = Titan.Application.Commands.Billing.TopUp;
 using BillInvoiceCmd = Titan.Application.Commands.Billing.Invoice;
-using BillWalletCmd = Titan.Application.Commands.Billing.Wallet;
+using BillActivationCmd = Titan.Application.Commands.Billing.TenantActivation;
 using BillPgtCmd = Titan.Application.Commands.Billing.PaymentGatewayTransaction;
 using PlatTenantCmd = Titan.Application.Commands.Platform.Tenant;
 using PlatLegalCmd = Titan.Application.Commands.Platform.Legal;
@@ -119,6 +119,8 @@ builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
 builder.Services.AddScoped<WalletLedger>();
 builder.Services.AddScoped<NetworkDeletion>();
+builder.Services.AddScoped<NetworkRoutes>();
+builder.Services.AddScoped<TenantActivation>();
 builder.Services.AddScoped<VmDeletion>();
 builder.Services.AddScoped<IWalletMutationRepository, WalletMutationRepository>();
 builder.Services.AddScoped<IPaymentGatewayTransactionRepository, PaymentGatewayTransactionRepository>();
@@ -185,7 +187,7 @@ builder.Services.AddScoped<BillInvoiceCmd.MarkInvoicePaidCommandHandler>();
 builder.Services.AddScoped<BillInvoiceCmd.PayInvoiceFromWalletCommandHandler>();
 builder.Services.AddScoped<BillInvoiceCmd.SettleInvoiceFromWalletCommandHandler>();
 builder.Services.AddScoped<BillInvoiceCmd.GenerateInvoicesForPeriodCommandHandler>();
-builder.Services.AddScoped<BillWalletCmd.OpenWalletCommandHandler>();
+builder.Services.AddScoped<BillActivationCmd.ActivateTenantCommandHandler>();
 builder.Services.AddScoped<BillPgtCmd.ReceiveSePayPaymentCommandHandler>();
 // Scoped: the subscriber opens a scope per notification, the sweeper one per pass
 // (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
@@ -195,7 +197,7 @@ builder.Services.AddSingleton<ILegalDocumentCatalog, LegalDocumentCatalog>();
 // BootstrapTenant and ApproveDeclaredAccount have no endpoint: TenantResolutionMiddleware injects them on
 // every authenticated request, so a missing line here fails every signed-in call, not just one route.
 builder.Services.AddScoped<PlatTenantCmd.BootstrapTenantCommandHandler>();
-builder.Services.AddScoped<PlatTenantCmd.ApproveDeclaredAccountCommandHandler>();
+builder.Services.AddScoped<BillActivationCmd.ApproveDeclaredAccountCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantStatusCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantQuotaCommandHandler>();
 builder.Services.AddScoped<PlatTenantCmd.UpdateTenantDebtCeilingCommandHandler>();

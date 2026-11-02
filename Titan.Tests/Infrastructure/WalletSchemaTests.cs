@@ -50,8 +50,8 @@ public class WalletSchemaTests
 
     // ── titan-ops architecture/money-and-wallet.md#wallet-one-balance: the single-balance wallet ────────────────────────────────────
 
-    // One wallet per tenant. A check-then-insert in C# is a race, so this index is what stops a tenant
-    // from ending up with two balances.
+    // One wallet per tenant. TenantActivation checks then inserts under the tenant's row lock; this index still
+    // refuses a second wallet, whatever opens it.
     [Fact]
     public void WalletTenantId_IsUnique()
     {

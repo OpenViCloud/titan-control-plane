@@ -20,8 +20,7 @@ public class Invoice : AggregateRoot
     public DateTimeOffset DueAt { get; private set; }
     public DateTimeOffset? PaidAt { get; private set; }
     public string? PaidBy { get; private set; }
-    /// Whole VND, summed from the items. Sum over an empty sequence is 0, and a zero total settles itself
-    /// (AutoSettleZeroTotal).
+    /// Whole VND, summed from the items. Sum over an empty sequence is 0, and a zero total settles itself in Generate.
     public long Total { get; private set; }
     public string Currency { get; private set; } = default!;
 
@@ -31,6 +30,10 @@ public class Invoice : AggregateRoot
     private Invoice() { }
 
     /// Items arrive grouped, one per resource. Total is computed here so it can never drift from the items.
+    /// A zero total is Paid by "system" at issue time. Not an exception to
+    /// titan-ops architecture/money-and-wallet.md#human-confirmed-debit: at zero no money moves, so there is nothing to
+    /// confirm, and a 0 ₫ bill left New would age to Overdue. Paid, not SettledByWallet: the wallet is untouched, and
+    /// claiming otherwise would put a phantom spend in the statement.
     public static Invoice Generate(
         Guid tenantId, int year, int month, DateTimeOffset issuedAt,
         IReadOnlyList<InvoiceItem> items, string currency)
@@ -54,6 +57,13 @@ public class Invoice : AggregateRoot
             invoice._items.Add(item);
         }
 
+        if (invoice.Total == 0)
+        {
+            invoice.Status = InvoiceStatus.Paid;
+            invoice.PaidAt = issuedAt;
+            invoice.PaidBy = "system";
+        }
+
         return invoice;
     }
 
@@ -68,23 +78,6 @@ public class Invoice : AggregateRoot
         Status = InvoiceStatus.Paid;
         PaidAt = paidAt;
         PaidBy = paidBy;
-    }
-
-    /// Not an exception to titan-ops architecture/money-and-wallet.md#human-confirmed-debit: at zero no money moves, so
-    /// there is nothing to confirm, and a 0 ₫ bill left New would age to Overdue. Paid, not SettledByWallet:
-    /// the wallet is untouched, and claiming otherwise would put a phantom spend in the statement.
-    public void AutoSettleZeroTotal()
-    {
-        if (Total != 0)
-            throw new BusinessException("INVOICE_INVALID_STATE",
-                $"Only a zero-total invoice settles itself (was {Total} {Currency}).");
-        if (Status != InvoiceStatus.New)
-            throw new BusinessException("INVOICE_INVALID_STATE",
-                $"Only a new invoice can auto-settle (was {Status}).");
-
-        Status = InvoiceStatus.Paid;
-        PaidAt = IssuedAt;
-        PaidBy = "system";
     }
 
     /// A person pressed pay (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
