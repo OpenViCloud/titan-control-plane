@@ -1,9 +1,10 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
 using Titan.Application.Options;
-using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using TopUpAggregate = Titan.Domain.Aggregates.TopUp.TopUp;
 
 namespace Titan.Application.Commands.Billing.TopUp;
@@ -13,6 +14,7 @@ namespace Titan.Application.Commands.Billing.TopUp;
 public class GrantTopUpCommandHandler(
     ICreditRepository repo,
     IWalletRepository walletRepo,
+    WalletLedger ledger,
     ICurrentUser currentUser,
     CreditOptions options)
 {
@@ -33,10 +35,8 @@ public class GrantTopUpCommandHandler(
         var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, ct)
             ?? throw new NotFoundException("WALLET_NOT_FOUND",
                 $"Tenant {tenantId} has no wallet; it should have been opened at activation.");
-        wallet.Credit(amount);
+        ledger.Credit(wallet, WalletTransactionType.Promo, amount, topUp.Id);
         repo.AddTopUp(topUp);
-        walletRepo.AddTransaction(
-            WalletTransaction.Create(WalletTransactionType.Promo, wallet.Id, amount, topUp.Id, wallet.AvailableAmount));
         try
         {
             await walletRepo.SaveChangesAsync(ct);

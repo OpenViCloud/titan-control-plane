@@ -5,8 +5,9 @@ namespace Titan.Domain.Aggregates.Wallet;
 
 /// One row per tenant (titan-ops architecture/money-and-wallet.md#wallet-one-balance). The balance is stored, not
 /// derived, and must equal the sum of the wallet's WalletTransaction rows; both are written in one SaveChanges.
-/// Credit and Debit are the only ways it changes (titan-ops architecture/money-and-wallet.md#wallet-invariant-in-aggregate):
-/// the aggregate owns the non-negative rule, Version owns the race.
+/// Credit and Debit are the only ways it changes (titan-ops architecture/money-and-wallet.md#wallet-invariant-in-aggregate),
+/// internal so that WalletLedger, which adds the row, is the only caller. The aggregate owns the non-negative rule,
+/// Version owns the race.
 public class Wallet : AggregateRoot
 {
     public Guid Id { get; private set; }
@@ -42,7 +43,7 @@ public class Wallet : AggregateRoot
     }
 
     /// Positive only: a negative credit would be a spend wearing the wrong sign.
-    public void Credit(long amount)
+    internal void Credit(long amount)
     {
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(
@@ -54,7 +55,7 @@ public class Wallet : AggregateRoot
 
     /// The non-negative invariant lives here, whoever is asking. The pay handler's balance read only gives a
     /// friendlier "short by X"; this is the guard, and with Version it holds against a stale read.
-    public void Debit(long amount)
+    internal void Debit(long amount)
     {
         if (amount <= 0)
             throw new ArgumentOutOfRangeException(

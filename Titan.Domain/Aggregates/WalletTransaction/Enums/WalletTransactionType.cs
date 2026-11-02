@@ -1,4 +1,4 @@
-namespace Titan.Domain.Aggregates.Wallet;
+namespace Titan.Domain.Aggregates.WalletTransaction;
 
 /// TopUp vs Promo exists for accounting, not spending: money the customer paid (deferred revenue) stays
 /// separable from credit Titan gave away (titan-ops architecture/money-and-wallet.md#tax-legal-posture). Paying an

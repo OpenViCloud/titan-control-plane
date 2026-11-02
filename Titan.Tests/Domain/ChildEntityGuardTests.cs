@@ -87,8 +87,6 @@ public class ChildEntityGuardTests
     // Structural half: a child goes into a repository only inside its root.
     private static readonly Dictionary<string, string> RepositoryMethodsTakingAChild = new(StringComparer.Ordinal)
     {
-        ["IWalletRepository.AddTransaction"] =
-            "the ledger grows without bound, so the wallet does not load it; the row commits in the balance's SaveChanges",
     };
 
     [Fact]
@@ -138,7 +136,6 @@ public class ChildEntityGuardTests
         ["VolumeSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["VmSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["InvoiceItem.Create"] = "the items exist before their invoice: built first, handed to the invoice's factory",
-        ["WalletTransaction.Create"] = "the ledger is not loaded with the wallet: the factory applies the sign, the row goes in beside the balance",
     };
 
     [Fact]

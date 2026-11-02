@@ -10,6 +10,7 @@ using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Services;
 using Titan.Domain.Repositories;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -58,7 +59,8 @@ public class InvoicePaymentAsyncDbTests(PostgresFixture pg)
     }
 
     private static WalletMutationConsumer NewConsumer(TitanDbContext db) =>
-        new(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db));
+        new(new WalletMutationRepository(db), new WalletRepository(db), new InvoiceRepository(db),
+            new WalletLedger(new WalletTransactionRepository(db)));
 
     private async Task<Wallet> SeedWalletAsync(Guid tenantId, long balance)
     {

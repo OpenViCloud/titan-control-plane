@@ -1,8 +1,9 @@
 using Titan.Domain.Aggregates.Invoice;
-using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using InvoiceAggregate = Titan.Domain.Aggregates.Invoice.Invoice;
 
 namespace Titan.Application.Services.Billing.WalletMutations;
@@ -24,7 +25,8 @@ public interface IWalletMutationConsumer
 public class WalletMutationConsumer(
     IWalletMutationRepository mutationRepo,
     IWalletRepository walletRepo,
-    IInvoiceRepository invoiceRepo) : IWalletMutationConsumer
+    IInvoiceRepository invoiceRepo,
+    WalletLedger ledger) : IWalletMutationConsumer
 {
     public async Task ApplyAsync(Guid mutationId, CancellationToken ct = default)
     {
@@ -40,21 +42,18 @@ public class WalletMutationConsumer(
                 "should only ever be enqueued against an opened wallet.");
 
         // A Credit always comes from a confirmed TopUp and a Debit from an invoice payment, so the ledger
-        // factory follows Type. The default refuses an unknown member instead of dropping it silently.
+        // call follows Type. The default refuses an unknown member instead of dropping it silently.
         switch (mutation.Type)
         {
             case WalletMutationType.Credit:
-                wallet.Credit(mutation.Amount);
-                walletRepo.AddTransaction(
-                    WalletTransaction.Create(WalletTransactionType.TopUp, wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
+                ledger.Credit(wallet, WalletTransactionType.TopUp, mutation.Amount, mutation.RefId);
                 mutation.MarkApplied();
                 break;
 
             case WalletMutationType.Debit:
                 // The authoritative funds check (titan-ops architecture/money-and-wallet.md#single-writer-outbox): two
                 // payments can both pass the pre-check at the button, and only one can be honoured.
-                // A test before Wallet.Debit, not a catch around it: once Debit throws, the ChangeTracker may
-                // hold half-made changes that the MarkFailed SaveChanges would commit along with the verdict.
+                // A test before ledger.Debit, not a catch around it: too little money is this mutation's verdict, not an error.
                 if (wallet.AvailableAmount < mutation.Amount)
                 {
                     mutation.MarkFailed(
@@ -86,9 +85,7 @@ public class WalletMutationConsumer(
                     }
                 }
 
-                wallet.Debit(mutation.Amount);
-                walletRepo.AddTransaction(
-                    WalletTransaction.Create(WalletTransactionType.InvoicePayment, wallet.Id, mutation.Amount, mutation.RefId, wallet.AvailableAmount));
+                ledger.Debit(wallet, mutation.Amount, mutation.RefId);
                 if (invoice != null)
                 {
                     // The invoice reaches SettledByWallet in the debit's transaction, not at the button:
@@ -103,7 +100,7 @@ public class WalletMutationConsumer(
                     nameof(mutation), mutation.Type, "Unknown wallet mutation type; cannot apply.");
         }
 
-        // Both repositories share the DbContext, so one SaveChanges commits balance, ledger row and status.
+        // Every repository here, the ledger's too, shares the DbContext, so one SaveChanges commits balance, ledger row and status.
         // A double-apply that slipped past the status check fails here on the ledger UNIQUE(type, ref_id) or the
         // version token; the failed save does not undo the balance change, so the context must not be reused.
         await walletRepo.SaveChangesAsync(ct);

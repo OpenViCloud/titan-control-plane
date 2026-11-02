@@ -7,6 +7,7 @@ using Titan.Application.Services.Billing.WalletMutations;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletMutation;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
@@ -40,6 +41,9 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         services.AddScoped<IInvoiceRepository>(sp =>
             new InvoiceRepository(sp.GetRequiredService<TitanDbContext>()));
 
+        services.AddScoped<IWalletTransactionRepository>(sp =>
+            new WalletTransactionRepository(sp.GetRequiredService<TitanDbContext>()));
+        services.AddScoped<WalletLedger>();
         services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
 
         var provider = services.BuildServiceProvider();

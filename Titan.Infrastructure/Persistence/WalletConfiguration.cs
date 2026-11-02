@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 
 namespace Titan.Infrastructure.Persistence;
 

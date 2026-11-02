@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.Wallet;
+using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Infrastructure.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
@@ -39,9 +41,8 @@ public class PromotionalCreditDbTests(PostgresFixture pg)
             var topUp = TopUp.GrantPromo(tenantId, 500_000L, "VND", "welcome", "admin-1");
             topUpId = topUp.Id;
             var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, default);
-            wallet!.Credit(500_000L);
+            new WalletLedger(new WalletTransactionRepository(db)).Credit(wallet!, WalletTransactionType.Promo, 500_000L, topUp.Id);
             creditRepo.AddTopUp(topUp);
-            walletRepo.AddTransaction(WalletTransaction.Create(WalletTransactionType.Promo, wallet.Id, 500_000L, topUp.Id, wallet.AvailableAmount));
             await walletRepo.SaveChangesAsync(default);
         }
 
