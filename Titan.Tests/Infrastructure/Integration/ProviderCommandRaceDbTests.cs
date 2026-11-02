@@ -18,15 +18,15 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// The race of two identical requests, on Postgres. Since REQUEST-END phase 1 a VM's keys carry the request id
 /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request), so the race of CC-01 — the second delete reading the
 /// VM before the first committed — is settled by the row lock (PendingRequestsDbTests.TwoStops_AtOnce…), not by the key.
-/// What is left to show here is the rollout seam: a VM whose delete row still carries the old key, from the image before
-/// this one, takes a new delete as its own request, not as 409. Category=Integration — its own CI step; needs real
+/// What is left to show here is the rollout seam: a VM whose delete gave up under the old key, from the image before this
+/// one, takes a new delete as its own request, not as 409 or a reopened row. Category=Integration — its own CI step; needs real
 /// Postgres; no doubles (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ProviderCommandRaceDbTests(PostgresFixture pg)
 {
     [Fact]
-    public async Task ANewVmDelete_BesideAnOpenRowUnderTheOldKey_GetsItsOwnRow_AndIsNotRefused()
+    public async Task ANewVmDelete_BesideAFailedRowUnderTheOldKey_GetsItsOwnRow_AndTheOldOneStaysFailed()
     {
         Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}", "race@titan.local");
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
@@ -36,8 +36,12 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
         {
             seed.Tenants.Add(tenant);
             seed.Vms.Add(vm);
-            seed.ProviderCommands.Add(ProviderCommand.Create($"vm-delete-{vm.Id}", ProviderCommandKinds.VmDelete,
-                "cluster-1", "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
+            Guid lease = Guid.NewGuid();
+            ProviderCommand gaveUp = ProviderCommand.Create($"vm-delete-{vm.Id}", ProviderCommandKinds.VmDelete,
+                "cluster-1", "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+            gaveUp.Lease(lease, DateTimeOffset.UtcNow);
+            gaveUp.Fail(lease, "gave up", retryable: false, DateTimeOffset.UtcNow);
+            seed.ProviderCommands.Add(gaveUp);
             await seed.SaveChangesAsync();
         }
 
@@ -57,6 +61,6 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
         Assert.Equal(VmRequestKind.Delete, stored.Pending!.Kind);
         Assert.Equal(1, await read.ActivityEvents.CountAsync(e => e.ResourceId == vm.Id && e.Action == "vm.delete_requested"));
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == $"vm-delete-{vm.Id}-{stored.Pending.Id}"));
-        Assert.Equal(2, await read.ProviderCommands.CountAsync(c => c.Key.StartsWith($"vm-delete-{vm.Id}")));
+        Assert.Equal(ProviderCommandStatus.Failed, (await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{vm.Id}")).Status);
     }
 }

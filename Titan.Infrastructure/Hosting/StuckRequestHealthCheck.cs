@@ -30,11 +30,11 @@ public sealed class StuckRequestHealthCheck(
             return HealthCheckResult.Healthy($"no request waiting longer than {thresholdMinutes} min");
         }
 
-        int neverEnding = stuck.Count(r => !r.CommandIsOpen);
-        if (neverEnding > 0)
+        int withNoOpenCommand = stuck.Count(r => !r.CommandIsOpen);
+        if (withNoOpenCommand > 0)
         {
             return HealthCheckResult.Unhealthy(
-                $"{neverEnding} request(s) waiting longer than {thresholdMinutes} min whose command row is closed or missing — " +
+                $"{withNoOpenCommand} request(s) waiting longer than {thresholdMinutes} min whose command row is closed or missing — " +
                 "no command will report them (GET /v1/admin/requests/stuck)");
         }
 

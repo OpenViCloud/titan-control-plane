@@ -42,7 +42,7 @@ public class StuckRequestHealthCheckTests
         Assert.Contains("/v1/admin/requests/stuck", result.Description);
     }
 
-    [Fact] // worst first: one request nobody will end outranks any number the worker is still on
+    [Fact] // worst first: one request no command will report outranks any number the worker is still on
     public void AClosedRow_OutranksOpenOnes()
     {
         HealthCheckResult result = StuckRequestHealthCheck.Evaluate([Stuck("Pending"), Stuck("Done"), Stuck("Leased")], 15);

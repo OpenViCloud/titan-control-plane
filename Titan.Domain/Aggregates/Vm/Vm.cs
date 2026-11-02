@@ -10,7 +10,8 @@ public class Vm : AggregateRoot
     public Guid TenantId { get; private set; }
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
-    // Only an observation (Mark*) or a request's own report (EndRequest) writes CurrentState and CurrentExistence; only
+    // Only an observation (Mark*), a request's own report (EndRequest) or a delete with nothing on the provider
+    // (DeleteLocally) writes CurrentState and CurrentExistence; only
     // a request, or a failed request's report putting it back, writes DesiredState and DesiredExistence
     // (titan-ops architecture/desired-and-current.md#desired-and-current).
     // CurrentState is the Incus status word for word, null while Incus has no instance

@@ -3,8 +3,7 @@ namespace Titan.Application.Abstractions;
 /// Reads the waiting requests through the view core.pending_requests (the tables that reached this rollout phase),
 /// joined to the command row each request's key names (titan-ops architecture/resource-lifecycle.md#lost-and-stale). A
 /// request waiting longer than the threshold is stuck: with its command row still open the worker is slow or absent; with
-/// the row Done, Failed or missing no command will report it. A create or delete enqueued before the request routes has
-/// a key without the request id, so it reads as missing until it ends.
+/// the row Done, Failed or missing no command will report it.
 public interface IPendingRequestReader
 {
     Task<IReadOnlyList<StuckRequest>> ListStuckAsync(TimeSpan olderThan, CancellationToken ct = default);

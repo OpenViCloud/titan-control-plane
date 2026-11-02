@@ -1736,7 +1736,7 @@ public class VmServiceTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
-    // An observation never ends a request (titan-ops architecture/resource-lifecycle.md#invariants): Running while the
+    // An observation never ends a create (titan-ops architecture/resource-lifecycle.md#invariants): Running while the
     // create waits records what Incus shows and leaves the create to its own command's report.
     [Fact]
     public async Task UpdateStatus_Running_WhileTheCreateWaits_RecordsNothing_AndTheCreateKeepsWaiting()

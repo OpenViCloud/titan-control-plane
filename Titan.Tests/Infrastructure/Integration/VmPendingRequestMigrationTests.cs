@@ -40,7 +40,7 @@ public sealed class VmPendingRequestMigrationTests : IAsyncLifetime
 
     // A VM row as the image before this migration wrote it: the request's id in pending_intent_id, its kind implied
     // by desired_existence, desired_state and create_finished.
-    private async Task<Guid> SeedVmAsync(string desiredExistence, string desiredState, bool createFinished, bool waiting)
+    private async Task<Guid> SeedVmAsync(string desiredExistence, string desiredState, bool createFinished, bool waiting, string? externalId = "ext")
     {
         Guid id = Guid.NewGuid();
         Guid? intent = waiting ? Guid.NewGuid() : null;
@@ -52,7 +52,7 @@ INSERT INTO core.vms (id, tenant_id, network_id, name, current_state, desired_st
                       external_id, has_been_running, create_finished, vm_offering_id, template_id, cluster_id, disk_size_gb,
                       created_at, pending_intent_id)
 VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]}, 'Running', {desiredState}, 'Exists',
-        {desiredExistence}, 'ext', true, {createFinished}, 'm-mig', 'tpl', 'cluster-a', 20, now(), {intent})");
+        {desiredExistence}, {externalId}, true, {createFinished}, 'm-mig', 'tpl', 'cluster-a', 20, now(), {intent})");
         return id;
     }
 
@@ -69,7 +69,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await MigrateToAsync(MigrationBefore);
         Guid deleting = await SeedVmAsync("Deleted", "Running", true, waiting: true);
         Guid stopping = await SeedVmAsync("Exists", "Stopped", true, waiting: true);
-        Guid creating = await SeedVmAsync("Exists", "Running", false, waiting: true);
+        Guid creating = await SeedVmAsync("Exists", "Running", false, waiting: true, externalId: null);
         Guid starting = await SeedVmAsync("Exists", "Running", true, waiting: true);
         Guid resting = await SeedVmAsync("Exists", "Running", true, waiting: false);
 
@@ -117,6 +117,70 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Vm waiting = await read.Vms.SingleAsync(v => v.Id == stillOpen);
         Assert.Equal(VmRequestKind.Delete, waiting.Pending!.Kind);
         Assert.Equal(DesiredExistence.Deleted, waiting.DesiredExistence);
+    }
+
+    // The old image reports Created and waits for the reconciler to see Running; an observation no longer ends a create,
+    // and that Created will not come again. Its Done has arrived (titan-ops architecture/resource-lifecycle.md#kinds).
+    [Fact]
+    public async Task ACreateWhoseInstanceNameArrived_IsOver_AndOneWithoutItKeepsWaiting()
+    {
+        await MigrateToAsync(MigrationBefore);
+        Guid named = await SeedVmAsync("Exists", "Running", false, waiting: true);
+        Guid unnamed = await SeedVmAsync("Exists", "Running", false, waiting: true, externalId: null);
+
+        await MigrateToLatestAsync();
+
+        await using TitanDbContext read = NewDbContext();
+        Vm over = await read.Vms.SingleAsync(v => v.Id == named);
+        Assert.Null(over.Pending);
+        Assert.Equal("ext", over.ExternalId);
+        Assert.Null(over.RequestFailureReason);
+        Assert.Equal("Create", (await PendingColumnsAsync(unnamed)).Kind);
+    }
+
+    // A command still open meets the new worker with the request's key and id, so its report names the request and
+    // a give-up of a delete has a route to come back on (titan-ops architecture/resource-lifecycle.md#callback-routes).
+    // A row of a VM not waiting on it, or a finished one, is left alone.
+    [Fact]
+    public async Task OpenCommands_TakeTheKeyAndTheIdOfTheirRequest()
+    {
+        await MigrateToAsync(MigrationBefore);
+        Guid creating = await SeedVmAsync("Exists", "Running", false, waiting: true, externalId: null);
+        Guid deleting = await SeedVmAsync("Deleted", "Running", true, waiting: true);
+        Guid stopping = await SeedVmAsync("Exists", "Stopped", true, waiting: true);
+        Guid resting = await SeedVmAsync("Exists", "Running", true, waiting: false);
+        Guid stopIntent;
+        await using (TitanDbContext seed = NewDbContext())
+        {
+            stopIntent = (await seed.Database
+                .SqlQuery<Guid>($"SELECT pending_intent_id AS \"Value\" FROM core.vms WHERE id = {stopping}").ToListAsync()).Single();
+            ProviderCommand Open(string key, string kind) => ProviderCommand.Create(key, kind, "cluster-a", "{\"vmId\":\"x\"}",
+                ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow);
+            seed.ProviderCommands.AddRange(
+                Open($"vm-provision-{creating}", ProviderCommandKinds.VmCreate),
+                Open($"vm-delete-{deleting}", ProviderCommandKinds.VmDelete),
+                Open($"vm-stop-{stopping}-{stopIntent}", ProviderCommandKinds.VmStop),
+                Open($"vm-delete-{resting}", ProviderCommandKinds.VmDelete));
+            await seed.SaveChangesAsync();
+        }
+
+        await MigrateToLatestAsync();
+
+        await using TitanDbContext read = NewDbContext();
+        async Task AssertCarried(Guid vmId, string kind)
+        {
+            Guid requestId = (await read.Vms.SingleAsync(v => v.Id == vmId)).Pending!.Id;
+            ProviderCommand row = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-{kind}-{vmId}-{requestId}");
+            using var payload = System.Text.Json.JsonDocument.Parse(row.Payload);
+            Assert.Equal(requestId.ToString(), payload.RootElement.GetProperty("requestId").GetString());
+            Assert.Equal("x", payload.RootElement.GetProperty("vmId").GetString());
+        }
+        await AssertCarried(creating, "create");
+        await AssertCarried(deleting, "delete");
+        await AssertCarried(stopping, "stop");
+        Assert.Equal(stopIntent, (await read.Vms.SingleAsync(v => v.Id == stopping)).Pending!.Id);
+        ProviderCommand untouched = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{resting}");
+        Assert.DoesNotContain("requestId", untouched.Payload);
     }
 
     [Fact] // the model no longer writes create_finished and has_been_running; the table still has them, with a default

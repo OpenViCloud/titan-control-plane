@@ -5,7 +5,8 @@ namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
-// observation of the provider (Mark*, reached from the worker's callback) writes CurrentState. The two
+// observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
+// (EndRequest), writes CurrentState. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //

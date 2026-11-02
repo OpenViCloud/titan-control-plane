@@ -9,7 +9,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 namespace Titan.Application.Commands.Compute.Vm;
 
 
-// The mirror of StopVm: the start command's own report, or until rollout phase 6 the observation that reaches Running,
+// The mirror of StopVm: the start command's own report, or until rollout phase 6 the observation that reaches Running or Ready,
 // ends the request and records "vm.started" — nothing here writes a status.
 public class StartVmCommandHandler(
     IVmRepository repo,
