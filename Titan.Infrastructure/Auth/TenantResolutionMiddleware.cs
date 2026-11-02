@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Http;
-using Titan.Application.Commands.Billing.Wallet;
-using Titan.Application.Commands.Billing.Wallet.Contracts;
+using Titan.Application.Commands.Billing.TenantActivation;
+using Titan.Application.Commands.Billing.TenantActivation.Contracts;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Commands.Platform.Tenant.Contracts;
 using Titan.Domain.Aggregates.Tenant;
@@ -9,13 +9,10 @@ using Titan.Infrastructure.Endpoints;
 
 namespace Titan.Infrastructure.Auth;
 
-// Orchestrates Platform (approve the tenant) and Billing (open its wallet) here, in the adapter layer: Platform
-// depending on Billing would be a module cycle, since Billing already depends on Platform.
 public class TenantResolutionMiddleware(
     ITenantRepository tenantRepository,
     BootstrapTenantCommandHandler bootstrapTenant,
-    ApproveDeclaredAccountCommandHandler approveDeclaredAccount,
-    OpenWalletCommandHandler openWallet) : IMiddleware
+    ApproveDeclaredAccountCommandHandler approveDeclaredAccount) : IMiddleware
 {
     public const string AutoApproveRole = "auto-approve";
 
@@ -49,13 +46,11 @@ public class TenantResolutionMiddleware(
         }
 
         // A PendingApproval tenant of an account the realm declares (role auto-approve), a new one included, is approved
-        // on the spot; every other signup waits for an admin
-        // (titan-ops architecture/tenancy-and-admin.md#approval-is-activation). Wallet before approval: if the process dies
-        // between the two commits, the next request approves a tenant that already has a wallet; never an Active
-        // tenant without one. Both steps are idempotent. Fires at most once, since approval leaves PendingApproval.
+        // on the spot, its wallet in the same save; every other signup waits for an admin
+        // (titan-ops architecture/tenancy-and-admin.md#approval-is-activation). The tenant ends Active with one wallet: a
+        // second request waits at the tenant's row lock and opens no second one.
         if (result.Value.Status == TenantStatus.PendingApproval && context.User.IsInRole(AutoApproveRole))
         {
-            await openWallet.HandleAsync(new OpenWalletCommand(result.Value.TenantId), context.RequestAborted);
             await approveDeclaredAccount.HandleAsync(
                 new ApproveDeclaredAccountCommand(result.Value.TenantId), context.RequestAborted);
             result = await tenantRepository.FindTenantByMemberAsync(keycloakUserId, context.RequestAborted);

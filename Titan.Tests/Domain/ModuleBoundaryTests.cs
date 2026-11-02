@@ -329,7 +329,9 @@ public class ModuleBoundaryTests
         [("Billing", "Platform")] =
             "GetReceivablesQueryHandler reads tenant names and debt ceilings for the receivables view "
             + "(docs/architecture/money-and-wallet.md#postpaid-no-brake DEBT-6); SettleInvoiceFromWalletCommandHandler "
-            + "writes an admin audit entry when an admin spends a tenant's wallet (docs/architecture/tenancy-and-admin.md#admin-audit).",
+            + "writes an admin audit entry when an admin spends a tenant's wallet (docs/architecture/tenancy-and-admin.md#admin-audit); "
+            + "ApproveDeclaredAccountCommandHandler and ActivateTenantCommandHandler make a tenant Active with its wallet in one save "
+            + "(docs/architecture/tenancy-and-admin.md#approval-is-activation): Platform cannot, Billing already reads Platform.",
         [("Catalog", "Platform")] =
             "UpdateVmOfferingPriceCommandHandler writes an admin audit entry when a price changes "
             + "(docs/architecture/money-and-wallet.md#price-belongs-to-offering). CQRS-5 moved it out of VmOfferingService; the edge and its reason did not change.",

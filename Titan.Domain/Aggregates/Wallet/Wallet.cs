@@ -26,8 +26,8 @@ public class Wallet : AggregateRoot
 
     private Wallet() { }
 
-    /// Opened at tenant activation. UNIQUE(tenant_id) keeps a racing pair of openers from producing two
-    /// wallets; a check-then-insert in C# would be a race, not a guard.
+    /// Opened by TenantActivation, which looks for the wallet under the tenant's row lock, so two activations take
+    /// turns; UNIQUE(tenant_id) still refuses a second wallet whatever opens it.
     public static Wallet Open(Guid tenantId, string currency)
     {
         var now = DateTimeOffset.UtcNow;

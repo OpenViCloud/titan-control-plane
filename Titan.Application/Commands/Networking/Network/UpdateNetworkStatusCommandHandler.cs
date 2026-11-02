@@ -4,9 +4,8 @@ using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
-using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
-using RouteAggregate = Titan.Domain.Aggregates.ClusterIpv6Route.ClusterIpv6Route;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -16,7 +15,7 @@ namespace Titan.Application.Commands.Networking.Network;
 // (titan-ops features/activity/design.md#outcome-source).
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
-    IClusterIpv6RouteRepository routes,
+    NetworkRoutes routes,
     IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateNetworkStatusCommand command, CancellationToken ct = default)
@@ -54,7 +53,6 @@ public class UpdateNetworkStatusCommandHandler(
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
         string? outcome = null;
-        bool routeGoesBack = false;
         switch (req.Report)
         {
             case "Observed":
@@ -89,15 +87,14 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 else
                 {
-                    routeGoesBack = network.MarkRequestFailed(req.Reason, req.Detail);
+                    await routes.RecordCreateGaveUpAsync(network, req.Reason, req.Detail, ct);
                 }
                 break;
             case "Deleted":
                 // The network takes its rules with it (titan-ops features/network/design.md#network-lifecycle) and names
                 // the ones whose own delete was waiting: their own delete command will only find them already Deleted,
                 // so their outcome is recorded now.
-                NetworkDeletionOutcome deletion = network.MarkDeleted();
-                routeGoesBack = true;
+                NetworkDeletionOutcome deletion = await routes.RecordDeletedAsync(network, ct);
                 if (deletion.FulfilledNetworkDelete)
                 {
                     outcome = "network.deleted";
@@ -115,23 +112,8 @@ public class UpdateNetworkStatusCommandHandler(
             activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name.Value);
         }
 
-        if (routeGoesBack)
-        {
-            await TakeRouteBackAsync(network, ct);
-        }
-
+        // A route given back above commits with the network that let go of it.
         await repo.SaveAsync(ct);
-    }
-
-    // The route goes back in the same save as the network that let go of it. No route names a network without public
-    // IPv6, or one whose route already went back with an earlier report: there is nothing to take back.
-    private async Task TakeRouteBackAsync(NetworkAggregate network, CancellationToken ct)
-    {
-        RouteAggregate? route = await routes.FindHeldByAsync(network.Id, ct);
-        if (route != null)
-        {
-            route.TakeBack(DateTimeOffset.UtcNow);
-        }
     }
 
     // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).

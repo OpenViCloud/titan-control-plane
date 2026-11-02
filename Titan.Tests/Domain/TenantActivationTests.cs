@@ -1,12 +1,27 @@
+using System.Reflection;
+using Moq;
 using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/tenancy-and-admin.md#approval-is-activation. A tenant has no provider account any more: its
-// Incus project is created per cluster when its first resource there is, so approving it makes it Active at once.
+// Incus project is created per cluster when its first resource there is, so approving it makes it Active at once, and
+// TenantActivation opens its wallet in the same save. Silent about the lock on the tenant row;
+// FirstSignInDbTests.TwoFirstRequestsOfADeclaredAccount_TakeTurns_OneWallet_AndBothPass runs two at once on Postgres.
 public class TenantActivationTests
 {
+    private readonly Mock<IWalletRepository> _wallets = new();
+
+    private TenantActivation Activation() => new(_wallets.Object);
+
+    private void HasAWallet(Tenant tenant) =>
+        _wallets.Setup(w => w.GetByTenantForUpdateAsync(tenant.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Wallet.Open(tenant.Id, "VND"));
+
     private static Tenant Pending() => Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
 
     private static Tenant Active()
@@ -100,5 +115,82 @@ public class TenantActivationTests
         var ex = Assert.Throws<BadRequestException>(() => t.Suspend());
 
         Assert.Equal("INVALID_STATUS", ex.Code);
+    }
+
+    // ── TenantActivation: the tenant and its wallet ──────────────────────────
+
+    [Fact]
+    public async Task ApproveThroughTheService_OpensAnEmptyWallet_AndTheTenantIsActive()
+    {
+        var t = Pending();
+        var added = new List<Wallet>();
+        _wallets.Setup(w => w.Add(It.IsAny<Wallet>())).Callback<Wallet>(added.Add);
+
+        await Activation().ApproveAsync(t, "VND");
+
+        Assert.Equal(TenantStatus.Active, t.Status);
+        Wallet wallet = Assert.Single(added);
+        Assert.Equal(t.Id, wallet.TenantId);
+        Assert.Equal("VND", wallet.Currency);
+        Assert.Equal(0L, wallet.AvailableAmount);
+    }
+
+    [Fact]
+    public async Task ApproveThroughTheService_ATenantThatIsNotPending_IsRefused_AndOpensNoWallet()
+    {
+        var t = Active();
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => Activation().ApproveAsync(t, "VND"));
+
+        Assert.Equal("INVALID_STATUS", ex.Code);
+        _wallets.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivateThroughTheService_ASuspendedTenant_KeepsTheWalletItHad()
+    {
+        var t = Active();
+        t.Suspend();
+        HasAWallet(t);
+
+        await Activation().ActivateAsync(t, "VND");
+
+        Assert.Equal(TenantStatus.Active, t.Status);
+        _wallets.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ActivateThroughTheService_APendingSignup_OpensItsWallet()
+    {
+        var t = Pending();
+        var added = new List<Wallet>();
+        _wallets.Setup(w => w.Add(It.IsAny<Wallet>())).Callback<Wallet>(added.Add);
+
+        await Activation().ActivateAsync(t, "VND");
+
+        Assert.Equal(TenantStatus.Active, t.Status);
+        Assert.Equal(t.Id, Assert.Single(added).TenantId);
+    }
+
+    [Fact]
+    public async Task ActivateThroughTheService_AnActiveTenant_IsRefused_AndOpensNoWallet()
+    {
+        var t = Active();
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() => Activation().ActivateAsync(t, "VND"));
+
+        Assert.Equal("INVALID_STATUS", ex.Code);
+        _wallets.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);
+    }
+
+    // The compiler keeps Titan.Application off these two, so TenantActivation is the only way a tenant becomes Active.
+    [Fact]
+    public void OnlyTenantActivationMakesATenantActive()
+    {
+        const BindingFlags surface = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        string[] publicMethods = [.. typeof(Tenant).GetMethods(surface).Select(m => m.Name)];
+        Assert.Contains(nameof(Tenant.Suspend), publicMethods);
+        Assert.DoesNotContain(nameof(Tenant.Approve), publicMethods);
+        Assert.DoesNotContain(nameof(Tenant.RequestActivation), publicMethods);
     }
 }

@@ -187,6 +187,8 @@ public class ChildEntityGuardTests
         ["Backup"] = "no aggregate of this name: BackupRecord and BackupObservation, and the VMs and volumes it reads",
         ["BackupTarget"] = "no aggregate: the bucket is config",
         ["WalletMutations"] = "the job over WalletMutation: a folder of the same name would hide the type (CS0118)",
+        ["TenantActivation"] = "no aggregate of this name: a Tenant made Active with its Wallet, through the domain service of "
+            + "that name (an alias in the handlers, CS0118); in Billing because it opens the wallet",
         ["FirewallRule"] = "a child with its own routes and callback; the handlers load and save its Network",
         ["VolumeSnapshot"] = "a child with its own routes and callback; the handlers load and save its Volume",
         ["VmSnapshot"] = "a child with its own routes and callback; the handlers load and save its Vm",

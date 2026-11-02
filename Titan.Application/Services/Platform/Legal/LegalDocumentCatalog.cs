@@ -1,8 +1,8 @@
 namespace Titan.Application.Services.Platform.Legal;
 
 // Content is git-tracked, not a CMS table (titan-ops features/legal/design.md#legal-document-in-code): bumping
-// content = bumping Version here. Go-live is blocked until legal sign-off replaces the placeholder
-// (BLOCK-LEGAL-1).
+// content = bumping Version here. Approving the first real customer is blocked until legal sign-off replaces the
+// placeholder (BLOCK-LEGAL-1).
 
 public interface ILegalDocumentCatalog
 {
@@ -19,9 +19,9 @@ public class LegalDocumentCatalog : ILegalDocumentCatalog
         English: new LegalText("Terms of Service", EnglishPlaceholder),
         Vietnamese: new LegalText("Điều khoản dịch vụ", VietnamesePlaceholder));
 
-    // PLACEHOLDER — NOT legally reviewed; blocks production go-live (BLOCK-LEGAL-1). A lawyer replaces both texts and the
-    // Version bumps to v1. One document with four clearly separated sections: a merged file, not merged content.
-    // The two languages say the same thing; one Version covers both, so accepting either is the same acceptance.
+    // PLACEHOLDER — NOT legally reviewed; blocks approving the first real customer (BLOCK-LEGAL-1). A lawyer replaces
+    // both texts and the Version bumps to v1. One document with four clearly separated sections: a merged file, not
+    // merged content. The two languages say the same thing; one Version covers both, so accepting either is the same acceptance.
     private const string EnglishPlaceholder = """
         # Terms of Service (DRAFT — waiting for a lawyer)
 

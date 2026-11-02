@@ -3,12 +3,13 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Moq;
-using Titan.Application.Commands.Billing.Wallet;
+using Titan.Application.Commands.Billing.TenantActivation;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Options;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using Titan.Infrastructure.Auth;
 
 namespace Titan.Tests.Auth;
@@ -19,19 +20,27 @@ public class TenantResolutionMiddlewareTests
     private readonly Mock<IWalletRepository> _walletRepo = new();
     private readonly Mock<RequestDelegate> _next = new();
 
-    // The middleware takes the three concrete command handlers (nothing to mock), so they run for real over the
+    public TenantResolutionMiddlewareTests()
+    {
+        // Approval locks the tenant row; a mock has no rows, so the locked read answers what the plain one does.
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _repo.Object.FindByIdAsync(id, ct));
+    }
+
+    // The middleware takes the two concrete command handlers (nothing to mock), so they run for real over the
     // repository mocks. "Bootstrap ran with X" is read off the tenant it added; "the wallet was opened" off the
     // wallet it added.
     private TenantResolutionMiddleware CreateMiddleware() => new(
         _repo.Object,
         new BootstrapTenantCommandHandler(_repo.Object),
-        new ApproveDeclaredAccountCommandHandler(_repo.Object),
-        new OpenWalletCommandHandler(_walletRepo.Object, new CreditOptions { Currency = "VND" }));
+        new ApproveDeclaredAccountCommandHandler(_repo.Object, _walletRepo.Object,
+            new TenantActivation(_walletRepo.Object), new CreditOptions { Currency = "VND" }));
 
     private void VerifyNoWalletOpened() =>
         _walletRepo.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);
 
-    // Records "wallet" when a wallet is saved and "tenant" when the tenant is, so a test reads the order.
+    // Records "wallet" when the wallet repository saves (the approval and its wallet) and "tenant" when the tenant
+    // repository does (bootstrap), so a test reads the order.
     private List<string> RecordWalletAndTenantSaves()
     {
         var calls = new List<string>();
@@ -104,10 +113,10 @@ public class TenantResolutionMiddlewareTests
     }
 
     // titan-ops architecture/tenancy-and-admin.md#approval-is-activation: a first login of an account with the realm role
-    // auto-approve is created pending and approved in the same request, wallet first — the request already sees an
-    // Active tenant with a wallet.
+    // auto-approve is created pending and approved in the same request, its wallet in the approval's save — the request
+    // already sees an Active tenant with a wallet.
     [Fact]
-    public async Task FirstLogin_DeclaredAccount_EndsActive_WithAWallet_OpenedBeforeTheApproval()
+    public async Task FirstLogin_DeclaredAccount_EndsActive_WithAWallet_InTheApprovalsSave()
     {
         Tenant? created = null;
         _repo.Setup(r => r.Add(It.IsAny<Tenant>())).Callback<Tenant>(t => created = t);
@@ -130,8 +139,8 @@ public class TenantResolutionMiddlewareTests
         Assert.NotNull(created);
         Assert.Equal(TenantStatus.Active, created!.Status);
         _walletRepo.Verify(w => w.Add(It.Is<Wallet>(x => x.TenantId == created.Id)), Times.Once);
-        // bootstrap saves the pending tenant, then the wallet, then the approval
-        Assert.Equal(new[] { "tenant", "wallet", "tenant" }, calls);
+        // bootstrap saves the pending tenant, then one save carries the wallet and the approval
+        Assert.Equal(new[] { "tenant", "wallet" }, calls);
         _next.Verify(n => n(ctx), Times.Once); // a write passes: the request sees the approved tenant
         Assert.Equal(created.Id, ctx.Items["TenantId"]);
     }
@@ -324,7 +333,7 @@ public class TenantResolutionMiddlewareTests
     }
 
     [Fact]
-    public async Task PendingApproval_DeclaredAccount_OpensTheWalletThenApproves_AndPassesThrough()
+    public async Task PendingApproval_DeclaredAccount_IsApproved_WithItsWallet_InOneSave_AndPassesThrough()
     {
         var pending = Tenant.CreatePending("bob", "user-1", "bob@openvicloud.com");
         _repo.SetupSequence(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
@@ -332,20 +341,24 @@ public class TenantResolutionMiddlewareTests
              .ReturnsAsync((pending.Id, TenantStatus.Active));
         _repo.Setup(r => r.FindByIdAsync(pending.Id, It.IsAny<CancellationToken>())).ReturnsAsync(pending);
         var calls = RecordWalletAndTenantSaves();
+        TenantStatus? statusAtTheSave = null;
+        _walletRepo.Setup(w => w.SaveChangesAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => { calls.Add("wallet"); statusAtTheSave = pending.Status; }).Returns(Task.CompletedTask);
 
         var ctx = DeclaredAccountContext("POST"); // a write — proves the self-heal cleared the PendingApproval gate
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
 
         Assert.Equal(TenantStatus.Active, pending.Status);
-        Assert.Equal(new[] { "wallet", "tenant" }, calls);
+        _walletRepo.Verify(w => w.Add(It.Is<Wallet>(x => x.TenantId == pending.Id)), Times.Once);
+        Assert.Equal(new[] { "wallet" }, calls);
+        Assert.Equal(TenantStatus.Active, statusAtTheSave); // the wallet's save carries the approval too
         _next.Verify(n => n(ctx), Times.Once);
         Assert.Equal(StatusCodes.Status200OK, ctx.Response.StatusCode);
         Assert.Equal(pending.Id, ctx.Items["TenantId"]);
     }
 
-    // A process that died after opening the wallet left the tenant pending: the next request opens nothing new and
-    // approves it.
+    // A wallet already there is kept: the approval opens no second one.
     [Fact]
     public async Task PendingApproval_WhoseWalletIsAlreadyOpen_IsApproved_WithoutASecondWallet()
     {

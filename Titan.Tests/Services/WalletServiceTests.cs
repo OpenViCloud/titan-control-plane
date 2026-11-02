@@ -1,19 +1,16 @@
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
-using Titan.Application.Commands.Billing.Wallet;
-using Titan.Application.Commands.Billing.Wallet.Contracts;
 using Titan.Application.Queries.Billing.Wallet;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.WalletTransaction;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 
 namespace Titan.Tests.Services;
 
-// The wallet itself: open it (at activation), read its balance, read its statement. The real Wallet
-// aggregate over a mocked repository; a concurrent open is simulated by making SaveChangesAsync throw.
+// The wallet itself: read its balance, read its statement. The real Wallet aggregate over a mocked repository.
+// Opening it is TenantActivation's (TenantActivationTests).
 public class WalletServiceTests
 {
     private readonly Mock<IWalletRepository> _walletRepo = new();
@@ -22,19 +19,12 @@ public class WalletServiceTests
     private readonly CreditOptions _options = new() { MaxGrantAmount = 100_000_000m, Currency = "VND" };
     private static readonly Guid Tenant = Guid.NewGuid();
 
-    public WalletServiceTests() =>
-        _walletRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-
-    // Facade over one command and two query handlers: every method forwards to exactly one handler and
-    // adds nothing.
+    // Facade over two query handlers: every method forwards to exactly one handler and adds nothing.
     private WalletFacade CreateService() => new(_walletRepo.Object, _transactions.Object, _currentUser.Object, _options);
 
     private sealed class WalletFacade(
         IWalletRepository walletRepo, IWalletTransactionRepository transactions, ICurrentUser currentUser, CreditOptions options)
     {
-        public Task OpenForTenantAsync(Guid tenantId, CancellationToken ct = default)
-            => new OpenWalletCommandHandler(walletRepo, options).HandleAsync(new OpenWalletCommand(tenantId), ct);
-
         public Task<WalletQueryResult> GetMyWalletAsync(CancellationToken ct = default)
             => new GetWalletQueryHandler(walletRepo, currentUser, options).HandleAsync(new GetWalletQuery(), ct);
 
@@ -42,50 +32,6 @@ public class WalletServiceTests
             => new GetWalletStatementQueryHandler(transactions, currentUser, options).HandleAsync(new GetWalletStatementQuery(), ct);
     }
     private void AsTenant() => _currentUser.SetupGet(u => u.TenantId).Returns(Tenant);
-
-    // ── OpenForTenantAsync ───────────────────────────────────
-
-    // The activation path opens an EMPTY wallet in the configured currency and persists it.
-    [Fact]
-    public async Task OpenForTenant_NoWallet_OpensEmptyWallet_AndSaves()
-    {
-        _walletRepo.Setup(r => r.GetByTenantForUpdateAsync(Tenant, default)).ReturnsAsync((Wallet?)null);
-        Wallet? opened = null;
-        _walletRepo.Setup(r => r.Add(It.IsAny<Wallet>())).Callback<Wallet>(w => opened = w);
-
-        await CreateService().OpenForTenantAsync(Tenant);
-
-        Assert.NotNull(opened);
-        Assert.Equal(Tenant, opened!.TenantId);
-        Assert.Equal(0L, opened.AvailableAmount);   // opened empty — money only ever arrives via Credit
-        Assert.Equal("VND", opened.Currency);
-        _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Once);
-    }
-
-    // Idempotent: a retried provision callback (or a backfill racing activation) finds the wallet and
-    // does nothing — never a second row, never a reset balance, never a save.
-    [Fact]
-    public async Task OpenForTenant_WalletExists_IsNoOp()
-    {
-        _walletRepo.Setup(r => r.GetByTenantForUpdateAsync(Tenant, default)).ReturnsAsync(Wallet.Open(Tenant, "VND"));
-
-        await CreateService().OpenForTenantAsync(Tenant);
-
-        _walletRepo.Verify(r => r.Add(It.IsAny<Wallet>()), Times.Never);
-        _walletRepo.Verify(r => r.SaveChangesAsync(default), Times.Never);
-    }
-
-    // Two opens race: the loser's INSERT hits the UNIQUE(tenant_id) index (surfaced as
-    // ConcurrencyConflictException). One wallet per tenant IS the goal, so losing the race is success.
-    [Fact]
-    public async Task OpenForTenant_ConcurrentOpen_SwallowsConflict()
-    {
-        _walletRepo.Setup(r => r.GetByTenantForUpdateAsync(Tenant, default)).ReturnsAsync((Wallet?)null);
-        _walletRepo.Setup(r => r.SaveChangesAsync(It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new ConcurrencyConflictException("WALLET_CONCURRENCY_CONFLICT", "lost the open race"));
-
-        await CreateService().OpenForTenantAsync(Tenant);   // does not throw
-    }
 
     // ── GetMyWalletAsync ──────────────────────────────────────────────────
 

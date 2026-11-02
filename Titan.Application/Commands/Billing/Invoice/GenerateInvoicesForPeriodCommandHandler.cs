@@ -45,11 +45,6 @@ public class GenerateInvoicesForPeriodCommandHandler(IInvoiceRepository invoiceR
             // (titan-ops architecture/money-and-wallet.md#human-confirmed-debit): the wallet moves only when a person pays it.
             var invoice = InvoiceAggregate.Generate(tenantId, year, month, issuedAt, items, DefaultCurrency);
 
-            // A 0 ₫ bill settles itself: no money moves, and leaving it New would let a bill for nothing
-            // age into Overdue.
-            if (invoice.Total == 0)
-                invoice.AutoSettleZeroTotal();
-
             var added = await invoiceRepo.TryAddAsync(invoice, ct);
 
             if (added)

@@ -106,8 +106,8 @@ public class Network : AggregateRoot
     }
 
     /// The /64 of the route given to this network. The route keeps who holds it by the network's id, so the /64 comes
-    /// after Create: once, and only while the create is waiting.
-    public void ReceivePublicIpv6(string subnet)
+    /// after Create: once, and only while the create is waiting. Internal: NetworkRoutes gives the route with it.
+    internal void ReceivePublicIpv6(string subnet)
     {
         if (HasPublicIpv6)
         {
@@ -200,7 +200,8 @@ public class Network : AggregateRoot
     /// network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle), so every rule not
     /// yet Deleted becomes Deleted here, in the same save; a rule whose own delete was waiting is done by this, and
     /// is named in the outcome so the caller records "firewall_rule.deleted" for it once, next to "network.deleted".
-    public NetworkDeletionOutcome MarkDeleted()
+    /// Internal: NetworkRoutes takes the route back with it.
+    internal NetworkDeletionOutcome MarkDeleted()
     {
         if (IsTerminal)
         {
@@ -224,8 +225,8 @@ public class Network : AggregateRoot
 
     /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure): records why and ends
     /// the waiting create. A give-up with no create waiting is stale and records nothing; a delete's give-up is
-    /// AbandonRequest. True when the network let go of its /64, whose route the caller takes back.
-    public bool MarkRequestFailed(string? reason, string? detail)
+    /// AbandonRequest. True when the network let go of its /64. Internal: NetworkRoutes takes the route back with it.
+    internal bool MarkRequestFailed(string? reason, string? detail)
     {
         if (IsTerminal || !CreateIsWaiting)
         {
@@ -235,8 +236,8 @@ public class Network : AggregateRoot
         RequestFailureDetail = detail;
         RequestFailedAt = DateTimeOffset.UtcNow;
         PendingIntentId = null;
-        // Incus never had the network, so nothing holds the /64 there; keeping it here would take one of the
-        // cluster's 255 until the tenant deletes the row.
+        // Incus never had the network, so nothing holds the /64 there; keeping it here would hold one of the
+        // cluster's 255 for as long as the network lives.
         bool incusNeverHadIt = ExternalId is null;
         if (incusNeverHadIt && HasPublicIpv6)
         {
@@ -413,6 +414,13 @@ public class Network : AggregateRoot
         {
             throw new BusinessException("NETWORK_INVALID_STATE",
                 "Only a network whose create failed before Incus had it can be deleted locally.");
+        }
+        // A create that gave up before Incus let go of the /64 (MarkRequestFailed). A network still holding one would keep
+        // its route once Deleted here: no delete report follows a local delete, so nothing takes the route back.
+        if (HasPublicIpv6)
+        {
+            throw new BusinessException("NETWORK_INVALID_STATE",
+                "A network still holding its public IPv6 /64 cannot be deleted locally.");
         }
         DesiredExistence = DesiredExistence.Deleted;
         CurrentExistence = CurrentExistence.Deleted;

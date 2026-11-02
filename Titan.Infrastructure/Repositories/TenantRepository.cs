@@ -12,6 +12,13 @@ public class TenantRepository(TitanDbContext db) : ITenantRepository
     public async Task<Tenant?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         await db.Tenants.Include(t => t.Members).FirstOrDefaultAsync(t => t.Id == id, ct);
 
+    // Lock first, load second, as NetworkRepository.FindByIdForUpdateAsync.
+    public async Task<Tenant?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.tenants WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
     public async Task<bool> ExistsByOwnerAsync(string keycloakUserId, CancellationToken ct = default) =>
         await db.Set<Member>().AnyAsync(m => m.KeycloakUserId == keycloakUserId, ct);
 

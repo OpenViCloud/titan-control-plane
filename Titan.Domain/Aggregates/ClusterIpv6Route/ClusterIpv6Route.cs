@@ -46,7 +46,8 @@ public class ClusterIpv6Route : AggregateRoot
         return next;
     }
 
-    public void HandTo(Guid networkId)
+    /// Internal: NetworkRoutes is the only way in, so the network gets the route's /64 with it.
+    internal void HandTo(Guid networkId)
     {
         if (!IsFree)
         {
@@ -56,7 +57,8 @@ public class ClusterIpv6Route : AggregateRoot
         ReleasedAt = null;
     }
 
-    public void TakeBack(DateTimeOffset at)
+    /// Internal: NetworkRoutes is the only way in, so the route goes back exactly when its network lets go.
+    internal void TakeBack(DateTimeOffset at)
     {
         if (IsFree)
         {

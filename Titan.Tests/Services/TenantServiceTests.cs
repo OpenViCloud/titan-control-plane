@@ -1,34 +1,54 @@
 using Moq;
+using Titan.Application.Commands.Billing.TenantActivation.Contracts;
 using Titan.Application.Commands.Platform.Tenant.Contracts;
+using Titan.Application.Options;
+using ActivationCmd = Titan.Application.Commands.Billing.TenantActivation;
 using TenantCmd = Titan.Application.Commands.Platform.Tenant;
 using Titan.Domain.Aggregates.Tenant;
+using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Services;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
-// The tenant command handlers. None of them takes an IProviderCommandQueue: approval is activation and no provider is
-// asked for anything (titan-ops architecture/tenancy-and-admin.md#approval-is-activation) — the compiler holds that, not a
-// Verify(Times.Never). Opening the wallet before approval is the adapters' job: TenantResolutionMiddlewareTests and
-// UpdateTenantStatusEndpointTests.
+// The tenant command handlers, and the two of Billing that make a tenant Active. None of them takes an
+// IProviderCommandQueue: approval is activation and no provider is asked for anything
+// (titan-ops architecture/tenancy-and-admin.md#approval-is-activation) — the compiler holds that, not a
+// Verify(Times.Never). The wallet and the Active tenant commit in one save; TenantActivationTests pins the wallet itself.
 public class TenantServiceTests
 {
     private readonly Mock<ITenantRepository> _repo = new();
+    private readonly Mock<IWalletRepository> _wallets = new();
+
+    public TenantServiceTests()
+    {
+        // Activation locks the tenant row (titan-ops architecture/domain-services.md#cross-aggregate-lock); a mock has no
+        // rows, so the locked read answers what the plain one does.
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .Returns((Guid id, CancellationToken ct) => _repo.Object.FindByIdAsync(id, ct));
+    }
 
     // Facade over the tenant command handlers (the queries are covered in TenantQueryHandlerTests); it
     // forwards and adds nothing.
-    private TenantFacade CreateService() => new(_repo.Object);
+    private TenantFacade CreateService() => new(_repo.Object, _wallets.Object);
 
-    private sealed class TenantFacade(ITenantRepository repo)
+    private sealed class TenantFacade(ITenantRepository repo, IWalletRepository wallets)
     {
+        private static readonly CreditOptions Options = new() { Currency = "VND" };
+
         public Task BootstrapAsync(string keycloakUserId, string username, string email, CancellationToken ct = default)
             => new TenantCmd.BootstrapTenantCommandHandler(repo)
                 .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username, email), ct);
 
         public Task ApproveDeclaredAccountAsync(Guid tenantId, CancellationToken ct = default)
-            => new TenantCmd.ApproveDeclaredAccountCommandHandler(repo)
+            => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets), Options)
                 .HandleAsync(new ApproveDeclaredAccountCommand(tenantId), ct);
+
+        public Task ActivateAsync(Guid tenantId, CancellationToken ct = default)
+            => new ActivationCmd.ActivateTenantCommandHandler(repo, wallets, new TenantActivation(wallets), Options)
+                .HandleAsync(new ActivateTenantCommand(tenantId), ct);
 
         public Task UpdateStatusAsync(Guid tenantId, string status, CancellationToken ct = default)
             => new TenantCmd.UpdateTenantStatusCommandHandler(repo)
@@ -55,7 +75,8 @@ public class TenantServiceTests
     [Fact]
     // A second press after the result is already there is a repeat
     // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): the aggregate still refuses it
-    // (Tenant.Suspend/RequestActivation throw); the handler recognises it first and answers 204.
+    // (Tenant.Suspend throws); the handler recognises it first and answers 204. Activate_AlreadyActive_ChangesNothing is
+    // the same for Active.
     public async Task UpdateStatus_SuspendAlreadySuspended_ChangesNothing()
     {
         var tenant = MakeTenant(TenantStatus.Suspended);
@@ -69,15 +90,40 @@ public class TenantServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_ActivateAlreadyActive_ChangesNothing()
+    public async Task Activate_AlreadyActive_ChangesNothing()
     {
         var tenant = MakeTenant(TenantStatus.Active);
         Assert.Equal(TenantStatus.Active, tenant.Status);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
 
-        await CreateService().UpdateStatusAsync(tenant.Id, "Active");
+        await CreateService().ActivateAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
+        VerifyNoWalletOpened();
+        _wallets.Verify(w => w.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Activate_TenantNotFound_ThrowsNotFound_AndOpensNoWallet()
+    {
+        _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Tenant?)null);
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateService().ActivateAsync(Guid.NewGuid()));
+
+        Assert.Equal("TENANT_NOT_FOUND", ex.Code);
+        VerifyNoWalletOpened();
+    }
+
+    // Active is Billing's handler: it opens the wallet. The endpoint never sends Active here.
+    [Fact]
+    public async Task UpdateStatus_Active_IsNotThisHandlers()
+    {
+        var tenant = MakeTenant(TenantStatus.PendingApproval);
+        _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => CreateService().UpdateStatusAsync(tenant.Id, "Active"));
+
+        Assert.Equal(TenantStatus.PendingApproval, tenant.Status);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -114,30 +160,35 @@ public class TenantServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    [Fact]
-    public async Task UpdateStatus_ActivateSuspended_SavesCalled()
+    [Fact] // a suspended tenant already has its wallet: coming back keeps it, no second one
+    public async Task Activate_Suspended_KeepsItsWallet_SavesOnce()
     {
         var tenant = MakeTenant(TenantStatus.Suspended);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
+        _wallets.Setup(w => w.GetByTenantForUpdateAsync(tenant.Id, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Wallet.Open(tenant.Id, "VND"));
 
-        await CreateService().UpdateStatusAsync(tenant.Id, "Active");
+        await CreateService().ActivateAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        VerifyNoWalletOpened();
+        _wallets.Verify(w => w.SaveChangesAsync(default), Times.Once);
     }
 
     // ── Anti-abuse gate: admin approve / reject a PendingApproval tenant ─────────
 
-    [Fact] // approval is activation: no provider account to wait for
-    public async Task UpdateStatus_ApprovePending_MakesItActive()
+    [Fact] // approval is activation: no provider account to wait for; the wallet commits with it
+    public async Task Activate_Pending_MakesItActive_WithItsWallet_InOneSave()
     {
         var tenant = MakeTenant(TenantStatus.PendingApproval);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
 
-        await CreateService().UpdateStatusAsync(tenant.Id, "Active");
+        await CreateService().ActivateAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        _wallets.Verify(w => w.Add(It.Is<Wallet>(x => x.TenantId == tenant.Id)), Times.Once);
+        _wallets.Verify(w => w.SaveChangesAsync(default), Times.Once);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -153,13 +204,13 @@ public class TenantServiceTests
     }
 
     [Fact] // a rejected signup is approved again by the same press
-    public async Task UpdateStatus_ActivateRejectedSignup_MakesItActive()
+    public async Task Activate_RejectedSignup_MakesItActive()
     {
         var tenant = MakeTenant(TenantStatus.PendingApproval);
         tenant.Suspend();
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
 
-        await CreateService().UpdateStatusAsync(tenant.Id, "Active");
+        await CreateService().ActivateAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
     }
@@ -392,7 +443,7 @@ public class TenantServiceTests
     }
 
     // Every signup starts pending, whatever the domain: the middleware approves one whose account has the realm role auto-approve
-    // in the same request after opening its wallet, so there is one approval path, not two.
+    // in the same request, its wallet in the approval's save, so there is one approval path, not two.
     [Theory]
     [InlineData("alice@gmail.com")]
     [InlineData("bob@openvicloud.com")]
@@ -441,7 +492,7 @@ public class TenantServiceTests
     // ── ApproveDeclaredAccountAsync (self-heal, no admin) ────
 
     [Fact]
-    public async Task ApproveDeclaredAccount_Pending_MakesItActive()
+    public async Task ApproveDeclaredAccount_Pending_MakesItActive_WithItsWallet_InOneSave()
     {
         var tenant = MakeTenant(TenantStatus.PendingApproval);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, default)).ReturnsAsync(tenant);
@@ -449,7 +500,8 @@ public class TenantServiceTests
         await CreateService().ApproveDeclaredAccountAsync(tenant.Id);
 
         Assert.Equal(TenantStatus.Active, tenant.Status);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        _wallets.Verify(w => w.Add(It.Is<Wallet>(x => x.TenantId == tenant.Id)), Times.Once);
+        _wallets.Verify(w => w.SaveChangesAsync(default), Times.Once);
     }
 
     // Idempotent — two requests of a declared account can race; the second finds it approved.
@@ -464,7 +516,7 @@ public class TenantServiceTests
         await CreateService().ApproveDeclaredAccountAsync(tenant.Id);
 
         Assert.Equal(status, tenant.Status);
-        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoWalletOpened();
     }
 
     [Fact]
@@ -474,10 +526,12 @@ public class TenantServiceTests
 
         await CreateService().ApproveDeclaredAccountAsync(Guid.NewGuid());
 
-        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+        VerifyNoWalletOpened();
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
+
+    private void VerifyNoWalletOpened() => _wallets.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);
 
     private static Tenant MakeTenant(TenantStatus status)
     {

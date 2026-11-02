@@ -50,8 +50,8 @@ public class Tenant : AggregateRoot
         return tenant;
     }
 
-    // Approval is activation: there is no provider account to wait for. The caller opens the wallet first.
-    public void Approve()
+    // Approval is activation: there is no provider account to wait for. Internal: TenantActivation opens the wallet with it.
+    internal void Approve()
     {
         if (Status != TenantStatus.PendingApproval)
             throw new Titan.Domain.Exceptions.BusinessException("INVALID_STATUS", "Only a pending-approval tenant can be approved.");
@@ -69,8 +69,9 @@ public class Tenant : AggregateRoot
 
     /// The admin's "make this tenant Active", an intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation):
     /// a pending, rejected or suspended tenant becomes Active. A repeat is refused
-    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat); the handler recognises it first.
-    public void RequestActivation()
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat); the handler recognises it first. Internal:
+    /// TenantActivation opens the wallet with it.
+    internal void RequestActivation()
     {
         if (Status == TenantStatus.Active)
         {

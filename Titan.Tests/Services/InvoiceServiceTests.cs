@@ -350,7 +350,6 @@ public class InvoiceServiceTests
     public async Task PayFromWallet_ZeroTotalInvoice_AlreadyTerminal_ThrowsInvalidState()
     {
         var invoice = MakeOwedInvoice(TenantId, 0L, T0);
-        invoice.AutoSettleZeroTotal();
         _invoiceRepo.Seed(invoice);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
