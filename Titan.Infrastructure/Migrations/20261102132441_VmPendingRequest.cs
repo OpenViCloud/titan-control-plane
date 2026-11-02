@@ -13,9 +13,10 @@ namespace Titan.Infrastructure.Migrations
     /// carried this one (titan-ops architecture/resource-lifecycle.md#rollout, phase 6 drops them). The rename stops an image
     /// from before this migration on every VM read: rolling one back needs this migration's Down first.
     ///
-    /// Requests under way meet the new rule here, so none is left with nothing to end it: a delete whose command gave up
-    /// and a create whose instance name already arrived end now, and a command still open takes the request's key and
-    /// id, so its report can name the request. Down leaves those rows as they are: they run whatever their key.
+    /// Requests under way meet the new rule here: a delete whose command gave up and a create whose instance name already
+    /// arrived end now, and a command still open takes the request's key and id, so its report can name the request. A
+    /// delete still open on a worker that does not report its give-up can still wait; the stuck query shows it. Down leaves
+    /// those command rows as they are: they run whatever their key.
     /// The view core.pending_requests is what the stuck-request query reads; each later phase adds its table to it.
     public partial class VmPendingRequest : Migration
     {
@@ -35,8 +36,8 @@ WHERE v.pending_request_id IS NOT NULL
   AND c.key = 'vm-delete-' || v.id::text
   AND c.status = 'Failed';";
 
-        /// The old create command reports the instance name, then the reconciler's Running ended the create. An observation
-        /// no longer ends one and that report will not come again; it was the create's Done
+        /// The create command reported the instance name, then the reconciler's Running or Ready ended the create. An
+        /// observation no longer ends one, and that report already was the create's Done
         /// (titan-ops architecture/resource-lifecycle.md#kinds). The vm.created it would have recorded is not written.
         private const string EndTheCreatesWhoseNameArrivedSql = @"
 UPDATE core.vms SET pending_request_id = NULL

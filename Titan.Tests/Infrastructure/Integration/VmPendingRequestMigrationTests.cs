@@ -85,7 +85,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
     // A delete whose command already gave up: the image before this one kept it waiting and let the next press reopen the
     // row. A repeat now sends nothing and no report is coming, so it would wait for ever; the migration ends it as Failed
-    // (titan-ops architecture/resource-lifecycle.md#kinds). One whose row is still open keeps waiting: its worker reports.
+    // (titan-ops architecture/resource-lifecycle.md#kinds). One whose row is still open keeps waiting, for its command's report.
     [Fact]
     public async Task ADeleteWhoseCommandAlreadyFailed_EndsAsFailed_AndOneStillOpenKeepsWaiting()
     {
@@ -119,8 +119,8 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.Equal(DesiredExistence.Deleted, waiting.DesiredExistence);
     }
 
-    // The old image reports Created and waits for the reconciler to see Running; an observation no longer ends a create,
-    // and that Created will not come again. Its Done has arrived (titan-ops architecture/resource-lifecycle.md#kinds).
+    // The worker reported Created and the old image waited for the reconciler to see Running or Ready; an observation no
+    // longer ends a create. Its Done has arrived (titan-ops architecture/resource-lifecycle.md#kinds).
     [Fact]
     public async Task ACreateWhoseInstanceNameArrived_IsOver_AndOneWithoutItKeepsWaiting()
     {
