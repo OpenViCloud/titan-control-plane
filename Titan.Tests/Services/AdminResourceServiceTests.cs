@@ -191,15 +191,15 @@ public class AdminResourceServiceTests
 
         // Enqueues the same delete command as the tenant path, in the OWNING tenant's project — proving the
         // admin path resolves the owner, not the caller.
-        wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, It.IsAny<Guid>(), "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
 
         // titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write — the audit row is flushed by the VM
-        // repo's SaveAsync together with the pending delete intent and the provider command (same DbContext).
+        // repo's SaveAsync together with the waiting delete and the provider command (same DbContext).
         audit.Verify(a => a.Add(It.Is<AdminAuditLog>(e =>
             e.Action == "vm.delete.cross_tenant" && e.ActorKeycloakUserId == "admin-1"
             && e.ResourceType == "vm" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);
         Assert.True(repo.SaveCalled);
-        Assert.Equal(VmIntent.Delete, vm.PendingIntent);
+        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
     }
 
     // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path detaches the VM's volumes like the
@@ -219,21 +219,23 @@ public class AdminResourceServiceTests
         Assert.Equal(Titan.Domain.Aggregates.Volume.VolumeTransition.Detaching, volume.Transition);
     }
 
-    // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete enqueues the same command again but writes
-    // the audit row once: the second press destroyed nothing.
+    // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete writes the audit row once and sends
+    // nothing more: the delete already waits, and its command carries it (titan-ops architecture/resource-lifecycle.md#repeat).
     [Fact]
-    public async Task DeleteVm_Repeated_AuditsOnce_AndResendsTheCommand()
+    public async Task DeleteVm_Repeated_AuditsOnce_AndSendsNothingMore()
     {
         var vm = RunningVm(TenantBOwner, "victim");
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
+        Guid firstRequest = vm.Pending!.Id;
         await svc.DeleteVmAsync(vm.Id);
 
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Once);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
-        wf.Verify(w => w.ResendVmDeleteAsync(vm.Id, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, firstRequest, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
+        Assert.Equal(firstRequest, vm.Pending!.Id);
     }
 
     [Fact] // deleting a VM that is already gone is done, not an error, and audits nothing
@@ -248,7 +250,7 @@ public class AdminResourceServiceTests
         await svc.DeleteVmAsync(vm.Id);
 
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.False(repo.SaveCalled);
     }
 
@@ -258,7 +260,7 @@ public class AdminResourceServiceTests
         var (svc, wf, audit) = Build(new StubVmRepo());
 
         await Assert.ThrowsAsync<NotFoundException>(() => svc.DeleteVmAsync(Guid.NewGuid()));
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         // A rejected attempt (nothing destructive happened) writes no audit row.
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
     }
@@ -272,7 +274,7 @@ public class AdminResourceServiceTests
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         // Guard rejected before the destructive call — no audit row.
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
     }
@@ -287,7 +289,7 @@ public class AdminResourceServiceTests
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         // Guard rejected before the destructive call — no audit row.
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
     }
@@ -303,7 +305,7 @@ public class AdminResourceServiceTests
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
         Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);
     }
 
@@ -319,7 +321,7 @@ public class AdminResourceServiceTests
 
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.True(repo.SaveCalled);
-        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         // The VM was destroyed locally, so an audit row is staged; it persists with DeleteLocally() through the
         // VM repo's SaveAsync (same DbContext), so there is no separate audit save.
         audit.Verify(a => a.Add(It.Is<AdminAuditLog>(e =>

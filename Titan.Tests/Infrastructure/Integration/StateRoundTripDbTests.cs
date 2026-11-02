@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Repositories;
 
@@ -19,11 +20,11 @@ public class StateRoundTripDbTests(PostgresFixture pg)
         network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
     [Fact]
-    public async Task WaitingStop_SurvivesAReload_AndResendsTheSameId()
+    public async Task WaitingStop_SurvivesAReload_WithItsIdKindAndTime()
     {
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        VmIntentTicket ticket = vm.RequestStop();
+        RequestTicket ticket = vm.RequestStop();
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
@@ -39,8 +40,9 @@ public class StateRoundTripDbTests(PostgresFixture pg)
             Assert.Equal("Stopped", stored);
 
             var reloaded = await db.Vms.SingleAsync(v => v.Id == vm.Id);
-            Assert.Equal(VmIntent.Stop, reloaded.PendingIntent);
-            Assert.Equal(ticket.IntentId, reloaded.ResendWaitingIntent(VmIntent.Stop).IntentId);
+            Assert.Equal(VmRequestKind.Stop, reloaded.Pending?.Kind);
+            Assert.Equal(ticket.RequestId, reloaded.Pending!.Id);
+            Assert.Equal(vm.Pending!.AskedAt, reloaded.Pending.AskedAt, TimeSpan.FromMilliseconds(1));
         }
     }
 

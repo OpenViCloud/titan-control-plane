@@ -57,14 +57,15 @@ public class IntentRepeatDeclarationTests
         [typeof(CreateLoadBalancerCommandHandler)] = new IdempotencyKey(),
 
         // ── VM ──
+        // A repeat of a waiting VM request records nothing and sends nothing (titan-ops architecture/resource-lifecycle.md#repeat).
         [typeof(StopVmCommandHandler)] =
-            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Stop_Repeated_RecordsOneRequest_AndResendsTheSameIntentId)),
+            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Stop_Repeated_RecordsOneRequest_AndSendsNothingMore)),
         [typeof(StartVmCommandHandler)] =
-            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Start_Repeated_RecordsOneRequest)),
+            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Start_Repeated_RecordsOneRequest_AndSendsNothingMore)),
         [typeof(DeleteVmCommandHandler)] =
-            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Delete_Repeated_RecordsOneRequest_AndResendsTheSameCommand)),
+            new RepeatCheck(typeof(VmServiceTests), nameof(VmServiceTests.Delete_Repeated_RecordsOneRequest_AndSendsNothingMore)),
         [typeof(DeleteAdminVmCommandHandler)] =
-            new RepeatCheck(typeof(AdminResourceServiceTests), nameof(AdminResourceServiceTests.DeleteVm_Repeated_AuditsOnce_AndResendsTheCommand)),
+            new RepeatCheck(typeof(AdminResourceServiceTests), nameof(AdminResourceServiceTests.DeleteVm_Repeated_AuditsOnce_AndSendsNothingMore)),
 
         // ── group B: a repeat is a no-op ──
         [typeof(RevertVmSnapshotCommandHandler)] =

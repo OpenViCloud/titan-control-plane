@@ -8,7 +8,8 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Infrastructure.ProviderCommands;
 
 // titan-ops architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
-// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes.
+// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes; a VM's keys carry the request
+// id (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
 public class ProviderCommandQueueTests
 {
     private readonly FakeProviderCommandRepository _repo = new();
@@ -17,20 +18,22 @@ public class ProviderCommandQueueTests
     private ProviderCommandQueue Queue() => new(_repo, _clock);
 
     [Fact]
-    public async Task VmCreate_StagesOnePendingRow_WithTheProvisionKey_AndTheWorkersPayload()
+    public async Task VmCreate_StagesOnePendingRow_KeyedOnTheRequest_WithTheWorkersPayload()
     {
         Guid vmId = Guid.NewGuid();
+        Guid requestId = Guid.NewGuid();
 
-        await Queue().EnqueueVmCreateAsync(vmId, "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
+        await Queue().EnqueueVmCreateAsync(vmId, requestId, "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
             "t-0123", 20, "#cloud-config\n", vendorData: null);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
-        Assert.Equal($"vm-provision-{vmId}", row.Key);
+        Assert.Equal($"vm-create-{vmId}-{requestId}", row.Key);
         Assert.Equal(ProviderCommandKinds.VmCreate, row.Kind);
         Assert.Equal("mock", row.ClusterId);
         Assert.Equal(ProviderCommandStatus.Pending, row.Status);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
+        Assert.Equal(requestId.ToString(), payload.RootElement.GetProperty("requestId").GetString());
         Assert.Equal("t-0123", payload.RootElement.GetProperty("projectName").GetString());
         Assert.Equal("tpl-a", payload.RootElement.GetProperty("templateId").GetString());
         Assert.Equal(4096, payload.RootElement.GetProperty("memoryMb").GetInt32());
@@ -42,7 +45,7 @@ public class ProviderCommandQueueTests
     [InlineData(null, "")]
     public async Task VmCreate_CarriesTheVendorData_OrAnEmptyOne(string? vendorData, string expected)
     {
-        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
+        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
             "t-0123", 20, null, vendorData);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
@@ -50,25 +53,29 @@ public class ProviderCommandQueueTests
         Assert.Equal("", payload.RootElement.GetProperty("userData").GetString());
     }
 
-    // The handler resends a delete that is still waiting: the open row absorbs it.
+    // One row per request (titan-ops architecture/resource-lifecycle.md#one-key-per-request): a second delete of the same VM is
+    // a new request with its own key, never a repeat of the first row.
     [Fact]
-    public async Task Resend_OfAnOpenVmDelete_IsAbsorbed_NoSecondRow()
+    public async Task VmDelete_EachRequest_GetsItsOwnRow_CarryingItsRequestId()
     {
         Guid vmId = Guid.NewGuid();
+        Guid first = Guid.NewGuid();
+        Guid second = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
-        await queue.ResendVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmDeleteAsync(vmId, first, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmDeleteAsync(vmId, second, "vm-x", "t-1", "mock");
 
-        ProviderCommand row = Assert.Single(_repo.Rows);
-        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
+        Assert.Equal(2, _repo.Rows.Count);
+        Assert.Equal($"vm-delete-{vmId}-{first}", _repo.Rows[0].Key);
+        Assert.Equal($"vm-delete-{vmId}-{second}", _repo.Rows[1].Key);
+        Assert.Contains(second.ToString(), _repo.Rows[1].Payload);
     }
 
     // A request the handler took as new, on a resource key whose row is open: another request committed it first
     // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
     // handler saves nothing of this request.
     [Theory]
-    [InlineData("vm-delete")]
     [InlineData("network-delete")]
     [InlineData("firewall-delete")]
     [InlineData("vm-snapshot-revert")]
@@ -97,7 +104,6 @@ public class ProviderCommandQueueTests
 
     private static Task EnqueueNewAsync(ProviderCommandQueue queue, string key, Guid id) => key switch
     {
-        "vm-delete" => queue.EnqueueVmDeleteAsync(id, "vm-x", "t-1", "mock"),
         "network-delete" => queue.EnqueueNetworkDeleteAsync(id, "net-x", "t-1", "mock"),
         "firewall-delete" => queue.EnqueueFirewallRuleDeleteAsync(id, Guid.Empty, "rule-x", "t-1", "mock"),
         "vm-snapshot-revert" => queue.EnqueueVmSnapshotRevertAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
@@ -110,40 +116,22 @@ public class ProviderCommandQueueTests
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "not a resource key"),
     };
 
+    // The VM's keys carry the request id, so stop->start->stop are three rows; no handler enqueues a key twice
+    // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
-    public async Task VmStop_RepeatAfterItRan_IsAbsorbed()
+    public async Task VmStopAndStart_AreKeyedOnTheirRequest()
     {
         Guid vmId = Guid.NewGuid();
-        Guid intentId = Guid.NewGuid();
+        Guid stop = Guid.NewGuid();
+        Guid start = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVmStopAsync(vmId, intentId, "vm-x", "t-1", "mock");
-        ProviderCommand row = Assert.Single(_repo.Rows);
-        Assert.Equal($"vm-stop-{vmId}-{intentId}", row.Key);
-        Guid lease = Guid.NewGuid();
-        row.Lease(lease, _clock.GetUtcNow());
-        row.Complete(lease, _clock.GetUtcNow());
 
-        await queue.EnqueueVmStopAsync(vmId, intentId, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStopAsync(vmId, stop, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStartAsync(vmId, start, "vm-x", "t-1", "mock");
 
-        Assert.Equal(ProviderCommandStatus.Done, row.Status);
-    }
-
-    // A failed run of the same intent is what a repeat may run again, as the failed-only workflow id reuse did.
-    [Fact]
-    public async Task VmStop_RepeatAfterItFailed_RunsAgain()
-    {
-        Guid vmId = Guid.NewGuid();
-        Guid intentId = Guid.NewGuid();
-        ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVmStopAsync(vmId, intentId, "vm-x", "t-1", "mock");
-        ProviderCommand row = Assert.Single(_repo.Rows);
-        Guid lease = Guid.NewGuid();
-        row.Lease(lease, _clock.GetUtcNow());
-        row.Fail(lease, "poweroff refused", retryable: false, _clock.GetUtcNow());
-
-        await queue.EnqueueVmStopAsync(vmId, intentId, "vm-x", "t-1", "mock");
-
-        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
+        Assert.Equal($"vm-stop-{vmId}-{stop}", _repo.Rows[0].Key);
+        Assert.Equal($"vm-start-{vmId}-{start}", _repo.Rows[1].Key);
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
     }
 
     [Fact]
@@ -164,37 +152,25 @@ public class ProviderCommandQueueTests
         Assert.Contains("vm-y", row.Payload);
     }
 
+    // The worker's report names the request (titan-ops architecture/resource-lifecycle.md#callback-routes): the id travels in the
+    // payload as requestId, and as intentId for a worker from before the request routes (removed in rollout phase 6).
     [Fact]
-    public async Task VmDelete_RepeatAfterItRan_IsAbsorbed()
+    public async Task StopAndStart_CarryTheRequestId_AsRequestIdAndIntentId()
     {
         Guid vmId = Guid.NewGuid();
-        ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
-        ProviderCommand row = Assert.Single(_repo.Rows);
-        Guid lease = Guid.NewGuid();
-        row.Lease(lease, _clock.GetUtcNow());
-        row.Complete(lease, _clock.GetUtcNow());
-
-        await queue.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
-
-        Assert.Equal(ProviderCommandStatus.Done, row.Status);
-    }
-
-    // The worker reports a failed stop/start on intents/{intentId}/failed: the id must travel with the command.
-    [Fact]
-    public async Task StopAndStart_CarryTheIntentIdTheFailureReportNeeds()
-    {
-        Guid vmId = Guid.NewGuid();
-        Guid stopIntent = Guid.NewGuid();
-        Guid startIntent = Guid.NewGuid();
+        Guid stopRequest = Guid.NewGuid();
+        Guid startRequest = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmStopAsync(vmId, stopIntent, "vm-x", "t-1", "mock");
-        await queue.EnqueueVmStartAsync(vmId, startIntent, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStopAsync(vmId, stopRequest, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStartAsync(vmId, startRequest, "vm-x", "t-1", "mock");
 
-        Assert.Contains(stopIntent.ToString(), _repo.Rows[0].Payload);
-        Assert.Contains(startIntent.ToString(), _repo.Rows[1].Payload);
-        Assert.Equal($"vm-start-{vmId}-{startIntent}", _repo.Rows[1].Key);
+        using JsonDocument stop = JsonDocument.Parse(_repo.Rows[0].Payload);
+        Assert.Equal(stopRequest.ToString(), stop.RootElement.GetProperty("requestId").GetString());
+        Assert.Equal(stopRequest.ToString(), stop.RootElement.GetProperty("intentId").GetString());
+        using JsonDocument start = JsonDocument.Parse(_repo.Rows[1].Payload);
+        Assert.Equal(startRequest.ToString(), start.RootElement.GetProperty("requestId").GetString());
+        Assert.Equal($"vm-start-{vmId}-{startRequest}", _repo.Rows[1].Key);
     }
 
     // The delete callback URL is /internal/networks/{networkId}/firewall-rules/{ruleId}.
@@ -242,7 +218,7 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmCreate_NoLongerCarriesEnablePublicIpv6()
     {
-        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
+        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
             "t-0123", 20, null, null);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);

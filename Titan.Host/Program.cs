@@ -59,6 +59,7 @@ using CatClusterQry = Titan.Application.Queries.Catalog.Cluster;
 using CatOsImageQry = Titan.Application.Queries.Catalog.OsImage;
 using AdminVmCmd = Titan.Application.Commands.Admin.Vm;
 using AdminVmQry = Titan.Application.Queries.Admin.Vm;
+using AdminRequestQry = Titan.Application.Queries.Admin.Request;
 using AdminNetworkQry = Titan.Application.Queries.Admin.Network;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
@@ -102,11 +103,14 @@ builder.Services.AddHealthChecks()
     // payment into an outage (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
     .AddCheck<WalletMutationHealthCheck>("wallet-async", tags: ["background", "wallet"])
     // A stale reconciler means observations are late, not that this pod cannot serve.
-    .AddCheck<ReconcilerLivenessHealthCheck>("reconcilers", tags: ["background", "reconcilers"]);
+    .AddCheck<ReconcilerLivenessHealthCheck>("reconcilers", tags: ["background", "reconcilers"])
+    // A request waiting past the threshold (titan-ops architecture/resource-lifecycle.md#lost-and-stale): shown with the reconcilers.
+    .AddCheck<StuckRequestHealthCheck>("stuck-requests", tags: ["background", "reconcilers"]);
 
 builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<INetworkRepository, NetworkRepository>();
 builder.Services.AddScoped<IClusterIpv6RouteRepository, ClusterIpv6RouteRepository>();
+builder.Services.AddScoped<IPendingRequestReader, PendingRequestReader>();
 builder.Services.AddScoped<IFirewallRuleRepository, FirewallRuleRepository>();
 builder.Services.AddScoped<ISshKeyRepository, SshKeyRepository>();
 builder.Services.AddScoped<IApiTokenRepository, ApiTokenRepository>();
@@ -172,6 +176,8 @@ builder.Services.AddScoped<StopVmCommandHandler>();
 builder.Services.AddScoped<StartVmCommandHandler>();
 builder.Services.AddScoped<UpdateVmStatusCommandHandler>();
 builder.Services.AddScoped<MarkVmIntentFailedCommandHandler>();
+builder.Services.AddScoped<EndVmRequestCommandHandler>();
+builder.Services.AddScoped<ObserveVmCommandHandler>();
 builder.Services.AddScoped<IActivityRecorder, ActivityRecorder>();
 builder.Services.AddScoped<BillUsageQry.GetVmCostQueryHandler>();
 builder.Services.AddScoped<BillUsageQry.GetTenantBillingSummaryQueryHandler>();
@@ -282,6 +288,7 @@ builder.Services.AddSingleton<WalletSweeperHeartbeat>();
 builder.Services.AddHostedService<WalletMutationSweeper>();
 // The worker's reconcilers poll GET /internal/reconcile/*; each poll feeds this heartbeat, read by /healthz/reconcilers.
 builder.Services.AddOptions<ReconcilerLivenessOptions>().BindConfiguration(ReconcilerLivenessOptions.SectionName);
+builder.Services.AddOptions<RequestStuckOptions>().BindConfiguration(RequestStuckOptions.SectionName);
 builder.Services.AddSingleton<ReconcilerHeartbeat>();
 // titan-ops architecture/money-and-wallet.md#append-only-metering
 builder.Services.AddMeters();
@@ -302,6 +309,7 @@ builder.Services.AddScoped<TemplateSyncRunner>();
 // Cross-tenant, platform-admin only (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read).
 builder.Services.AddScoped<AdminVmCmd.DeleteAdminVmCommandHandler>();
 builder.Services.AddScoped<AdminVmQry.ListAdminVmsQueryHandler>();
+builder.Services.AddScoped<AdminRequestQry.ListStuckRequestsQueryHandler>();
 builder.Services.AddScoped<AdminNetworkQry.ListAdminNetworksQueryHandler>();
 // The provider command table (titan-ops architecture/provider-and-worker.md#provider-command-table): handlers stage rows,
 // the worker leases them over /internal.

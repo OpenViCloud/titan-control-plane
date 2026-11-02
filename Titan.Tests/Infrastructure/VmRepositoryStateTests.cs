@@ -150,14 +150,16 @@ public class VmRepositoryStateTests
     // A create Titan gave up on is not watched (it is not brought back to life), with or without an instance;
     // it is never billed, as it has no Incus status.
     [Fact]
-    public async Task Reconciler_WatchesEveryVmWithAnInstance_ButNotACreateThatGaveUp()
+    // Every VM Incus may hold, a create that gave up after the instance was made included: an instance that runs is
+    // billed whether or not its create ended well (titan-ops architecture/resource-lifecycle.md#reconciler).
+    public async Task Reconciler_WatchesEveryVmWithAnInstance_ACreateThatGaveUpIncluded()
     {
         using var db = NewDb();
         VmRepository repo = await SeededAsync(db);
 
         List<Vm> watched = await repo.ListReconcilableAsync("cluster-a");
 
-        Assert.Equal(new[] { "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
+        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
             watched.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 }

@@ -81,6 +81,16 @@ public class DomainRoleFolderTests
         Assert.True(offenders.Count == 0, string.Join(" | ", offenders));
     }
 
+    // The request shape of titan-ops architecture/resource-lifecycle.md#shape is shared by design and reaches the aggregates one
+    // rollout phase at a time (titan-ops architecture/resource-lifecycle.md#rollout); VM is the first. Each row leaves when
+    // the second aggregate (Volume, phase 2) uses the type — the stale check below says so.
+    private static readonly Dictionary<string, string> SharedByTheRollout = new(StringComparer.Ordinal)
+    {
+        ["PendingRequest"] = "the one waiting request of every Incus-backed resource; VM first, Volume in rollout phase 2",
+        ["RequestTicket"] = "what every Request* hands the handler; VM first, Volume in rollout phase 2",
+        ["RequestOutcome"] = "Done or Failed of every request's report; VM first, Volume in rollout phase 2",
+    };
+
     [Fact]
     public void SharedValueTypes_AreUsedByAtLeastTwoAggregates()
     {
@@ -100,10 +110,16 @@ public class DomainRoleFolderTests
         var offenders = new List<string>();
         foreach (var type in values)
         {
-            var users = sources.Where(s => Regex.IsMatch(s.Code, $@"\b{type.Name}\b")).Select(s => s.Aggregate).ToList();
-            if (users.Count < 2)
-                offenders.Add($"{type.Name} is used by {users.Count} aggregate(s): {string.Join(", ", users)}");
+            // A generic's reflection name carries its arity (PendingRequest`1); the source says PendingRequest<VmRequestKind>.
+            string name = type.Name.Split('`')[0];
+            var users = sources.Where(s => Regex.IsMatch(s.Code, $@"\b{name}\b")).Select(s => s.Aggregate).ToList();
+            if (users.Count < 2 && !SharedByTheRollout.ContainsKey(name))
+                offenders.Add($"{name} is used by {users.Count} aggregate(s): {string.Join(", ", users)}");
         }
+        var stale = SharedByTheRollout.Keys
+            .Where(name => sources.Count(s => Regex.IsMatch(s.Code, $@"\b{name}\b")) >= 2)
+            .ToList();
+        Assert.True(stale.Count == 0, "SharedByTheRollout rows for types two aggregates now use; delete them: " + string.Join(", ", stale));
 
         Assert.True(offenders.Count == 0,
             "A type only one aggregate uses belongs in that aggregate's folder: " + string.Join(" | ", offenders));
@@ -120,12 +136,13 @@ public class DomainRoleFolderTests
     }
 
     // Internal counts: a method a domain service calls (Network.MarkDeleted) still hands its result out of the aggregate.
+    // Property getters do not: an input record's part (VmRequestEnd.Observed) is read back, not handed out.
     private static bool ReturnedByAnAggregateMethod(Type type) =>
         typeof(NotFoundException).Assembly.GetExportedTypes()
             // Skip the type's own methods: a record's compiler-generated Clone returns the record, whatever its role.
             .Where(t => t != type && t.Namespace is not null && t.Namespace.StartsWith(Aggregates + ".", StringComparison.Ordinal))
             .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
-            .Where(m => m.IsPublic || m.IsAssembly)
+            .Where(m => (m.IsPublic || m.IsAssembly) && !m.IsSpecialName)
             .Any(m => m.ReturnType == type);
 
     private static List<string> AggregateFolders() => Directory.GetDirectories(AggregatesDir()).ToList();

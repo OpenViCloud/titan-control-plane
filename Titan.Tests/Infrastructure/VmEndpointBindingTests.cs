@@ -41,6 +41,9 @@ public class VmEndpointBindingTests
     {
         _currentUser.SetupGet(u => u.TenantId).Returns(TenantId);
         _repo.Setup(r => r.FindByIdAsync(VmId, default)).ReturnsAsync(() => SampleVm());
+        // Every lifecycle handler locks the row (titan-ops architecture/resource-lifecycle.md#one-key-per-request); a mock has
+        // no rows, so the locked read answers what the plain one does.
+        _repo.Setup(r => r.FindByIdForUpdateAsync(VmId, default)).Returns(() => _repo.Object.FindByIdAsync(VmId, default));
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(() => [SampleVm()]);
     }
 
@@ -163,7 +166,7 @@ public class VmEndpointBindingTests
 
         _repo.Verify(r => r.FindByIdForUpdateAsync(VmId, default), Times.Once);
         commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), "one-42", It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 

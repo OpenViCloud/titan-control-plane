@@ -94,7 +94,13 @@ public class VmServiceTests
         new(_repo.Object, _volumeRepo.Object, _activity);
 
     private MarkVmIntentFailedCommandHandler CreateMarkIntentFailedHandler() =>
-        new(_repo.Object, _activity);
+        new(_repo.Object, _volumeRepo.Object, _activity);
+
+    private EndVmRequestCommandHandler CreateEndRequestHandler() =>
+        new(_repo.Object, _volumeRepo.Object, _activity);
+
+    private ObserveVmCommandHandler CreateObserveHandler() =>
+        new(_repo.Object, _volumeRepo.Object, _activity);
 
     private ListVmsQueryHandler CreateListHandler() =>
         new(_repo.Object, _currentUser.Object);
@@ -163,7 +169,7 @@ public class VmServiceTests
             .Callback(() => calls.Add("save"))
             .Returns(Task.CompletedTask);
         _commands.Setup(w => w.EnqueueVmCreateAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
@@ -199,7 +205,7 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "77", "cluster-1",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -224,7 +230,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, chosenTier, _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", chosenTier, (decimal)cpu, vcpu, memoryMb, "77", "cluster-1",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", chosenTier, (decimal)cpu, vcpu, memoryMb, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -271,7 +277,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "xl", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "xl", 4.0m, 8, 16384, "77", "cluster-1",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "xl", 4.0m, 8, 16384, "77", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -294,7 +300,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "99", "cluster-1",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "99", "cluster-1",
             "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -317,7 +323,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-2", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "3", "cluster-2",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "3", "cluster-2",
             "cs-net-2", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -594,10 +600,10 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Equal(VmState.Running, vm.CurrentState); // reconciler handles transition, not CP
-        Assert.Equal(VmIntent.Delete, vm.PendingIntent);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
+        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
@@ -615,7 +621,7 @@ public class VmServiceTests
 
         Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -638,7 +644,7 @@ public class VmServiceTests
 
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The unprovisioned-VM shortcut (ExternalId == null → VmDeletion deletes it locally) must
@@ -657,7 +663,7 @@ public class VmServiceTests
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -671,7 +677,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -689,7 +695,7 @@ public class VmServiceTests
 
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A VM that provisioned (MarkRunning persisted an external id) and then failed on the provider
@@ -711,7 +717,7 @@ public class VmServiceTests
 
         // Must terminate the still-existing provider VM — not silently mark destroyed.
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence); // reconciler owns the terminal transition
     }
 
@@ -743,8 +749,8 @@ public class VmServiceTests
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
         Assert.Equal(VmState.Running, vm.CurrentState); // reconciler writes Stopped, not CP
-        var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the intent, request event and provider command together
+        var intentId = Assert.IsType<Guid>(vm.Pending?.Id);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmStopAsync(
             vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -783,7 +789,7 @@ public class VmServiceTests
 
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
-        var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        var intentId = Assert.IsType<Guid>(vm.Pending?.Id);
         _commands.Verify(w => w.EnqueueVmStopAsync(
             vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -816,7 +822,7 @@ public class VmServiceTests
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
         Assert.Equal(VmState.Stopped, vm.CurrentState); // reconciler writes Running, not CP
-        var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        var intentId = Assert.IsType<Guid>(vm.Pending?.Id);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmStartAsync(
             vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -865,7 +871,7 @@ public class VmServiceTests
 
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
-        Assert.Null(vm.PendingIntent);
+        Assert.Null(vm.Pending);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
         _commands.Verify(w => w.EnqueueVmStartAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -1008,7 +1014,7 @@ public class VmServiceTests
         Assert.Equal("VM provisioning failed due to a system error. Please try again or contact support.", vm.RequestFailureReason);
         Assert.Equal("instance create failed: operation timed out", vm.RequestFailureDetail);
         Assert.Null(vm.CurrentState);
-        Assert.Null(vm.PendingIntent);
+        Assert.Null(vm.Pending);
     }
 
     // The tenant-facing DTO must not carry the raw diagnostic at all. Asserting the value is
@@ -1099,15 +1105,49 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Deleted_RecordsTheInstanceGone()
+    public async Task UpdateStatus_Deleted_WithADeleteWaiting_EndsTheVm()
+    {
+        var vm = MakeVm(VmSeed.Running);
+        vm.RequestDelete();
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+
+        Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
+        Assert.Null(vm.Pending);
+        Assert.Equal("vm.deleted", Assert.Single(_activity.Events).Action);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+    }
+
+    // A Deleted on the old route is not the report of a waiting stop: the stop keeps waiting for its own, and nothing is
+    // recorded as if it had ended (titan-ops architecture/resource-lifecycle.md#invariants).
+    [Fact]
+    public async Task UpdateStatus_Deleted_WhileAStopWaits_IsNotFound_AndTheStopKeepsWaiting()
+    {
+        var vm = MakeVm(VmSeed.Running);
+        RequestTicket stop = vm.RequestStop();
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+
+        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
+        Assert.Empty(_activity.Events);
+    }
+
+    // Only a delete's own report ends a VM (titan-ops architecture/resource-lifecycle.md#invariants); a Deleted on the old route
+    // with nothing waiting says the instance is gone from Incus, which is what NotFound records.
+    [Fact]
+    public async Task UpdateStatus_Deleted_WithNoDeleteWaiting_IsNotFound_AndRecordsNothing()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
-        Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
+        Assert.False(vm.IsTerminal);
+        Assert.Empty(_activity.Events);
     }
 
     // The VM's Deleted takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every one is Deleted
@@ -1157,14 +1197,15 @@ public class VmServiceTests
         volume.RequestDelete();
     }
 
-    // Seen detached by the VM's Deleted whether or not a delete asked (a repeat that found it detaching, say). The
-    // desired attachment is the customer's and stays: nothing waits, so it reads as drift.
+    // Seen detached by the VM's Deleted whether or not the volume's detach was asked (a repeat that found it detaching,
+    // say). The desired attachment is the customer's and stays: nothing waits, so it reads as drift.
     [Fact]
     public async Task UpdateStatus_Deleted_SeesItsVolumesDetached()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         Volume volume = AttachedVolume(vm);
+        vm.RequestDelete();
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
@@ -1185,8 +1226,9 @@ public class VmServiceTests
 
     [Fact]
     // Incus says Running before the guest has an address: that is Running (the callback used to refuse it, and the
-    // VM sat Creating until DHCP answered — or forever).
-    public async Task UpdateStatus_RunningWithoutAnAddress_IsRunning_AndEndsTheCreate()
+    // VM sat Creating until DHCP answered — or forever). The create ended with the Created report; Running is drift
+    // toward what was asked, and records nothing.
+    public async Task UpdateStatus_RunningWithoutAnAddress_IsRunning_AndRecordsNothing()
     {
         var vm = MakeVm(VmSeed.CreatedNotSeen);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
@@ -1195,8 +1237,8 @@ public class VmServiceTests
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Null(vm.IpAddress);
-        Assert.Null(vm.PendingIntent);
-        Assert.Equal("vm.created", Assert.Single(_activity.Events).Action);
+        Assert.Null(vm.Pending);
+        Assert.Empty(_activity.Events);
     }
 
     [Fact]
@@ -1239,7 +1281,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, userData), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
             userData, null, It.IsAny<CancellationToken>()), Times.Once);
@@ -1258,7 +1300,7 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
             null, null, It.IsAny<CancellationToken>()), Times.Once);
@@ -1286,11 +1328,11 @@ public class VmServiceTests
         _sshKeys.Saved.AddRange([ed, rsa]);
         string? vendorData = null;
         _commands.Setup(w => w.EnqueueVmCreateAsync(
-                It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
                 It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[12]))
+            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[13])) // requestId sits at index 1
             .Returns(Task.CompletedTask);
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand(
@@ -1314,7 +1356,7 @@ public class VmServiceTests
             "web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
             It.IsAny<string?>(), null, It.IsAny<CancellationToken>()), Times.Once);
@@ -1348,7 +1390,7 @@ public class VmServiceTests
         Assert.Equal("SSH_KEY_NOT_FOUND", refused.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
             It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -1528,7 +1570,7 @@ public class VmServiceTests
         var e = Assert.Single(_activity.Events);
         Assert.Equal("vm.delete_requested", e.Action); // titan-ops architecture/intent-and-observation.md#intent-has-identity: the request, not the outcome
         Assert.Equal(vm.Id, e.ResourceId);
-        Assert.False(e.Saved); // staged, flushed with the pending intent and the provider command
+        Assert.False(e.Saved); // staged, flushed with the waiting request and the provider command
     }
 
     [Fact]
@@ -1574,10 +1616,10 @@ public class VmServiceTests
 
     // ── titan-ops architecture/intent-and-observation.md#intent-has-identity: a request is applied once; its outcome is recorded once ─────
 
-    // A second DELETE before the reconciler notices records no second request; it only enqueues the
-    // same command again.
+    // A second DELETE while the first waits records no second request and sends nothing more: the waiting request's
+    // own command carries it (titan-ops architecture/resource-lifecycle.md#repeat).
     [Fact]
-    public async Task Delete_Repeated_RecordsOneRequest_AndResendsTheSameCommand()
+    public async Task Delete_Repeated_RecordsOneRequest_AndSendsNothingMore()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -1585,39 +1627,40 @@ public class VmServiceTests
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
+        Guid firstRequest = vm.Pending!.Id;
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Equal("vm.delete_requested", Assert.Single(_activity.Events).Action);
-        // The repeat saves too: that save is what persists a command row the repeat reopened.
-        _repo.Verify(r => r.SaveAsync(default), Times.Exactly(2));
-        // Re-sent, not re-decided: same command key, which the queue absorbs unless the first run failed. A resend,
-        // not a new request: a new request on an open row is another request's race and is refused.
+        Assert.Equal(firstRequest, vm.Pending!.Id);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the repeat changes nothing, so it saves nothing
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        _commands.Verify(w => w.ResendVmDeleteAsync(
-            vm.Id, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, firstRequest, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task Stop_Repeated_RecordsOneRequest_AndResendsTheSameIntentId()
+    public async Task Stop_Repeated_RecordsOneRequest_AndSendsNothingMore()
     {
         SetupCurrentUser(TenantId);
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        var intentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        Guid requestId = Assert.IsType<Guid>(vm.Pending?.Id);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
         Assert.Equal("vm.stop_requested", Assert.Single(_activity.Events).Action);
+        Assert.Equal(requestId, vm.Pending!.Id);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
+            vm.Id, requestId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, It.Is<Guid>(g => g != intentId), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
     [Fact]
-    public async Task Start_Repeated_RecordsOneRequest()
+    public async Task Start_Repeated_RecordsOneRequest_AndSendsNothingMore()
     {
         SetupCurrentUser(TenantId);
         var vm = MakeVm(VmSeed.Stopped);
@@ -1627,8 +1670,9 @@ public class VmServiceTests
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
         Assert.Equal("vm.start_requested", Assert.Single(_activity.Events).Action);
-        // The repeat saves too: that save is what persists a command row the repeat reopened.
-        _repo.Verify(r => r.SaveAsync(default), Times.Exactly(2));
+        _commands.Verify(w => w.EnqueueVmStartAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once); // the repeat changes nothing, so it saves nothing
     }
 
     // Asking for the state the VM is already in is done, not illegal
@@ -1675,7 +1719,7 @@ public class VmServiceTests
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1692,23 +1736,23 @@ public class VmServiceTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
-    // The reconciler's observation is where the outcome is recorded, once, for the VM's tenant. A flip
-    // nobody asked for, like a guest shutdown, records nothing (see the last test in this block).
+    // An observation never ends a create (titan-ops architecture/resource-lifecycle.md#invariants): Running while the
+    // create waits records what Incus shows and leaves the create to its own command's report.
     [Fact]
-    public async Task UpdateStatus_FirstRunning_RecordsVmCreated()
+    public async Task UpdateStatus_Running_WhileTheCreateWaits_RecordsNothing_AndTheCreateKeepsWaiting()
     {
         var vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
 
-        var e = Assert.Single(_activity.Events);
-        Assert.Equal("vm.created", e.Action);
-        Assert.Equal(TenantId, e.OutcomeTenantId);
-        Assert.Equal(vm.Id, e.ResourceId);
-        Assert.False(e.Saved); // staged, flushed with the status in the same SaveChanges
+        Assert.Equal(VmState.Running, vm.CurrentState);
+        Assert.Equal(VmTransition.Creating, vm.Transition);
+        Assert.Empty(_activity.Events);
     }
 
+    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached): a worker from before the request
+    // routes reports nothing when a stop or start succeeds, so the observation that reaches what was asked still ends it.
     [Fact]
     public async Task UpdateStatus_FulfillingStopStartDelete_RecordsEachOutcome()
     {
@@ -1731,22 +1775,10 @@ public class VmServiceTests
             e => Assert.Equal(TenantId, e.OutcomeTenantId));
     }
 
-    [Fact] // the reconciler reports Running every cycle
-    public async Task UpdateStatus_RepeatedRunning_RecordsTheOutcomeOnce()
-    {
-        var vm = MakeVm(VmSeed.Creating);
-        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
-
-        Assert.Equal("vm.created", Assert.Single(_activity.Events).Action);
-    }
-
-    // ── The create command reports the provider id before the VM runs ──
+    // ── The create command's report is the create's Done (titan-ops architecture/resource-lifecycle.md#kinds) ──
 
     [Fact]
-    public async Task UpdateStatus_Created_StoresTheProviderId_AndTheCreateKeepsWaiting()
+    public async Task UpdateStatus_Created_EndsTheCreate_StoresTheProviderId_AndRecordsVmCreated()
     {
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
@@ -1754,10 +1786,13 @@ public class VmServiceTests
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: "cs-vm-abc"), default);
 
         Assert.Equal("cs-vm-abc", vm.ExternalId);
-        Assert.Null(vm.CurrentState);
+        Assert.Null(vm.CurrentState); // the status is the reconciler's to say
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
-        Assert.Equal(VmTransition.Creating, vm.Transition);
-        Assert.Empty(_activity.Events);
+        Assert.Null(vm.Pending);
+        var e = Assert.Single(_activity.Events);
+        Assert.Equal("vm.created", e.Action);
+        Assert.Equal(TenantId, e.OutcomeTenantId);
+        Assert.False(e.Saved); // staged, flushed with the VM in the same SaveChanges
     }
 
     [Fact]
@@ -1784,9 +1819,11 @@ public class VmServiceTests
             CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: ""), default));
     }
 
-    // A1 of the resource sync review: the VM exists on the provider, so its delete must reach the provider.
+    // The create ended with its Created report; a give-up that arrives after it (an overlapping lease) names a request
+    // that no longer waits and is ignored (titan-ops architecture/resource-lifecycle.md#lost-and-stale). The VM exists on
+    // the provider, so its delete reaches the provider.
     [Fact]
-    public async Task UpdateStatus_RequestFailedAfterCreated_KeepsTheProviderId_AndDeleteGoesToTheProvider()
+    public async Task UpdateStatus_AGiveUpAfterTheCreateEnded_IsIgnored_AndDeleteGoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -1798,16 +1835,16 @@ public class VmServiceTests
             new UpdateVmStatusCommand(vm.Id, "RequestFailed", Reason: "IPv6 could not be assigned."), default);
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
-        Assert.Equal("IPv6 could not be assigned.", vm.RequestFailureReason);
+        Assert.Null(vm.RequestFailureReason);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence);
     }
 
-    // A VM the provider never runs would sit Creating for ever with no way out; once it has a provider id the
-    // delete reaches the provider and cleans it up.
+    // A VM the provider never runs is not stuck: its create ended when Incus took the instance, and the delete reaches
+    // the provider and cleans it up.
     [Fact]
-    public async Task Delete_WhileTheCreateWaits_AfterTheProviderIdArrived_GoesToTheProvider()
+    public async Task Delete_AfterTheCreateEnded_BeforeTheVmEverRan_GoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -1819,8 +1856,8 @@ public class VmServiceTests
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        Assert.Equal(new[] { "vm.delete_requested", "vm.deleted" }, _activity.Events.Select(e => e.Action));
+            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new[] { "vm.created", "vm.delete_requested", "vm.deleted" }, _activity.Events.Select(e => e.Action));
     }
 
     [Fact] // no provider id yet: the create command may still instantiate, so there is nothing safe to delete
@@ -1869,13 +1906,13 @@ public class VmServiceTests
         Vm vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        Guid intentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        Guid intentId = Assert.IsType<Guid>(vm.Pending?.Id);
         _activity.Events.Clear();
 
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
 
-        Assert.Null(vm.PendingIntent);
+        Assert.Null(vm.Pending);
         var e = Assert.Single(_activity.Events);
         Assert.Equal("vm.stop_failed", e.Action);
         Assert.Equal(TenantId, e.OutcomeTenantId); // the VM's tenant: a callback has no user
@@ -1890,7 +1927,7 @@ public class VmServiceTests
         Vm vm = MakeVm(VmSeed.Stopped);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
-        Guid intentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        Guid intentId = Assert.IsType<Guid>(vm.Pending?.Id);
         _activity.Events.Clear();
 
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
@@ -1905,13 +1942,13 @@ public class VmServiceTests
         Vm vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        Guid firstIntentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        Guid firstIntentId = Assert.IsType<Guid>(vm.Pending?.Id);
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, firstIntentId), default);
 
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
-        Guid secondIntentId = Assert.IsType<Guid>(vm.PendingIntentId);
+        Guid secondIntentId = Assert.IsType<Guid>(vm.Pending?.Id);
         Assert.NotEqual(firstIntentId, secondIntentId);
         _commands.Verify(w => w.EnqueueVmStopAsync(
             vm.Id, secondIntentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -1929,7 +1966,7 @@ public class VmServiceTests
 
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, Guid.NewGuid()), default);
 
-        Assert.Equal(VmIntent.Stop, vm.PendingIntent);
+        Assert.Equal(VmRequestKind.Stop, vm.Pending?.Kind);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }

@@ -6,6 +6,7 @@ using Titan.Domain.Aggregates.AdminAuditLog;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
+using Titan.Domain.Values;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Domain.Aggregates.Volume;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
@@ -37,29 +38,19 @@ public class DeleteAdminVmCommandHandler(
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
         // The aggregate refuses a repeat, so it is recognised here first, whoever sent it
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted: nothing to audit
-        // (titan-ops features/vm/design.md#admin-delete-audit), nothing to send.
-        if (vm.IsTerminal)
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted, or a delete still
+        // waiting: nothing to audit (titan-ops features/vm/design.md#admin-delete-audit), nothing to send
+        // (titan-ops architecture/resource-lifecycle.md#repeat).
+        bool deleteIsWaiting = vm.Pending?.Kind == VmRequestKind.Delete;
+        if (vm.IsTerminal || deleteIsWaiting)
         {
-            return;
-        }
-
-        // A delete still waiting: enqueue its command again, without a second audit row. The save is what
-        // persists a reopened command row.
-        bool deleteIsWaiting = vm.PendingIntent == VmIntent.Delete;
-        if (deleteIsWaiting)
-        {
-            VmIntentTicket waiting = vm.ResendWaitingIntent(VmIntent.Delete);
-            await commands.ResendVmDeleteAsync(vm.Id, waiting.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
-                vm.ClusterId, ct);
-            await vms.SaveAsync(ct);
             return;
         }
 
         // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), or while a
         // load balancer still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
         // (titan-ops architecture/code-structure.md#child-entity · titan-ops architecture/domain-services.md#cross-aggregate-lock).
-        VmIntentTicket ticket = await deletion.RequestAsync(vm, ct);
+        RequestTicket? ticket = await deletion.RequestAsync(vm, ct);
 
         // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.
@@ -83,17 +74,18 @@ public class DeleteAdminVmCommandHandler(
 
         // Errored before provisioning — nothing at the provider, no reconciler running. The audit row
         // and the local delete persist together in one SaveChanges (same DbContext).
-        if (ticket.Outcome == VmIntentOutcome.FinishLocally)
+        bool finishedLocally = ticket == null;
+        if (finishedLocally)
         {
             await vms.SaveAsync(ct);
             return;
         }
 
-        // The audit row, the pending intent and the provider command commit together (same DbContext), so
+        // The audit row, the waiting request and the provider command commit together (same DbContext), so
         // the worker never deletes a VM the audit log does not show
         // (titan-ops architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
+        await commands.EnqueueVmDeleteAsync(vm.Id, ticket!.RequestId, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
             vm.ClusterId, ct);
         await vms.SaveAsync(ct);
     }

@@ -19,16 +19,15 @@ public interface IProviderCommandQueue
     // cpuUnits/vcpuCount/memoryMb come from the selected VM offering (titan-ops features/catalog/design.md#vm-offering-sizing): the
     // worker has no access to Titan's catalog, so the resolved sizing travels with the command. vendorData is Titan's own
     // cloud-init script (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData.
-    Task EnqueueVmCreateAsync(Guid vmId, string name, string vmOfferingId,
+    // requestId is the VM's waiting request (Vm.Pending): one command per request, the key and the payload carry
+    // the id, and the worker's report brings it back (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId,
         decimal cpuUnits, int vcpuCount, int memoryMb, string templateId, string clusterId,
         string externalNetworkId, string projectName, int diskSizeGb,
         string? userData, string? vendorData, CancellationToken ct = default);
-    Task EnqueueVmDeleteAsync(Guid vmId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    Task ResendVmDeleteAsync(Guid vmId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    // Stop/start only actuate the provider; the reconciler observes the result. intentId is Vm.PendingIntentId
-    // (titan-ops architecture/intent-and-observation.md#intent-has-identity): a repeat enqueues the same key.
-    Task EnqueueVmStopAsync(Guid vmId, Guid intentId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVmStartAsync(Guid vmId, Guid intentId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmDeleteAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmStopAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmStartAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
 
     // clusterId is the VM's: a snapshot lives on the VM's cluster. projectName is the tenant's Incus project, where the
     // instance, its snapshots and the custom volumes live (titan-ops architecture/tenancy-and-admin.md#project-name).

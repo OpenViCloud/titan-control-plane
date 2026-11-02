@@ -59,7 +59,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
             v => v.NetworkId == networkId &&
                  (v.CurrentExistence == CurrentExistence.Exists
-                  || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingIntentId != null)), ct);
+                  || (v.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(v, "PendingRequestId") != null)), ct);
 
     // Read here, not through a Compute repository: Networking -> Compute in Titan.Application would close a module
     // cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above reads the VM table.

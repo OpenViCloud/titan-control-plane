@@ -1,6 +1,7 @@
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 
 namespace Titan.Domain.Services;
 
@@ -12,16 +13,18 @@ namespace Titan.Domain.Services;
 public class VmDeletion(ILoadBalancerRepository loadBalancers)
 {
     /// The VM's own refusals come first (already deleted, a snapshot being created or reverted). A refusal here is
-    /// thrown before anything is saved, so the intent RequestDelete recorded in memory goes with the request.
-    public async Task<VmIntentTicket> RequestAsync(Vm vm, CancellationToken ct = default)
+    /// thrown before anything is saved, so the request RequestDelete recorded in memory goes with it. Null: the VM
+    /// never reached the provider, so it was deleted locally and there is no command to enqueue.
+    public async Task<RequestTicket?> RequestAsync(Vm vm, CancellationToken ct = default)
     {
-        VmIntentTicket ticket = vm.RequestDelete();
+        RequestTicket? ticket = vm.RequestDelete();
         if (await loadBalancers.IsBackendAsync(vm.Id, ct))
         {
             throw new BusinessException("VM_IS_LOAD_BALANCER_BACKEND",
                 "A load balancer still sends to this VM. Remove it from the load balancer first.");
         }
-        if (ticket.Outcome == VmIntentOutcome.FinishLocally)
+        bool nothingOnTheProvider = ticket == null;
+        if (nothingOnTheProvider)
         {
             vm.DeleteLocally();
         }

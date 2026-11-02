@@ -14,8 +14,9 @@ public class ProviderCommand : AggregateRoot
 
     public Guid Id { get; private set; }
 
-    /// UNIQUE: the old workflow id (`vm-provision-{vmId}`, `vm-stop-{vmId}-{intentId}`, …). One key, one row, reused
-    /// by a repeat according to Rerun.
+    /// UNIQUE: `network-delete-{networkId}`, `vm-stop-{vmId}-{requestId}`, … One key, one row. A resource's key is reused by
+    /// a repeat according to Rerun; a key carrying a request id is never reused
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public string Key { get; private set; } = default!;
 
     /// What the worker does: `vm.create`, `vm.delete`, … (ProviderCommandKinds).

@@ -85,22 +85,24 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     }
 
     // Two handlers enqueue the same key in two transactions: one row survives, the loser hits 23505 and answers 409.
+    // A network delete: its key is still the resource's (the keys of a VM's requests carry the request
+    // id, titan-ops architecture/resource-lifecycle.md#one-key-per-request, so two of them never share a key).
     [Fact]
     public async Task SameKey_FromTwoScopes_LeavesOneRow()
     {
-        Guid vmId = Guid.NewGuid();
-        string key = $"vm-delete-{vmId}";
+        Guid networkId = Guid.NewGuid();
+        string key = $"network-delete-{networkId}";
 
         await using (TitanDbContext first = pg.NewDbContext())
         {
             await new ProviderCommandQueue(new ProviderCommandRepository(first), TimeProvider.System)
-                .EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
+                .EnqueueNetworkDeleteAsync(networkId, "net-x", "t-1", "mock");
             await first.SaveChangesAsync();
         }
         await using (TitanDbContext second = pg.NewDbContext())
         {
-            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmDelete, "mock", "{}",
-                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
+            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.NetworkDelete, "mock", "{}",
+                ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow));
             DbUpdateException clash = await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
             // A double-clicked delete reaches the caller as "in progress", not as a 500.
             ErrorStatus status = ErrorStatus.For(clash);
@@ -112,17 +114,18 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == key));
     }
 
-    // Two identical repeats at the same instant both reopen one finished row (a failed VM delete, double-clicked):
-    // the version token lets one commit; the other reaches the caller as 409, not 500.
+    // Two identical repeats at the same instant both reopen one finished row (a failed network delete, double-clicked):
+    // the version token lets one commit; the other reaches the caller as 409, not 500. A network, not a VM: a VM's
+    // keys are never reused (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
     public async Task TwoConcurrentReopens_OfOneFinishedRow_TheSecondIs409()
     {
-        Guid vmId = Guid.NewGuid();
+        Guid networkId = Guid.NewGuid();
         Guid leaseId = Guid.NewGuid();
         await using (TitanDbContext seed = pg.NewDbContext())
         {
-            ProviderCommand failed = ProviderCommand.Create($"vm-delete-{vmId}", ProviderCommandKinds.VmDelete, "mock",
-                "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+            ProviderCommand failed = ProviderCommand.Create($"network-delete-{networkId}", ProviderCommandKinds.NetworkDelete, "mock",
+                "{}", ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow);
             failed.Lease(leaseId, DateTimeOffset.UtcNow);
             failed.Fail(leaseId, "gave up", retryable: false, DateTimeOffset.UtcNow);
             seed.ProviderCommands.Add(failed);
@@ -133,8 +136,8 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         var queueA = new ProviderCommandQueue(new ProviderCommandRepository(dbA), TimeProvider.System);
         var queueB = new ProviderCommandQueue(new ProviderCommandRepository(dbB), TimeProvider.System);
 
-        await queueA.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
-        await queueB.EnqueueVmDeleteAsync(vmId, "vm-x", "t-1", "mock");
+        await queueA.EnqueueNetworkDeleteAsync(networkId, "net-x", "t-1", "mock");
+        await queueB.EnqueueNetworkDeleteAsync(networkId, "net-x", "t-1", "mock");
         await dbA.SaveChangesAsync();
         DbUpdateConcurrencyException lost = await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync());
 

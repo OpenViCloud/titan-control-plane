@@ -43,7 +43,10 @@ public class StateTransitionOwnershipTests
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|Invalid status"] = "parse: unknown enum value from the admin request",
         // PendingApproval parses as TenantStatus but is not an admin target.
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|A tenant can only be set to"] = "parse: only Active and Suspended are admin targets",
-        ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback",
+        ["VmReports.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback, shared by every VM callback handler",
+        ["EndVmRequestCommandHandler.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's request report",
+        ["EndVmRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the instance name is missing from the create command's Done",
+        ["ObserveVmCommandHandler.cs|INVALID_STATUS|Observed is required when the instance exists"] = "payload: an observation of an existing instance that does not say its status",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM report"] = "parse: unknown report kind from the worker callback",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the instance exists",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
@@ -189,7 +192,7 @@ public class StateTransitionOwnershipTests
         foreach (var (file, src) in ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates")))
         {
             var aggregate = Path.GetFileNameWithoutExtension(file);
-            // `?` is in the return-type class: Vm.MarkRunning returns VmIntent?, and a pattern without it
+            // `?` is in the return-type class: Volume.MarkObserved returns VolumeTransition?, and a pattern without it
             // would skip that method silently — the scan measuring less, still green. `internal` for the same
             // reason: a child's mutations (VmTemplateCluster) are internal, reached only through its root.
             foreach (var m in Regex.Matches(src, @"(?:public|internal) (?:void|[A-Za-z<>?]+) (Mark\w*)\([^)]*\)\s*\{").Cast<Match>())

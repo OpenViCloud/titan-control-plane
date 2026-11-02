@@ -5,7 +5,8 @@ namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
-// observation of the provider (Mark*, reached from the worker's callback) writes CurrentState. The two
+// observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
+// (EndRequest), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -43,7 +44,7 @@ public class DesiredCurrentOwnershipTests
         var offenders = new List<string>();
         foreach (var method in SplitAggregateMethods())
         {
-            if (method.IsObservation)
+            if (method.IsObservation || method.IsReport)
             {
                 continue;
             }
@@ -60,6 +61,16 @@ public class DesiredCurrentOwnershipTests
 
         var stale = IntentWritesCurrentAllowlist.Keys.Where(k => !offenders.Contains(k)).OrderBy(k => k).ToList();
         Assert.True(stale.Count == 0, "IntentWritesCurrentAllowlist rows that no longer write CurrentState:\n  " + string.Join("\n  ", stale));
+    }
+
+    // The report of a request's own command (EndRequest, titan-ops architecture/resource-lifecycle.md#shape) is the one
+    // method that may write both: what the worker saw is current, and a failed request puts desired back. It is
+    // neither an intent nor an observation, so both scans skip it; every aggregate on the new shape gets one.
+    [Fact]
+    public void ReportMethods_AreOnlyEndRequest()
+    {
+        var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
+        Assert.Equal(["Vm.EndRequest"], reports);
     }
 
     [Fact]
@@ -109,7 +120,10 @@ public class DesiredCurrentOwnershipTests
 
     // ---------- helpers ----------
 
-    private sealed record AggregateMethod(string Key, bool IsObservation, string Body);
+    private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
+    {
+        public bool IsReport => Key.EndsWith(".EndRequest", StringComparison.Ordinal);
+    }
 
     private static List<AggregateMethod> SplitAggregateMethods()
     {
