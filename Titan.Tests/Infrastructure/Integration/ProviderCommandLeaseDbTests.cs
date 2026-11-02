@@ -85,7 +85,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     }
 
     // Two handlers enqueue the same key in two transactions: one row survives, the loser hits 23505 and answers 409.
-    // A network delete: its key is still the resource's (a VM's keys carry the request id since REQUEST-END phase 1,
+    // A network delete: its key is still the resource's (a VM's keys carry the request id,
     // titan-ops architecture/resource-lifecycle.md#one-key-per-request, so two VM requests never share a key).
     [Fact]
     public async Task SameKey_FromTwoScopes_LeavesOneRow()
