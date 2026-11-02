@@ -89,10 +89,8 @@ public class WalletMutationConsumerDbTests(PostgresFixture pg)
     // is 100k, not 200k, and there is one movement, not two.
     //
     // 🔴 Mutation check: delete `if (mutation.Status != Pending) return;` from the consumer and the second
-    // ApplyAsync tries to credit again → the ledger UNIQUE(type, ref_id) rejects the
-    // duplicate movement → SaveChanges throws → this test goes red on the unhandled exception. Remove
-    // that unique too and the balance doubles → the movements/balance asserts go red. Either way the
-    // no-op is pinned, not assumed.
+    // ApplyAsync reaches WalletMutationApply, which refuses a mutation no longer pending → this test goes red
+    // on the unhandled exception. The no-op is pinned, not assumed.
     [Fact]
     public async Task Apply_SameMutationTwice_CreditsOnce_SecondCallIsNoOp()
     {

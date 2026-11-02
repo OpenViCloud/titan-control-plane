@@ -24,7 +24,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Collection(PostgresCollection.Name)]
 public class TopUpConfirmDbTests(PostgresFixture pg)
 {
-    // The confirm rule both channels share (TopUpConfirmation), over real repositories. It returns nothing
+    // What both channels share (TopUpConfirmation, TopUpCredit), over real repositories. It returns nothing
     // (titan-ops architecture/http-contract.md#commands-return-no-data), so these tests read the stored row back
     // through a fresh context — the way the admin list sees it.
     private static ConfirmRule NewService(TitanDbContext db, IWalletMutationPublisher bus) => new(db, bus);

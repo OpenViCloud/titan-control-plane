@@ -96,7 +96,7 @@ public class WalletMutationTests
     }
 
     // ---- MarkFailed + RecordAttempt (titan-ops architecture/money-and-wallet.md#single-writer-outbox) ----
-    // Failed is reached by the consumer's insufficient-funds re-check and by the sweeper giving up on a poison
+    // Failed is reached by WalletMutationApply's insufficient-funds re-check and by the sweeper giving up on a poison
     // mutation. Both are OBSERVATIONS (titan-ops architecture/intent-and-observation.md#observation-converges) — they never throw a transition error.
 
     [Fact]

@@ -33,7 +33,7 @@ public class WalletMutationConsumer(
 
         await apply.ApplyAsync(mutation, ct);
 
-        // Every repository here, the ledger's too, shares the DbContext, so one SaveChanges commits balance, ledger row and status.
+        // Every repository behind this call, the ledger's too, shares the DbContext, so one SaveChanges commits balance, ledger row and status.
         // A double-apply that slipped past the status check fails here on the ledger UNIQUE(type, ref_id) or the
         // version token; the failed save does not undo the balance change, so the context must not be reused.
         await walletRepo.SaveChangesAsync(ct);

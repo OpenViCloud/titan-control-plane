@@ -46,8 +46,8 @@ public class TopUpServiceTests
         _currentUser.SetupGet(u => u.KeycloakUserId).Returns("admin-1");
     }
 
-    // Facade over the TopUp handlers and the shared TopUpConfirmation rule; every method forwards to
-    // exactly one target and adds nothing. ConfirmAsync goes to the RULE rather than the admin handler
+    // Facade over the TopUp handlers and the shared TopUpConfirmation; every method forwards to
+    // exactly one target and adds nothing. ConfirmAsync goes to TopUpConfirmation rather than the admin handler
     // because these tests drive both channels (SePay and Manual); the admin handler's own job — stamping
     // Manual and the caller — has its own test below.
     private TopUpFacade CreateService() =>

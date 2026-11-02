@@ -75,7 +75,7 @@ public class WalletMutation : AggregateRoot
     /// It does not guard the money: WalletMutationApply moves it before MarkApplied (titan-ops features/billing/wallet/design.md#wallet-debts).
     public bool IsTerminal => Status is WalletMutationStatus.Applied or WalletMutationStatus.Failed;
 
-    /// A reopen moves QueuedAt; a row never reopened has it equal to CreatedAt.
+    /// A reopen moves QueuedAt; Create sets it equal to CreatedAt.
     public bool WasReopened => QueuedAt != CreatedAt;
 
     /// An observation (titan-ops architecture/intent-and-observation.md#observation-converges): never throws.
