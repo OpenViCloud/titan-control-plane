@@ -31,8 +31,8 @@ UPDATE core.firewall_rules SET
     pending_request_asked_at = now()
 WHERE pending_request_id IS NOT NULL;";
 
-        /// The create's command already reported the provider id; before this migration an observation ended it (Created,
-        /// Errored or Unavailable), and none does now.
+        /// The create's command already reported the provider id; before this migration an observation ended it (a
+        /// network's Created, Errored, Unavailable or not found; any reading of a rule), and none does now.
         private const string EndTheCreatesTheirCommandReportedSql = @"
 UPDATE core.networks SET pending_request_id = NULL, pending_request_kind = NULL, pending_request_asked_at = NULL
 WHERE pending_request_kind = 'Create' AND external_id IS NOT NULL;
