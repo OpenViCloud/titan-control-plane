@@ -718,7 +718,7 @@ public class VmServiceTests
         // Must terminate the still-existing provider VM — not silently mark destroyed.
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence); // reconciler owns the terminal transition
+        Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence); // only the delete command's Done ends the VM
     }
 
     [Fact]
