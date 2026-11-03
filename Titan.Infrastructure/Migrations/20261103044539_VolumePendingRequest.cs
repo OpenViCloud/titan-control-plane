@@ -8,14 +8,15 @@ namespace Titan.Infrastructure.Migrations
     /// A volume's and a volume snapshot's waiting request become three columns each — id, kind, when it was asked —
     /// written together (titan-ops architecture/resource-lifecycle.md#shape). The id column is the old pending_intent_id
     /// renamed; the kind of a request already waiting is read from the columns it used to be derived from, in the order
-    /// Volume.Transition and VolumeSnapshot.Transition read them before this migration. The rename stops an image from before this migration on
-    /// every volume read: rolling one back needs this migration's Down first.
+    /// Volume.Transition and VolumeSnapshot.Transition read them before this migration. The rename stops an image from
+    /// before this migration on every volume read: rolling one back needs this migration's Down first.
     ///
     /// Requests under way meet the new rule here: a detach with no open command ends — the one a VM's delete asked for
     /// had none and is no longer a request (titan-ops architecture/resource-lifecycle.md#kinds), and a customer's whose
     /// command closed before an observation ended it has no report coming either; any other request without an open
-    /// command keeps waiting and shows in the stuck query. A command still open takes the request's key and id, so its report
-    /// can name the request; a restore's is keyed as the new volume's create. Down leaves the command rows as they are.
+    /// command keeps waiting and shows in the stuck query. A command still open takes the request's key and id, so its
+    /// report can name the request; a restore's is keyed as the new volume's create. Down leaves the command rows as they
+    /// are.
     /// The view core.pending_requests gains the two tables.
     public partial class VolumePendingRequest : Migration
     {
@@ -36,9 +37,10 @@ UPDATE core.volume_snapshots SET
     pending_request_asked_at = now()
 WHERE pending_request_id IS NOT NULL;";
 
-        /// Volume.DetachWithDeletedVm waited without a command; the desired attachment it cleared stays cleared, which is
-        /// what a VM's delete now leaves on a volume with nothing waiting.
-        private const string EndTheDetachesAVmDeleteAskedForSql = @"
+        /// A detach with no open command has no report coming: the one Volume.DetachWithDeletedVm left never had one, and
+        /// a customer's whose command closed was waiting for an observation that no longer ends it. The desired attachment
+        /// stays as asked, which is what a VM's delete now leaves on a volume with nothing waiting.
+        private const string EndTheDetachesWithoutAnOpenCommandSql = @"
 UPDATE core.volumes v SET pending_request_id = NULL, pending_request_kind = NULL, pending_request_asked_at = NULL
 WHERE v.pending_request_kind = 'Detach'
   AND NOT EXISTS (
@@ -131,7 +133,7 @@ WHERE pending_request_id IS NOT NULL;";
 
             migrationBuilder.Sql(BackfillTheVolumeKindSql);
             migrationBuilder.Sql(BackfillTheSnapshotKindSql);
-            migrationBuilder.Sql(EndTheDetachesAVmDeleteAskedForSql);
+            migrationBuilder.Sql(EndTheDetachesWithoutAnOpenCommandSql);
             migrationBuilder.Sql(GiveOpenVolumeCommandsTheirRequestSql);
             migrationBuilder.Sql(GiveOpenSnapshotCommandsTheirRequestSql);
             migrationBuilder.Sql(ViewWithVolumesSql);

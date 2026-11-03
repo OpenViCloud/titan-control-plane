@@ -202,7 +202,7 @@ public class AdminResourceServiceTests
         Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
     }
 
-    // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path detaches the VM's volumes like the
+    // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path releases the VM's volumes like the
     // tenant path, or the owner's volume would be stuck attached to a VM that no longer exists.
     [Fact]
     public async Task DeleteVm_ReleasesTheVolumesTheVmHolds()
