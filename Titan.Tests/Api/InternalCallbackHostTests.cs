@@ -563,7 +563,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
     private const string LoadBalancerSubnet = "2001:db8:0:3::/64";
 
-    // A load balancer waiting on its create (kind "creating"), or one Incus holds that waits on its delete.
+    // A load balancer waiting on its create (kind Create), or one Incus holds that waits on its delete.
     private async Task<LoadBalancer> StoredLoadBalancerAsync(bool deleting)
     {
         Guid tenantId = TestTenant.WithRoomToSpare().Id;

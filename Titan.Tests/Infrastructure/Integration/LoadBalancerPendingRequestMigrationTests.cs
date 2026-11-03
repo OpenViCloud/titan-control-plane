@@ -118,7 +118,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         string replacedKey = $"load-balancer-update-{deleting.Id}-{replaced}";
         await AddCommandAsync(replacedKey, ProviderCommandKinds.LoadBalancerUpdate,
             $$"""{"loadBalancerId":"{{deleting.Id}}","intentId":"{{replaced}}"}""");
-        // An earlier delete of the load balancer now created again, done: its row is history, keyed as it was.
+        // A finished row under the old key is history: the migration leaves it keyed as it was.
         await AddCommandAsync($"load-balancer-delete-{creating.Id}", ProviderCommandKinds.LoadBalancerDelete, "{}", done: true);
 
         await MigrateToLatestAsync();

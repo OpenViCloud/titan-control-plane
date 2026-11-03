@@ -5,8 +5,9 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// The create and delete commands and the firewall reconciler all report here
-// (titan-ops features/network/design.md#firewall-rule-soft-delete).
+// The old callback route, alive until rollout phase 6: a command without a requestId reports here; commands with one
+// and the reconciler report on the request and observation routes
+// (titan-ops architecture/resource-lifecycle.md#callback-routes).
 public class UpdateFirewallRuleStatusEndpoint(UpdateFirewallRuleStatusCommandHandler handler, IConfiguration config)
     : Endpoint<UpdateFirewallRuleStatusBody>
 {

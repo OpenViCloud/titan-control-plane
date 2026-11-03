@@ -204,7 +204,7 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void Updated_ForTheWaitingIntent_AppliesTheNewSpec()
+    public void Updated_ForTheWaitingRequest_AppliesTheNewSpec()
     {
         Vm a = VmOnIncus();
         Vm b = VmOnIncus();
@@ -220,7 +220,7 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void Updated_ForAnotherIntent_ChangesNothing()
+    public void Updated_ForAnotherRequest_ChangesNothing()
     {
         LoadBalancer lb = OnIncus();
         lb.RequestUpdate([Dns], [VmOnIncus()]);
