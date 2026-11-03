@@ -41,7 +41,7 @@ public class CreateVolumeSnapshotCommandHandler(
         string externalVolumeId = ticket.ExternalVolumeId;
         activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, volumeId, externalVolumeId, projectName,
+        await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, snapshot.Pending!.Id, volumeId, externalVolumeId, projectName,
             volume.ClusterId, ct);
         await volumeRepo.SaveAsync(ct);
 

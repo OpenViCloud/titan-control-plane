@@ -35,16 +35,19 @@ public interface IProviderCommandQueue
     Task EnqueueVmSnapshotRevertAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
     Task EnqueueVmSnapshotDeleteAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
 
-    // No offering id: the worker has no catalog, the pool comes from the cluster and the size travels here.
-    Task EnqueueVolumeCreateAsync(Guid volumeId, string name, string clusterId, int sizeGb,
+    // No offering id: the worker has no catalog, the pool comes from the cluster and the size travels here. Every
+    // volume and volume snapshot command carries the request it was enqueued for
+    // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    Task EnqueueVolumeCreateAsync(Guid volumeId, Guid requestId, string name, string clusterId, int sizeGb,
         string projectName, CancellationToken ct = default);
-    Task EnqueueVolumeAttachAsync(Guid volumeId, string externalVolumeId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVolumeDetachAsync(Guid volumeId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVolumeDeleteAsync(Guid volumeId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVolumeAttachAsync(Guid volumeId, Guid requestId, string externalVolumeId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVolumeDetachAsync(Guid volumeId, Guid requestId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVolumeDeleteAsync(Guid volumeId, Guid requestId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
 
-    Task EnqueueVolumeSnapshotCreateAsync(Guid snapshotId, Guid volumeId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVolumeSnapshotDeleteAsync(Guid snapshotId, Guid volumeId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVolumeSnapshotRestoreAsync(Guid snapshotId, Guid newVolumeId, string externalSnapshotId, string name, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVolumeSnapshotCreateAsync(Guid snapshotId, Guid requestId, Guid volumeId, string externalVolumeId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVolumeSnapshotDeleteAsync(Guid snapshotId, Guid requestId, Guid volumeId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
+    // The restore's request is the new volume's create.
+    Task EnqueueVolumeSnapshotRestoreAsync(Guid snapshotId, Guid newVolumeId, Guid requestId, string externalSnapshotId, string name, string projectName, string clusterId, CancellationToken ct = default);
 
     // One a day per resource, the UTC day in the key (titan-ops features/backup/design.md#incus-backup).
     Task EnqueueVmBackupAsync(Guid vmId, string externalVmId, string projectName, Guid tenantId, string clusterId, DateOnly day, CancellationToken ct = default);

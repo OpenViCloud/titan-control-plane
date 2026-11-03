@@ -1,3 +1,4 @@
+using Titan.Domain.Values;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Application.Services.Compute;
@@ -16,7 +17,7 @@ public class DetachVolumeCommandHandler(
     public async Task HandleAsync(DetachVolumeCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var volume = await ComputeOwnership.RequireVolumeAsync(repo, callerId, command.VolumeId, ct);
+        var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(repo, callerId, command.VolumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -34,11 +35,11 @@ public class DetachVolumeCommandHandler(
             return;
         }
 
-        string externalVolumeId = volume.Detach();
+        RequestTicket ticket = volume.Detach();
 
         activity.Stage("volume.detach_requested", "volume", volume.Id, volume.Name); // atomic with Detach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDetachAsync(volume.Id, externalVolumeId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDetachAsync(volume.Id, ticket.RequestId, ticket.ProviderId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

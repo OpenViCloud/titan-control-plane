@@ -152,7 +152,7 @@ public class VmEndpointBindingTests
             .ReturnsAsync(ProvisionedTenant());
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
-        volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
             _repo.Object, tenantRepo.Object, _currentUser.Object, commands.Object,

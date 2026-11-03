@@ -50,16 +50,13 @@ public class DeleteVmCommandHandler(
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
-        // The volumes go with the VM's delete as detaches (titan-ops features/volume/design.md#vm-delete-releases-volumes);
-        // one already being detached is left to its own request.
-        List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmAsync(vm.Id, ct);
+        // The volumes go with the VM's delete (titan-ops features/volume/design.md#vm-delete-releases-volumes), and it is
+        // not a request of theirs (titan-ops architecture/resource-lifecycle.md#kinds): a volume with nothing waiting is no
+        // longer asked to be attached; one with its own attach or detach waiting is left to that request.
+        List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmLockedAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)
         {
-            bool stillAskedToBeAttached = volume.DesiredAttachedVmId != null;
-            if (stillAskedToBeAttached)
-            {
-                volume.DetachWithDeletedVm();
-            }
+            volume.ReleaseFromVmDelete(vm.Id);
         }
 
         // Never reached the provider — no external resource, no reconciler running. The request and

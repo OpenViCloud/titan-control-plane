@@ -1,19 +1,18 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Volume.Contracts;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
-using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
-using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
-using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
+using Titan.Domain.Values;
 
 namespace Titan.Application.Commands.Compute.Volume;
 
-// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
-// observation converges). No ICurrentUser: the reconciler acts for no tenant, and the caller is authenticated by
-// X-Internal-Token at the endpoint — which is why there is no ownership check here and why no customer path may ever
-// route to it. Outcomes are recorded once: the aggregate says whether a report fulfilled the waiting request
-// (titan-ops features/activity/design.md#outcome-source).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): a
+// worker that predates the request routes reports the reconciler's observation and the commands' results here, none of
+// them naming a request. Each report is mapped onto the request the volume is waiting on, so the volume ends up as the
+// new routes would leave it. No ICurrentUser on purpose: authenticated by X-Internal-Token at the endpoint, acting for
+// no tenant.
 public class UpdateVolumeStatusCommandHandler(
     IVolumeRepository repo,
     IVmRepository vmRepo,
@@ -45,138 +44,75 @@ public class UpdateVolumeStatusCommandHandler(
                 throw new BadRequestException("INVALID_STATUS", $"Unknown volume report: '{req.Report}'");
         }
 
-        var volume = await repo.FindByIdAsync(command.VolumeId, ct)
+        Domain.Aggregates.Volume.Volume volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
-        string? outcome = null;
+        PendingRequest<VolumeRequestKind>? waiting = volume.Pending;
+        VolumeRequestEnded? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
-                outcome = await ApplyObservationAsync(volume, req.Exists!.Value, req.AttachedTo, ct);
+                await ObserveAsync(volume, req.Exists!.Value, req.AttachedTo, ct);
+                // Temporary allowlist, rollout phase 6 removes it (VolumeReports.EndAttachOrDetachTheObservationReached):
+                // the old attach and detach commands report themselves this way.
+                ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
                 break;
             case "Created":
-                outcome = CreatedOutcome(volume.MarkCreated(req.ExternalId!));
+                // The old create and restore commands report the volume name as soon as Incus holds it: the create's Done.
+                if (waiting is { Kind: VolumeRequestKind.Create })
+                {
+                    ended = volume.EndRequest(waiting.Id, VolumeRequestEnd.Done(req.ExternalId, null));
+                }
                 break;
             case "RequestFailed":
-                // A create's give-up carrying the id found the volume on Incus: the create happened.
-                bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && volume.ExternalId == null;
-                if (carriesAnIdNotYetStored)
-                {
-                    outcome = CreatedOutcome(volume.MarkCreated(req.ExternalId!));
-                }
-                // An attach's or detach's give-up carries what Incus showed: an attach that happened while its report
-                // failed is fulfilled by it, and is not abandoned below.
+                // An attach's or detach's give-up carries what Incus showed: one that happened while its report failed
+                // is ended Done by the observation, as before; otherwise the waiting request ends Failed, keeping an id
+                // the create's give-up found.
                 if (req.Exists != null)
                 {
-                    string? observedOutcome = await ApplyObservationAsync(volume, req.Exists.Value, req.AttachedTo, ct);
-                    if (observedOutcome != null)
-                    {
-                        outcome = observedOutcome;
-                    }
+                    await ObserveAsync(volume, req.Exists.Value, req.AttachedTo, ct);
+                    ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
                 }
-                // A request Incus refused moves the desired pair back to what Incus holds
-                // (titan-ops architecture/desired-and-current.md#abandoned-request); a create's give-up only records why.
-                bool attachDetachOrDeleteWaiting = volume.Transition == VolumeTransition.Attaching
-                                                   || volume.Transition == VolumeTransition.Detaching
-                                                   || volume.Transition == VolumeTransition.Deleting;
-                if (attachDetachOrDeleteWaiting)
+                PendingRequest<VolumeRequestKind>? stillWaiting = volume.Pending;
+                if (ended == null && stillWaiting != null)
                 {
-                    volume.AbandonRequest(req.Reason, req.Detail);
-                }
-                else
-                {
-                    volume.MarkRequestFailed(req.Reason, req.Detail);
+                    outcome = RequestOutcome.Failed;
+                    ended = volume.EndRequest(stillWaiting.Id,
+                        VolumeRequestEnd.Failed(req.ExternalId, null, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
-                // The volume takes its snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots)
-                // and names the ones whose own delete was waiting: their delete command will only find them already
-                // Deleted, so their outcome is recorded now.
-                VolumeDeletionOutcome deletion = volume.MarkDeleted();
-                if (deletion.FulfilledVolumeDelete)
+                // Only a delete's own report ends a volume; with no delete waiting the volume is gone from Incus, which
+                // is what NotFound records.
+                if (waiting is { Kind: VolumeRequestKind.Delete })
                 {
-                    outcome = "volume.deleted";
+                    ended = volume.EndRequest(waiting.Id, VolumeRequestEnd.Done(null, null));
                 }
-                foreach (VolumeSnapshotEntity snapshot in deletion.SnapshotsWhoseDeleteWasFulfilled)
+                else
                 {
-                    activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot",
-                        snapshot.Id, snapshot.Name);
+                    volume.MarkNotFound();
                 }
                 break;
         }
 
-        if (outcome != null)
+        if (ended != null)
         {
-            activity.StageOutcome(volume.TenantId, outcome, "volume", volume.Id, volume.Name);
+            VolumeReports.RecordEnded(volume, ended, outcome, activity);
         }
 
         await repo.SaveAsync(ct);
     }
 
-    private async Task<string?> ApplyObservationAsync(
-        VolumeAggregate volume, bool exists, List<string>? attachedTo, CancellationToken ct)
+    private async Task ObserveAsync(Domain.Aggregates.Volume.Volume volume, bool exists, List<string>? attachedTo,
+        CancellationToken ct)
     {
         if (!exists)
         {
             volume.MarkNotFound();
-            return null;
+            return;
         }
-        VolumeAttachment attachment = await ResolveAttachmentAsync(volume.TenantId, attachedTo, ct);
-        VolumeTransition? fulfilled = volume.MarkObserved(attachment.VmId, attachment.Elsewhere);
-        if (fulfilled == VolumeTransition.Creating)
-        {
-            return "volume.created";
-        }
-        if (fulfilled == VolumeTransition.Attaching)
-        {
-            return "volume.attached";
-        }
-        if (fulfilled == VolumeTransition.Detaching)
-        {
-            return "volume.detached";
-        }
-        return null;
-    }
-
-    // The worker reports instance names as Incus lists them; which of them are Titan VMs is Titan's to say
-    // (titan-ops features/volume/design.md#attachment-from-used-by). Only the volume's own tenant is searched: an instance
-    // name of another tenant's VM must never read as this volume's VM. A name matching no VM, or a second VM, is an
-    // instance Titan does not manage for this volume.
-    private async Task<VolumeAttachment> ResolveAttachmentAsync(
-        Guid tenantId, List<string>? instanceNames, CancellationToken ct)
-    {
-        bool noInstance = instanceNames == null || instanceNames.Count == 0;
-        if (noInstance)
-        {
-            return new VolumeAttachment(null, false);
-        }
-        List<VmAggregate> vms = await vmRepo.ListByExternalIdsAsync(tenantId, instanceNames!, ct);
-        Guid? attachedVmId = null;
-        bool elsewhere = false;
-        foreach (string instanceName in instanceNames!)
-        {
-            VmAggregate? vm = vms.FirstOrDefault(v => v.ExternalId == instanceName);
-            bool isTheFirstTitanVm = vm != null && attachedVmId == null;
-            if (isTheFirstTitanVm)
-            {
-                attachedVmId = vm!.Id;
-            }
-            else
-            {
-                elsewhere = true;
-            }
-        }
-        return new VolumeAttachment(attachedVmId, elsewhere);
-    }
-
-    private sealed record VolumeAttachment(Guid? VmId, bool Elsewhere);
-
-    private static string? CreatedOutcome(bool fulfilledTheCreate)
-    {
-        if (fulfilledTheCreate)
-        {
-            return "volume.created";
-        }
-        return null;
+        VolumeObservation observed = await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, attachedTo, ct);
+        volume.MarkObserved(observed.AttachedVmId, observed.AttachedElsewhere);
     }
 }

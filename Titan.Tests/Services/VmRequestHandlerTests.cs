@@ -25,7 +25,7 @@ public class VmRequestHandlerTests
 
     public VmRequestHandlerTests()
     {
-        _volumeRepo.Setup(r => r.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Volume>());
+        _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(new List<Volume>());
     }
 
     private EndVmRequestCommandHandler EndHandler() => new(_repo.Object, _volumeRepo.Object, _activity);
@@ -110,8 +110,8 @@ public class VmRequestHandlerTests
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
-        volume.MarkObserved(vm.Id, false);
-        _volumeRepo.Setup(r => r.ListAttachedToVmAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
+        volume.MarkAttached(vm.Id);
+        _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
         RequestTicket delete = vm.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, "Done"));
@@ -121,6 +121,8 @@ public class VmRequestHandlerTests
         Assert.Equal(["vm.deleted", "vm_snapshot.deleted"], Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "vm_snapshot.deleted").ResourceId);
         Assert.Null(volume.CurrentAttachedVmId);
+        Assert.Null(volume.DesiredAttachedVmId);
+        Assert.Null(volume.Pending);
     }
 
     [Fact]
@@ -130,19 +132,44 @@ public class VmRequestHandlerTests
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
-        volume.MarkObserved(vm.Id, false);
-        _volumeRepo.Setup(r => r.ListAttachedToVmAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
+        volume.MarkAttached(vm.Id);
+        _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
         RequestTicket delete = vm.RequestDelete()!;
-        volume.DetachWithDeletedVm();
+        volume.ReleaseFromVmDelete(vm.Id);
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, "Failed", Reason: "It failed."));
 
-        Assert.Null(volume.Transition);
+        Assert.Null(volume.Pending);
         Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         Assert.NotNull(vm.RequestDelete());
-        volume.DetachWithDeletedVm();
-        Assert.Equal(VolumeTransition.Detaching, volume.Transition);
+        volume.ReleaseFromVmDelete(vm.Id);
+        Assert.Null(volume.DesiredAttachedVmId);
+        Assert.Null(volume.Pending);
+    }
+
+    // A VM's delete is not a request of the volume (titan-ops architecture/resource-lifecycle.md#kinds): a detach the
+    // customer asked for keeps its own request whichever way the VM's delete ends, and its own command reports it.
+    [Theory]
+    [InlineData("Done")]
+    [InlineData("Failed")]
+    public async Task ADeleteEnding_LeavesAVolumesOwnWaitingDetach_ToItsCommand(string outcome)
+    {
+        Vm vm = Given(RunningVm());
+        Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
+        volume.MarkCreated("vol-x");
+        VolumeAttachProviderIds attach = volume.Attach(vm);
+        volume.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        RequestTicket detach = volume.Detach();
+        _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
+        RequestTicket delete = vm.RequestDelete()!;
+        volume.ReleaseFromVmDelete(vm.Id);
+
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, outcome, Reason: "It failed."));
+
+        Assert.Equal((VolumeRequestKind.Detach, detach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Null(volume.DesiredAttachedVmId);
+        Assert.DoesNotContain(_activity.Events, e => e.Action.StartsWith("volume.", StringComparison.Ordinal));
     }
 
     [Theory]

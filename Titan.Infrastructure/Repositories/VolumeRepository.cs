@@ -18,16 +18,18 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
         return await FindByIdAsync(id, ct);
     }
 
-    public async Task<Volume?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) =>
-        await db.Volumes.Include(v => v.Snapshots)
-            .FirstOrDefaultAsync(v => v.Snapshots.Any(s => s.Id == snapshotId), ct);
-
-    public async Task<List<Volume>> ListAttachedToVmAsync(Guid vmId, CancellationToken ct = default) =>
-        await db.Volumes
+    // Lock first, load second, as FindByIdForUpdateAsync; the lock statement filters as the load does.
+    public async Task<List<Volume>> ListAttachedToVmLockedAsync(Guid vmId, CancellationToken ct = default)
+    {
+        await db.LockRowAsync(
+            $"SELECT id FROM core.volumes WHERE (current_attached_vm_id = {vmId} OR desired_attached_vm_id = {vmId}) AND current_existence <> 'Deleted' FOR UPDATE",
+            ct);
+        return await db.Volumes
             .Include(v => v.Snapshots)
             .Where(v => (v.CurrentAttachedVmId == vmId || v.DesiredAttachedVmId == vmId)
                         && v.CurrentExistence != CurrentExistence.Deleted)
             .ToListAsync(ct);
+    }
 
     public async Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes
@@ -43,7 +45,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             v => v.TenantId == tenantId
                  && v.DesiredExistence == DesiredExistence.Exists
                  && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingIntentId != null)), ct);
+                     || (v.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(v, "PendingRequestId") != null)), ct);
 
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Volumes

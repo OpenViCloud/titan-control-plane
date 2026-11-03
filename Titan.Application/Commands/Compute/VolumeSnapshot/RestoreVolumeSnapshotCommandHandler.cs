@@ -24,8 +24,9 @@ public class RestoreVolumeSnapshotCommandHandler(
 
         // The source volume, whatever Incus holds of it: only the snapshot must rest on Incus
         // (titan-ops features/volume/design.md#volume-restore-is-a-new-volume). Deliberately NOT
-        // ComputeOwnership.RequireVolumeAsync: that one is for volumes the caller is acting ON.
-        var sourceVolume = await volumeRepo.FindByIdAsync(volumeId, ct)
+        // ComputeOwnership.RequireVolumeAsync: that one is for volumes the caller is acting ON. Locked all the same, so a
+        // delete of the snapshot and its restore take turns.
+        var sourceVolume = await volumeRepo.FindByIdForUpdateAsync(volumeId, ct)
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         if (sourceVolume.TenantId != callerId)
@@ -51,7 +52,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         activity.Stage("volume_snapshot.restore_requested", "volume", newVolume.Id, newVolume.Name); // atomic with Add
         string projectName = TenantAggregate.ProjectNameFor(newVolume.TenantId);
         await commands.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, newVolume.Id, externalSnapshotId, command.Name, projectName, sourceVolume.ClusterId, ct);
+            snapshot.Id, newVolume.Id, newVolume.Pending!.Id, externalSnapshotId, command.Name, projectName, sourceVolume.ClusterId, ct);
         await volumeRepo.SaveAsync(ct);
 
         return new RestoreVolumeSnapshotCommandResult(newVolume.Id);

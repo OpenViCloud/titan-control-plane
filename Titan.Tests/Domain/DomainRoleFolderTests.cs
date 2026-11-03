@@ -82,13 +82,10 @@ public class DomainRoleFolderTests
     }
 
     // The request shape of titan-ops architecture/resource-lifecycle.md#shape is shared by design and reaches the aggregates one
-    // rollout phase at a time (titan-ops architecture/resource-lifecycle.md#rollout); VM is the first. Each row leaves when
-    // the second aggregate (Volume, phase 2) uses the type — the stale check below says so.
+    // rollout phase at a time (titan-ops architecture/resource-lifecycle.md#rollout). A shared type a single aggregate uses so
+    // far waits here; its row leaves when a second aggregate uses it — the stale check below says so.
     private static readonly Dictionary<string, string> SharedByTheRollout = new(StringComparer.Ordinal)
     {
-        ["PendingRequest"] = "the one waiting request of every Incus-backed resource; VM first, Volume in rollout phase 2",
-        ["RequestTicket"] = "what every Request* hands the handler; VM first, Volume in rollout phase 2",
-        ["RequestOutcome"] = "Done or Failed of every request's report; VM first, Volume in rollout phase 2",
     };
 
     [Fact]

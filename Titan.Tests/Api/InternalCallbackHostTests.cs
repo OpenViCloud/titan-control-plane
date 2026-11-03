@@ -4,6 +4,8 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
+using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Api;
@@ -138,6 +140,123 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(VmRequestKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
+    }
+
+    // ---------- the volume's and its snapshots' routes ----------
+
+    private const string VolumeOffering = "vol-callback";
+
+    private async Task<Volume> StoredVolumeWaitingOnADeleteAsync()
+    {
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
+        volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done($"vol-{volume.Id:N}", null));
+        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        volume.EndSnapshotRequest(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotRequestEnd.Done($"vol-{volume.Id:N}/s1"));
+        volume.RequestSnapshotDelete(snapshot.Id);
+        volume.RequestDelete();
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            $"INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('{VolumeOffering}', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
+        db.Volumes.Add(volume);
+        await db.SaveChangesAsync();
+        return volume;
+    }
+
+    private async Task<Volume> ReloadVolumeAsync(Guid volumeId)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        return await db.Volumes.AsNoTracking().Include(v => v.Snapshots).SingleAsync(v => v.Id == volumeId);
+    }
+
+    [Fact]
+    public async Task AVolumeFailed_InTheWorkersJson_GivesTheVolumeBack_WithItsReason()
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/requests/{volume.Pending!.Id}",
+            """{"outcome":"Failed","observed":{"attachedTo":[]},"reason":"The volume could not be deleted.","detail":"incus: busy"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Volume stored = await ReloadVolumeAsync(volume.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
+        Assert.Equal("The volume could not be deleted.", stored.RequestFailureReason);
+    }
+
+    [Fact]
+    public async Task AVolumeObservation_InTheWorkersJson_WritesCurrent_AndLeavesTheDeleteWaiting()
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/observation",
+            """{"exists":true,"observed":{"attachedTo":["an-instance-outside-titan"]}}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Volume stored = await ReloadVolumeAsync(volume.Id);
+        Assert.True(stored.CurrentAttachedElsewhere);
+        Assert.Equal(VolumeRequestKind.Delete, stored.Pending!.Kind);
+    }
+
+    [Fact]
+    public async Task ASnapshotDone_InTheWorkersJson_EndsItsDelete()
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+        VolumeSnapshot snapshot = volume.Snapshots.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/volumes/{volume.Id}/snapshots/{snapshot.Id}/requests/{snapshot.Pending!.Id}", """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(CurrentExistence.Deleted, (await ReloadVolumeAsync(volume.Id)).Snapshots.Single().CurrentExistence);
+    }
+
+    [Fact]
+    public async Task ASnapshotObservation_InTheWorkersJson_WritesCurrent_AndLeavesItsDeleteWaiting()
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+        VolumeSnapshot snapshot = volume.Snapshots.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/volumes/{volume.Id}/snapshots/{snapshot.Id}/observation", """{"exists":false}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        VolumeSnapshot stored = (await ReloadVolumeAsync(volume.Id)).Snapshots.Single();
+        Assert.Equal(CurrentExistence.NotFound, stored.CurrentExistence);
+        Assert.Equal(VolumeSnapshotRequestKind.Delete, stored.Pending!.Kind);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Maybe"}""")]
+    [InlineData("observation", """{"exists":"yes"}""")]
+    public async Task AVolumeReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/{string.Format(route, volume.Pending!.Id)}", json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(VolumeRequestKind.Delete, (await ReloadVolumeAsync(volume.Id)).Pending!.Kind);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    [InlineData("snapshots/{1}/requests/{2}", """{"outcome":"Done"}""")]
+    [InlineData("snapshots/{1}/observation", """{"exists":false}""")]
+    public async Task EveryVolumeRoute_WithoutTheToken_Is401_AndChangesNothing(string route, string json)
+    {
+        Volume volume = await StoredVolumeWaitingOnADeleteAsync();
+        VolumeSnapshot snapshot = volume.Snapshots.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/volumes/{volume.Id}/{string.Format(route, volume.Pending!.Id, snapshot.Id, snapshot.Pending!.Id)}", json, token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Volume stored = await ReloadVolumeAsync(volume.Id);
+        Assert.Equal((CurrentExistence.Exists, VolumeRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal(CurrentExistence.Exists, stored.Snapshots.Single().CurrentExistence);
     }
 
     // What the control plane's environment sets on dev and prd.

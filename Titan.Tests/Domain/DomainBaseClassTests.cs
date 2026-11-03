@@ -22,9 +22,12 @@ public class DomainBaseClassTests
         ["VmSnapshotTicket"] = "result of Vm.AddSnapshot, read by the handler that enqueues the command",
         ["VolumeSnapshotTicket"] = "result of Volume.AddSnapshot, read by the handler that enqueues the command",
         ["FirewallRuleTicket"] = "result of Network.AddFirewallRule, read by the handler that enqueues the command",
-        ["VolumeAttachProviderIds"] = "result of Volume attach, the provider ids the attach command carries",
+        ["VolumeAttachProviderIds"] = "result of Volume.Attach: the request id and the provider ids the attach command carries",
+        ["VolumeObservation"] = "input of a volume request's report: the Titan VM and the instances outside Titan using the volume",
+        ["VolumeRequestEnd"] = "input of Volume.EndRequest: how the request's command ended and what the worker saw",
+        ["VolumeRequestEnded"] = "result of Volume.EndRequest: the request it ended and the snapshots whose delete went with the volume",
+        ["VolumeSnapshotRequestEnd"] = "input of Volume.EndSnapshotRequest: how the snapshot request's command ended",
         ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
-        ["VolumeDeletionOutcome"] = "result of Volume.MarkDeleted: the volume's own outcome and the snapshots whose delete it finished",
     };
 
     [Fact]

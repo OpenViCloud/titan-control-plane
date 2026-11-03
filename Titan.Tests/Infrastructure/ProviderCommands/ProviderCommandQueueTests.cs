@@ -80,10 +80,6 @@ public class ProviderCommandQueueTests
     [InlineData("firewall-delete")]
     [InlineData("vm-snapshot-revert")]
     [InlineData("vm-snapshot-delete")]
-    [InlineData("volume-attach")]
-    [InlineData("volume-detach")]
-    [InlineData("volume-delete")]
-    [InlineData("volume-snapshot-delete")]
     [InlineData("load-balancer-delete")]
     public async Task NewRequest_OnTheOpenRowOfItsKey_IsRequestInProgress(string key)
     {
@@ -108,10 +104,6 @@ public class ProviderCommandQueueTests
         "firewall-delete" => queue.EnqueueFirewallRuleDeleteAsync(id, Guid.Empty, "rule-x", "t-1", "mock"),
         "vm-snapshot-revert" => queue.EnqueueVmSnapshotRevertAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
         "vm-snapshot-delete" => queue.EnqueueVmSnapshotDeleteAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
-        "volume-attach" => queue.EnqueueVolumeAttachAsync(id, "vol-x", "vm-x", "t-1", "mock"),
-        "volume-detach" => queue.EnqueueVolumeDetachAsync(id, "vol-x", "t-1", "mock"),
-        "volume-delete" => queue.EnqueueVolumeDeleteAsync(id, "vol-x", "t-1", "mock"),
-        "volume-snapshot-delete" => queue.EnqueueVolumeSnapshotDeleteAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
         "load-balancer-delete" => queue.EnqueueLoadBalancerDeleteAsync(id, "net-x", "2001:db8::1:1", "t-1", "mock"),
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "not a resource key"),
     };
@@ -134,22 +126,41 @@ public class ProviderCommandQueueTests
         Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
     }
 
+    // A volume's and a snapshot's keys carry the request id, as the VM's: each request its own row, and the payload names
+    // the request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
-    public async Task VolumeAttach_RepeatAfterItRan_RunsAgain()
+    public async Task VolumeAndSnapshotRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
         Guid volumeId = Guid.NewGuid();
+        Guid snapshotId = Guid.NewGuid();
+        Guid firstAttach = Guid.NewGuid();
+        Guid secondAttach = Guid.NewGuid();
+        Guid detach = Guid.NewGuid();
+        Guid delete = Guid.NewGuid();
+        Guid snapshotCreate = Guid.NewGuid();
+        Guid snapshotDelete = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVolumeAttachAsync(volumeId, "vol-x", "vm-x", "t-1", "mock");
-        ProviderCommand row = Assert.Single(_repo.Rows);
-        Guid lease = Guid.NewGuid();
-        row.Lease(lease, _clock.GetUtcNow());
-        row.Complete(lease, _clock.GetUtcNow());
 
-        await queue.EnqueueVolumeAttachAsync(volumeId, "vol-x", "vm-y", "t-1", "mock");
+        await queue.EnqueueVolumeAttachAsync(volumeId, firstAttach, "vol-x", "vm-x", "t-1", "mock");
+        await queue.EnqueueVolumeAttachAsync(volumeId, secondAttach, "vol-x", "vm-y", "t-1", "mock");
+        await queue.EnqueueVolumeDetachAsync(volumeId, detach, "vol-x", "t-1", "mock");
+        await queue.EnqueueVolumeDeleteAsync(volumeId, delete, "vol-x", "t-1", "mock");
+        await queue.EnqueueVolumeSnapshotCreateAsync(snapshotId, snapshotCreate, volumeId, "vol-x", "t-1", "mock");
+        await queue.EnqueueVolumeSnapshotDeleteAsync(snapshotId, snapshotDelete, volumeId, "vol-x/s-x", "t-1", "mock");
 
-        Assert.Single(_repo.Rows);
-        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
-        Assert.Contains("vm-y", row.Payload);
+        Assert.Equal(
+            [
+                $"volume-attach-{volumeId}-{firstAttach}", $"volume-attach-{volumeId}-{secondAttach}",
+                $"volume-detach-{volumeId}-{detach}", $"volume-delete-{volumeId}-{delete}",
+                $"volume-snapshot-create-{snapshotId}-{snapshotCreate}", $"volume-snapshot-delete-{snapshotId}-{snapshotDelete}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Guid[] requests = [firstAttach, secondAttach, detach, delete, snapshotCreate, snapshotDelete];
+        for (int i = 0; i < requests.Length; i++)
+        {
+            using JsonDocument payload = JsonDocument.Parse(_repo.Rows[i].Payload);
+            Assert.Equal(requests[i].ToString(), payload.RootElement.GetProperty("requestId").GetString());
+        }
     }
 
     // The worker's report names the request (titan-ops architecture/resource-lifecycle.md#callback-routes): the id travels in the
@@ -243,20 +254,23 @@ public class ProviderCommandQueueTests
         Assert.Equal(2, _repo.Rows.Count);
     }
 
-    // Each restore is its own intent: keyed on the snapshot, a second restore would be absorbed by the first's open row.
+    // A restore is the new volume's create: keyed like one, so the stuck-request query finds it; keyed on the snapshot, a
+    // second restore would be absorbed by the first's open row.
     [Fact]
-    public async Task VolumeRestore_IsKeyedOnTheNewVolume_NotTheSnapshot()
+    public async Task VolumeRestore_IsKeyedAsTheNewVolumesCreate_NotOnTheSnapshot()
     {
         Guid snapshotId = Guid.NewGuid();
         Guid firstVolume = Guid.NewGuid();
         Guid secondVolume = Guid.NewGuid();
+        Guid secondRequest = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, firstVolume, "vol-src/snap-1", "a", "t-1", "mock");
-        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, secondVolume, "vol-src/snap-1", "b", "t-1", "mock");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, firstVolume, Guid.NewGuid(), "vol-src/snap-1", "a", "t-1", "mock");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, secondVolume, secondRequest, "vol-src/snap-1", "b", "t-1", "mock");
 
         Assert.Equal(2, _repo.Rows.Count);
-        Assert.Equal($"volume-snapshot-restore-{secondVolume}", _repo.Rows[1].Key);
+        Assert.Equal($"volume-create-{secondVolume}-{secondRequest}", _repo.Rows[1].Key);
+        Assert.Equal(ProviderCommandKinds.VolumeSnapshotRestore, _repo.Rows[1].Kind);
     }
 
     // An Incus image carries no CPU/RAM: sizing travels with the VM (titan-ops features/catalog/design.md#template-is-an-image-alias).
@@ -434,7 +448,7 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VolumeCreate_CarriesTheSize_NotTheOfferingId()
     {
-        await Queue().EnqueueVolumeCreateAsync(Guid.NewGuid(), "data-1", "mock", 50, "t-0123");
+        await Queue().EnqueueVolumeCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "data-1", "mock", 50, "t-0123");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -449,19 +463,19 @@ public class ProviderCommandQueueTests
         switch (kind)
         {
             case ProviderCommandKinds.VolumeCreate:
-                return queue.EnqueueVolumeCreateAsync(id, "data-1", cluster, 10, project);
+                return queue.EnqueueVolumeCreateAsync(id, other, "data-1", cluster, 10, project);
             case ProviderCommandKinds.VolumeAttach:
-                return queue.EnqueueVolumeAttachAsync(id, "vol-x", "vm-x", project, cluster);
+                return queue.EnqueueVolumeAttachAsync(id, other, "vol-x", "vm-x", project, cluster);
             case ProviderCommandKinds.VolumeDetach:
-                return queue.EnqueueVolumeDetachAsync(id, "vol-x", project, cluster);
+                return queue.EnqueueVolumeDetachAsync(id, other, "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeDelete:
-                return queue.EnqueueVolumeDeleteAsync(id, "vol-x", project, cluster);
+                return queue.EnqueueVolumeDeleteAsync(id, other, "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotCreate:
-                return queue.EnqueueVolumeSnapshotCreateAsync(id, other, "vol-x", project, cluster);
+                return queue.EnqueueVolumeSnapshotCreateAsync(id, other, Guid.NewGuid(), "vol-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotDelete:
-                return queue.EnqueueVolumeSnapshotDeleteAsync(id, other, "vol-x/snap-x", project, cluster);
+                return queue.EnqueueVolumeSnapshotDeleteAsync(id, other, Guid.NewGuid(), "vol-x/snap-x", project, cluster);
             case ProviderCommandKinds.VolumeSnapshotRestore:
-                return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, "vol-x/snap-x", "restored", project, cluster);
+                return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, Guid.NewGuid(), "vol-x/snap-x", "restored", project, cluster);
             case ProviderCommandKinds.VmSnapshotCreate:
                 return queue.EnqueueVmSnapshotCreateAsync(id, other, "vm-x", "before-upgrade", project, cluster);
             case ProviderCommandKinds.VmSnapshotRevert:

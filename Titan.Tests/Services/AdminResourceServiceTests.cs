@@ -53,7 +53,7 @@ public class AdminResourceServiceTests
         wf.SetReturnsDefault(Task.CompletedTask);
         var audit = new Mock<IAdminAuditLogRepository>();
         var volumes = new Mock<IVolumeRepository>();
-        volumes.Setup(v => v.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(attachedVolumes ?? new List<Titan.Domain.Aggregates.Volume.Volume>());
         var user = Mock.Of<ICurrentUser>(u => u.KeycloakUserId == "admin-1");
         var svc = new AdminFacade(
@@ -211,12 +211,14 @@ public class AdminResourceServiceTests
         var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TenantBOwner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
-        volume.MarkObserved(vm.Id, false);
+        volume.MarkAttached(vm.Id);
         var (svc, _, _) = Build(new StubVmRepo(vm), attachedVolumes: new() { volume });
 
         await svc.DeleteVmAsync(vm.Id);
 
-        Assert.Equal(Titan.Domain.Aggregates.Volume.VolumeTransition.Detaching, volume.Transition);
+        // Released, not a request of the volume (titan-ops architecture/resource-lifecycle.md#kinds): nothing waits on it.
+        Assert.Null(volume.DesiredAttachedVmId);
+        Assert.Null(volume.Pending);
     }
 
     // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete writes the audit row once and sends

@@ -1,3 +1,4 @@
+using Titan.Domain.Values;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Application.Services.Compute;
@@ -16,7 +17,7 @@ public class DeleteVolumeCommandHandler(
     public async Task HandleAsync(DeleteVolumeCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var volume = await ComputeOwnership.RequireVolumeAsync(repo, callerId, command.VolumeId, ct);
+        var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(repo, callerId, command.VolumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -42,11 +43,11 @@ public class DeleteVolumeCommandHandler(
         }
 
         // The volume refuses while a snapshot it holds still counts (titan-ops features/volume/design.md#delete-refused-with-snapshots).
-        string externalVolumeId = volume.RequestDelete();
+        RequestTicket ticket = volume.RequestDelete();
 
         activity.Stage("volume.delete_requested", "volume", volume.Id, volume.Name); // atomic with RequestDelete
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDeleteAsync(volume.Id, externalVolumeId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDeleteAsync(volume.Id, ticket.RequestId, ticket.ProviderId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

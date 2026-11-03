@@ -93,6 +93,8 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         SetupTenant();
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+        Volume? added = null;
+        _repo.Setup(r => r.Add(It.IsAny<Volume>())).Callback<Volume>(v => added = v);
 
         var result = await CreateService().CreateAsync(MakeCreateRequest(), default);
 
@@ -103,7 +105,7 @@ public class VolumeServiceTests
                                                 && v.Transition == VolumeTransition.Creating)), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeCreateAsync(
-            It.IsAny<Guid>(), "vol-01", "cluster-1", 50,
+            result.VolumeId, added!.Pending!.Id, "vol-01", "cluster-1", 50,
             "t-" + _tenant!.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -122,7 +124,7 @@ public class VolumeServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Volume>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVolumeCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
             It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -189,7 +191,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
         var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id), default);
@@ -197,7 +199,7 @@ public class VolumeServiceTests
         Assert.Equal(VolumeTransition.Attaching, volume.Transition);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         _commands.Verify(w => w.EnqueueVolumeAttachAsync(
-            volume.Id, "cs-vol-1", "cs-vm-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, volume.Pending!.Id, "cs-vol-1", "cs-vm-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -205,7 +207,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Attaching);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         // Volume.Attach(vm) takes the VM, so the VM lookup comes first and a missing VM wins with 404.
         // Seeding a real VM isolates the rule this test is named after instead of leaning on error
@@ -225,7 +227,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Vm?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -240,7 +242,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
         var vm = MakeVm(VmState.Running, owner: TestTenant.WithRoomToSpare());
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
@@ -255,7 +257,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, clusterId: "cluster-a");
         var vm = MakeVm(VmState.Running, clusterId: "cluster-b");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -270,7 +272,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
         var vm = MakeVm(VmState.Error, clusterId: volume.ClusterId);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
@@ -286,13 +288,13 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Attached, externalVolumeId: "cs-vol-2");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DetachAsync(volume.Id, default);
 
         Assert.Equal(VolumeTransition.Detaching, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDetachAsync(
-            volume.Id, "cs-vol-2", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, volume.Pending!.Id, "cs-vol-2", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -302,13 +304,13 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DetachAsync(volume.Id, default);
 
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDetachAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact] // a repeat attach to the same VM succeeds like the first, without a second command
@@ -317,7 +319,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
         var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id), default);
@@ -326,7 +328,7 @@ public class VolumeServiceTests
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         Assert.Equal("volume.attach_requested", Assert.Single(_activity.Events).Action);
         _commands.Verify(w => w.EnqueueVolumeAttachAsync(
-            volume.Id, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── DeleteAsync ───────────────────────────────────────────────────────
@@ -336,13 +338,13 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-3");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DeleteAsync(volume.Id, default);
 
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, volume.Pending!.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -353,14 +355,14 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(from, externalVolumeId: "cs-vol-3");
         string before = Shape(volume);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DeleteAsync(volume.Id, default);
 
         Assert.Equal(before, Shape(volume));
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -368,7 +370,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Attached);
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().DeleteAsync(volume.Id, default));
@@ -385,7 +387,7 @@ public class VolumeServiceTests
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-3");
         string before = Shape(volume);
         volume.WithSnapshot("live").MarkCreated("cs-vol-3/s1");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => CreateService().DeleteAsync(volume.Id, default));
 
@@ -393,14 +395,14 @@ public class VolumeServiceTests
         Assert.Equal(before, Shape(volume));
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
     public async Task Delete_VolumeNotFound_ThrowsNotFoundException()
     {
         SetupCurrentUser(TenantId);
-        _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().DeleteAsync(Guid.NewGuid(), default));
@@ -455,7 +457,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
         var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id), default);
@@ -468,7 +470,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Attached, externalVolumeId: "cs-vol-2");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DetachAsync(volume.Id, default);
 
@@ -480,7 +482,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-3");
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
 
         await CreateService().DeleteAsync(volume.Id, default);
 
@@ -521,7 +523,7 @@ public class VolumeServiceTests
     // The volume carries its snapshots (titan-ops architecture/code-structure.md#child-entity): none unless a test adds one.
     private void SetupVolume(Volume volume)
     {
-        _repo.Setup(r => r.FindByIdAsync(volume.Id, default)).ReturnsAsync(volume);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
     }
 
     // The tenant's VMs the callback resolves instance names against (titan-ops features/volume/design.md#attachment-from-used-by).
@@ -558,16 +560,19 @@ public class VolumeServiceTests
         Assert.Null(volume.Transition);
     }
 
-    [Fact] // the reconciler lists only volumes with an id; seeing one whose Created report was lost ends its create
-    public async Task UpdateStatus_ObservedOnAWaitingCreate_EndsIt_AndRecordsVolumeCreated()
+    // An observation writes current only: the create waits for its own command's report, so nothing is recorded.
+    [Fact]
+    public async Task UpdateStatus_ObservedOnAWaitingCreate_WritesCurrentOnly_AndTheCreateKeepsWaiting()
     {
         var volume = MakeVolume(VolumeSeed.Creating);
+        Guid createId = volume.Pending!.Id;
         SetupVolume(volume);
 
         await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Observed", Exists: true));
 
-        Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
-        Assert.Equal("volume.created", Assert.Single(_activity.Events).Action);
+        Assert.Equal("Exists/Exists/-/-/Creating", Shape(volume));
+        Assert.Equal(createId, volume.Pending!.Id);
+        Assert.Empty(_activity.Events);
     }
 
     // P3-1: an instance that is no Titan VM of this tenant — another tenant's VM of the same name included.
@@ -631,7 +636,7 @@ public class VolumeServiceTests
 
     // The attach command gave up, reporting what Incus showed: not attached, so the request is withdrawn with why.
     [Fact]
-    public async Task UpdateStatus_AFailedAttach_WithdrawsTheRequest_WithTheReason_AndRecordsNothing()
+    public async Task UpdateStatus_AFailedAttach_WithdrawsTheRequest_WithTheReason_AndRecordsAttachFailed()
     {
         var volume = MakeVolume(VolumeSeed.Attaching);
         SetupVolume(volume);
@@ -641,7 +646,9 @@ public class VolumeServiceTests
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("Attaching failed.", volume.RequestFailureReason);
-        Assert.Empty(_activity.Events);
+        var e = Assert.Single(_activity.Events);
+        Assert.Equal("volume.attach_failed", e.Action);
+        Assert.Equal(TenantId, e.OutcomeTenantId);
     }
 
     // The attach happened, only its report failed: the give-up's observation fulfils it, and nothing is withdrawn.
@@ -662,7 +669,7 @@ public class VolumeServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_AFailedDetach_LeavesItAttached_WithTheReason()
+    public async Task UpdateStatus_AFailedDetach_LeavesItAttached_WithTheReason_AndRecordsDetachFailed()
     {
         Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
         var volume = MakeVolume(VolumeSeed.Detaching, attachTo: vm);
@@ -674,7 +681,7 @@ public class VolumeServiceTests
 
         Assert.Equal("Exists/Exists/vm/vm/-", Shape(volume));
         Assert.Equal("Detaching failed.", volume.RequestFailureReason);
-        Assert.Empty(_activity.Events);
+        Assert.Equal("volume.detach_failed", Assert.Single(_activity.Events).Action);
     }
 
     [Fact]
@@ -692,8 +699,10 @@ public class VolumeServiceTests
         Assert.Empty(_activity.Events);
     }
 
-    [Fact] // the give-up found the volume on Incus: the create happened
-    public async Task UpdateStatus_RequestFailedCarryingTheId_IsTheCreateDone()
+    // The give-up found the volume on Incus: the id and existence are kept, so a delete reaches Incus, but the create
+    // still failed — it records why, and a failed create has no outcome.
+    [Fact]
+    public async Task UpdateStatus_RequestFailedCarryingTheId_RecordsTheIdAndWhy_WithoutVolumeCreated()
     {
         var volume = MakeVolume(VolumeSeed.Creating);
         SetupVolume(volume);
@@ -703,7 +712,8 @@ public class VolumeServiceTests
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("vol9", volume.ExternalId);
-        Assert.Equal("volume.created", Assert.Single(_activity.Events).Action);
+        Assert.Equal("Volume creation failed.", volume.RequestFailureReason);
+        Assert.Empty(_activity.Events);
     }
 
     [Fact]
@@ -717,12 +727,13 @@ public class VolumeServiceTests
             new UpdateVolumeStatusBody("RequestFailed", Reason: "Volume deletion failed.", Detail: "refused"));
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("Volume deletion failed.", volume.RequestFailureReason);
+        Assert.Equal("volume.delete_failed", Assert.Single(_activity.Events).Action);
 
         await CreateService().DeleteAsync(volume.Id, default);
 
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, volume.Pending!.Id, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Only the delete command ends a delete: the reconciler not finding the volume is NotFound.
@@ -806,7 +817,7 @@ public class VolumeServiceTests
     [Fact]
     public async Task UpdateStatus_VolumeNotFound_ThrowsNotFoundException()
     {
-        _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
+        _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().UpdateStatusAsync(Guid.NewGuid(), new UpdateVolumeStatusBody("Deleted")));
@@ -827,7 +838,7 @@ public class VolumeServiceTests
         await CreateService().DeleteAsync(volume.Id, default);
 
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, "vol7", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            volume.Id, volume.Pending!.Id, "vol7", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -942,13 +953,11 @@ public class VolumeServiceTests
                 break;
             case VolumeSeed.Attached:
                 vol.MarkCreated(externalId);
-                vol.Attach(target);
-                vol.MarkObserved(target.Id, false);
+                EndAttachDone(vol, target);
                 break;
             case VolumeSeed.Detaching:
                 vol.MarkCreated(externalId);
-                vol.Attach(target);
-                vol.MarkObserved(target.Id, false);
+                EndAttachDone(vol, target);
                 vol.Detach();
                 break;
             case VolumeSeed.Deleting:
@@ -962,6 +971,13 @@ public class VolumeServiceTests
                 break;
         }
         return vol;
+    }
+
+    // Only the attach command's own report ends the attach; an observation of the VM using the volume would not.
+    private static void EndAttachDone(Volume vol, Vm target)
+    {
+        VolumeAttachProviderIds attach = vol.Attach(target);
+        vol.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(target.Id, false)));
     }
 
     private static Vm MakeVm(

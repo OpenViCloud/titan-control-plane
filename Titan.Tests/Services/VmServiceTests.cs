@@ -36,7 +36,7 @@ public class VmServiceTests
     private static Mock<IVolumeRepository> CreateVolumeRepo()
     {
         var repo = new Mock<IVolumeRepository>();
-        repo.Setup(r => r.ListAttachedToVmAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+        repo.Setup(r => r.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Volume>());
         return repo;
     }
@@ -1188,7 +1188,8 @@ public class VmServiceTests
         Volume volume = AttachedVolume(vm);
 
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
-        Assert.Equal(VolumeTransition.Detaching, volume.Transition);
+        Assert.Null(volume.DesiredAttachedVmId);
+        Assert.Null(volume.Pending);
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
         Assert.Null(volume.Transition);
@@ -1218,8 +1219,8 @@ public class VmServiceTests
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
-        volume.MarkObserved(vm.Id, false);
-        _volumeRepo.Setup(r => r.ListAttachedToVmAsync(vm.Id, It.IsAny<CancellationToken>()))
+        volume.MarkAttached(vm.Id);
+        _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Volume> { volume });
         return volume;
     }

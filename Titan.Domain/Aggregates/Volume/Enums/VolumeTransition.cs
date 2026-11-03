@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Volume;
 
-/// The request still waiting for Incus, derived from the desired pair + PendingIntentId — never stored.
+/// The move the waiting request makes, for display; derived from its kind, never stored.
 public enum VolumeTransition
 {
     Creating,
