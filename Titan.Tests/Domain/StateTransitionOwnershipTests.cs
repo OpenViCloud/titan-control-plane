@@ -30,10 +30,8 @@ public class StateTransitionOwnershipTests
         // --- Payload / parse validation: NOT transition legality. These reject a malformed request
         // before any aggregate is consulted ("what is 'Frobnicated'?"), which is the adapter layer's
         // job. They are BadRequestException (400), not BusinessException (422).
-        ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|Unknown network status"] = "parse: unknown enum value from the worker callback",
         ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|Unknown network report"] = "parse: unknown report kind from the worker callback",
         ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the network exists",
-        ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|Unknown firewall rule state"] = "parse: unknown enum value from the worker callback",
         ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|Unknown firewall rule report"] = "parse: unknown report kind from the worker callback",
         ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the rule exists",
         ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|ExternalRuleId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
@@ -55,6 +53,11 @@ public class StateTransitionOwnershipTests
         ["VolumeReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's volume or volume snapshot request report",
         ["EndVolumeRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the volume name is missing from the create command's Done",
         ["EndVolumeSnapshotRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the snapshot id is missing from the create command's Done",
+        ["NetworkReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's network or firewall rule request report",
+        ["NetworkReports.cs|INVALID_STATUS|Unknown network status"] = "parse: unknown enum value from the worker callback, shared by every network callback handler",
+        ["NetworkReports.cs|INVALID_STATUS|Unknown firewall rule state"] = "parse: unknown enum value from the worker callback, shared by every firewall rule callback handler",
+        ["EndNetworkRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the network name is missing from the create command's Done",
+        ["EndFirewallRuleRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the ACL rule id is missing from the create command's Done",
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|Unknown load balancer report"] = "parse: unknown report kind from the worker callback",
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the load balancer exists",
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the VIP is missing from the create command's report",

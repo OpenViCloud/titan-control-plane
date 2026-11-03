@@ -39,7 +39,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             n => n.TenantId == tenantId &&
                  n.DesiredExistence == DesiredExistence.Exists &&
                  (n.CurrentExistence == CurrentExistence.Exists
-                  || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingIntentId != null)), ct);
+                  || (n.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(n, "PendingRequestId") != null)), ct);
 
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks.CountAsync(
@@ -47,7 +47,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                  n.PublicIpv6Subnet != null &&
                  n.DesiredExistence == DesiredExistence.Exists &&
                  (n.CurrentExistence == CurrentExistence.Exists
-                  || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingIntentId != null)), ct);
+                  || (n.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(n, "PendingRequestId") != null)), ct);
 
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
@@ -76,7 +76,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         var held = await db.Networks
             .Where(n => n.TenantId == tenantId
                      && (n.CurrentExistence == CurrentExistence.Exists
-                         || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingIntentId != null)))
+                         || (n.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(n, "PendingRequestId") != null)))
             .Select(n => new { n.CurrentExistence, n.Cidr, n.RequestedCidr })
             .ToListAsync(ct);
 

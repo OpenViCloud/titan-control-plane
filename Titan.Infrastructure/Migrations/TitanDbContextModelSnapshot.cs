@@ -654,9 +654,17 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
-                    b.Property<Guid?>("PendingIntentId")
+                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingRequestId")
                         .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingRequestKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<string>("Protocol")
                         .IsRequired()
@@ -751,9 +759,17 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
-                    b.Property<Guid?>("PendingIntentId")
+                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingRequestId")
                         .HasColumnType("uuid")
-                        .HasColumnName("pending_intent_id");
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingRequestKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<int?>("PublicIpv6Index")
                         .HasColumnType("integer")

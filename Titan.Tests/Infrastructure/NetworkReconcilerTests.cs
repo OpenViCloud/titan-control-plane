@@ -49,6 +49,7 @@ public class NetworkReconcilerTests
         var leaving = ActiveIn(Cluster, "leaving");
         leaving.RequestDelete();
         var gone = ActiveIn(Cluster, "gone");
+        gone.RequestDelete();
         gone.MarkDeleted();
         var creating = TestAggregates.Network(TestTenant.WithRoomToSpare(), "creating", Cluster);
         var otherCluster = ActiveIn("vn-han-1", "elsewhere");

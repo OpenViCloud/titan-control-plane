@@ -153,10 +153,11 @@ public class VmSnapshotFirewallRepositoryStateTests
         Assert.Equal(new[] { "sg-2", "sg-3" }, ids);
     }
 
-    // RULES-ON-NETWORK-DELETE: the network's delete takes the ACL with it, so its rules are not observed meanwhile —
-    // the reconciler would report every one not found halfway through the delete.
+    // The network's delete may give up and leave its rules in force, so they are still observed meanwhile; an observation
+    // ends no request, so a rule not found halfway through the delete is not marked Deleted
+    // (titan-ops architecture/resource-lifecycle.md#reconciler).
     [Fact]
-    public async Task RuleReconcilable_LeavesOutTheRulesOfANetworkBeingDeleted()
+    public async Task RuleReconcilable_StillListsTheRulesOfANetworkBeingDeleted()
     {
         using var db = NewDb();
         var leaving = UsableNetwork("leaving", "vn-hcm-1");
@@ -165,6 +166,8 @@ public class VmSnapshotFirewallRepositoryStateTests
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
 
-        Assert.Empty(await new FirewallRuleRepository(db).ListReconcilableAsync("vn-hcm-1"));
+        var ids = (await new FirewallRuleRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(r => r.ExternalId).ToList();
+
+        Assert.Equal(new[] { "sg-9" }, ids);
     }
 }

@@ -52,7 +52,7 @@ public class CreateFirewallRuleCommandHandler(
 
         activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with the save
         await commands.EnqueueFirewallRuleCreateAsync(
-            rule.Id, networkId, req.Direction, req.Protocol,
+            rule.Id, rule.Pending!.Id, networkId, req.Direction, req.Protocol,
             req.StartPort, req.EndPort, req.Cidr,
             externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await networkRepo.SaveAsync(ct);

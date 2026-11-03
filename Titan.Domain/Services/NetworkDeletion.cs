@@ -1,6 +1,7 @@
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 
 namespace Titan.Domain.Services;
 
@@ -10,8 +11,9 @@ namespace Titan.Domain.Services;
 /// The caller loads the network with its row locked, so a create onto it waits for this request and then sees it.
 public class NetworkDeletion(INetworkRepository networks)
 {
-    /// The provider id the delete command takes, or null when the network never reached Incus and is gone here already.
-    public async Task<string?> RequestAsync(Network network, CancellationToken ct = default)
+    /// The request and the provider id the delete command takes, or null when the network never reached Incus and is
+    /// gone here already.
+    public async Task<RequestTicket?> RequestAsync(Network network, CancellationToken ct = default)
     {
         if (await networks.HasActiveVmsAsync(network.Id, ct))
         {

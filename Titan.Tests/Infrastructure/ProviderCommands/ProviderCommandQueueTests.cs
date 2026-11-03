@@ -8,8 +8,8 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Infrastructure.ProviderCommands;
 
 // titan-ops architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
-// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes; a VM's keys carry the request
-// id (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes; the keys of a resource on the
+// request lifecycle carry the request id (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
 public class ProviderCommandQueueTests
 {
     private readonly FakeProviderCommandRepository _repo = new();
@@ -76,8 +76,6 @@ public class ProviderCommandQueueTests
     // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
     // handler saves nothing of this request.
     [Theory]
-    [InlineData("network-delete")]
-    [InlineData("firewall-delete")]
     [InlineData("vm-snapshot-revert")]
     [InlineData("vm-snapshot-delete")]
     [InlineData("load-balancer-delete")]
@@ -100,8 +98,6 @@ public class ProviderCommandQueueTests
 
     private static Task EnqueueNewAsync(ProviderCommandQueue queue, string key, Guid id) => key switch
     {
-        "network-delete" => queue.EnqueueNetworkDeleteAsync(id, "net-x", "t-1", "mock"),
-        "firewall-delete" => queue.EnqueueFirewallRuleDeleteAsync(id, Guid.Empty, "rule-x", "t-1", "mock"),
         "vm-snapshot-revert" => queue.EnqueueVmSnapshotRevertAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
         "vm-snapshot-delete" => queue.EnqueueVmSnapshotDeleteAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
         "load-balancer-delete" => queue.EnqueueLoadBalancerDeleteAsync(id, "net-x", "2001:db8::1:1", "t-1", "mock"),
@@ -184,14 +180,74 @@ public class ProviderCommandQueueTests
         Assert.Equal($"vm-start-{vmId}-{startRequest}", _repo.Rows[1].Key);
     }
 
-    // The delete callback URL is /internal/networks/{networkId}/firewall-rules/{ruleId}.
+    // A network's and a rule's keys carry the request id, as the volume's: each request its own row, and the payload names
+    // the request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public async Task NetworkAndFirewallRuleRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
+    {
+        Guid networkId = Guid.NewGuid();
+        Guid ruleId = Guid.NewGuid();
+        Guid networkCreate = Guid.NewGuid();
+        Guid networkDelete = Guid.NewGuid();
+        Guid ruleCreate = Guid.NewGuid();
+        Guid ruleDelete = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueNetworkCreateAsync(networkId, networkCreate, "backend", "mock", "t-1", "10.40.0.0/24", "Deny", "Allow", null, null);
+        await queue.EnqueueNetworkDeleteAsync(networkId, networkDelete, "net-x", "t-1", "mock");
+        await queue.EnqueueFirewallRuleCreateAsync(ruleId, ruleCreate, networkId, "Ingress", "TCP", 22, 22, "10.0.0.0/8", "net-x", "t-1", "mock");
+        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, ruleDelete, networkId, "acl-x/rule", "t-1", "mock");
+
+        Assert.Equal(
+            [
+                $"network-create-{networkId}-{networkCreate}", $"network-delete-{networkId}-{networkDelete}",
+                $"firewall-rule-create-{ruleId}-{ruleCreate}", $"firewall-rule-delete-{ruleId}-{ruleDelete}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Assert.Equal(
+            [ProviderCommandKinds.NetworkCreate, ProviderCommandKinds.NetworkDelete,
+                ProviderCommandKinds.FirewallRuleCreate, ProviderCommandKinds.FirewallRuleDelete],
+            _repo.Rows.Select(r => r.Kind));
+        Guid[] requests = [networkCreate, networkDelete, ruleCreate, ruleDelete];
+        for (int i = 0; i < requests.Length; i++)
+        {
+            using JsonDocument payload = JsonDocument.Parse(_repo.Rows[i].Payload);
+            Assert.Equal(requests[i].ToString(), payload.RootElement.GetProperty("requestId").GetString());
+        }
+    }
+
+    // A second delete of the same network or rule is a new request with its own row, never a 409 on the first's open row
+    // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public async Task NetworkAndFirewallRuleDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
+    {
+        Guid networkId = Guid.NewGuid();
+        Guid ruleId = Guid.NewGuid();
+        Guid[] requests = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueNetworkDeleteAsync(networkId, requests[0], "net-x", "t-1", "mock");
+        await queue.EnqueueNetworkDeleteAsync(networkId, requests[1], "net-x", "t-1", "mock");
+        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, requests[2], networkId, "acl-x/rule", "t-1", "mock");
+        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, requests[3], networkId, "acl-x/rule", "t-1", "mock");
+
+        Assert.Equal(
+            [
+                $"network-delete-{networkId}-{requests[0]}", $"network-delete-{networkId}-{requests[1]}",
+                $"firewall-rule-delete-{ruleId}-{requests[2]}", $"firewall-rule-delete-{ruleId}-{requests[3]}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
+    }
+
+    // The delete callback URL is /internal/networks/{networkId}/firewall-rules/{ruleId}/requests/{requestId}.
     [Fact]
     public async Task FirewallRuleDelete_CarriesTheNetworkIdTheCallbackNeeds()
     {
         Guid ruleId = Guid.NewGuid();
         Guid networkId = Guid.NewGuid();
 
-        await Queue().EnqueueFirewallRuleDeleteAsync(ruleId, networkId, "acl-1", "t-1", "mock");
+        await Queue().EnqueueFirewallRuleDeleteAsync(ruleId, Guid.NewGuid(), networkId, "acl-1", "t-1", "mock");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -203,7 +259,7 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task NetworkCreate_CarriesBothPolicies()
     {
-        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), "backend", "mock", "t-1", "10.40.0.0/24", "Deny", "Allow", null, null);
+        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "backend", "mock", "t-1", "10.40.0.0/24", "Deny", "Allow", null, null);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -218,7 +274,7 @@ public class ProviderCommandQueueTests
     [InlineData(null, null, "", "")]
     public async Task NetworkCreate_CarriesThePublicIpv6_OrEmptyStrings(string? subnet, string? router, string wantSubnet, string wantRouter)
     {
-        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), "backend", "singapore01", "t-1", null, "Allow", "Allow", subnet, router);
+        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "backend", "singapore01", "t-1", null, "Allow", "Allow", subnet, router);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
         Assert.Equal(wantSubnet, payload.RootElement.GetProperty("publicIpv6Subnet").GetString());
@@ -242,8 +298,8 @@ public class ProviderCommandQueueTests
     {
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueFirewallRuleCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "Ingress", "TCP", 22, 22, "10.0.0.0/8", "net-x", "t-1", "mock");
-        await queue.EnqueueFirewallRuleDeleteAsync(Guid.NewGuid(), Guid.NewGuid(), "acl-x/rule", "t-1", "mock");
+        await queue.EnqueueFirewallRuleCreateAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Ingress", "TCP", 22, 22, "10.0.0.0/8", "net-x", "t-1", "mock");
+        await queue.EnqueueFirewallRuleDeleteAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "acl-x/rule", "t-1", "mock");
 
         foreach (ProviderCommand row in _repo.Rows)
         {

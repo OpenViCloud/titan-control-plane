@@ -9,13 +9,17 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Services;
 
-// The firewall rule callback (titan-ops features/network/design.md#firewall-rule-soft-delete): four reports, the Incus
-// ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim). The rule is
-// reached through its network (titan-ops architecture/code-structure.md#child-entity), so the repository the handler
-// asks is the network's, by rule id.
+// The old firewall rule callback (titan-ops architecture/resource-lifecycle.md#callback-routes): four reports, the Incus
+// ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim), each mapped
+// onto the request the rule waits on. The rule is reached through the network the route names, locked
+// (titan-ops architecture/code-structure.md#child-entity). The new routes are in NetworkRequestHandlerTests.
 public class FirewallRuleStatusCallbackTests
 {
     private readonly Network _network = ActiveNetwork();
+    private readonly Mock<INetworkRepository> _repo = new();
+
+    public FirewallRuleStatusCallbackTests() =>
+        _repo.Setup(r => r.FindByIdForUpdateAsync(_network.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_network);
 
     private static Network ActiveNetwork()
     {
@@ -24,15 +28,9 @@ public class FirewallRuleStatusCallbackTests
         return network;
     }
 
-    private UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule, IActivityRecorder activity)
-    {
-        Mock<INetworkRepository> repo = new();
-        repo.Setup(r => r.FindByFirewallRuleIdAsync(rule.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_network);
-        return new UpdateFirewallRuleStatusCommandHandler(repo.Object, activity);
-    }
+    private UpdateFirewallRuleStatusCommandHandler Handler(IActivityRecorder activity) => new(_repo.Object, activity);
 
-    private UpdateFirewallRuleStatusCommandHandler HandlerFor(FirewallRule rule) =>
-        HandlerFor(rule, Mock.Of<IActivityRecorder>());
+    private UpdateFirewallRuleStatusCommandHandler Handler() => Handler(Mock.Of<IActivityRecorder>());
 
     private UpdateFirewallRuleStatusCommand Report(FirewallRule rule, string report, bool? exists = null,
         string? state = null, string? externalRuleId = null, string? reason = null, string? detail = null) =>
@@ -45,44 +43,63 @@ public class FirewallRuleStatusCallbackTests
     {
         FirewallRule rule = CreatingRule();
         rule.MarkActive("rule-7");
-        rule.RequestDelete();
+        _network.RequestFirewallRuleDelete(rule.Id);
         return rule;
     }
 
     [Fact]
-    public async Task Deleted_MarksTheRuleDeleted_AndRecordsTheOutcomeOnce()
+    public async Task Deleted_EndsTheWaitingDeleteDone_AndRecordsTheOutcomeOnce()
     {
         FirewallRule rule = DeletingRule();
         Mock<IActivityRecorder> activity = new();
-        UpdateFirewallRuleStatusCommandHandler handler = HandlerFor(rule, activity.Object);
+        UpdateFirewallRuleStatusCommandHandler handler = Handler(activity.Object);
 
         await handler.HandleAsync(Report(rule, "Deleted"));
         await handler.HandleAsync(Report(rule, "Deleted"));
 
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Null(rule.Pending);
         Assert.Equal("rule-7", rule.ExternalId);
         activity.Verify(a => a.StageOutcome(rule.TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
+        _repo.Verify(r => r.FindByIdForUpdateAsync(_network.Id, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    // Only a delete's own report ends a rule: with no delete waiting, Deleted is Incus no longer having it.
+    [Fact]
+    public async Task Deleted_WithNoDeleteWaiting_IsNotFound_AndRecordsNothing()
+    {
+        FirewallRule rule = CreatingRule();
+        rule.MarkActive("rule-7");
+        Mock<IActivityRecorder> activity = new();
+
+        await Handler(activity.Object).HandleAsync(Report(rule, "Deleted"));
+
+        Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
+        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
+        activity.VerifyNoOtherCalls();
     }
 
     [Fact]
-    public async Task Created_StoresTheProviderId_AndTheCreateKeepsWaiting()
+    public async Task Created_EndsTheCreateDone_StoresTheProviderId_AndRecordsCreatedOnce()
     {
         FirewallRule rule = CreatingRule();
+        Mock<IActivityRecorder> activity = new();
 
-        await HandlerFor(rule).HandleAsync(Report(rule, "Created", externalRuleId: "rule-9"));
+        await Handler(activity.Object).HandleAsync(Report(rule, "Created", externalRuleId: "rule-9"));
 
         Assert.Equal("rule-9", rule.ExternalId);
         Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
         Assert.Null(rule.CurrentState);
-        Assert.Equal(FirewallRuleTransition.Creating, rule.Transition);
+        Assert.Null(rule.Pending);
+        activity.Verify(a => a.StageOutcome(rule.TenantId, "firewall_rule.created", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
     }
 
-    [Fact] // the reconciler sees the rule after the create command reported its id
-    public async Task ObservedAfterCreated_RecordsTheCreatedOutcomeOnce()
+    [Fact] // the reconciler sees the rule after the create command reported its id: current only, no second outcome
+    public async Task ObservedAfterCreated_WritesTheState_AndRecordsNoSecondOutcome()
     {
         FirewallRule rule = CreatingRule();
         Mock<IActivityRecorder> activity = new();
-        UpdateFirewallRuleStatusCommandHandler handler = HandlerFor(rule, activity.Object);
+        UpdateFirewallRuleStatusCommandHandler handler = Handler(activity.Object);
 
         await handler.HandleAsync(Report(rule, "Created", externalRuleId: "rule-9"));
         await handler.HandleAsync(Report(rule, "Observed", exists: true, state: "enabled"));
@@ -91,6 +108,22 @@ public class FirewallRuleStatusCallbackTests
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
         Assert.Null(rule.Transition);
         activity.Verify(a => a.StageOutcome(rule.TenantId, "firewall_rule.created", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
+        activity.VerifyNoOtherCalls();
+    }
+
+    // An observation ends no request (titan-ops architecture/resource-lifecycle.md#invariants): a waiting create stays
+    // waiting even when the reconciler reads the rule enabled.
+    [Fact]
+    public async Task Observed_WhileTheCreateWaits_WritesTheState_AndTheCreateKeepsWaiting()
+    {
+        FirewallRule rule = CreatingRule();
+        Mock<IActivityRecorder> activity = new();
+
+        await Handler(activity.Object).HandleAsync(Report(rule, "Observed", exists: true, state: "enabled"));
+
+        Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
+        Assert.Equal(FirewallRuleRequestKind.Create, rule.Pending!.Kind);
+        activity.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -102,7 +135,7 @@ public class FirewallRuleStatusCallbackTests
         FirewallRule rule = CreatingRule();
         rule.MarkActive("rule-9");
 
-        await HandlerFor(rule).HandleAsync(Report(rule, "Observed", exists: true, state: word));
+        await Handler().HandleAsync(Report(rule, "Observed", exists: true, state: word));
 
         Assert.Equal(expected, rule.CurrentState);
     }
@@ -119,7 +152,7 @@ public class FirewallRuleStatusCallbackTests
         rule.MarkActive("rule-9");
 
         BadRequestException ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => HandlerFor(rule).HandleAsync(Report(rule, "Observed", exists: true, state: word)));
+            () => Handler().HandleAsync(Report(rule, "Observed", exists: true, state: word)));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
@@ -130,7 +163,7 @@ public class FirewallRuleStatusCallbackTests
     {
         FirewallRule rule = DeletingRule();
 
-        await HandlerFor(rule).HandleAsync(Report(rule, "Observed", exists: false));
+        await Handler().HandleAsync(Report(rule, "Observed", exists: false));
 
         Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
@@ -142,7 +175,7 @@ public class FirewallRuleStatusCallbackTests
         FirewallRule rule = DeletingRule();
 
         BadRequestException ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => HandlerFor(rule).HandleAsync(Report(rule, "Observed")));
+            () => Handler().HandleAsync(Report(rule, "Observed")));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
     }
@@ -153,37 +186,43 @@ public class FirewallRuleStatusCallbackTests
         FirewallRule rule = CreatingRule();
 
         BadRequestException ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => HandlerFor(rule).HandleAsync(Report(rule, "Created", externalRuleId: "")));
+            () => Handler().HandleAsync(Report(rule, "Created", externalRuleId: "")));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         Assert.Null(rule.ExternalId);
     }
 
     [Fact]
-    public async Task RequestFailed_WhileDeleting_GivesTheRuleBack_WithTheReason()
+    public async Task RequestFailed_WhileDeleting_GivesTheRuleBack_WithTheReason_AndRecordsDeleteFailedOnce()
     {
         FirewallRule rule = DeletingRule();
+        Mock<IActivityRecorder> activity = new();
+        UpdateFirewallRuleStatusCommandHandler handler = Handler(activity.Object);
 
-        await HandlerFor(rule).HandleAsync(Report(rule, "RequestFailed", reason: "Firewall rule deletion failed.", detail: "raw"));
+        await handler.HandleAsync(Report(rule, "RequestFailed", reason: "Firewall rule deletion failed.", detail: "raw"));
+        await handler.HandleAsync(Report(rule, "RequestFailed", reason: "Firewall rule deletion failed.", detail: "raw"));
 
         Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
         Assert.Null(rule.Transition);
         Assert.Equal("Firewall rule deletion failed.", rule.RequestFailureReason);
         Assert.Equal("raw", rule.RequestFailureDetail);
         Assert.Equal("rule-7", rule.ExternalId);
+        activity.Verify(a => a.StageOutcome(rule.TenantId, "firewall_rule.delete_failed", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
     }
 
     [Fact] // the create report was lost, the give-up report carries the id
-    public async Task RequestFailed_OfTheCreate_CarryingTheId_KeepsTheProviderId_AndTheReason()
+    public async Task RequestFailed_OfTheCreate_CarryingTheId_KeepsTheProviderId_AndTheReason_AndRecordsNothing()
     {
         FirewallRule rule = CreatingRule();
+        Mock<IActivityRecorder> activity = new();
 
-        await HandlerFor(rule).HandleAsync(Report(rule, "RequestFailed", externalRuleId: "rule-9", reason: "Firewall rule creation failed.", detail: "raw"));
+        await Handler(activity.Object).HandleAsync(Report(rule, "RequestFailed", externalRuleId: "rule-9", reason: "Firewall rule creation failed.", detail: "raw"));
 
         Assert.Equal("rule-9", rule.ExternalId);
         Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
         Assert.Equal("Firewall rule creation failed.", rule.RequestFailureReason);
         Assert.Null(rule.Transition);
+        activity.VerifyNoOtherCalls();
     }
 
     [Theory]
@@ -191,30 +230,42 @@ public class FirewallRuleStatusCallbackTests
     [InlineData("Active")]
     [InlineData("Absent")]
     [InlineData("Error")]
-    public async Task AReportTheWorkerNoLongerSends_IsRefused_AndChangesNothing(string report)
+    public async Task AReportTheWorkerNoLongerSends_IsRefused_BeforeTheNetworkIsRead(string report)
     {
         FirewallRule rule = DeletingRule();
 
         BadRequestException ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => HandlerFor(rule).HandleAsync(Report(rule, report, externalRuleId: "rule-7")));
+            () => Handler().HandleAsync(Report(rule, report, externalRuleId: "rule-7")));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
+        _repo.Verify(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // A rule no network has: the repository answers null, and the caller gets the same 404 as before the rule
-    // became the network's child.
+    // The network the route names is not there: the caller gets the rule's 404.
     [Fact]
-    public async Task AnUnknownRule_IsNotFound()
+    public async Task AnUnknownNetwork_IsFirewallRuleNotFound()
     {
         FirewallRule rule = CreatingRule();
-        Mock<INetworkRepository> repo = new();
-        repo.Setup(r => r.FindByFirewallRuleIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Network?)null);
-        UpdateFirewallRuleStatusCommandHandler handler = new(repo.Object, Mock.Of<IActivityRecorder>());
+        UpdateFirewallRuleStatusCommand report = new(Guid.NewGuid(), rule.Id, "Deleted");
 
-        NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => handler.HandleAsync(Report(rule, "Deleted")));
+        NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(() => Handler().HandleAsync(report));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
+    }
+
+    // A rule is found only under the network the route names (titan-ops features/network/design.md#firewall-rule-soft-delete).
+    [Fact]
+    public async Task ARuleOfAnotherNetwork_IsFirewallRuleNotFound_AndIsLeftAlone()
+    {
+        Network other = ActiveNetwork();
+        FirewallRule rule = other.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+
+        NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(
+            () => Handler().HandleAsync(Report(rule, "Created", externalRuleId: "rule-9")));
+
+        Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
+        Assert.Null(rule.ExternalId);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }

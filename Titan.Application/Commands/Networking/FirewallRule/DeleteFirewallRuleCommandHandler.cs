@@ -4,6 +4,7 @@ using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
@@ -21,7 +22,9 @@ public class DeleteFirewallRuleCommandHandler(
         Guid networkId = command.NetworkId;
         Guid ruleId = command.RuleId;
 
-        NetworkAggregate network = await NetworkOwnership.RequireNetworkAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
+        // Locked, so two deletes of the rule take turns and the second sees the first waiting
+        // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+        NetworkAggregate network = await NetworkOwnership.RequireNetworkForUpdateAsync(networkRepo, currentUser.RequireTenantId(), networkId, ct);
 
         // A rule of another network answers like a missing one (titan-ops features/network/design.md#firewall-rule-soft-delete).
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, ruleId);
@@ -53,10 +56,10 @@ public class DeleteFirewallRuleCommandHandler(
         // The rule stays (delete waiting) until the worker reports the provider has removed it
         // (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm): forgetting it here would leave a rule
         // enforced that Titan no longer lists.
-        string externalRuleId = network.RequestFirewallRuleDelete(ruleId);
+        RequestTicket ticket = network.RequestFirewallRuleDelete(ruleId);
         activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);
-        await commands.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, networkId, externalRuleId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
+        await commands.EnqueueFirewallRuleDeleteAsync(rule.Id, ticket.RequestId, networkId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await networkRepo.SaveAsync(ct);
     }
 }

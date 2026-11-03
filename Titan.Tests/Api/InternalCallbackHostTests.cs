@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
@@ -257,6 +258,148 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Volume stored = await ReloadVolumeAsync(volume.Id);
         Assert.Equal((CurrentExistence.Exists, VolumeRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
         Assert.Equal(CurrentExistence.Exists, stored.Snapshots.Single().CurrentExistence);
+    }
+
+    // ---------- the network's and its firewall rules' routes ----------
+
+    private async Task<Network> StoredNetworkAndRuleWaitingOnTheirDeletesAsync()
+    {
+        Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]),
+            "cluster-a", null, wantsPublicIpv6: false);
+        network.EndRequest(network.Pending!.Id,
+            NetworkRequestEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+        FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        network.EndFirewallRuleRequest(rule.Id, rule.Pending!.Id, FirewallRuleRequestEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
+        network.RequestFirewallRuleDelete(rule.Id);
+        network.RequestDelete();
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        db.Networks.Add(network);
+        await db.SaveChangesAsync();
+        return network;
+    }
+
+    private async Task<Network> ReloadNetworkAsync(Guid networkId)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        return await db.Networks.AsNoTracking().Include(n => n.FirewallRules).SingleAsync(n => n.Id == networkId);
+    }
+
+    [Fact]
+    public async Task ANetworkFailed_InTheWorkersJson_GivesTheNetworkBack_WithItsReason()
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Pending!.Id}",
+            """{"outcome":"Failed","observed":{"status":"Created"},"reason":"The network could not be deleted.","detail":"incus: in use"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
+        Assert.Equal(("The network could not be deleted.", "incus: in use"), (stored.RequestFailureReason, stored.RequestFailureDetail));
+    }
+
+    [Fact]
+    public async Task ANetworkDone_InTheWorkersJson_EndsItsDelete_AndTheRulesWithIt()
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Pending!.Id}",
+            """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal(CurrentExistence.Deleted, stored.CurrentExistence);
+        Assert.Equal(CurrentExistence.Deleted, stored.FirewallRules.Single().CurrentExistence);
+    }
+
+    [Fact]
+    public async Task ANetworkObservation_InTheWorkersJson_WritesCurrent_AndLeavesTheDeleteWaiting()
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+
+        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/observation",
+            """{"exists":true,"observed":{"status":"Errored"}}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Equal(NetworkStatus.Errored, stored.CurrentState);
+        Assert.Equal(NetworkRequestKind.Delete, stored.Pending!.Kind);
+    }
+
+    [Fact]
+    public async Task ARuleDone_InTheWorkersJson_EndsItsDelete()
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+        FirewallRule rule = network.FirewallRules.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/networks/{network.Id}/firewall-rules/{rule.Id}/requests/{rule.Pending!.Id}", """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Equal(CurrentExistence.Deleted, stored.FirewallRules.Single().CurrentExistence);
+        Assert.Equal(NetworkRequestKind.Delete, stored.Pending!.Kind);
+    }
+
+    [Fact]
+    public async Task ARuleObservation_InTheWorkersJson_WritesCurrent_AndLeavesItsDeleteWaiting()
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+        FirewallRule rule = network.FirewallRules.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/networks/{network.Id}/firewall-rules/{rule.Id}/observation", """{"exists":true,"observed":{"state":"disabled"}}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        FirewallRule stored = (await ReloadNetworkAsync(network.Id)).FirewallRules.Single();
+        Assert.Equal(FirewallRuleState.disabled, stored.CurrentState);
+        Assert.Equal(FirewallRuleRequestKind.Delete, stored.Pending!.Kind);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Maybe"}""")]
+    [InlineData("requests/{0}", """{"outcome":"Done","observed":{"status":"Sleeping"}}""")]
+    [InlineData("observation", """{"exists":"yes"}""")]
+    [InlineData("firewall-rules/{1}/requests/{2}", """{"outcome":"Maybe"}""")]
+    [InlineData("firewall-rules/{1}/requests/{2}", """{"outcome":"Done","observed":{"state":"sleeping"}}""")]
+    [InlineData("firewall-rules/{1}/observation", """{"exists":"yes"}""")]
+    public async Task ANetworkOrRuleReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+        FirewallRule rule = network.FirewallRules.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/networks/{network.Id}/{string.Format(route, network.Pending!.Id, rule.Id, rule.Pending!.Id)}", json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Equal((NetworkStatus.Created, NetworkRequestKind.Delete), (stored.CurrentState!.Value, stored.Pending!.Kind));
+        Assert.Equal((FirewallRuleState.enabled, FirewallRuleRequestKind.Delete),
+            (stored.FirewallRules.Single().CurrentState!.Value, stored.FirewallRules.Single().Pending!.Kind));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    [InlineData("firewall-rules/{1}/requests/{2}", """{"outcome":"Done"}""")]
+    [InlineData("firewall-rules/{1}/observation", """{"exists":false}""")]
+    public async Task EveryNetworkRoute_WithoutTheToken_Is401_AndChangesNothing(string route, string json)
+    {
+        Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
+        FirewallRule rule = network.FirewallRules.Single();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/networks/{network.Id}/{string.Format(route, network.Pending!.Id, rule.Id, rule.Pending!.Id)}", json, token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Network stored = await ReloadNetworkAsync(network.Id);
+        Assert.Equal((CurrentExistence.Exists, NetworkRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, FirewallRuleRequestKind.Delete),
+            (stored.FirewallRules.Single().CurrentExistence, stored.FirewallRules.Single().Pending!.Kind));
     }
 
     // What the control plane's environment sets on dev and prd.

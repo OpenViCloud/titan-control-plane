@@ -11,42 +11,55 @@ namespace Titan.Infrastructure.ProviderCommands;
 
 /// Stages provider commands in the scope's DbContext (titan-ops architecture/provider-and-worker.md#provider-command-table).
 /// Keys are the former workflow ids, so the repeat rules of titan-ops architecture/intent-and-observation.md#intent-has-identity
-/// keep their shape, except the VM's, the volume's and the volume snapshot's, which carry the request id
+/// keep their shape, except those of the resources on the request lifecycle, which carry the request id
 /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request); payload property names are what the worker reads.
 public class ProviderCommandQueue(IProviderCommandRepository repository, TimeProvider clock) : IProviderCommandQueue
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    public Task EnqueueNetworkCreateAsync(Guid networkId, string name, string clusterId, string projectName,
+    // Network and firewall rule: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public Task EnqueueNetworkCreateAsync(Guid networkId, Guid requestId, string name, string clusterId, string projectName,
         string? cidr, string defaultIngressPolicy, string defaultEgressPolicy, string? publicIpv6Subnet,
         string? publicIpv6RouterAddress, CancellationToken ct = default) =>
-        EnqueueAsync($"network-create-{networkId}", ProviderCommandKinds.NetworkCreate, clusterId,
+        EnqueueAsync(NetworkCreateKey(networkId, requestId), ProviderCommandKinds.NetworkCreate, clusterId,
             new
             {
-                networkId, name, projectName, clusterId, cidr = cidr ?? "", defaultIngressPolicy, defaultEgressPolicy,
-                publicIpv6Subnet = publicIpv6Subnet ?? "", publicIpv6RouterAddress = publicIpv6RouterAddress ?? ""
+                networkId, requestId, name, projectName, clusterId, cidr = cidr ?? "", defaultIngressPolicy,
+                defaultEgressPolicy, publicIpv6Subnet = publicIpv6Subnet ?? "",
+                publicIpv6RouterAddress = publicIpv6RouterAddress ?? ""
             },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueNetworkDeleteAsync(Guid networkId, string externalNetworkId, string projectName, string clusterId,
-        CancellationToken ct = default) =>
-        EnqueueRequestAsync($"network-delete-{networkId}", ProviderCommandKinds.NetworkDelete, clusterId,
-            new { networkId, externalNetworkId, projectName, clusterId },
+    public Task EnqueueNetworkDeleteAsync(Guid networkId, Guid requestId, string externalNetworkId, string projectName,
+        string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(NetworkDeleteKey(networkId, requestId), ProviderCommandKinds.NetworkDelete, clusterId,
+            new { networkId, requestId, externalNetworkId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueFirewallRuleCreateAsync(Guid ruleId, Guid networkId, string direction, string protocol,
-        int? startPort, int? endPort, string cidr, string externalNetworkId, string projectName, string clusterId,
-        CancellationToken ct = default) =>
-        EnqueueAsync($"firewall-create-{ruleId}", ProviderCommandKinds.FirewallRuleCreate, clusterId,
-            new { ruleId, networkId, direction, protocol, startPort, endPort, cidr, externalNetworkId, projectName, clusterId },
+    public Task EnqueueFirewallRuleCreateAsync(Guid ruleId, Guid requestId, Guid networkId, string direction,
+        string protocol, int? startPort, int? endPort, string cidr, string externalNetworkId, string projectName,
+        string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(FirewallRuleCreateKey(ruleId, requestId), ProviderCommandKinds.FirewallRuleCreate, clusterId,
+            new
+            {
+                ruleId, requestId, networkId, direction, protocol, startPort, endPort, cidr, externalNetworkId,
+                projectName, clusterId
+            },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
     // networkId: the worker needs it for the callback URL that reports the delete (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
-    public Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid networkId, string externalRuleId, string projectName,
-        string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"firewall-delete-{ruleId}", ProviderCommandKinds.FirewallRuleDelete, clusterId,
-            new { ruleId, networkId, externalRuleId, projectName, clusterId },
+    public Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid requestId, Guid networkId, string externalRuleId,
+        string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(FirewallRuleDeleteKey(ruleId, requestId), ProviderCommandKinds.FirewallRuleDelete, clusterId,
+            new { ruleId, requestId, networkId, externalRuleId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // `network-{kind}-{networkId}-{requestId}` and `firewall-rule-{kind}-{ruleId}-{requestId}`: the stuck-request query
+    // rebuilds the key from the waiting request (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string NetworkCreateKey(Guid networkId, Guid requestId) => $"network-create-{networkId}-{requestId}";
+    internal static string NetworkDeleteKey(Guid networkId, Guid requestId) => $"network-delete-{networkId}-{requestId}";
+    internal static string FirewallRuleCreateKey(Guid ruleId, Guid requestId) => $"firewall-rule-create-{ruleId}-{requestId}";
+    internal static string FirewallRuleDeleteKey(Guid ruleId, Guid requestId) => $"firewall-rule-delete-{ruleId}-{requestId}";
 
     // VM: one row per request, the key carries the request id, so no key is ever reused and the rerun rule never
     // applies (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The payload carries requestId for the
