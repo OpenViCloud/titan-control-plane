@@ -46,7 +46,7 @@ public class VolumeRepositoryStateTests
     private static Volume Attached(string name, Vm vm)
     {
         var volume = AttachRequested(name, vm);
-        volume.MarkObserved(vm.Id, false);
+        volume.MarkAttached(vm.Id);
         return volume;
     }
 
@@ -230,13 +230,14 @@ public class VolumeRepositoryStateTests
         attachedOutsideTitan.MarkObserved(vm.Id, false);
         Volume otherVms = AttachRequested("other", otherVm);
         Volume deleted = Available("deleted");
+        deleted.RequestDelete();
         deleted.MarkObserved(vm.Id, false);
         deleted.MarkDeleted();
         Volume loose = Available("loose");
         db.Volumes.AddRange(attached, attaching, attachedOutsideTitan, otherVms, deleted, loose);
         await db.SaveChangesAsync();
 
-        List<Volume> found = await new VolumeRepository(db).ListAttachedToVmAsync(vm.Id);
+        List<Volume> found = await new VolumeRepository(db).ListAttachedToVmLockedAsync(vm.Id);
 
         Assert.Equal(new[] { "attached", "attaching", "outside" }, found.Select(v => v.Name).OrderBy(n => n).ToArray());
     }

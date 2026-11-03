@@ -85,12 +85,14 @@ public static class VmReports
         {
             return;
         }
-        List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmAsync(vm.Id, ct);
+        // A volume's own waiting request is not touched: its command reports it.
+        List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmLockedAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)
         {
             if (outcome == RequestOutcome.Done)
             {
                 volume.MarkDetachedByVmDelete(vm.Id);
+                volume.ReleaseFromVmDelete(vm.Id);
             }
             else
             {

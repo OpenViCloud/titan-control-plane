@@ -68,6 +68,21 @@ public static class ComputeOwnership
         return volume;
     }
 
+    /// The same answer with the volume's row locked (IVolumeRepository.FindByIdForUpdateAsync): every lifecycle request
+    /// of a volume takes the lock, so two requests take turns and the second sees the first waiting
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public static async Task<Volume> RequireVolumeForUpdateAsync(
+        IVolumeRepository volumeRepo, Guid tenantId, Guid volumeId, CancellationToken ct)
+    {
+        var volume = await volumeRepo.FindByIdForUpdateAsync(volumeId, ct)
+            ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
+
+        if (volume.TenantId != tenantId)
+            throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
+
+        return volume;
+    }
+
     public static VmSnapshot RequireVmSnapshot(VmAggregate vm, Guid snapshotId)
     {
         foreach (VmSnapshot snapshot in vm.Snapshots)

@@ -2,6 +2,7 @@ using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
@@ -11,7 +12,8 @@ namespace Titan.Tests.Domain;
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
-// semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests holds those).
+// semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests and VolumeRequestLifecycleTests hold
+// those). A child entity (VolumeSnapshot) is on the shape with internal methods, reached through its root.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
@@ -27,6 +29,13 @@ public class RequestLifecycleShapeTests
     private static readonly Dictionary<Type, Func<object>> WaitingOnARequest = new()
     {
         [typeof(Vm)] = () => Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20),
+        [typeof(Volume)] = () => Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10),
+        [typeof(VolumeSnapshot)] = () =>
+        {
+            Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
+            volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done("vol-shape", null));
+            return volume.AddSnapshot("shape").Snapshot;
+        },
     };
 
     [Fact]
@@ -53,7 +62,8 @@ public class RequestLifecycleShapeTests
     public void MarkMethods_ReturnNothing()
     {
         var offenders = OnTheRequestShape()
-            .SelectMany(t => t.GetMethods(Declared).Where(m => m.Name.StartsWith("Mark", StringComparison.Ordinal) && !m.Name.StartsWith("MarkSnapshot", StringComparison.Ordinal)))
+            .SelectMany(t => t.GetMethods(Declared).Where(m => m.Name.StartsWith("Mark", StringComparison.Ordinal)
+                                                                && !(t == typeof(Vm) && m.Name.StartsWith("MarkSnapshot", StringComparison.Ordinal))))
             .Where(m => m.ReturnType != typeof(void))
             .Select(m => $"{m.DeclaringType!.Name}.{m.Name} returns {m.ReturnType.Name}")
             .ToList();
@@ -66,7 +76,7 @@ public class RequestLifecycleShapeTests
         foreach ((Type type, Func<object> build) in WaitingOnARequest)
         {
             object aggregate = build();
-            MethodInfo endRequest = type.GetMethod("EndRequest", BindingFlags.Public | BindingFlags.Instance)!;
+            MethodInfo endRequest = type.GetMethod("EndRequest", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
             object end = ADoneReportFor(type);
             Dictionary<string, object?> before = PublicProperties(aggregate);
 
@@ -77,9 +87,13 @@ public class RequestLifecycleShapeTests
         }
     }
 
-    private static object ADoneReportFor(Type type) => type == typeof(Vm)
-        ? VmRequestEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null))
-        : throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
+    private static object ADoneReportFor(Type type)
+    {
+        if (type == typeof(Vm)) return VmRequestEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null));
+        if (type == typeof(Volume)) return VolumeRequestEnd.Done("foreign", new VolumeObservation(Guid.NewGuid(), true));
+        if (type == typeof(VolumeSnapshot)) return VolumeSnapshotRequestEnd.Done("foreign");
+        throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
+    }
 
     private static Dictionary<string, object?> PublicProperties(object aggregate) =>
         aggregate.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -91,19 +105,34 @@ public class RequestLifecycleShapeTests
     [Fact]
     public void EveryVmLifecycleHandler_LocksTheRow()
     {
-        string[] folders = [Path.Combine("Titan.Application", "Commands", "Compute", "Vm"), Path.Combine("Titan.Application", "Commands", "Admin", "Vm")];
+        AssertEveryHandlerLocks(
+            [Path.Combine("Titan.Application", "Commands", "Compute", "Vm"), Path.Combine("Titan.Application", "Commands", "Admin", "Vm")],
+            except: ["Rename", "RequestVmSsh"], atLeast: 8, "VM");
+    }
+
+    // A volume's create makes a new row, so it has nothing to lock; a snapshot's create locks its volume for the cap.
+    [Fact]
+    public void EveryVolumeLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks(
+            [Path.Combine("Titan.Application", "Commands", "Compute", "Volume"), Path.Combine("Titan.Application", "Commands", "Compute", "VolumeSnapshot")],
+            except: ["CreateVolumeCommandHandler"], atLeast: 12, "volume");
+    }
+
+    private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
+    {
         var handlers = folders
             .SelectMany(f => Directory.EnumerateFiles(Path.Combine(RepoRoot.ControlPlane, f), "*CommandHandler.cs"))
-            .Where(f => !Path.GetFileName(f).StartsWith("Rename", StringComparison.Ordinal) && !Path.GetFileName(f).StartsWith("RequestVmSsh", StringComparison.Ordinal))
+            .Where(f => !except.Any(e => Path.GetFileName(f).StartsWith(e, StringComparison.Ordinal)))
             .ToList();
-        Assert.True(handlers.Count >= 8, $"only {handlers.Count} VM lifecycle handlers found — the scan is blind");
+        Assert.True(handlers.Count >= atLeast, $"only {handlers.Count} {resource} lifecycle handlers found — the scan is blind");
 
         var unlocked = handlers
             .Where(f => !File.ReadAllText(f).Contains("ForUpdateAsync(", StringComparison.Ordinal))
             .Select(Path.GetFileName)
             .ToList();
         Assert.True(unlocked.Count == 0,
-            "VM lifecycle handlers that read the VM without its row lock (titan-ops architecture/resource-lifecycle.md#one-key-per-request): "
+            $"{resource} lifecycle handlers that read without the row lock (titan-ops architecture/resource-lifecycle.md#one-key-per-request): "
             + string.Join(", ", unlocked));
     }
 
@@ -118,5 +147,17 @@ public class RequestLifecycleShapeTests
         // A property named requestId, not any mention: stop and start also write `intentId = requestId`.
         var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "VM command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
+    }
+
+    [Fact]
+    public void EveryVolumeCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        var enqueues = Regex.Matches(src, @"public Task EnqueueVolume(Create|Attach|Detach|Delete|SnapshotCreate|SnapshotDelete|SnapshotRestore)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+            .Cast<Match>().ToList();
+        Assert.Equal(7, enqueues.Count);
+
+        var without = enqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVolume" + m.Groups[1].Value).ToList();
+        Assert.True(without.Count == 0, "Volume command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
     }
 }

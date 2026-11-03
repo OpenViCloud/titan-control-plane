@@ -7,10 +7,11 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/intent-and-observation.md#intent-versus-observation: a request throws when it cannot be accepted,
-// an observation (Mark*) never throws, Deleted absorbs. Incus has no status word for a custom volume or its snapshots
-// (titan-ops features/volume/design.md#volume-state-is-existence), so the model is existence plus, for a volume, the VM it
-// is attached to: the current pair is written only by observations, the desired pair only by requests. The Seed enums
-// name every situation so each "from every other situation" test walks all of them.
+// an observation (Mark*) never throws and ends no request, Deleted absorbs. Incus has no status word for a custom volume
+// or its snapshots (titan-ops features/volume/design.md#volume-state-is-existence), so the model is existence plus, for a
+// volume, the VM it is attached to: the current pair is written by observations and by a request's own report, the
+// desired pair only by requests and their failure. The Seed enums name every situation so each "from every other
+// situation" test walks all of them. How a request ends is VolumeRequestLifecycleTests'.
 public class VolumeStateMachineTests
 {
     public enum Seed
@@ -23,19 +24,21 @@ public class VolumeStateMachineTests
 
     private static readonly Vm AttachedVm = VmForAttach(VmShape.Running);
 
-    private static Volume VolumeIn(Seed seed)
+    private static Volume VolumeIn(Seed seed) => VolumeIn(seed, out _);
+
+    private static Volume VolumeIn(Seed seed, out Guid createRequestId)
     {
         var v = Volume.Create(TestTenant.WithRoomToSpare().Id, "vol-1", "cluster-a", "std", 20);
+        createRequestId = v.Pending!.Id;
         switch (seed)
         {
             case Seed.Creating: break; // Create() lands here
             case Seed.CreateFailed: v.MarkRequestFailed("could not create", "raw"); break;
             case Seed.Available: v.MarkCreated("vol11"); break;
             case Seed.AttachRequested: v.MarkCreated("vol11"); v.Attach(AttachedVm); break;
-            case Seed.Attached: v.MarkCreated("vol11"); v.Attach(AttachedVm); v.MarkObserved(AttachedVm.Id, false); break;
+            case Seed.Attached: v.MarkCreated("vol11"); AttachDone(v); break;
             case Seed.AttachedElsewhere: v.MarkCreated("vol11"); v.MarkObserved(null, true); break;
-            case Seed.DetachRequested:
-                v.MarkCreated("vol11"); v.Attach(AttachedVm); v.MarkObserved(AttachedVm.Id, false); v.Detach(); break;
+            case Seed.DetachRequested: v.MarkCreated("vol11"); AttachDone(v); v.Detach(); break;
             case Seed.DeleteRequested: v.MarkCreated("vol11"); v.RequestDelete(); break;
             case Seed.NotFound: v.MarkCreated("vol11"); v.MarkNotFound(); break;
             case Seed.Deleted: v.MarkCreated("vol11"); v.RequestDelete(); v.MarkDeleted(); break;
@@ -43,6 +46,16 @@ public class VolumeStateMachineTests
         }
         return v;
     }
+
+    /// The attach command's Done, having seen AttachedVm use the volume.
+    private static void AttachDone(Volume v)
+    {
+        VolumeAttachProviderIds attach = v.Attach(AttachedVm);
+        v.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(AttachedVm.Id, false)));
+    }
+
+    private static VolumeRequestEnd GaveUp(string reason, VolumeObservation? observed = null) =>
+        VolumeRequestEnd.Failed(null, observed, reason, "raw");
 
     private static string Shape(Volume v)
     {
@@ -105,10 +118,10 @@ public class VolumeStateMachineTests
     [Fact]
     public void Created_SetsTheIdAndExists_AndFulfilsTheCreateOnce()
     {
-        var v = VolumeIn(Seed.Creating);
+        var v = VolumeIn(Seed.Creating, out Guid createRequestId);
 
-        Assert.True(v.MarkCreated("vol11"));
-        Assert.False(v.MarkCreated("vol11"));
+        Assert.NotNull(v.EndRequest(createRequestId, VolumeRequestEnd.Done("vol11", null)));
+        Assert.Null(v.EndRequest(createRequestId, VolumeRequestEnd.Done("vol11", null)));
 
         Assert.Equal("vol11", v.ExternalId);
         Assert.Equal(CurrentExistence.Exists, v.CurrentExistence);
@@ -124,14 +137,18 @@ public class VolumeStateMachineTests
         Assert.Equal("vol11", v.ExternalId);
     }
 
-    // The Created report was lost, but the reconciler sees the volume: that ends the create.
+    // The reconciler may see the volume before the create command reports: current follows Incus, but only the
+    // command's report ends the create and brings the id.
     [Fact]
-    public void Observed_OnAWaitingCreate_FulfilsIt_AsCreating()
+    public void Observed_OnAWaitingCreate_WritesExistence_AndLeavesTheCreateWaiting()
     {
         var v = VolumeIn(Seed.Creating);
-        Assert.Equal(VolumeTransition.Creating, v.MarkObserved(null, false));
-        Assert.Null(v.Transition);
+
+        v.MarkObserved(null, false);
+
         Assert.Equal(CurrentExistence.Exists, v.CurrentExistence);
+        Assert.Equal(VolumeTransition.Creating, v.Transition);
+        Assert.Null(v.ExternalId);
     }
 
     [Fact]
@@ -153,19 +170,22 @@ public class VolumeStateMachineTests
     [InlineData(Seed.DeleteRequested)]
     public void RequestFailed_WithNoCreateWaiting_IsStale_AndRecordsNothing(Seed seed)
     {
-        var v = VolumeIn(seed);
+        var v = VolumeIn(seed, out Guid createRequestId);
         string before = Shape(v);
-        v.MarkRequestFailed("late", "late");
+
+        Assert.Null(v.EndRequest(createRequestId, VolumeRequestEnd.Failed(null, null, "late", "late")));
+
         Assert.Equal(before, Shape(v));
         Assert.Null(v.RequestFailureReason);
     }
 
+    // Not seeing the volume yet is not the create failing: the command still reports.
     [Fact]
-    public void NotFound_EndsAWaitingCreate()
+    public void NotFound_KeepsAWaitingCreate()
     {
         var v = VolumeIn(Seed.Creating);
         v.MarkNotFound();
-        Assert.Null(v.Transition);
+        Assert.Equal(VolumeTransition.Creating, v.Transition);
         Assert.Equal(CurrentExistence.NotFound, v.CurrentExistence);
     }
 
@@ -219,24 +239,12 @@ public class VolumeStateMachineTests
         Assert.Equal("VOLUME_CLUSTER_MISMATCH", ex.Code);
     }
 
-    [Fact]
-    public void Observed_AttachedToTheVmAsked_FulfilsTheAttachOnce()
-    {
-        var v = VolumeIn(Seed.AttachRequested);
-
-        Assert.Equal(VolumeTransition.Attaching, v.MarkObserved(AttachedVm.Id, false));
-        Assert.Null(v.MarkObserved(AttachedVm.Id, false));
-
-        Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
-        Assert.Null(v.Transition);
-    }
-
     // No observation withdraws a waiting request: an attach not seen yet keeps waiting for its command.
     [Fact]
     public void Observed_NotYetAttached_KeepsTheAttachWaiting()
     {
         var v = VolumeIn(Seed.AttachRequested);
-        Assert.Null(v.MarkObserved(null, false));
+        v.MarkObserved(null, false);
         Assert.Equal(VolumeTransition.Attaching, v.Transition);
     }
 
@@ -244,7 +252,7 @@ public class VolumeStateMachineTests
     public void Detach_FromAttached_AsksForNoVm_AndLeavesTheCurrentAttachmentAlone()
     {
         var v = VolumeIn(Seed.Attached);
-        Assert.Equal("vol11", v.Detach());
+        Assert.Equal("vol11", v.Detach().ProviderId);
         Assert.Null(v.DesiredAttachedVmId);
         Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
         Assert.Equal(VolumeTransition.Detaching, v.Transition);
@@ -273,23 +281,23 @@ public class VolumeStateMachineTests
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 
+    // Seeing the volume unused is not the detach's report: only the detach command ends the detach.
     [Fact]
-    public void Observed_Unattached_FulfilsTheDetachOnce()
+    public void Observed_Unattached_WritesTheCurrentAttachment_AndLeavesTheDetachWaiting()
     {
         var v = VolumeIn(Seed.DetachRequested);
 
-        Assert.Equal(VolumeTransition.Detaching, v.MarkObserved(null, false));
-        Assert.Null(v.MarkObserved(null, false));
+        v.MarkObserved(null, false);
 
         Assert.Null(v.CurrentAttachedVmId);
-        Assert.Null(v.Transition);
+        Assert.Equal(VolumeTransition.Detaching, v.Transition);
     }
 
     [Fact]
     public void Observed_StillUsedOutsideTitan_KeepsTheDetachWaiting()
     {
         var v = VolumeIn(Seed.DetachRequested);
-        Assert.Null(v.MarkObserved(null, true));
+        v.MarkObserved(null, true);
         Assert.Equal(VolumeTransition.Detaching, v.Transition);
     }
 
@@ -298,13 +306,13 @@ public class VolumeStateMachineTests
     public void Observed_AChangeMadeOutsideTitan_MovesOnlyTheCurrentAttachment()
     {
         var v = VolumeIn(Seed.Attached);
-        Assert.Null(v.MarkObserved(null, false));
+        v.MarkObserved(null, false);
         Assert.Null(v.CurrentAttachedVmId);
         Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
         Assert.Null(v.Transition);
 
         var other = VmForAttach(VmShape.Running);
-        Assert.Null(v.MarkObserved(other.Id, false));
+        v.MarkObserved(other.Id, false);
         Assert.Equal(other.Id, v.CurrentAttachedVmId);
         Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
     }
@@ -312,8 +320,10 @@ public class VolumeStateMachineTests
     [Fact]
     public void AFailedAttach_GivesBackWhatIncusShows_WithTheReason()
     {
-        var v = VolumeIn(Seed.AttachRequested);
-        v.AbandonRequest("attach failed", "raw");
+        var v = VolumeIn(Seed.Available);
+        VolumeAttachProviderIds attach = v.Attach(AttachedVm);
+
+        v.EndRequest(attach.RequestId, GaveUp("attach failed", new VolumeObservation(null, false)));
 
         Assert.Null(v.DesiredAttachedVmId);
         Assert.Null(v.Transition);
@@ -324,8 +334,10 @@ public class VolumeStateMachineTests
     [Fact]
     public void AFailedDetach_LeavesItAttached_WithTheReason()
     {
-        var v = VolumeIn(Seed.DetachRequested);
-        v.AbandonRequest("detach failed", "raw");
+        var v = VolumeIn(Seed.Attached);
+        RequestTicket detach = v.Detach();
+
+        v.EndRequest(detach.RequestId, GaveUp("detach failed", new VolumeObservation(AttachedVm.Id, false)));
 
         Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
         Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
@@ -334,34 +346,6 @@ public class VolumeStateMachineTests
     }
 
     // ---------- VM delete releases the volume (titan-ops features/volume/design.md#vm-delete-releases-volumes) ----------
-
-    [Theory]
-    [InlineData(Seed.Attached)]
-    [InlineData(Seed.AttachRequested)]
-    public void DetachWithDeletedVm_ThenTheVmDeleted_LeavesTheVolumeAvailable_SoItCanBeDeleted(Seed seed)
-    {
-        var v = VolumeIn(seed);
-        v.DetachWithDeletedVm();
-        Assert.Equal(VolumeTransition.Detaching, v.Transition);
-
-        v.MarkDetachedByVmDelete(AttachedVm.Id);
-
-        Assert.Equal("Exists/Exists/-/-/-", Shape(v));
-        Assert.Equal("vol11", v.RequestDelete());
-    }
-
-    [Fact]
-    public void DetachWithDeletedVm_ThenThatDeleteFailed_KeepsTheAttachment_WithNothingWaiting()
-    {
-        var v = VolumeIn(Seed.Attached);
-        v.DetachWithDeletedVm();
-
-        v.KeepAttachmentAfterVmDeleteFailed(AttachedVm.Id);
-
-        Assert.Null(v.Transition);
-        Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
-        Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
-    }
 
     [Theory]
     [InlineData(Seed.Available)]
@@ -381,7 +365,7 @@ public class VolumeStateMachineTests
     public void KeepAttachmentAfterVmDeleteFailed_ForAnotherVm_ChangesNothing()
     {
         var v = VolumeIn(Seed.Attached);
-        v.DetachWithDeletedVm();
+        v.ReleaseFromVmDelete(AttachedVm.Id);
 
         string before = Shape(v);
 
@@ -403,14 +387,19 @@ public class VolumeStateMachineTests
         Assert.Equal(before, Shape(v));
     }
 
+    // A VM's delete is not a request of the volume: it releases only an attachment asked for that VM, and never throws.
     [Theory]
     [InlineData(Seed.Available)]
     [InlineData(Seed.DetachRequested)]
     [InlineData(Seed.Deleted)]
-    public void DetachWithDeletedVm_OnAVolumeNotAskedToBeAttached_Throws(Seed seed)
+    public void ReleaseFromVmDelete_OnAVolumeNotAskedToBeAttachedToThatVm_ChangesNothing(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Throws<BusinessException>(() => v.DetachWithDeletedVm());
+        string before = Shape(v);
+
+        v.ReleaseFromVmDelete(AttachedVm.Id);
+
+        Assert.Equal(before, Shape(v));
     }
 
     [Fact]
@@ -429,7 +418,7 @@ public class VolumeStateMachineTests
     public void RequestDelete_WithAnId_NotAttached_IsAccepted_AndYieldsTheId(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Equal("vol11", v.RequestDelete());
+        Assert.Equal("vol11", v.RequestDelete().ProviderId);
         Assert.Equal(DesiredExistence.Deleted, v.DesiredExistence);
         Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
@@ -476,16 +465,20 @@ public class VolumeStateMachineTests
         lost.MarkNotFound();
         v.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
 
-        Assert.Equal("vol11", v.RequestDelete());
+        Assert.Equal("vol11", v.RequestDelete().ProviderId);
         Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
 
+    // The delete command's Done.
     [Fact]
     public void MarkDeleted_FulfilsTheDeleteOnce()
     {
-        var v = VolumeIn(Seed.DeleteRequested);
-        Assert.True(v.MarkDeleted().FulfilledVolumeDelete);
-        Assert.False(v.MarkDeleted().FulfilledVolumeDelete);
+        var v = VolumeIn(Seed.Available);
+        RequestTicket delete = v.RequestDelete();
+
+        Assert.NotNull(v.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null)));
+        Assert.Null(v.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null)));
+
         Assert.Equal(CurrentExistence.Deleted, v.CurrentExistence);
         Assert.True(v.IsTerminal);
     }
@@ -503,26 +496,33 @@ public class VolumeStateMachineTests
     [Fact]
     public void AFailedDelete_GivesTheVolumeBack_WithTheReason_AndAnotherPressIsANewRequest()
     {
-        var v = VolumeIn(Seed.DeleteRequested);
-        Guid? firstIntent = v.PendingIntentId;
-        v.AbandonRequest("delete failed", "raw");
+        var v = VolumeIn(Seed.Available);
+        RequestTicket first = v.RequestDelete();
+
+        v.EndRequest(first.RequestId, GaveUp("delete failed"));
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(v));
         Assert.Equal("delete failed", v.RequestFailureReason);
 
-        v.RequestDelete();
-        Assert.NotEqual(firstIntent, v.PendingIntentId);
+        RequestTicket second = v.RequestDelete();
+        Assert.NotEqual(first.RequestId, second.RequestId);
     }
 
+    // A give-up names its request; one the volume is not waiting on (another request's, or none) is ignored.
     [Theory]
     [InlineData(Seed.Creating)]
     [InlineData(Seed.Available)]
     [InlineData(Seed.Attached)]
     [InlineData(Seed.Deleted)]
-    public void AbandonRequest_WithNoAttachDetachOrDeleteWaiting_Throws(Seed seed)
+    public void AGiveUp_ForARequestNotWaiting_ChangesNothing_AndReturnsNull(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Throws<BusinessException>(() => v.AbandonRequest("x", "y"));
+        string before = Shape(v);
+
+        Assert.Null(v.EndRequest(Guid.NewGuid(), GaveUp("late")));
+
+        Assert.Equal(before, Shape(v));
+        Assert.Null(v.RequestFailureReason);
     }
 
     [Fact]
@@ -574,15 +574,16 @@ public class VolumeStateMachineTests
     [Fact]
     public void Deleted_IgnoresEveryObservation_AndNeverThrows()
     {
-        var v = VolumeIn(Seed.Deleted);
-        Assert.False(v.MarkCreated("vol99"));
-        Assert.Null(v.MarkObserved(AttachedVm.Id, true));
+        var v = VolumeIn(Seed.Deleted, out Guid createRequestId);
+        Assert.Null(v.EndRequest(createRequestId, VolumeRequestEnd.Done("vol99", null)));
+        v.MarkObserved(AttachedVm.Id, true);
         v.MarkNotFound();
-        v.MarkRequestFailed("late", "late");
+        Assert.Null(v.EndRequest(createRequestId, GaveUp("late")));
         v.MarkDetachedByVmDelete(AttachedVm.Id);
-        Assert.False(v.MarkDeleted().FulfilledVolumeDelete);
+        v.ReleaseFromVmDelete(AttachedVm.Id);
         Assert.Equal("Deleted/Deleted/-/-/-", Shape(v));
         Assert.Equal("vol11", v.ExternalId);
+        Assert.Null(v.RequestFailureReason);
     }
 
     [Fact]
@@ -599,9 +600,12 @@ public class VolumeStateMachineTests
 
     private static readonly SnapSeed[] AllSnapSeeds = Enum.GetValues<SnapSeed>();
 
-    private static VolumeSnapshot SnapshotIn(SnapSeed seed)
+    private static VolumeSnapshot SnapshotIn(SnapSeed seed) => SnapshotIn(seed, out _);
+
+    private static VolumeSnapshot SnapshotIn(SnapSeed seed, out Guid createRequestId)
     {
         var s = VolumeIn(Seed.Available).AddSnapshot("snap-1").Snapshot;
+        createRequestId = s.Pending!.Id;
         switch (seed)
         {
             case SnapSeed.Creating: break;
@@ -609,7 +613,10 @@ public class VolumeStateMachineTests
             case SnapSeed.Exists: s.MarkCreated("vol11/s5"); break;
             case SnapSeed.DeleteRequested: s.MarkCreated("vol11/s5"); s.RequestDelete(); break;
             case SnapSeed.NotFound: s.MarkCreated("vol11/s5"); s.MarkNotFound(); break;
-            case SnapSeed.Deleted: s.MarkCreated("vol11/s5"); s.RequestDelete(); s.MarkDeleted(); break;
+            case SnapSeed.Deleted:
+                s.MarkCreated("vol11/s5");
+                s.EndRequest(s.RequestDelete().RequestId, VolumeSnapshotRequestEnd.Done(null));
+                break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
         return s;
@@ -640,18 +647,10 @@ public class VolumeStateMachineTests
     [Fact]
     public void Snapshot_Created_FulfilsTheCreateOnce()
     {
-        var s = SnapshotIn(SnapSeed.Creating);
-        Assert.True(s.MarkCreated("vol11/s5"));
-        Assert.False(s.MarkCreated("vol11/s5"));
-        Assert.False(s.MarkObserved());
-        Assert.Equal("Exists/Exists/-", SnapShape(s));
-    }
-
-    [Fact]
-    public void Snapshot_Observed_OnAWaitingCreate_FulfilsIt()
-    {
-        var s = SnapshotIn(SnapSeed.Creating);
-        Assert.True(s.MarkObserved());
+        var s = SnapshotIn(SnapSeed.Creating, out Guid createRequestId);
+        Assert.NotNull(s.EndRequest(createRequestId, VolumeSnapshotRequestEnd.Done("vol11/s5")));
+        Assert.Null(s.EndRequest(createRequestId, VolumeSnapshotRequestEnd.Done("vol11/s5")));
+        s.MarkObserved();
         Assert.Equal("Exists/Exists/-", SnapShape(s));
     }
 
@@ -662,8 +661,8 @@ public class VolumeStateMachineTests
         Assert.Equal("could not create", s.RequestFailureReason);
         Assert.Equal("raw", s.RequestFailureDetail);
 
-        var exists = SnapshotIn(SnapSeed.Exists);
-        exists.MarkRequestFailed("late", "late");
+        var exists = SnapshotIn(SnapSeed.Exists, out Guid createRequestId);
+        Assert.Null(exists.EndRequest(createRequestId, VolumeSnapshotRequestEnd.Failed(null, "late", "late")));
         Assert.Null(exists.RequestFailureReason);
     }
 
@@ -673,7 +672,7 @@ public class VolumeStateMachineTests
     public void Snapshot_RequestDelete_WithAnId_IsAccepted(SnapSeed seed)
     {
         var s = SnapshotIn(seed);
-        Assert.Equal("vol11/s5", s.RequestDelete());
+        Assert.Equal("vol11/s5", s.RequestDelete().ProviderId);
         Assert.Equal(VolumeSnapshotTransition.Deleting, s.Transition);
     }
 
@@ -705,31 +704,40 @@ public class VolumeStateMachineTests
     [Fact]
     public void Snapshot_NotFound_KeepsAWaitingDelete_OnlyTheDeleteCommandEndsIt()
     {
-        var s = SnapshotIn(SnapSeed.DeleteRequested);
+        var s = SnapshotIn(SnapSeed.Exists);
+        RequestTicket delete = s.RequestDelete();
         s.MarkNotFound();
         Assert.Equal(VolumeSnapshotTransition.Deleting, s.Transition);
-        Assert.True(s.MarkDeleted());
-        Assert.False(s.MarkDeleted());
+        Assert.NotNull(s.EndRequest(delete.RequestId, VolumeSnapshotRequestEnd.Done(null)));
+        Assert.Null(s.EndRequest(delete.RequestId, VolumeSnapshotRequestEnd.Done(null)));
         Assert.True(s.IsTerminal);
     }
 
     [Fact]
     public void Snapshot_AFailedDelete_GivesItBack_WithTheReason()
     {
-        var s = SnapshotIn(SnapSeed.DeleteRequested);
-        s.AbandonRequest("delete failed", "raw");
+        var s = SnapshotIn(SnapSeed.Exists);
+        RequestTicket delete = s.RequestDelete();
+        s.EndRequest(delete.RequestId, VolumeSnapshotRequestEnd.Failed(null, "delete failed", "raw"));
         Assert.Equal("Exists/Exists/-", SnapShape(s));
         Assert.Equal("delete failed", s.RequestFailureReason);
-        Assert.Equal("vol11/s5", s.RequestDelete());
+        Assert.Equal("vol11/s5", s.RequestDelete().ProviderId);
     }
 
+    // A give-up names its request; one the snapshot is not waiting on (another request's, or none) is ignored.
     [Theory]
     [InlineData(SnapSeed.Creating)]
     [InlineData(SnapSeed.Exists)]
     [InlineData(SnapSeed.Deleted)]
-    public void Snapshot_AbandonRequest_WithNoDeleteWaiting_Throws(SnapSeed seed)
+    public void Snapshot_AGiveUp_ForARequestNotWaiting_ChangesNothing_AndReturnsNull(SnapSeed seed)
     {
-        Assert.Throws<BusinessException>(() => SnapshotIn(seed).AbandonRequest("x", "y"));
+        var s = SnapshotIn(seed);
+        string before = SnapShape(s);
+
+        Assert.Null(s.EndRequest(Guid.NewGuid(), VolumeSnapshotRequestEnd.Failed(null, "late", "late")));
+
+        Assert.Equal(before, SnapShape(s));
+        Assert.Null(s.RequestFailureReason);
     }
 
     [Fact]
@@ -748,13 +756,14 @@ public class VolumeStateMachineTests
     [Fact]
     public void Snapshot_Deleted_IgnoresEveryObservation_AndNeverThrows()
     {
-        var s = SnapshotIn(SnapSeed.Deleted);
-        Assert.False(s.MarkCreated("vol11/s9"));
-        Assert.False(s.MarkObserved());
+        var s = SnapshotIn(SnapSeed.Deleted, out Guid createRequestId);
+        Assert.Null(s.EndRequest(createRequestId, VolumeSnapshotRequestEnd.Done("vol11/s9")));
+        s.MarkObserved();
         s.MarkNotFound();
-        s.MarkRequestFailed("late", "late");
+        Assert.Null(s.EndRequest(createRequestId, VolumeSnapshotRequestEnd.Failed(null, "late", "late")));
         Assert.False(s.MarkDeleted());
         Assert.Equal("Deleted/Deleted/-", SnapShape(s));
+        Assert.Equal("vol11/s5", s.ExternalId);
     }
 
     [Theory]

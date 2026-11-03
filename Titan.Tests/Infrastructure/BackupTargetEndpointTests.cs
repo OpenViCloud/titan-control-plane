@@ -6,6 +6,7 @@ using Titan.Application.Queries.Platform.BackupTarget;
 using Titan.Domain.Repositories;
 using Titan.Tests.Fakes;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Infrastructure.Endpoints.Admin;
 
 namespace Titan.Tests.Infrastructure;

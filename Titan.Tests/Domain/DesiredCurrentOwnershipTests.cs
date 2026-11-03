@@ -27,6 +27,7 @@ public class DesiredCurrentOwnershipTests
         ["VolumeSnapshot.DeleteLocally"] = "delete of a snapshot whose create failed before Incus had it: nothing to observe",
         ["VmSnapshot.DeleteLocally"] = "delete of a snapshot whose create failed before Incus had it: nothing to observe",
         ["LoadBalancer.DeleteLocally"] = "delete of a load balancer whose create failed before Incus had it: nothing to observe",
+        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndRequest: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -70,7 +71,7 @@ public class DesiredCurrentOwnershipTests
     public void ReportMethods_AreOnlyEndRequest()
     {
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
-        Assert.Equal(["Vm.EndRequest"], reports);
+        Assert.Equal(["Vm.EndRequest", "Volume.EndRequest", "VolumeSnapshot.EndRequest"], reports);
     }
 
     [Fact]

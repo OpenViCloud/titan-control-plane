@@ -26,7 +26,12 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         // Incus has no status word for it: existence only (titan-ops architecture/desired-and-current.md#existence-axis).
         builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(v => v.PendingIntentId).HasColumnName("pending_intent_id");
+        // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
+        // Volume.Pending is built from them on read. Private properties, mapped by name.
+        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
+        builder.Property<VolumeRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Ignore(v => v.Pending);
         builder.Ignore(v => v.Transition);
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
         // The attachment pair: Incus's used_by (only observations) and the customer's ask (only requests).

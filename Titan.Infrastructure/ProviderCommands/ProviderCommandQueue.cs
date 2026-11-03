@@ -11,7 +11,8 @@ namespace Titan.Infrastructure.ProviderCommands;
 
 /// Stages provider commands in the scope's DbContext (titan-ops architecture/provider-and-worker.md#provider-command-table).
 /// Keys are the former workflow ids, so the repeat rules of titan-ops architecture/intent-and-observation.md#intent-has-identity
-/// keep their shape, except the VM's, which carry the request id; payload property names are what the worker reads.
+/// keep their shape, except the VM's, the volume's and the volume snapshot's, which carry the request id
+/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request); payload property names are what the worker reads.
 public class ProviderCommandQueue(IProviderCommandRepository repository, TimeProvider clock) : IProviderCommandQueue
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -105,49 +106,58 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
             new { snapshotId, vmId, externalSnapshotId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVolumeCreateAsync(Guid volumeId, string name, string clusterId, int sizeGb,
+    // Volume and volume snapshot: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    // A restore is the new volume's create, so its row is keyed like one and the stuck-request query finds it.
+    public Task EnqueueVolumeCreateAsync(Guid volumeId, Guid requestId, string name, string clusterId, int sizeGb,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync($"volume-create-{volumeId}", ProviderCommandKinds.VolumeCreate, clusterId,
-            new { volumeId, name, clusterId, sizeGb, projectName },
+        EnqueueAsync(VolumeCreateKey(volumeId, requestId), ProviderCommandKinds.VolumeCreate, clusterId,
+            new { volumeId, requestId, name, clusterId, sizeGb, projectName },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVolumeAttachAsync(Guid volumeId, string externalVolumeId, string externalVmId, string projectName,
+    public Task EnqueueVolumeAttachAsync(Guid volumeId, Guid requestId, string externalVolumeId, string externalVmId,
+        string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(VolumeAttachKey(volumeId, requestId), ProviderCommandKinds.VolumeAttach, clusterId,
+            new { volumeId, requestId, externalVolumeId, externalVmId, projectName, clusterId },
+            ProviderCommandRerun.AfterAnyFinish, ct);
+
+    public Task EnqueueVolumeDetachAsync(Guid volumeId, Guid requestId, string externalVolumeId, string projectName,
         string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"volume-attach-{volumeId}", ProviderCommandKinds.VolumeAttach, clusterId,
-            new { volumeId, externalVolumeId, externalVmId, projectName, clusterId },
+        EnqueueAsync(VolumeDetachKey(volumeId, requestId), ProviderCommandKinds.VolumeDetach, clusterId,
+            new { volumeId, requestId, externalVolumeId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVolumeDetachAsync(Guid volumeId, string externalVolumeId, string projectName, string clusterId,
-        CancellationToken ct = default) =>
-        EnqueueRequestAsync($"volume-detach-{volumeId}", ProviderCommandKinds.VolumeDetach, clusterId,
-            new { volumeId, externalVolumeId, projectName, clusterId },
+    public Task EnqueueVolumeDeleteAsync(Guid volumeId, Guid requestId, string externalVolumeId, string projectName,
+        string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(VolumeDeleteKey(volumeId, requestId), ProviderCommandKinds.VolumeDelete, clusterId,
+            new { volumeId, requestId, externalVolumeId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVolumeDeleteAsync(Guid volumeId, string externalVolumeId, string projectName, string clusterId,
-        CancellationToken ct = default) =>
-        EnqueueRequestAsync($"volume-delete-{volumeId}", ProviderCommandKinds.VolumeDelete, clusterId,
-            new { volumeId, externalVolumeId, projectName, clusterId },
-            ProviderCommandRerun.AfterAnyFinish, ct);
-
-    public Task EnqueueVolumeSnapshotCreateAsync(Guid snapshotId, Guid volumeId, string externalVolumeId,
+    public Task EnqueueVolumeSnapshotCreateAsync(Guid snapshotId, Guid requestId, Guid volumeId, string externalVolumeId,
         string projectName, string clusterId, CancellationToken ct = default) =>
-        EnqueueAsync($"volume-snapshot-create-{snapshotId}", ProviderCommandKinds.VolumeSnapshotCreate, clusterId,
-            new { snapshotId, volumeId, externalVolumeId, projectName, clusterId },
+        EnqueueAsync(VolumeSnapshotCreateKey(snapshotId, requestId), ProviderCommandKinds.VolumeSnapshotCreate, clusterId,
+            new { snapshotId, requestId, volumeId, externalVolumeId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVolumeSnapshotDeleteAsync(Guid snapshotId, Guid volumeId, string externalSnapshotId,
+    public Task EnqueueVolumeSnapshotDeleteAsync(Guid snapshotId, Guid requestId, Guid volumeId, string externalSnapshotId,
         string projectName, string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"volume-snapshot-delete-{snapshotId}", ProviderCommandKinds.VolumeSnapshotDelete, clusterId,
-            new { snapshotId, volumeId, externalSnapshotId, projectName, clusterId },
+        EnqueueAsync(VolumeSnapshotDeleteKey(snapshotId, requestId), ProviderCommandKinds.VolumeSnapshotDelete, clusterId,
+            new { snapshotId, requestId, volumeId, externalSnapshotId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    // Keyed on the new volume, not the snapshot: each restore is its own intent, and a second restore keyed on the
-    // snapshot would be absorbed while the first is open, leaving its volume Allocating for ever.
-    public Task EnqueueVolumeSnapshotRestoreAsync(Guid snapshotId, Guid newVolumeId, string externalSnapshotId,
-        string name, string projectName, string clusterId, CancellationToken ct = default) =>
-        EnqueueAsync($"volume-snapshot-restore-{newVolumeId}", ProviderCommandKinds.VolumeSnapshotRestore, clusterId,
-            new { snapshotId, newVolumeId, externalSnapshotId, name, projectName, clusterId },
+    public Task EnqueueVolumeSnapshotRestoreAsync(Guid snapshotId, Guid newVolumeId, Guid requestId,
+        string externalSnapshotId, string name, string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(VolumeCreateKey(newVolumeId, requestId), ProviderCommandKinds.VolumeSnapshotRestore, clusterId,
+            new { snapshotId, newVolumeId, requestId, externalSnapshotId, name, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // `volume-{kind}-{volumeId}-{requestId}` and `volume-snapshot-{kind}-{snapshotId}-{requestId}`: the stuck-request
+    // query rebuilds the key from the waiting request (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string VolumeCreateKey(Guid volumeId, Guid requestId) => $"volume-create-{volumeId}-{requestId}";
+    internal static string VolumeAttachKey(Guid volumeId, Guid requestId) => $"volume-attach-{volumeId}-{requestId}";
+    internal static string VolumeDetachKey(Guid volumeId, Guid requestId) => $"volume-detach-{volumeId}-{requestId}";
+    internal static string VolumeDeleteKey(Guid volumeId, Guid requestId) => $"volume-delete-{volumeId}-{requestId}";
+    internal static string VolumeSnapshotCreateKey(Guid snapshotId, Guid requestId) => $"volume-snapshot-create-{snapshotId}-{requestId}";
+    internal static string VolumeSnapshotDeleteKey(Guid snapshotId, Guid requestId) => $"volume-snapshot-delete-{snapshotId}-{requestId}";
 
     // AfterFailureOnly: the schedule asks every hour; the day's backup that ran stays done, one that failed runs again.
     public Task EnqueueVmBackupAsync(Guid vmId, string externalVmId, string projectName, Guid tenantId, string clusterId,

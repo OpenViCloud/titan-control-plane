@@ -1,17 +1,18 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
-using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
-// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
-// observation converges). Authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the aggregate
-// says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): each
+// report of a worker that predates the request routes is mapped onto the request the snapshot is waiting on.
+// Authenticated by X-Internal-Token at the endpoint.
 public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRepo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateVolumeSnapshotStatusCommand command, CancellationToken ct = default)
@@ -40,22 +41,21 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
                 throw new BadRequestException("INVALID_STATUS", $"Unknown volume snapshot report: '{req.Report}'");
         }
 
-        // The snapshot is reached through its volume (titan-ops architecture/code-structure.md#child-entity); a snapshot no
-        // volume has, or one under another volume than the route names, is not found.
-        VolumeAggregate? volume = await volumeRepo.FindBySnapshotIdAsync(command.SnapshotId, ct);
-        if (volume == null || volume.Id != command.VolumeId)
-        {
-            throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
-        }
+        // The snapshot is reached through its volume (titan-ops architecture/code-structure.md#child-entity); a snapshot the
+        // named volume does not have is not found.
+        VolumeAggregate volume = await volumeRepo.FindByIdForUpdateAsync(command.VolumeId, ct)
+            ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        string? outcome = null;
+        PendingRequest<VolumeSnapshotRequestKind>? waiting = snapshot.Pending;
+        PendingRequest<VolumeSnapshotRequestKind>? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
                 if (req.Exists == true)
                 {
-                    outcome = CreatedOutcome(volume.MarkSnapshotObserved(snapshot.Id));
+                    volume.MarkSnapshotObserved(snapshot.Id);
                 }
                 else
                 {
@@ -63,49 +63,36 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
                 }
                 break;
             case "Created":
-                outcome = CreatedOutcome(volume.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
+                if (waiting is { Kind: VolumeSnapshotRequestKind.Create })
+                {
+                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id, VolumeSnapshotRequestEnd.Done(req.ExternalId));
+                }
                 break;
             case "RequestFailed":
-                // A give-up carrying the id found the snapshot on Incus: the create happened.
-                bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && snapshot.ExternalId == null;
-                if (carriesAnIdNotYetStored)
+                if (waiting != null)
                 {
-                    outcome = CreatedOutcome(volume.MarkSnapshotCreated(snapshot.Id, req.ExternalId!));
-                }
-                // A delete Incus refused gives the snapshot back (titan-ops architecture/desired-and-current.md#abandoned-request).
-                bool deleteWasWaiting = snapshot.Transition == VolumeSnapshotTransition.Deleting;
-                if (deleteWasWaiting)
-                {
-                    volume.AbandonSnapshotRequest(snapshot.Id, req.Reason, req.Detail);
-                }
-                else
-                {
-                    volume.MarkSnapshotRequestFailed(snapshot.Id, req.Reason, req.Detail);
+                    outcome = RequestOutcome.Failed;
+                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id,
+                        VolumeSnapshotRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
-                bool deletedNow = volume.MarkSnapshotDeleted(snapshot.Id);
-                if (deletedNow)
+                if (waiting is { Kind: VolumeSnapshotRequestKind.Delete })
                 {
-                    outcome = "volume_snapshot.deleted";
+                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id, VolumeSnapshotRequestEnd.Done(null));
+                }
+                else
+                {
+                    volume.MarkSnapshotNotFound(snapshot.Id);
                 }
                 break;
         }
 
-        if (outcome != null)
+        if (ended != null)
         {
-            activity.StageOutcome(snapshot.TenantId, outcome, "volume_snapshot", snapshot.Id, snapshot.Name);
+            VolumeReports.RecordSnapshotEnded(snapshot, ended, outcome, activity);
         }
 
         await volumeRepo.SaveAsync(ct);
-    }
-
-    private static string? CreatedOutcome(bool fulfilledTheCreate)
-    {
-        if (fulfilledTheCreate)
-        {
-            return "volume_snapshot.created";
-        }
-        return null;
     }
 }

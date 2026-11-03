@@ -18,7 +18,7 @@ public class AttachVolumeCommandHandler(
     public async Task HandleAsync(AttachVolumeCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var volume = await ComputeOwnership.RequireVolumeAsync(repo, callerId, command.VolumeId, ct);
+        var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(repo, callerId, command.VolumeId, ct);
 
         var vm = await vmRepo.FindByIdAsync(command.VmId, ct);
         if (vm is null || vm.TenantId != callerId)
@@ -45,7 +45,7 @@ public class AttachVolumeCommandHandler(
         activity.Stage("volume.attach_requested", "volume", volume.Id, volume.Name); // atomic with Attach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeAttachAsync(
-            volume.Id, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
+            volume.Id, providerIds.RequestId, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -80,7 +80,7 @@ public class GroupBRepeatRefusedTests
         var volume = AllocatedVolume();
         var vm = RunningVm();
         volume.Attach(vm);
-        volume.MarkObserved(vm.Id, false);
+        volume.MarkAttached(vm.Id);
         volume.Detach();
 
         Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.Detach()).Code);
