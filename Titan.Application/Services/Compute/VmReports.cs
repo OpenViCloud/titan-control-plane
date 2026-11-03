@@ -12,7 +12,7 @@ namespace Titan.Application.Services.Compute;
 /// <summary>
 /// What every VM callback handler does with a worker's report, in one place: parse the Incus status, record the
 /// outcome of a request that ended once (titan-ops features/activity/design.md#request-and-outcome-names), and release
-/// the volumes of a VM whose delete ended. The new routes and the old ones share it, so they cannot drift apart
+/// the volumes of a VM whose delete was done, or keep them attached if it gave up. The new routes and the old ones share it, so they cannot drift apart
 /// (titan-ops architecture/resource-lifecycle.md#callback-routes).
 /// </summary>
 public static class VmReports
@@ -63,7 +63,9 @@ public static class VmReports
         report == null ? null : new VmObservation(ParseIncusStatus(report.Status), report.IpAddress, report.PublicIpv6Address);
 
     /// Records the ended request's outcome once, and what a delete took with it: the snapshots whose own delete was
-    /// waiting, and the volumes the provider kept and detached (titan-ops features/volume/design.md#vm-delete-releases-volumes).
+    /// waiting, and the volumes the provider kept and detached
+    /// (titan-ops features/volume/design.md#vm-delete-releases-volumes), which stay attached if the delete gave up
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
     public static async Task RecordEndedAsync(
         VmAggregate vm, VmRequestEnded ended, RequestOutcome outcome,
         IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
@@ -79,13 +81,20 @@ public static class VmReports
             activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
         }
 
-        bool theVmIsGone = outcome == RequestOutcome.Done && kind == VmRequestKind.Delete;
-        if (theVmIsGone)
+        if (kind != VmRequestKind.Delete)
         {
-            List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmAsync(vm.Id, ct);
-            foreach (VolumeAggregate volume in attachedVolumes)
+            return;
+        }
+        List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmAsync(vm.Id, ct);
+        foreach (VolumeAggregate volume in attachedVolumes)
+        {
+            if (outcome == RequestOutcome.Done)
             {
                 volume.MarkDetachedByVmDelete(vm.Id);
+            }
+            else
+            {
+                volume.KeepAttachmentAfterVmDeleteFailed(vm.Id);
             }
         }
     }

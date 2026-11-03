@@ -154,6 +154,19 @@ public class Volume : AggregateRoot
         PendingIntentId = Guid.NewGuid();
     }
 
+    /// The delete of the VM using this volume gave up: the VM stays, and so does the attachment that delete would have
+    /// ended (titan-ops architecture/resource-lifecycle.md#kinds). A detach of the customer's own waiting at that moment
+    /// looks the same and goes back too, while its command still runs.
+    public void KeepAttachmentAfterVmDeleteFailed(Guid vmId)
+    {
+        bool aDetachWaits = Transition == VolumeTransition.Detaching;
+        if (aDetachWaits && CurrentAttachedVmId == vmId)
+        {
+            DesiredAttachedVmId = vmId;
+            PendingIntentId = null;
+        }
+    }
+
     /// Follows Incus: a volume with a provider id is deleted through Incus, even one Incus no longer has; the
     /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat), and refuses while a

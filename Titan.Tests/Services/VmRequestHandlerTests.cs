@@ -123,6 +123,28 @@ public class VmRequestHandlerTests
         Assert.Null(volume.CurrentAttachedVmId);
     }
 
+    [Fact]
+    public async Task Failed_OfADelete_LeavesItsVolumeAttached_WithNothingWaiting_AndANewDeleteCanTakeIt()
+    {
+        Vm vm = Given(RunningVm());
+        Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
+        volume.MarkCreated("vol-x");
+        volume.Attach(vm);
+        volume.MarkObserved(vm.Id, false);
+        _volumeRepo.Setup(r => r.ListAttachedToVmAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
+        RequestTicket delete = vm.RequestDelete()!;
+        volume.DetachWithDeletedVm();
+
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, "Failed", Reason: "It failed."));
+
+        Assert.Null(volume.Transition);
+        Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
+        Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
+        Assert.NotNull(vm.RequestDelete());
+        volume.DetachWithDeletedVm();
+        Assert.Equal(VolumeTransition.Detaching, volume.Transition);
+    }
+
     [Theory]
     [InlineData("Delete", "vm.delete_failed")]
     [InlineData("Stop", "vm.stop_failed")]
