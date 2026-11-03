@@ -195,28 +195,39 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
     private static string BackupDay(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-    // The update is keyed on its intent and runs again only after a failure: an update that
-    // already happened must not run twice, and a second update gets its own key.
-    public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, string projectName, CancellationToken ct = default) =>
-        EnqueueAsync($"load-balancer-create-{loadBalancer.Id}", ProviderCommandKinds.LoadBalancerCreate,
-            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, null, projectName), ProviderCommandRerun.AfterAnyFinish, ct);
-
-    public Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid intentId, string projectName,
+    // Load balancer: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync($"load-balancer-update-{loadBalancer.Id}-{intentId}", ProviderCommandKinds.LoadBalancerUpdate,
-            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, intentId, projectName), ProviderCommandRerun.AfterFailureOnly, ct);
-
-    public Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, string externalNetworkId, string vip,
-        string projectName, string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"load-balancer-delete-{loadBalancerId}", ProviderCommandKinds.LoadBalancerDelete, clusterId,
-            new { loadBalancerId, externalNetworkId, vip, projectName, clusterId },
+        EnqueueAsync(LoadBalancerCreateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerCreate,
+            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, intentId: null, projectName),
             ProviderCommandRerun.AfterAnyFinish, ct);
 
+    // intentId carries the request id too, for a worker that still reports the update on the old route with it (removed
+    // in rollout phase 6, titan-ops architecture/resource-lifecycle.md#rollout).
+    public Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
+        CancellationToken ct = default) =>
+        EnqueueAsync(LoadBalancerUpdateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerUpdate,
+            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, intentId: requestId, projectName),
+            ProviderCommandRerun.AfterAnyFinish, ct);
+
+    public Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, Guid requestId, string externalNetworkId, string vip,
+        string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(LoadBalancerDeleteKey(loadBalancerId, requestId), ProviderCommandKinds.LoadBalancerDelete, clusterId,
+            new { loadBalancerId, requestId, externalNetworkId, vip, projectName, clusterId },
+            ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // `load-balancer-{kind}-{loadBalancerId}-{requestId}`: the stuck-request query rebuilds the key from the load
+    // balancer's waiting request (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string LoadBalancerCreateKey(Guid loadBalancerId, Guid requestId) => $"load-balancer-create-{loadBalancerId}-{requestId}";
+    internal static string LoadBalancerUpdateKey(Guid loadBalancerId, Guid requestId) => $"load-balancer-update-{loadBalancerId}-{requestId}";
+    internal static string LoadBalancerDeleteKey(Guid loadBalancerId, Guid requestId) => $"load-balancer-delete-{loadBalancerId}-{requestId}";
+
     // The asked configuration (titan-ops features/load-balancer/design.md#lb-resource-model); protocol in Incus's spelling.
-    private static object LoadBalancerPayload(LoadBalancer lb, Guid? intentId, string projectName) =>
+    private static object LoadBalancerPayload(LoadBalancer lb, Guid requestId, Guid? intentId, string projectName) =>
         new
         {
             loadBalancerId = lb.Id,
+            requestId,
             intentId,
             projectName,
             clusterId = lb.ClusterId,
@@ -243,8 +254,10 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
 
     // A new request on a key of a resource that already exists. The handler read the resource with no such request
     // waiting, so an open row under the key is another request's, committed in between: this one stops with 409
-    // before anything of it is saved (titan-ops architecture/provider-and-worker.md#provider-command-key).
-    private Task EnqueueRequestAsync(string key, string kind, string clusterId, object payload, ProviderCommandRerun rerun,
+    // before anything of it is saved (titan-ops architecture/provider-and-worker.md#provider-command-key). No key takes
+    // this path since every resource's keys carry their request id; it goes with rollout phase 6
+    // (titan-ops architecture/resource-lifecycle.md#rollout). Internal so its test runs it on a key of its own.
+    internal Task EnqueueRequestAsync(string key, string kind, string clusterId, object payload, ProviderCommandRerun rerun,
         CancellationToken ct) =>
         EnqueueAsync(key, kind, clusterId, payload, rerun, refuseOpenRow: true, ct);
 

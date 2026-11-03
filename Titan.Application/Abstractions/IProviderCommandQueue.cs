@@ -54,10 +54,10 @@ public interface IProviderCommandQueue
     Task EnqueueVolumeBackupAsync(Guid volumeId, string externalVolumeId, string projectName, Guid tenantId, string clusterId, DateOnly day, CancellationToken ct = default);
 
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
-    // (titan-ops features/load-balancer/design.md#lb-resource-model). The update is keyed on its intent.
-    Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, string projectName, CancellationToken ct = default);
-    Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid intentId, string projectName, CancellationToken ct = default);
-    Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, string externalNetworkId, string vip, string projectName, string clusterId, CancellationToken ct = default);
+    // (titan-ops features/load-balancer/design.md#lb-resource-model). Every command carries the request it was enqueued for.
+    Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName, CancellationToken ct = default);
+    Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName, CancellationToken ct = default);
+    Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, Guid requestId, string externalNetworkId, string vip, string projectName, string clusterId, CancellationToken ct = default);
 
     Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, string name, string? description, string osImageName,
         string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default);

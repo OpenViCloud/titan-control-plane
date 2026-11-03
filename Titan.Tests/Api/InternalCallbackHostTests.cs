@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
@@ -556,6 +557,150 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
         Assert.Equal((CurrentExistence.Exists, VmSnapshotRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    // ---------- the load balancer's routes ----------
+
+    private const string LoadBalancerSubnet = "2001:db8:0:3::/64";
+
+    // A load balancer waiting on its create (kind "creating"), or one Incus holds that waits on its delete.
+    private async Task<LoadBalancer> StoredLoadBalancerAsync(bool deleting)
+    {
+        Guid tenantId = TestTenant.WithRoomToSpare().Id;
+        Guid networkId = Guid.NewGuid();
+        Vm backend = Vm.Create(tenantId, networkId, $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
+        backend.MarkRunning($"ext-{backend.Id:N}", "10.0.0.5");
+        LoadBalancer lb = LoadBalancer.Create(tenantId, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-x", LoadBalancerSubnet,
+            "cluster-a", LoadBalancerVip.For(LoadBalancerSubnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)],
+            [backend]);
+        if (deleting)
+        {
+            lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
+            lb.RequestDelete();
+        }
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        db.LoadBalancers.Add(lb);
+        await db.SaveChangesAsync();
+        return lb;
+    }
+
+    private async Task<LoadBalancer> ReloadLoadBalancerAsync(Guid id)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        return await db.LoadBalancers.AsNoTracking().Include(lb => lb.Listeners).SingleAsync(lb => lb.Id == id);
+    }
+
+    [Fact]
+    public async Task ALoadBalancerCreateDone_InTheWorkersJson_RecordsTheVip_AndAppliesTheRows()
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: false);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", $$"""{"outcome":"Done","externalId":"{{lb.Vip}}"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal((CurrentExistence.Exists, lb.Vip), (stored.CurrentExistence, stored.ExternalId));
+        Assert.All(stored.Listeners, l => Assert.True(l.IsApplied));
+    }
+
+    [Fact]
+    public async Task ALoadBalancerDeleteFailed_InTheWorkersJson_GivesItBack_WithItsReason()
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}",
+            """{"outcome":"Failed","reason":"The load balancer could not be deleted.","detail":"incus: busy"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
+        Assert.Equal("The load balancer could not be deleted.", stored.RequestFailureReason);
+    }
+
+    // A report naming a request the load balancer does not wait on is ignored, and still 204: the worker has nothing to retry.
+    [Fact]
+    public async Task ALoadBalancerReport_NamingAnotherRequest_Is204_AndChangesNothing()
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(LoadBalancerRequestKind.Delete, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+    }
+
+    [Fact]
+    public async Task ALoadBalancerObservation_InTheWorkersJson_WritesCurrent_AndLeavesItsDeleteWaiting()
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
+
+        HttpResponseMessage response = await PatchAsync($"/internal/load-balancers/{lb.Id}/observation", """{"exists":false}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
+        Assert.Equal((CurrentExistence.NotFound, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Maybe"}""")]
+    [InlineData("requests/{0}", """{"reason":"no outcome"}""")]
+    [InlineData("observation", """{"exists":"yes"}""")]
+    public async Task ALoadBalancerReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Pending!.Id)}", json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
+        Assert.Equal((CurrentExistence.Exists, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    // A create's Done must name the VIP, or the load balancer would be left with nothing to delete through.
+    [Fact]
+    public async Task ALoadBalancerCreateDone_WithoutTheVip_Is400_AndTheCreateKeepsWaiting()
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: false);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(LoadBalancerRequestKind.Create, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task ALoadBalancerReport_ForNoLoadBalancer_Is404(string route, string json)
+    {
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{Guid.NewGuid()}/{string.Format(route, Guid.NewGuid())}", json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task EveryLoadBalancerRoute_WithoutTheToken_Is401_AndChangesNothing(string route, string json)
+    {
+        LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Pending!.Id)}", json, token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
+        Assert.Equal((CurrentExistence.Exists, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // What the control plane's environment sets on dev and prd.

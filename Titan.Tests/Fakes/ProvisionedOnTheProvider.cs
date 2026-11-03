@@ -252,3 +252,37 @@ namespace Titan.Domain.Aggregates.Volume
         public static bool MarkDeleted(this VolumeSnapshot snapshot) => snapshot.EndWithItsVolume();
     }
 }
+
+namespace Titan.Domain.Aggregates.LoadBalancer
+{
+    /// A load balancer's request ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
+    /// these replay the worker's reports under the one-call names test setups used before, through the real EndRequest.
+    /// A replay for a request not waiting does nothing, like the report it stands for.
+    public static class LoadBalancerProvisionedOnTheProvider
+    {
+        /// The create command's Done with the VIP. True when it ended the create.
+        public static bool MarkCreated(this LoadBalancer loadBalancer, string externalId) =>
+            loadBalancer.Pending is { Kind: LoadBalancerRequestKind.Create } create
+            && loadBalancer.EndRequest(create.Id, LoadBalancerRequestEnd.Done(externalId)) != null;
+
+        /// The update command's Done for its request. True when that update was the one waiting.
+        public static bool MarkUpdated(this LoadBalancer loadBalancer, Guid requestId) =>
+            loadBalancer.Pending is { Kind: LoadBalancerRequestKind.Update } update
+            && update.Id == requestId
+            && loadBalancer.EndRequest(requestId, LoadBalancerRequestEnd.Done(null)) != null;
+
+        /// The delete command's Done. True when a delete was waiting.
+        public static bool MarkDeleted(this LoadBalancer loadBalancer) =>
+            loadBalancer.Pending is { Kind: LoadBalancerRequestKind.Delete } delete
+            && loadBalancer.EndRequest(delete.Id, LoadBalancerRequestEnd.Done(null)) != null;
+
+        /// The create command's give-up, before Incus had the VIP.
+        public static void MarkRequestFailed(this LoadBalancer loadBalancer, string? reason, string? detail)
+        {
+            if (loadBalancer.Pending is { Kind: LoadBalancerRequestKind.Create } create)
+            {
+                loadBalancer.EndRequest(create.Id, LoadBalancerRequestEnd.Failed(null, reason, detail));
+            }
+        }
+    }
+}

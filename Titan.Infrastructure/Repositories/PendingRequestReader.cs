@@ -5,10 +5,10 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Repositories;
 
 /// Reads core.pending_requests, the view over every lifecycle table's waiting request (today: vms, volumes,
-/// volume_snapshots, networks, firewall_rules, vm_snapshots; each rollout phase adds its table —
+/// volume_snapshots, networks, firewall_rules, vm_snapshots, load_balancers; each rollout phase adds its table —
 /// titan-ops architecture/resource-lifecycle.md#rollout), and joins the command row whose key the request names:
 /// `{resource}-{kind}-{id}-{requestId}` (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key, FirewallRule*Key,
-/// VmSnapshot*Key).
+/// VmSnapshot*Key, LoadBalancer*Key).
 public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
 {
     public async Task<IReadOnlyList<StuckRequest>> ListStuckAsync(TimeSpan olderThan, CancellationToken ct = default)

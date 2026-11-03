@@ -4,6 +4,7 @@ using Titan.Application.Services.Compute;
 using Titan.Application.Services.Compute.LoadBalancer;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
@@ -18,7 +19,9 @@ public class UpdateLoadBalancerCommandHandler(
     public async Task HandleAsync(UpdateLoadBalancerCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var loadBalancer = await ComputeOwnership.RequireLoadBalancerAsync(repo, callerId, command.LoadBalancerId, ct);
+        // Locked, so two updates take turns and the second sees the first waiting
+        // (titan-ops architecture/resource-lifecycle.md#one-key-per-request). Before the backend VMs, like the create.
+        var loadBalancer = await ComputeOwnership.RequireLoadBalancerForUpdateAsync(repo, callerId, command.LoadBalancerId, ct);
         var listeners = LoadBalancerRequest.Listeners(command.Listeners);
         List<Guid> backendVmIds = command.Backends.Select(b => b.VmId).ToList();
 
@@ -34,9 +37,9 @@ public class UpdateLoadBalancerCommandHandler(
         }
 
         var backends = await LoadBalancerRequest.BackendsAsync(vmRepo, callerId, command.Backends, ct);
-        Guid intentId = loadBalancer.RequestUpdate(listeners, backends);
+        RequestTicket ticket = loadBalancer.RequestUpdate(listeners, backends);
         activity.Stage("load_balancer.update_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
-        await commands.EnqueueLoadBalancerUpdateAsync(loadBalancer, intentId,
+        await commands.EnqueueLoadBalancerUpdateAsync(loadBalancer, ticket.RequestId,
             TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);
         await repo.SaveAsync(ct);
     }

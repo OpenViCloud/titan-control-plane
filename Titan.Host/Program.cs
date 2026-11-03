@@ -265,6 +265,8 @@ builder.Services.AddScoped<LoadBalancerCmd.UpdateLoadBalancerCommandHandler>();
 builder.Services.AddScoped<LoadBalancerCmd.DeleteLoadBalancerCommandHandler>();
 builder.Services.AddScoped<LoadBalancerCmd.RenameLoadBalancerCommandHandler>();
 builder.Services.AddScoped<LoadBalancerCmd.UpdateLoadBalancerStatusCommandHandler>();
+builder.Services.AddScoped<LoadBalancerCmd.EndLoadBalancerRequestCommandHandler>();
+builder.Services.AddScoped<LoadBalancerCmd.ObserveLoadBalancerCommandHandler>();
 builder.Services.AddScoped<LoadBalancerQry.ListLoadBalancersQueryHandler>();
 builder.Services.AddScoped<LoadBalancerQry.GetLoadBalancerQueryHandler>();
 builder.Services.AddScoped<LoadBalancerQry.ListReconcilableLoadBalancersQueryHandler>();

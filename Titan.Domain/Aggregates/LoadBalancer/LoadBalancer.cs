@@ -27,7 +27,6 @@ public class LoadBalancer : AggregateRoot
     public string? ExternalId { get; private set; }
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
-    public Guid? PendingIntentId { get; private set; }
     // titan-ops architecture/desired-and-current.md#request-failure
     public string? RequestFailureReason { get; private set; }
     public string? RequestFailureDetail { get; private set; }
@@ -43,38 +42,60 @@ public class LoadBalancer : AggregateRoot
     public IEnumerable<LoadBalancerListener> AppliedListeners => _listeners.Where(l => l.IsApplied);
     public IEnumerable<LoadBalancerBackend> AppliedBackends => _backends.Where(b => b.IsApplied);
 
+    // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
+    // set, written by the factory and SetPending. The rows carry none of their own.
+    private Guid? PendingRequestId { get; set; }
+    private LoadBalancerRequestKind? PendingRequestKind { get; set; }
+    private DateTimeOffset? PendingRequestAskedAt { get; set; }
+
+    /// The request this load balancer is waiting on, or null. Only the report carrying its id ends it
+    /// (titan-ops architecture/resource-lifecycle.md#invariants).
+    public PendingRequest<LoadBalancerRequestKind>? Pending =>
+        PendingRequestId == null
+            ? null
+            : PendingRequest<LoadBalancerRequestKind>.Of(
+                PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
+
     private LoadBalancer() { }
 
+    /// The move the waiting request makes, for display.
     public LoadBalancerTransition? Transition
     {
         get
         {
-            bool nothingIsWaiting = PendingIntentId == null;
-            if (nothingIsWaiting)
+            switch (PendingRequestKind)
             {
-                return null;
+                case LoadBalancerRequestKind.Create:
+                    return LoadBalancerTransition.Creating;
+                case LoadBalancerRequestKind.Update:
+                    return LoadBalancerTransition.Updating;
+                case LoadBalancerRequestKind.Delete:
+                    return LoadBalancerTransition.Deleting;
+                default:
+                    return null;
             }
-            if (DesiredExistence == DesiredExistence.Deleted)
-            {
-                return LoadBalancerTransition.Deleting;
-            }
-            if (CurrentExistence == CurrentExistence.NotCreated)
-            {
-                return LoadBalancerTransition.Creating;
-            }
-            return LoadBalancerTransition.Updating;
         }
     }
 
-    private bool CreateIsWaiting => Transition == LoadBalancerTransition.Creating;
-    private bool UpdateIsWaiting => Transition == LoadBalancerTransition.Updating;
-    private bool DeleteIsWaiting => Transition == LoadBalancerTransition.Deleting;
+    private bool CreateIsWaiting => PendingRequestKind == LoadBalancerRequestKind.Create;
+    private bool DeleteIsWaiting => PendingRequestKind == LoadBalancerRequestKind.Delete;
 
     /// Incus holds it and nothing waits: an update starts only from here.
     private bool RestsOnIncus =>
-        PendingIntentId == null
+        PendingRequestId == null
+        && ExternalId != null
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
+
+    private static PendingRequest<LoadBalancerRequestKind> NewRequest(LoadBalancerRequestKind kind) =>
+        PendingRequest<LoadBalancerRequestKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
+
+    private void SetPending(PendingRequest<LoadBalancerRequestKind>? request)
+    {
+        PendingRequestId = request?.Id;
+        PendingRequestKind = request?.Kind;
+        PendingRequestAskedAt = request?.AskedAt;
+    }
 
     /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
@@ -99,10 +120,10 @@ public class LoadBalancer : AggregateRoot
             Vip = vip.Address,
             CurrentExistence = CurrentExistence.NotCreated,
             DesiredExistence = DesiredExistence.Exists,
-            PendingIntentId = Guid.NewGuid(),
             CreatedAt = DateTimeOffset.UtcNow
         };
         loadBalancer.Ask(listeners, backends);
+        loadBalancer.SetPending(NewRequest(LoadBalancerRequestKind.Create));
         return loadBalancer;
     }
 
@@ -127,8 +148,8 @@ public class LoadBalancer : AggregateRoot
         return desiredVmIds.Count == backendVmIds.Count && backendVmIds.All(desiredVmIds.Contains);
     }
 
-    /// Returns the new request's id: the update command is keyed on it.
-    public Guid RequestUpdate(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
+    /// Returns the new request and the VIP: the update command is keyed on the request.
+    public RequestTicket RequestUpdate(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
     {
         if (!RestsOnIncus)
         {
@@ -140,8 +161,9 @@ public class LoadBalancer : AggregateRoot
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer already has this configuration.");
         }
         Ask(listeners, backends);
-        PendingIntentId = Guid.NewGuid();
-        return PendingIntentId.Value;
+        PendingRequest<LoadBalancerRequestKind> request = NewRequest(LoadBalancerRequestKind.Update);
+        SetPending(request);
+        return RequestTicket.Of(request.Id, ExternalId!);
     }
 
     /// Titan-side only: Incus knows a load balancer by its VIP, never by its name
@@ -154,10 +176,10 @@ public class LoadBalancer : AggregateRoot
         Name = name;
     }
 
-    /// A delete replaces a waiting update (the update's report is then stale). A load balancer with a provider id is
-    /// deleted through Incus, even one Incus no longer has
-    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
-    public string RequestDelete()
+    /// A delete replaces a waiting update: the update's report then names a request no longer waiting, and is ignored.
+    /// A load balancer with a provider id is deleted through Incus, even one Incus no longer has
+    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Returns the request and the VIP.
+    public RequestTicket RequestDelete()
     {
         if (DeleteIsWaiting)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "A delete is already in progress for this load balancer.");
@@ -165,29 +187,10 @@ public class LoadBalancer : AggregateRoot
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer is already deleted.");
         if (CreateIsWaiting || ExternalId is null)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "Load balancer is not yet on Incus.");
+        PendingRequest<LoadBalancerRequestKind> request = NewRequest(LoadBalancerRequestKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
-        PendingIntentId = Guid.NewGuid();
-        return ExternalId;
-    }
-
-    /// An update or a delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request): the desired
-    /// side moves back to what Incus took. Not a Mark*: it changes what was asked for.
-    public void AbandonRequest(string? reason, string? detail)
-    {
-        if (DeleteIsWaiting)
-        {
-            DesiredExistence = DesiredExistence.Exists;
-        }
-        else if (UpdateIsWaiting)
-        {
-            AskWhatIsApplied();
-        }
-        else
-        {
-            throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "No update or delete is waiting on this load balancer.");
-        }
-        PendingIntentId = null;
-        RecordFailure(reason, detail);
+        SetPending(request);
+        return RequestTicket.Of(request.Id, ExternalId);
     }
 
     /// Intent: a load balancer that never reached Incus has no command and no observation coming, so this writes the
@@ -202,99 +205,94 @@ public class LoadBalancer : AggregateRoot
         }
         DesiredExistence = DesiredExistence.Deleted;
         CurrentExistence = CurrentExistence.Deleted;
-        PendingIntentId = null;
+        SetPending(null);
     }
 
-    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): converge, never throw.
+    // ---- The report of a request's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
+    // ends a request. It writes both axes and the rows, so it is neither an intent nor a Mark*.
 
-    /// The create command: Incus has the VIP and took the asked configuration. A repeat keeps the first id. Returns
-    /// true when it fulfilled the waiting create.
-    public bool MarkCreated(string externalId)
+    /// Ends the waiting request when the report names it; any other report is ignored and returns null: a stale
+    /// give-up, a Done that arrived twice, the report of an update a delete replaced, a report for a load balancer
+    /// already Deleted. A VIP the worker found is kept whatever the outcome. Done gives the request its effect and
+    /// clears an older failure; Failed records the reason and puts desired back according to the kind
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingRequest<LoadBalancerRequestKind>? EndRequest(Guid requestId, LoadBalancerRequestEnd end)
     {
-        if (IsTerminal)
+        if (IsTerminal) return null;
+        PendingRequest<LoadBalancerRequestKind>? waiting = Pending;
+        bool reportIsForTheWaitingRequest = waiting != null && waiting.Id == requestId;
+        if (!reportIsForTheWaitingRequest)
         {
-            return false;
+            return null;
         }
-        if (ExternalId == null)
+
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+        if (bringsTheProviderId)
         {
-            ExternalId = externalId;
+            ExternalId = end.ExternalId;
+            CurrentExistence = CurrentExistence.Exists;
         }
-        bool createWasWaiting = CreateIsWaiting;
-        CurrentExistence = CurrentExistence.Exists;
-        if (!createWasWaiting)
+
+        if (end.Outcome == RequestOutcome.Done)
         {
-            return false;
+            RequestFailureReason = null;
+            RequestFailureDetail = null;
+            RequestFailedAt = null;
+            if (waiting!.Kind == LoadBalancerRequestKind.Delete)
+            {
+                CurrentExistence = CurrentExistence.Deleted;
+            }
+            else
+            {
+                // Incus took what was asked.
+                CurrentExistence = CurrentExistence.Exists;
+                Apply();
+            }
         }
-        Apply();
-        PendingIntentId = null;
-        return true;
+        else
+        {
+            RequestFailureReason = end.Reason;
+            RequestFailureDetail = end.Detail;
+            RequestFailedAt = DateTimeOffset.UtcNow;
+            if (waiting!.Kind == LoadBalancerRequestKind.Delete)
+            {
+                // A delete may have replaced a waiting update, whose rows are still the ones asked: what Incus took is
+                // asked again, or desired and applied would differ with nothing waiting, and the replaced spec asked
+                // again would look like a repeat.
+                DesiredExistence = DesiredExistence.Exists;
+                AskWhatIsApplied();
+            }
+            else if (waiting.Kind == LoadBalancerRequestKind.Update)
+            {
+                AskWhatIsApplied();
+            }
+            else if (bringsTheProviderId)
+            {
+                // The create's one write carries the whole spec: a VIP on Incus holds what was asked.
+                Apply();
+            }
+        }
+
+        SetPending(null);
+        return waiting;
     }
 
-    /// The update command of intentId: Incus took the asked configuration. A report of another intent is stale (a
-    /// delete replaced it). Returns true when it fulfilled the waiting update.
-    public bool MarkUpdated(Guid intentId)
-    {
-        bool fulfilsTheWaitingUpdate = !IsTerminal && UpdateIsWaiting && PendingIntentId == intentId;
-        if (!fulfilsTheWaitingUpdate)
-        {
-            return false;
-        }
-        CurrentExistence = CurrentExistence.Exists;
-        Apply();
-        PendingIntentId = null;
-        return true;
-    }
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
+    // ends no request (titan-ops architecture/resource-lifecycle.md#invariants).
 
-    /// The reconciler saw the VIP on its network. No observation withdraws a waiting request.
+    /// The reconciler saw the VIP on its network.
     public void MarkObserved()
     {
-        if (IsTerminal)
-        {
-            return;
-        }
+        if (IsTerminal) return;
         CurrentExistence = CurrentExistence.Exists;
     }
 
-    /// The reconciler did not find it. Never Deleted: only Titan's own delete command confirms that
-    /// (titan-ops architecture/desired-and-current.md#existence-axis). Ends a waiting create; a delete or update keeps
-    /// waiting for its command.
+    /// The reconciler did not find it. Never Deleted: only a delete's Done confirms that
+    /// (titan-ops architecture/desired-and-current.md#existence-axis).
     public void MarkNotFound()
     {
-        if (IsTerminal)
-        {
-            return;
-        }
-        bool createWasWaiting = CreateIsWaiting;
+        if (IsTerminal) return;
         CurrentExistence = CurrentExistence.NotFound;
-        if (createWasWaiting)
-        {
-            PendingIntentId = null;
-        }
-    }
-
-    /// The delete command confirmed it gone. Idempotent. Returns true when it fulfilled the waiting delete.
-    public bool MarkDeleted()
-    {
-        if (IsTerminal)
-        {
-            return false;
-        }
-        bool fulfilled = DeleteIsWaiting;
-        CurrentExistence = CurrentExistence.Deleted;
-        PendingIntentId = null;
-        return fulfilled;
-    }
-
-    /// The create command gave up (titan-ops architecture/desired-and-current.md#request-failure). Stale with no create
-    /// waiting; the other give-ups are AbandonRequest.
-    public void MarkRequestFailed(string? reason, string? detail)
-    {
-        if (IsTerminal || !CreateIsWaiting)
-        {
-            return;
-        }
-        PendingIntentId = null;
-        RecordFailure(reason, detail);
     }
 
     // ---- desired and applied rows
@@ -357,7 +355,7 @@ public class LoadBalancer : AggregateRoot
         }
     }
 
-    /// The update gave up: what Incus took is asked for again.
+    /// An update or a delete gave up: what Incus took is asked for again.
     private void AskWhatIsApplied()
     {
         _listeners.RemoveAll(row => !row.IsApplied);
@@ -389,11 +387,4 @@ public class LoadBalancer : AggregateRoot
     }
 
     private static bool IsPort(int port) => port >= 1 && port <= 65535;
-
-    private void RecordFailure(string? reason, string? detail)
-    {
-        RequestFailureReason = reason;
-        RequestFailureDetail = detail;
-        RequestFailedAt = DateTimeOffset.UtcNow;
-    }
 }

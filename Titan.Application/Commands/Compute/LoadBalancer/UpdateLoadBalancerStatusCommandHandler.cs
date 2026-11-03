@@ -1,15 +1,18 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
+using Titan.Application.Services.Compute.LoadBalancer;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
-// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
-// No ICurrentUser: the caller is authenticated by X-Internal-Token at the endpoint. Outcomes are recorded once: the
-// aggregate says whether a report fulfilled the waiting request (titan-ops features/activity/design.md#outcome-source).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): each
+// report of a worker that predates the request routes is mapped onto the request the load balancer is waiting on.
+// Authenticated by X-Internal-Token at the endpoint, so no ownership check here; the row is locked like every
+// lifecycle handler's.
 public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateLoadBalancerStatusCommand command, CancellationToken ct = default)
@@ -44,13 +47,16 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 throw new BadRequestException("INVALID_STATUS", $"Unknown load balancer report: '{req.Report}'");
         }
 
-        var loadBalancer = await repo.FindByIdAsync(command.LoadBalancerId, ct)
+        LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
 
-        string? outcome = null;
+        PendingRequest<LoadBalancerRequestKind>? waiting = loadBalancer.Pending;
+        PendingRequest<LoadBalancerRequestKind>? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
+                // Seeing the VIP ends nothing: only a command's own report does.
                 if (req.Exists!.Value)
                 {
                     loadBalancer.MarkObserved();
@@ -61,60 +67,48 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 }
                 break;
             case "Created":
-                if (loadBalancer.MarkCreated(req.ExternalId!))
+                if (waiting is { Kind: LoadBalancerRequestKind.Create })
                 {
-                    outcome = "load_balancer.created";
+                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(req.ExternalId));
                 }
                 break;
             case "Updated":
-                if (loadBalancer.MarkUpdated(req.IntentId!.Value))
+                // The update command reports the intent it carried, which is the request's id; any other is an update a
+                // delete replaced, or one already ended.
+                if (waiting is { Kind: LoadBalancerRequestKind.Update } && waiting.Id == req.IntentId)
                 {
-                    outcome = "load_balancer.updated";
+                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(null));
                 }
                 break;
             case "RequestFailed":
-                outcome = ApplyGiveUp(loadBalancer, req);
+                // An update's give-up names its intent: one a delete has since replaced must not end the delete
+                // (titan-ops architecture/desired-and-current.md#abandoned-request).
+                bool namesAnotherRequest = req.IntentId != null && req.IntentId != waiting?.Id;
+                if (waiting != null && !namesAnotherRequest)
+                {
+                    outcome = RequestOutcome.Failed;
+                    ended = loadBalancer.EndRequest(waiting.Id,
+                        LoadBalancerRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                }
                 break;
             case "Deleted":
-                if (loadBalancer.MarkDeleted())
+                // Only a delete's own report ends a load balancer; with no delete waiting it is gone from Incus, which is
+                // what NotFound records.
+                if (waiting is { Kind: LoadBalancerRequestKind.Delete })
                 {
-                    outcome = "load_balancer.deleted";
+                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(null));
+                }
+                else
+                {
+                    loadBalancer.MarkNotFound();
                 }
                 break;
         }
 
-        if (outcome != null)
+        if (ended != null)
         {
-            activity.StageOutcome(loadBalancer.TenantId, outcome, "load_balancer", loadBalancer.Id, loadBalancer.Name);
+            LoadBalancerReports.RecordEnded(loadBalancer, ended, outcome, activity);
         }
         await repo.SaveAsync(ct);
-    }
-
-    private static string? ApplyGiveUp(LoadBalancerAggregate loadBalancer, UpdateLoadBalancerStatusCommand req)
-    {
-        // An update's give-up names its intent: one a delete has since replaced is stale, and must not abandon the
-        // delete (titan-ops architecture/desired-and-current.md#abandoned-request).
-        bool isAStaleUpdate = req.IntentId != null && req.IntentId != loadBalancer.PendingIntentId;
-        if (isAStaleUpdate)
-        {
-            return null;
-        }
-        // A create's give-up carrying the id found the VIP on Incus: the create happened.
-        bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && loadBalancer.ExternalId == null;
-        if (carriesAnIdNotYetStored && loadBalancer.MarkCreated(req.ExternalId!))
-        {
-            return "load_balancer.created";
-        }
-        bool updateOrDeleteWaiting = loadBalancer.Transition == LoadBalancerTransition.Updating
-                                     || loadBalancer.Transition == LoadBalancerTransition.Deleting;
-        if (updateOrDeleteWaiting)
-        {
-            loadBalancer.AbandonRequest(req.Reason, req.Detail);
-        }
-        else
-        {
-            loadBalancer.MarkRequestFailed(req.Reason, req.Detail);
-        }
-        return null;
     }
 }

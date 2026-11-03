@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.ProviderCommand;
+using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.ProviderCommands;
@@ -74,31 +76,99 @@ public class ProviderCommandQueueTests
 
     // A request the handler took as new, on a resource key whose row is open: another request committed it first
     // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
-    // handler saves nothing of this request.
-    [Theory]
-    [InlineData("load-balancer-delete")]
-    public async Task NewRequest_OnTheOpenRowOfItsKey_IsRequestInProgress(string key)
+    // handler saves nothing of this request. No enqueue takes this path any more (every resource's keys carry their
+    // request id), so it runs on a key of its own until rollout phase 6 removes it; a finished row still reopens.
+    [Fact]
+    public async Task NewRequest_OnTheOpenRowOfItsKey_IsRequestInProgress_AndAFinishedRowReopens()
     {
-        Guid id = Guid.NewGuid();
+        string key = $"test-request-{Guid.NewGuid()}";
         ProviderCommandQueue queue = Queue();
-        await EnqueueNewAsync(queue, key, id);
+        await queue.EnqueueRequestAsync(key, ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 1 },
+            ProviderCommandRerun.AfterAnyFinish, default);
         ProviderCommand row = Assert.Single(_repo.Rows);
-        Assert.StartsWith(key + "-", row.Key);
         string payload = row.Payload;
 
-        ConflictException refused = await Assert.ThrowsAsync<ConflictException>(() => EnqueueNewAsync(queue, key, id));
+        ConflictException refused = await Assert.ThrowsAsync<ConflictException>(() => queue.EnqueueRequestAsync(key,
+            ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 2 }, ProviderCommandRerun.AfterAnyFinish, default));
 
         Assert.Equal(ErrorStatus.RequestInProgressCode, refused.Code);
         Assert.Same(row, Assert.Single(_repo.Rows));
         Assert.Equal(ProviderCommandStatus.Pending, row.Status);
         Assert.Equal(payload, row.Payload);
+
+        Guid lease = Guid.NewGuid();
+        row.Lease(lease, _clock.GetUtcNow());
+        row.Fail(lease, "gave up", retryable: false, _clock.GetUtcNow());
+        await queue.EnqueueRequestAsync(key, ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 3 },
+            ProviderCommandRerun.AfterAnyFinish, default);
+        Assert.Equal(ProviderCommandStatus.Pending, Assert.Single(_repo.Rows).Status);
     }
 
-    private static Task EnqueueNewAsync(ProviderCommandQueue queue, string key, Guid id) => key switch
+    // A load balancer's keys carry the request id, as the network's: each request its own row, and the payload names the
+    // request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The update's
+    // payload also carries it as intentId, for a worker that still reports on the old route.
+    [Fact]
+    public async Task LoadBalancerRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
-        "load-balancer-delete" => queue.EnqueueLoadBalancerDeleteAsync(id, "net-x", "2001:db8::1:1", "t-1", "mock"),
-        _ => throw new ArgumentOutOfRangeException(nameof(key), key, "not a resource key"),
-    };
+        LoadBalancer lb = ALoadBalancer();
+        Guid create = Guid.NewGuid();
+        Guid update = Guid.NewGuid();
+        Guid delete = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueLoadBalancerCreateAsync(lb, create, "t-1");
+        await queue.EnqueueLoadBalancerUpdateAsync(lb, update, "t-1");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb.Id, delete, "net-x", lb.Vip, "t-1", "cluster-a");
+
+        Assert.Equal(
+            [
+                $"load-balancer-create-{lb.Id}-{create}", $"load-balancer-update-{lb.Id}-{update}",
+                $"load-balancer-delete-{lb.Id}-{delete}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Assert.Equal(
+            [ProviderCommandKinds.LoadBalancerCreate, ProviderCommandKinds.LoadBalancerUpdate, ProviderCommandKinds.LoadBalancerDelete],
+            _repo.Rows.Select(r => r.Kind));
+        Guid[] requests = [create, update, delete];
+        for (int i = 0; i < requests.Length; i++)
+        {
+            using JsonDocument payload = JsonDocument.Parse(_repo.Rows[i].Payload);
+            Assert.Equal(requests[i].ToString(), payload.RootElement.GetProperty("requestId").GetString());
+            Assert.Equal(lb.Id.ToString(), payload.RootElement.GetProperty("loadBalancerId").GetString());
+        }
+        using JsonDocument createPayload = JsonDocument.Parse(_repo.Rows[0].Payload);
+        using JsonDocument updatePayload = JsonDocument.Parse(_repo.Rows[1].Payload);
+        Assert.Equal(JsonValueKind.Null, createPayload.RootElement.GetProperty("intentId").ValueKind);
+        Assert.Equal(update.ToString(), updatePayload.RootElement.GetProperty("intentId").GetString());
+    }
+
+    // Two deletes under two request ids while the first row is open: two rows, never a 409 on the load balancer's key; a
+    // repeat while one waits never reaches the queue, the handler answers it.
+    [Fact]
+    public async Task LoadBalancerDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
+    {
+        Guid lbId = Guid.NewGuid();
+        Guid first = Guid.NewGuid();
+        Guid second = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueLoadBalancerDeleteAsync(lbId, first, "net-x", "2001:db8::1:1", "t-1", "mock");
+        await queue.EnqueueLoadBalancerDeleteAsync(lbId, second, "net-x", "2001:db8::1:1", "t-1", "mock");
+
+        Assert.Equal([$"load-balancer-delete-{lbId}-{first}", $"load-balancer-delete-{lbId}-{second}"], _repo.Rows.Select(r => r.Key));
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
+    }
+
+    private static LoadBalancer ALoadBalancer()
+    {
+        const string subnet = "2001:db8:0:1::/64";
+        Guid tenantId = TestTenant.WithRoomToSpare().Id;
+        Guid networkId = Guid.NewGuid();
+        Vm vm = Vm.Create(tenantId, networkId, "vm-q", "m", "tpl", "cluster-a", 20);
+        vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Done("vmq", new VmObservation(VmState.Running, "10.0.0.5", null)));
+        return LoadBalancer.Create(tenantId, "web", networkId, "net-x", subnet, "cluster-a", LoadBalancerVip.For(subnet, 1),
+            [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [vm]);
+    }
 
     // The VM's keys carry the request id, so stop->start->stop are three rows; no handler enqueues a key twice
     // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).

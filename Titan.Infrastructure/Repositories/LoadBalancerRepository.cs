@@ -14,6 +14,12 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
     public async Task<LoadBalancer?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         await WithRows().FirstOrDefaultAsync(lb => lb.Id == id, ct);
 
+    public async Task<LoadBalancer?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.load_balancers WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
     public async Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await WithRows()
             .Where(lb => lb.TenantId == tenantId && lb.CurrentExistence != CurrentExistence.Deleted)
@@ -28,7 +34,7 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
             lb => lb.TenantId == tenantId
                   && lb.DesiredExistence == DesiredExistence.Exists
                   && (lb.CurrentExistence == CurrentExistence.Exists
-                      || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingIntentId != null)), ct);
+                      || (lb.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(lb, "PendingRequestId") != null)), ct);
 
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         await db.LoadBalancers.AnyAsync(
