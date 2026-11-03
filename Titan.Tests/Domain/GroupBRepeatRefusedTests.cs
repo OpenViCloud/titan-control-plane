@@ -108,7 +108,7 @@ public class GroupBRepeatRefusedTests
         vm.RevertSnapshot(snapshot.Id);
         snapshot.MarkReverted();
 
-        Assert.Equal("snap-ext", vm.RevertSnapshot(snapshot.Id));
+        Assert.Equal("snap-ext", vm.RevertSnapshot(snapshot.Id).ProviderId);
     }
 
     [Fact]

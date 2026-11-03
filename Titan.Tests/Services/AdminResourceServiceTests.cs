@@ -352,7 +352,6 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
     public Task SaveAsync(CancellationToken ct = default) { SaveCalled = true; return Task.CompletedTask; }
 
     public Task<Vm?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default) => FindByIdAsync(id, ct);
-    public Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) => throw new NotSupportedException();
 
     public Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();

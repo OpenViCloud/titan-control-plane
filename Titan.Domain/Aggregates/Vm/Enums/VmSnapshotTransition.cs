@@ -1,6 +1,6 @@
 namespace Titan.Domain.Aggregates.Vm;
 
-/// The request still waiting for the provider, derived — never stored.
+/// The move the snapshot's waiting request makes, for display; derived from its kind, never stored.
 public enum VmSnapshotTransition
 {
     Creating,

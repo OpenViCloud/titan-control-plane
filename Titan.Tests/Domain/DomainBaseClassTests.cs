@@ -31,6 +31,7 @@ public class DomainBaseClassTests
         ["NetworkRequestEnd"] = "input of Network.EndRequest: how the request's command ended and what the worker saw",
         ["NetworkRequestEnded"] = "result of Network.EndRequest: the request it ended, the rules whose delete went with the network, and whether it let go of its /64",
         ["FirewallRuleRequestEnd"] = "input of Network.EndFirewallRuleRequest: how the rule's command ended and the state it read",
+        ["VmSnapshotRequestEnd"] = "input of Vm.EndSnapshotRequest: how the snapshot request's command ended",
     };
 
     [Fact]

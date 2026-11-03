@@ -42,8 +42,8 @@ public class CreateVmSnapshotCommandHandler(
         string externalVmId = ticket.ExternalVmId;
         activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotCreateAsync(snapshot.Id, vmId, externalVmId, command.Name, projectName,
-            vm.ClusterId, ct);
+        await commands.EnqueueVmSnapshotCreateAsync(snapshot.Id, snapshot.Pending!.Id, vmId, externalVmId, command.Name,
+            projectName, vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
 
         return new CreateVmSnapshotCommandResult(snapshot.Id);

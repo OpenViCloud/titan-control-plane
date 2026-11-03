@@ -29,6 +29,7 @@ public class DesiredCurrentOwnershipTests
         ["LoadBalancer.DeleteLocally"] = "delete of a load balancer whose create failed before Incus had it: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndRequest: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["FirewallRule.EndWithItsNetwork"] = "part of Network.EndRequest: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VmSnapshot.EndWithItsVm"] = "part of Vm.EndRequest: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -75,7 +76,8 @@ public class DesiredCurrentOwnershipTests
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
         Assert.Equal(
             ["FirewallRule.EndRequest", "Network.EndFirewallRuleRequest", "Network.EndRequest", "Vm.EndRequest",
-                "Volume.EndRequest", "Volume.EndSnapshotRequest", "VolumeSnapshot.EndRequest"],
+                "Vm.EndSnapshotRequest", "VmSnapshot.EndRequest", "Volume.EndRequest", "Volume.EndSnapshotRequest",
+                "VolumeSnapshot.EndRequest"],
             reports);
     }
 

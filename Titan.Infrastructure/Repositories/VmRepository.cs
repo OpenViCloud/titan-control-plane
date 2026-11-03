@@ -18,10 +18,6 @@ public class VmRepository(TitanDbContext db) : IVmRepository
         return await FindByIdAsync(id, ct);
     }
 
-    public async Task<Vm?> FindBySnapshotIdAsync(Guid snapshotId, CancellationToken ct = default) =>
-        await db.Vms.Include(v => v.Snapshots)
-            .FirstOrDefaultAsync(v => v.Snapshots.Any(s => s.Id == snapshotId), ct);
-
     public async Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)

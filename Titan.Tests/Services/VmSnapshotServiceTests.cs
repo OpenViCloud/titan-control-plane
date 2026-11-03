@@ -14,8 +14,7 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Services;
 
 // A snapshot is written through its VM (titan-ops architecture/code-structure.md#child-entity): the create, revert, delete
-// and callback handlers load the VM (locked, for a create; by snapshot id, for a callback), change it and save it
-// through IVmRepository. The snapshot repository is read side only, so only the list query asks it.
+// and callback handlers load the VM with its row locked, change it and save it through IVmRepository. The snapshot repository is read side only, so only the list query asks it.
 public class VmSnapshotServiceTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant TenantIdOwner = TestTenant.WithRoomToSpare();
@@ -95,7 +94,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("before-upgrade", created.Name);
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotCreateAsync(
-            result.SnapshotId, vm.Id, vm.ExternalId!, "before-upgrade",
+            result.SnapshotId, created.Pending!.Id, vm.Id, vm.ExternalId!, "before-upgrade",
             Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -129,7 +128,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);
         _commands.Verify(w => w.EnqueueVmSnapshotCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -285,7 +284,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Exists/Exists/Reverting", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotRevertAsync(
-            snap.Id, vm.Id, snap.ExternalId!,
+            snap.Id, snap.Pending!.Id, vm.Id, snap.ExternalId!,
             Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -364,7 +363,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Exists/Deleted/Deleting", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            snap.Id, vm.Id, snap.ExternalId!,
+            snap.Id, snap.Pending!.Id, vm.Id, snap.ExternalId!,
             Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -397,7 +396,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Exists/Exists/Reverting", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmSnapshotRevertAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -415,7 +414,7 @@ public class VmSnapshotServiceTests
         Assert.Equal(before, Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -444,7 +443,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", ex.Code);
         Assert.Equal("Exists/Exists/-", Shape(snap));
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Callbacks (titan-ops features/vm/design.md#vm-snapshot-reports) ───────────
@@ -477,10 +476,11 @@ public class VmSnapshotServiceTests
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
-    // The create's Created report was lost, but the give-up found the snapshot on Incus: the create happened, and the
-    // snapshot can be deleted through Incus.
+    // The create's Created report was lost, but the give-up found the snapshot on Incus: the create ends Failed with the
+    // id kept, so the snapshot can be deleted through Incus; a failure is not the create's outcome
+    // (titan-ops architecture/resource-lifecycle.md#kinds).
     [Fact]
-    public async Task UpdateStatus_RequestFailedCarryingTheId_IsTheCreateDone()
+    public async Task UpdateStatus_RequestFailedCarryingTheId_EndsTheCreateFailed_KeepingTheId_AndRecordsNoOutcome()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Creating);
@@ -489,9 +489,9 @@ public class VmSnapshotServiceTests
             new UpdateSnapshotStatusBody("RequestFailed", ExternalId: "cs-snap-abc", Reason: "Snapshot creation failed."), default);
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
-        Assert.Null(snap.RequestFailureReason);
-        _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.created", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
-        Assert.Equal("cs-snap-abc", vm.RequestSnapshotDelete(snap.Id));
+        Assert.Equal("Snapshot creation failed.", snap.RequestFailureReason);
+        _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+        Assert.Equal("cs-snap-abc", vm.RequestSnapshotDelete(snap.Id).ProviderId);
     }
 
     [Fact]
@@ -506,8 +506,8 @@ public class VmSnapshotServiceTests
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    [Fact] // a revert Incus refused ends, with why; the snapshot stays
-    public async Task UpdateStatus_RequestFailed_OnAWaitingRevert_EndsIt_WithTheReason()
+    [Fact] // a revert Incus refused ends, with why and its outcome; the snapshot stays
+    public async Task UpdateStatus_RequestFailed_OnAWaitingRevert_EndsIt_WithTheReason_AndRecordsRevertFailed()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.RevertRequested);
@@ -517,7 +517,7 @@ public class VmSnapshotServiceTests
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Reverting failed.", snap.RequestFailureReason);
-        _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
+        _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.revert_failed", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
     }
 
     [Fact]
@@ -561,10 +561,10 @@ public class VmSnapshotServiceTests
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
-    [Fact] // no VM holds the snapshot
+    [Fact] // no VM by the route's id
     public async Task UpdateStatus_SnapshotNotFound_ThrowsNotFoundException()
     {
-        _vmRepo.Setup(r => r.FindBySnapshotIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Vm?)null);
+        _vmRepo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Vm?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().UpdateStatusAsync(Guid.NewGuid(), Guid.NewGuid(),
@@ -723,11 +723,12 @@ public class VmSnapshotServiceTests
             new UpdateSnapshotStatusBody("RequestFailed", Reason: "Snapshot deletion failed.", Detail: "refused"), default);
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Snapshot deletion failed.", snap.RequestFailureReason);
+        _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.delete_failed", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
 
         await CreateService().DeleteAsync(vm.Id, snap.Id, default);
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(snap));
-        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, vm.Id, "cs-snap-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, snap.Pending!.Id, vm.Id, "cs-snap-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // reports the worker never sends, the old words included
@@ -762,13 +763,11 @@ public class VmSnapshotServiceTests
     private void SetupCurrentUser(Guid tenantId) =>
         _currentUser.Setup(u => u.TenantId).Returns(tenantId);
 
-    // The VM the repository hands back on every path a handler takes: plain, locked, and by any of its snapshots.
+    // The VM the repository hands back on every path a handler takes: plain and locked.
     private Vm Given(Vm vm)
     {
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
         _vmRepo.Setup(r => r.FindByIdForUpdateAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
-        _vmRepo.Setup(r => r.FindBySnapshotIdAsync(It.Is<Guid>(id => vm.Snapshots.Any(s => s.Id == id)), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(vm);
         return vm;
     }
 

@@ -42,7 +42,7 @@ public class StateTransitionOwnershipTests
         // PendingApproval parses as TenantStatus but is not an admin target.
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|A tenant can only be set to"] = "parse: only Active and Suspended are admin targets",
         ["VmReports.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback, shared by every VM callback handler",
-        ["EndVmRequestCommandHandler.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's request report",
+        ["VmReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's VM or VM snapshot request report",
         ["EndVmRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the instance name is missing from the create command's Done",
         ["ObserveVmCommandHandler.cs|INVALID_STATUS|Observed is required when the instance exists"] = "payload: an observation of an existing instance that does not say its status",
         ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM report"] = "parse: unknown report kind from the worker callback",
@@ -53,6 +53,7 @@ public class StateTransitionOwnershipTests
         ["VolumeReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's volume or volume snapshot request report",
         ["EndVolumeRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the volume name is missing from the create command's Done",
         ["EndVolumeSnapshotRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the snapshot id is missing from the create command's Done",
+        ["EndVmSnapshotRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the VM snapshot id is missing from the create command's Done",
         ["NetworkReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's network or firewall rule request report",
         ["NetworkReports.cs|INVALID_STATUS|Unknown network status"] = "parse: unknown enum value from the worker callback, shared by every network callback handler",
         ["NetworkReports.cs|INVALID_STATUS|Unknown firewall rule state"] = "parse: unknown enum value from the worker callback, shared by every firewall rule callback handler",
@@ -98,7 +99,7 @@ public class StateTransitionOwnershipTests
         // A promo TopUp is BORN Confirmed via GrantPromo() — a factory, not a transition — so it adds no
         // status mutation to guard here; Confirm()/Fail() still refuse it (already terminal).
         ["ProviderCommand/ProviderCommand"] = "Done/Failed are not absorbing on purpose: a repeat of the key reopens a " +
-            "finished row per its Rerun rule (docs/architecture/provider-and-worker.md#provider-command-key)",
+            "finished row per its Rerun rule (titan-ops architecture/provider-and-worker.md#provider-command-key)",
         ["BackupRecord/BackupRecord"] = "a row of the cache the backup refresh keeps from the bucket, not a state machine: Complete or " +
             "Incomplete only reports what barman wrote, and the next refresh rewrites it from the bucket",
         ["PaymentGatewayTransaction/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
@@ -176,7 +177,7 @@ public class StateTransitionOwnershipTests
 
         Assert.True(undeclared.Count == 0,
             "Transition-legality rules found in Titan.Application with no allowlist row. Move each onto "
-            + "the aggregate that owns the state (docs/architecture/intent-and-observation.md#intent-versus-observation), or add a row saying why it cannot move:\n  "
+            + "the aggregate that owns the state (titan-ops architecture/intent-and-observation.md#intent-versus-observation), or add a row saying why it cannot move:\n  "
             + string.Join("\n  ", undeclared.Select(k => $"{k}  ({found[k]})")));
     }
 
@@ -211,9 +212,9 @@ public class StateTransitionOwnershipTests
 
         var undeclared = offenders.Where(o => !MarkThrowAllowlist.ContainsKey(o)).OrderBy(o => o).ToList();
         Assert.True(undeclared.Count == 0,
-            "Mark* is the observation vocabulary (docs/architecture/intent-and-observation.md#observation-converges) and must not refuse a transition. A throw "
+            "Mark* is the observation vocabulary (titan-ops architecture/intent-and-observation.md#observation-converges) and must not refuse a transition. A throw "
             + "here 500s the internal callback, which the reconciler logs and skips forever "
-            + "— the VM freezes. Split intent out into EnsureCanX():\n  "
+            + "— the VM freezes. Split intent out into an Ensure*() guard of the request:\n  "
             + string.Join("\n  ", undeclared));
 
         var stale = MarkThrowAllowlist.Keys.Where(k => !offenders.Contains(k)).OrderBy(k => k).ToList();
@@ -250,7 +251,7 @@ public class StateTransitionOwnershipTests
 
         Assert.NotEmpty(declared); // the scan itself must have found something, or it proves nothing
         Assert.True(missing.Count == 0,
-            "These Mark* methods can move an aggregate OUT of its terminal state (docs/architecture/intent-and-observation.md#terminal-state-absorbs). For a VM "
+            "These Mark* methods can move an aggregate OUT of its terminal state (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs). For a VM "
             + "that means a destroyed machine reported Running gets billed (ComputeMeterService.cs:35). "
             + "Add `if (IsTerminal) return;` as the first statement:\n  " + string.Join("\n  ", missing));
 
@@ -279,8 +280,8 @@ public class StateTransitionOwnershipTests
     // a guard the caller has to remember is advice; this test is what makes it an invariant.
     //
     // Internal validation counts in three shapes: it throws; it consults IsTerminal (absorb instead
-    // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an EnsureCanX() on itself,
-    // which a text scan looking only for `throw` would report as a violation.
+    // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an Ensure*() on itself
+    // (EnsureSnapshottable, EnsureNoCreateWaiting, …), which a text scan looking only for `throw` would report as a violation.
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
         ["VmTemplateCluster.MarkNotFound"] = "there is genuinely no invariant to enforce: NotFound is reachable " +
@@ -318,7 +319,7 @@ public class StateTransitionOwnershipTests
 
                 var validates = body.Contains("throw")
                              || body.Contains("IsTerminal")
-                             || Regex.IsMatch(body, @"EnsureCan\w*\(\)");
+                             || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");
             }
         }

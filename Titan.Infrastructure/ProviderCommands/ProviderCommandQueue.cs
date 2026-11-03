@@ -101,23 +101,30 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     internal static string VmStopKey(Guid vmId, Guid requestId) => $"vm-stop-{vmId}-{requestId}";
     internal static string VmStartKey(Guid vmId, Guid requestId) => $"vm-start-{vmId}-{requestId}";
 
-    public Task EnqueueVmSnapshotCreateAsync(Guid snapshotId, Guid vmId, string externalVmId, string name,
+    // VM snapshot: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public Task EnqueueVmSnapshotCreateAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalVmId, string name,
         string projectName, string clusterId, CancellationToken ct = default) =>
-        EnqueueAsync($"vm-snapshot-create-{snapshotId}", ProviderCommandKinds.VmSnapshotCreate, clusterId,
-            new { snapshotId, vmId, externalVmId, name, projectName, clusterId },
+        EnqueueAsync(VmSnapshotCreateKey(snapshotId, requestId), ProviderCommandKinds.VmSnapshotCreate, clusterId,
+            new { snapshotId, requestId, vmId, externalVmId, name, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVmSnapshotRevertAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName,
-        string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"vm-snapshot-revert-{snapshotId}", ProviderCommandKinds.VmSnapshotRevert, clusterId,
-            new { snapshotId, vmId, externalSnapshotId, projectName, clusterId },
+    public Task EnqueueVmSnapshotRevertAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalSnapshotId,
+        string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(VmSnapshotRevertKey(snapshotId, requestId), ProviderCommandKinds.VmSnapshotRevert, clusterId,
+            new { snapshotId, requestId, vmId, externalSnapshotId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
 
-    public Task EnqueueVmSnapshotDeleteAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName,
-        string clusterId, CancellationToken ct = default) =>
-        EnqueueRequestAsync($"vm-snapshot-delete-{snapshotId}", ProviderCommandKinds.VmSnapshotDelete, clusterId,
-            new { snapshotId, vmId, externalSnapshotId, projectName, clusterId },
+    public Task EnqueueVmSnapshotDeleteAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalSnapshotId,
+        string projectName, string clusterId, CancellationToken ct = default) =>
+        EnqueueAsync(VmSnapshotDeleteKey(snapshotId, requestId), ProviderCommandKinds.VmSnapshotDelete, clusterId,
+            new { snapshotId, requestId, vmId, externalSnapshotId, projectName, clusterId },
             ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // `vm-snapshot-{kind}-{snapshotId}-{requestId}`: the stuck-request query rebuilds the key from the snapshot's waiting
+    // request (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string VmSnapshotCreateKey(Guid snapshotId, Guid requestId) => $"vm-snapshot-create-{snapshotId}-{requestId}";
+    internal static string VmSnapshotRevertKey(Guid snapshotId, Guid requestId) => $"vm-snapshot-revert-{snapshotId}-{requestId}";
+    internal static string VmSnapshotDeleteKey(Guid snapshotId, Guid requestId) => $"vm-snapshot-delete-{snapshotId}-{requestId}";
 
     // Volume and volume snapshot: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     // A restore is the new volume's create, so its row is keyed like one and the stuck-request query finds it.

@@ -31,9 +31,9 @@ public interface IProviderCommandQueue
 
     // clusterId is the VM's: a snapshot lives on the VM's cluster. projectName is the tenant's Incus project, where the
     // instance, its snapshots and the custom volumes live (titan-ops architecture/tenancy-and-admin.md#project-name).
-    Task EnqueueVmSnapshotCreateAsync(Guid snapshotId, Guid vmId, string externalVmId, string name, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVmSnapshotRevertAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVmSnapshotDeleteAsync(Guid snapshotId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmSnapshotCreateAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalVmId, string name, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmSnapshotRevertAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueVmSnapshotDeleteAsync(Guid snapshotId, Guid requestId, Guid vmId, string externalSnapshotId, string projectName, string clusterId, CancellationToken ct = default);
 
     // No offering id: the worker has no catalog, the pool comes from the cluster and the size travels here. Every
     // volume and volume snapshot command carries the request it was enqueued for
