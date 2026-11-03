@@ -24,8 +24,8 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
     /// The report of the network's own command (titan-ops architecture/resource-lifecycle.md#callback-routes), ended here
     /// so the route follows it: a create that failed before Incus had the network let go of its /64, and a delete done
     /// means Incus no longer has the network nor its router; either way the route goes back, its number waiting at the
-    /// back of the line. The held route is read without a lock: no create locks a held route. A repeat finds no route
-    /// held, and a network without public IPv6 never held one.
+    /// back of the line. The held route is read without a lock: no create locks a held route. A repeated report
+    /// ends nothing and touches no route, and a network without public IPv6 never held one.
     public async Task<NetworkRequestEnded?> RecordEndedAsync(Network network, Guid requestId, NetworkRequestEnd end,
         CancellationToken ct = default)
     {

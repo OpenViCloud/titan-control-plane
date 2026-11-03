@@ -83,8 +83,8 @@ public class NetworkRequestLifecycleTests
         Assert.Equal("net-ext", network.BeginVmDeployment("cluster-1"));
     }
 
-    // The worker waits for the status to leave Pending, but past its deadline it reports Done with no status: the
-    // network exists, and is usable only once the reconciler reads it Created.
+    // A worker from before the request routes reports the create's Done with no status (the old Created): the network
+    // exists, and is usable only once the reconciler reads it Created.
     [Fact]
     public void Done_OfTheCreate_WithoutAStatus_LeavesTheStateNull_AndTheNetworkNotUsable_UntilTheReconcilerReadsCreated()
     {

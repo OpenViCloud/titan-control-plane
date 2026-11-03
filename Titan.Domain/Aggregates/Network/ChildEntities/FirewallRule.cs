@@ -7,7 +7,8 @@ namespace Titan.Domain.Aggregates.Network;
 /// One rule of a network: a line in the network's ACL on Incus (titan-ops features/network/design.md#firewall-on-incus).
 /// A child of Network (titan-ops architecture/code-structure.md#child-entity): the network's delete taking
 /// every rule with it is the network's invariant, so only the root reaches the methods below, and
-/// handlers go through Network.AddFirewallRule, RequestFirewallRuleDelete, EndFirewallRuleRequest and MarkFirewallRule*.
+/// handlers go through Network.AddFirewallRule, RequestFirewallRuleDelete, DeleteFirewallRuleLocally,
+/// EndFirewallRuleRequest and MarkFirewallRule*.
 public class FirewallRule : ChildEntity
 {
     public Guid Id { get; private set; }

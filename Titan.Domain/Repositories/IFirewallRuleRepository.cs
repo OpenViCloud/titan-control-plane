@@ -8,7 +8,7 @@ namespace Titan.Domain.Repositories;
 public interface IFirewallRuleRepository
 {
     Task<List<FirewallRule>> ListByNetworkAsync(Guid networkId, CancellationToken ct = default);
-    /// Rules on the cluster's networks the firewall reconciler observes: they have a provider id, are not Deleted, and
-    /// their network is not being deleted (its delete takes the ACL with it).
+    /// Rules on the cluster's networks the firewall reconciler observes: they have a provider id and are not Deleted,
+    /// whatever their network waits on (a network's delete may give up and leave its rules in force).
     Task<List<FirewallRule>> ListReconcilableAsync(string clusterId, CancellationToken ct = default);
 }

@@ -150,7 +150,7 @@ public class Network : AggregateRoot
     // so no guard, and no request ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler read the network on Incus. Created, Errored or Unavailable after a create is the network's state,
-    /// not the create's ending: the create command's own report ended it.
+    /// not the create's ending: only the create command's own report ends it.
     public void MarkObserved(NetworkStatus status)
     {
         if (IsTerminal) return;

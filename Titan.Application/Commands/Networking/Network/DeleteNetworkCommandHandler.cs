@@ -50,8 +50,8 @@ public class DeleteNetworkCommandHandler(
         activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the delete request
         await commands.EnqueueNetworkDeleteAsync(network.Id, ticket.RequestId, ticket.ProviderId,
             TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
-        // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Deleted
-        // Done ends them (titan-ops features/network/design.md#network-lifecycle).
+        // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Done ends
+        // them (titan-ops features/network/design.md#network-lifecycle).
         await repo.SaveAsync(ct);
     }
 }
