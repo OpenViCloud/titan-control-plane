@@ -11,7 +11,8 @@ namespace Titan.Infrastructure.ProviderCommands;
 
 /// Stages provider commands in the scope's DbContext (titan-ops architecture/provider-and-worker.md#provider-command-table).
 /// Keys are the former workflow ids, so the repeat rules of titan-ops architecture/intent-and-observation.md#intent-has-identity
-/// keep their shape, except the VM's, which carry the request id; payload property names are what the worker reads.
+/// keep their shape, except the VM's, the volume's and the volume snapshot's, which carry the request id
+/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request); payload property names are what the worker reads.
 public class ProviderCommandQueue(IProviderCommandRepository repository, TimeProvider clock) : IProviderCommandQueue
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

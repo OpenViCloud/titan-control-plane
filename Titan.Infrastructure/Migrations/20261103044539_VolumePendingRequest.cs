@@ -8,12 +8,13 @@ namespace Titan.Infrastructure.Migrations
     /// A volume's and a volume snapshot's waiting request become three columns each — id, kind, when it was asked —
     /// written together (titan-ops architecture/resource-lifecycle.md#shape). The id column is the old pending_intent_id
     /// renamed; the kind of a request already waiting is read from the columns it used to be derived from, in the order
-    /// Volume.Transition and VolumeSnapshot.Transition read them. The rename stops an image from before this migration on
+    /// Volume.Transition and VolumeSnapshot.Transition read them before this migration. The rename stops an image from before this migration on
     /// every volume read: rolling one back needs this migration's Down first.
     ///
-    /// Requests under way meet the new rule here: a detach the VM's delete asked for had no command and is no longer a
-    /// request (titan-ops architecture/resource-lifecycle.md#kinds), so it ends; any other request without an open command
-    /// keeps waiting and shows in the stuck query. A command still open takes the request's key and id, so its report
+    /// Requests under way meet the new rule here: a detach with no open command ends — the one a VM's delete asked for
+    /// had none and is no longer a request (titan-ops architecture/resource-lifecycle.md#kinds), and a customer's whose
+    /// command closed before an observation ended it has no report coming either; any other request without an open
+    /// command keeps waiting and shows in the stuck query. A command still open takes the request's key and id, so its report
     /// can name the request; a restore's is keyed as the new volume's create. Down leaves the command rows as they are.
     /// The view core.pending_requests gains the two tables.
     public partial class VolumePendingRequest : Migration

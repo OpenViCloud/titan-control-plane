@@ -113,8 +113,8 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         Assert.Equal(VolumeSnapshotRequestKind.Create, rest.Snapshots.Single(s => s.Id == snapshotCreating).Pending!.Kind);
     }
 
-    // Volume.DetachWithDeletedVm left a detach waiting with no command: no report is coming, so it ends; the desired
-    // attachment it cleared stays clear, as a VM's delete now leaves a volume with nothing waiting.
+    // A detach waiting with no open command — the one Volume.DetachWithDeletedVm left — has no report coming, so it ends;
+    // the desired attachment it cleared stays clear, as a VM's delete now leaves a volume with nothing waiting.
     [Fact]
     public async Task ADetachWithoutAnOpenCommand_Ends_AndOneWithItKeepsWaiting()
     {

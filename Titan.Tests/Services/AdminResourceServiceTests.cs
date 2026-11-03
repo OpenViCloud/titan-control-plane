@@ -205,7 +205,7 @@ public class AdminResourceServiceTests
     // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path detaches the VM's volumes like the
     // tenant path, or the owner's volume would be stuck attached to a VM that no longer exists.
     [Fact]
-    public async Task DeleteVm_DetachesTheVolumesTheVmHolds()
+    public async Task DeleteVm_ReleasesTheVolumesTheVmHolds()
     {
         var vm = RunningVm(TenantBOwner, "victim");
         var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TenantBOwner.Id, "data-1", vm.ClusterId, "std", 20);
