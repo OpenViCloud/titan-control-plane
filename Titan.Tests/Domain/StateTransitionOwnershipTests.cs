@@ -63,6 +63,8 @@ public class StateTransitionOwnershipTests
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the load balancer exists",
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the VIP is missing from the create command's report",
         ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|IntentId is required when report is Updated"] = "payload: an update report that does not say which update it ends",
+        ["LoadBalancerReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's load balancer request report",
+        ["EndLoadBalancerRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a create ends Done"] = "payload: the VIP is missing from the create command's Done",
         ["CreateLoadBalancerCommandHandler.cs|LOAD_BALANCER_INVALID_STATE|This network has no free load balancer address left"] = "capacity: every VIP number of the network is taken, a count over many aggregates, not one's state",
         ["UpdateVolumeStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the volume exists",
         ["UpdateVolumeStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",

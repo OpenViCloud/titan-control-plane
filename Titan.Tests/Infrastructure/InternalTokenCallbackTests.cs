@@ -2,6 +2,7 @@ using FastEndpoints;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
+using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Compute.Volume;
 using Titan.Application.Commands.Compute.VmSnapshot;
 using Titan.Application.Commands.Compute.VolumeSnapshot;
@@ -36,6 +37,45 @@ public class InternalTokenCallbackTests
     }
 
     private static IActivityRecorder StrictActivity() => new Mock<IActivityRecorder>(MockBehavior.Strict).Object;
+
+    private static ILoadBalancerRepository StrictLoadBalancers() => new Mock<ILoadBalancerRepository>(MockBehavior.Strict).Object;
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task EndLoadBalancerRequest_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<EndLoadBalancerRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["loadBalancerId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new EndLoadBalancerRequestCommandHandler(StrictLoadBalancers(), StrictActivity()), ConfigWithToken());
+
+        await ep.HandleAsync(new EndLoadBalancerRequestBody("Done", ExternalId: "2001:db8::1:1"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveLoadBalancer_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveLoadBalancerEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["loadBalancerId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new ObserveLoadBalancerCommandHandler(StrictLoadBalancers()), ConfigWithToken());
+
+        await ep.HandleAsync(new ObserveLoadBalancerBody(false), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
 
     [Theory]
     [InlineData(null)]

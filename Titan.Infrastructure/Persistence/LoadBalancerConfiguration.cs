@@ -23,7 +23,11 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         // Incus has no status word for it: existence only (titan-ops features/load-balancer/design.md#lb-lifecycle).
         builder.Property(lb => lb.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(lb => lb.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(lb => lb.PendingIntentId).HasColumnName("pending_intent_id");
+        // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
+        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
+        builder.Property<LoadBalancerRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Ignore(lb => lb.Pending);
         builder.Ignore(lb => lb.Transition);
         builder.Property(lb => lb.RequestFailureReason).HasColumnName("request_failure_reason");
         builder.Property(lb => lb.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
@@ -14,7 +15,7 @@ namespace Titan.Tests.Domain;
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
 // semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
-// NetworkRequestLifecycleTests and VmSnapshotRequestLifecycleTests hold those). A child entity (VolumeSnapshot,
+// NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests and LoadBalancerRequestLifecycleTests hold those). A child entity (VolumeSnapshot,
 // FirewallRule, VmSnapshot) is on the shape with internal methods, reached through its root.
 public class RequestLifecycleShapeTests
 {
@@ -45,6 +46,19 @@ public class RequestLifecycleShapeTests
             return vm.AddSnapshot("shape").Snapshot;
         },
         [typeof(Network)] = () => ANetwork(),
+        [typeof(LoadBalancer)] = () =>
+        {
+            const string subnet = "2001:db8:0:9::/64";
+            Guid tenantId = TestTenant.WithRoomToSpare().Id;
+            Guid networkId = Guid.NewGuid();
+            Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
+            backend.EndRequest(backend.Pending!.Id, VmRequestEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
+            LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
+                LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
+            lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
+            lb.RequestUpdate([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
+            return lb;
+        },
         [typeof(FirewallRule)] = () =>
         {
             Network network = ANetwork();
@@ -113,6 +127,7 @@ public class RequestLifecycleShapeTests
         if (type == typeof(VmSnapshot)) return VmSnapshotRequestEnd.Done("foreign");
         if (type == typeof(Network)) return NetworkRequestEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
         if (type == typeof(FirewallRule)) return FirewallRuleRequestEnd.Done("foreign", FirewallRuleState.enabled);
+        if (type == typeof(LoadBalancer)) return LoadBalancerRequestEnd.Done("foreign");
         throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
     }
 
@@ -150,6 +165,16 @@ public class RequestLifecycleShapeTests
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Networking", "Network"), Path.Combine("Titan.Application", "Commands", "Networking", "FirewallRule")],
             except: ["CreateNetworkCommandHandler", "RenameNetworkCommandHandler"], atLeast: 9, "network");
+    }
+
+    // A load balancer's create makes a new row, so it has nothing to lock (it locks its network); a rename is Titan-side
+    // metadata only (titan-ops features/load-balancer/design.md#lb-rename).
+    [Fact]
+    public void EveryLoadBalancerLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks(
+            [Path.Combine("Titan.Application", "Commands", "Compute", "LoadBalancer")],
+            except: ["CreateLoadBalancerCommandHandler", "RenameLoadBalancerCommandHandler"], atLeast: 5, "load balancer");
     }
 
     private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
@@ -204,6 +229,34 @@ public class RequestLifecycleShapeTests
 
         var without = enqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVmSnapshot" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "VM snapshot command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
+    }
+
+    // The create and the update build their payload in LoadBalancerPayload, so the scan follows each enqueue into it: an
+    // inline payload must name requestId, a helper call must pass it, and the helper must write it.
+    [Fact]
+    public void EveryLoadBalancerCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        var enqueues = Regex.Matches(src, @"public Task EnqueueLoadBalancer(Create|Update|Delete)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+            .Cast<Match>().ToList();
+        Assert.Equal(3, enqueues.Count);
+
+        Match helper = Regex.Match(src, @"private static object LoadBalancerPayload\((?<params>[^)]*)\)\s*=>\s*new\s*\{(?<body>[\s\S]*?)\};");
+        Assert.True(helper.Success, "LoadBalancerPayload not found: the scan cannot follow the create and the update into it");
+        int requestIdPosition = helper.Groups["params"].Value.Split(',').Select(p => p.Trim().Split(' ').Last()).ToList().IndexOf("requestId");
+        Assert.True(requestIdPosition >= 0, "LoadBalancerPayload takes no requestId");
+        bool helperWritesIt = Regex.IsMatch(helper.Groups["body"].Value, @"(^|[\s,{])requestId\s*,");
+
+        var without = new List<string>();
+        foreach (Match m in enqueues)
+        {
+            bool inline = Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]");
+            Match call = Regex.Match(m.Value, @"LoadBalancerPayload\((?<args>[^;]*?)\),\s*ProviderCommandRerun");
+            bool throughTheHelper = call.Success && helperWritesIt
+                                    && call.Groups["args"].Value.Split(',').Select(a => a.Trim()).ElementAtOrDefault(requestIdPosition) == "requestId";
+            if (!inline && !throughTheHelper) without.Add("EnqueueLoadBalancer" + m.Groups[1].Value);
+        }
+        Assert.True(without.Count == 0, "Load balancer command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
     }
 
     [Fact]

@@ -7,8 +7,10 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops features/load-balancer/design.md#lb-lifecycle: existence only, one request waiting at a time, observations
-// converge. Desired and applied listeners/backends share rows (titan-ops features/load-balancer/design.md#lb-resource-model):
+// converge and end nothing. Desired and applied listeners/backends share rows (titan-ops features/load-balancer/design.md#lb-resource-model):
 // a give-up of an update needs what Incus last took (titan-ops architecture/desired-and-current.md#abandoned-request).
+// MarkCreated, MarkUpdated, MarkDeleted and MarkRequestFailed here are replays of the commands' reports
+// (Fakes/ProvisionedOnTheProvider); how a request ends is LoadBalancerRequestLifecycleTests'.
 public class LoadBalancerStateMachineTests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
@@ -178,10 +180,10 @@ public class LoadBalancerStateMachineTests
         Vm b = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
 
-        Guid intent = lb.RequestUpdate([Http, Dns], [a, b]);
+        RequestTicket update = lb.RequestUpdate([Http, Dns], [a, b]);
 
         Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
-        Assert.Equal(intent, lb.PendingIntentId);
+        Assert.Equal((LoadBalancerRequestKind.Update, update.RequestId), (lb.Pending!.Kind, lb.Pending.Id));
         Assert.Equal(new[] { "TCP 80->8080", "UDP 53->53" }, Keys(lb.DesiredListeners));
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.AppliedListeners));
         Assert.Equal(2, lb.DesiredBackends.Count());
@@ -202,14 +204,14 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void Updated_ForTheWaitingIntent_AppliesTheNewSpec()
+    public void Updated_ForTheWaitingRequest_AppliesTheNewSpec()
     {
         Vm a = VmOnIncus();
         Vm b = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid intent = lb.RequestUpdate([Dns], [b]);
+        Guid update = lb.RequestUpdate([Dns], [b]).RequestId;
 
-        Assert.True(lb.MarkUpdated(intent));
+        Assert.True(lb.MarkUpdated(update));
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { "UDP 53->53" }, Keys(lb.Listeners));
@@ -218,7 +220,7 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void Updated_ForAnotherIntent_ChangesNothing()
+    public void Updated_ForAnotherRequest_ChangesNothing()
     {
         LoadBalancer lb = OnIncus();
         lb.RequestUpdate([Dns], [VmOnIncus()]);
@@ -234,9 +236,9 @@ public class LoadBalancerStateMachineTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        lb.RequestUpdate([Dns], [VmOnIncus()]);
+        Guid update = lb.RequestUpdate([Dns], [VmOnIncus()]).RequestId;
 
-        lb.AbandonRequest("Load balancer update failed.", "detail");
+        lb.EndRequest(update, LoadBalancerRequestEnd.Failed(null, "Load balancer update failed.", "detail"));
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.DesiredListeners));
@@ -279,7 +281,7 @@ public class LoadBalancerStateMachineTests
     {
         LoadBalancer lb = OnIncus();
 
-        string vip = lb.RequestDelete();
+        string vip = lb.RequestDelete().ProviderId;
 
         Assert.Equal(lb.Vip, vip);
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
@@ -290,12 +292,12 @@ public class LoadBalancerStateMachineTests
     public void Delete_WinsOverAWaitingUpdate()
     {
         LoadBalancer lb = OnIncus();
-        Guid update = lb.RequestUpdate([Dns], [VmOnIncus()]);
+        Guid update = lb.RequestUpdate([Dns], [VmOnIncus()]).RequestId;
 
         lb.RequestDelete();
 
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        Assert.NotEqual(update, lb.PendingIntentId);
+        Assert.NotEqual(update, lb.Pending!.Id);
         Assert.False(lb.MarkUpdated(update));
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
     }
@@ -336,22 +338,13 @@ public class LoadBalancerStateMachineTests
     public void DeleteGivesUp_PutsTheDesiredExistenceBack()
     {
         LoadBalancer lb = OnIncus();
-        lb.RequestDelete();
+        Guid delete = lb.RequestDelete().RequestId;
 
-        lb.AbandonRequest("Load balancer deletion failed.", "detail");
+        lb.EndRequest(delete, LoadBalancerRequestEnd.Failed(null, "Load balancer deletion failed.", "detail"));
 
         Assert.Null(lb.Transition);
         Assert.Equal(DesiredExistence.Exists, lb.DesiredExistence);
         Assert.Equal("Load balancer deletion failed.", lb.RequestFailureReason);
-    }
-
-    [Fact]
-    public void AbandonRequest_WithNothingToAbandon_IsRefused()
-    {
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => OnIncus().AbandonRequest("r", "d")).Code);
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => NewLoadBalancer().AbandonRequest("r", "d")).Code);
     }
 
     [Fact]
@@ -385,8 +378,9 @@ public class LoadBalancerStateMachineTests
         Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
     }
 
+    // Only the create command's own report ends the create (titan-ops architecture/resource-lifecycle.md#invariants).
     [Fact]
-    public void NotFound_KeepsAWaitingDelete_AndEndsAWaitingCreate()
+    public void NotFound_KeepsAWaitingDelete_AndAWaitingCreate()
     {
         LoadBalancer deleting = OnIncus();
         deleting.RequestDelete();
@@ -398,7 +392,7 @@ public class LoadBalancerStateMachineTests
         Assert.Equal(CurrentExistence.NotFound, deleting.CurrentExistence);
         Assert.Equal(LoadBalancerTransition.Deleting, deleting.Transition);
         Assert.Equal(CurrentExistence.NotFound, creating.CurrentExistence);
-        Assert.Null(creating.Transition);
+        Assert.Equal(LoadBalancerTransition.Creating, creating.Transition);
     }
 
     [Fact]

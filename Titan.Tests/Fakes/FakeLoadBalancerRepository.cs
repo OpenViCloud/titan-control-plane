@@ -15,6 +15,15 @@ public class FakeLoadBalancerRepository : ILoadBalancerRepository
     public Task<LoadBalancer?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(Rows.FirstOrDefault(lb => lb.Id == id));
 
+    /// No rows to lock in memory; counted, so a test can see the handler asked for the lock.
+    public int LockedReads { get; private set; }
+
+    public Task<LoadBalancer?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        LockedReads++;
+        return FindByIdAsync(id, ct);
+    }
+
     public Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         Task.FromResult(Rows.Where(lb => lb.TenantId == tenantId && lb.CurrentExistence != CurrentExistence.Deleted)
             .OrderByDescending(lb => lb.CreatedAt).ToList());
@@ -23,7 +32,7 @@ public class FakeLoadBalancerRepository : ILoadBalancerRepository
         Task.FromResult(Rows.Count(lb => lb.TenantId == tenantId
                                          && lb.DesiredExistence == DesiredExistence.Exists
                                          && (lb.CurrentExistence == CurrentExistence.Exists
-                                             || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingIntentId != null))));
+                                             || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.Pending != null))));
 
     public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         Task.FromResult(Rows.Any(lb => lb.TenantId == tenantId && lb.Name == name && lb.CurrentExistence != CurrentExistence.Deleted));

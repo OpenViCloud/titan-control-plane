@@ -56,6 +56,21 @@ public static class ComputeOwnership
         return loadBalancer;
     }
 
+    /// The same answer with the load balancer's row locked (ILoadBalancerRepository.FindByIdForUpdateAsync): every
+    /// lifecycle request of a load balancer takes the lock, so two requests take turns and the second sees the first
+    /// waiting (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public static async Task<LoadBalancerAggregate> RequireLoadBalancerForUpdateAsync(
+        ILoadBalancerRepository repo, Guid tenantId, Guid loadBalancerId, CancellationToken ct)
+    {
+        var loadBalancer = await repo.FindByIdForUpdateAsync(loadBalancerId, ct)
+            ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
+
+        if (loadBalancer.TenantId != tenantId)
+            throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
+
+        return loadBalancer;
+    }
+
     public static async Task<Volume> RequireVolumeAsync(
         IVolumeRepository volumeRepo, Guid tenantId, Guid volumeId, CancellationToken ct)
     {

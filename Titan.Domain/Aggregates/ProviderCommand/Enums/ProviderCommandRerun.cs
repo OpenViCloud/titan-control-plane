@@ -5,11 +5,11 @@ namespace Titan.Domain.Aggregates.ProviderCommand;
 public enum ProviderCommandRerun
 {
     /// A finished row (Done or Failed) runs again: a key reused for the same resource, such as a template's sync to one
-    /// cluster. A key that carries its request id (VM, volume, volume snapshot, network, firewall rule, VM snapshot) is
-    /// never enqueued twice, so the rule never applies to it.
+    /// cluster. A key that carries its request id (VM, volume, volume snapshot, network, firewall rule, VM snapshot, load
+    /// balancer) is never enqueued twice, so the rule never applies to it.
     AfterAnyFinish,
 
-    /// Only a Failed row runs again; a Done one absorbs the repeat. load-balancer.update and the two backups: a repeat of
-    /// what already happened must not happen twice.
+    /// Only a Failed row runs again; a Done one absorbs the repeat. The two backups: a repeat of what already happened
+    /// must not happen twice.
     AfterFailureOnly
 }

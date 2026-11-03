@@ -84,27 +84,29 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal("PROVIDER_COMMAND_CONFLICT", ex.Code);
     }
 
+    private static readonly DateOnly BackupDay = new(2026, 11, 3);
+
     // Two handlers enqueue the same key in two transactions: one row survives, the loser hits 23505 and answers 409.
-    // A load balancer delete: its key is still the resource's (the keys of a resource on the request lifecycle carry the
+    // A VM's backup of one day: its key is still the resource's (the keys of a resource on the request lifecycle carry the
     // request id, titan-ops architecture/resource-lifecycle.md#one-key-per-request, so two of them never share a key).
     [Fact]
     public async Task SameKey_FromTwoScopes_LeavesOneRow()
     {
-        Guid loadBalancerId = Guid.NewGuid();
-        string key = $"load-balancer-delete-{loadBalancerId}";
+        Guid vmId = Guid.NewGuid();
+        string key = $"vm-backup-{vmId}-20261103";
 
         await using (TitanDbContext first = pg.NewDbContext())
         {
             await new ProviderCommandQueue(new ProviderCommandRepository(first), TimeProvider.System)
-                .EnqueueLoadBalancerDeleteAsync(loadBalancerId, "net-x", "2001:db8::1:1", "t-1", "mock");
+                .EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", BackupDay);
             await first.SaveChangesAsync();
         }
         await using (TitanDbContext second = pg.NewDbContext())
         {
-            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.LoadBalancerDelete, "mock", "{}",
-                ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow));
+            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmBackup, "mock", "{}",
+                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
             DbUpdateException clash = await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
-            // A double-clicked delete reaches the caller as "in progress", not as a 500.
+            // Two schedulers at once reach the caller as "in progress", not as a 500.
             ErrorStatus status = ErrorStatus.For(clash);
             Assert.Equal(409, status.Status);
             Assert.Equal(ErrorStatus.RequestInProgressCode, status.Code);
@@ -114,18 +116,18 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == key));
     }
 
-    // Two identical repeats at the same instant both reopen one finished row (a failed load balancer delete, double-clicked):
-    // the version token lets one commit; the other reaches the caller as 409, not 500. A load balancer, not a VM or a
-    // network: their keys are never reused (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    // Two identical repeats at the same instant both reopen one finished row (a failed backup of the day, asked twice at
+    // once): the version token lets one commit; the other reaches the caller as 409, not 500. A backup, not a resource's
+    // request: those keys are never reused (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
     public async Task TwoConcurrentReopens_OfOneFinishedRow_TheSecondIs409()
     {
-        Guid loadBalancerId = Guid.NewGuid();
+        Guid vmId = Guid.NewGuid();
         Guid leaseId = Guid.NewGuid();
         await using (TitanDbContext seed = pg.NewDbContext())
         {
-            ProviderCommand failed = ProviderCommand.Create($"load-balancer-delete-{loadBalancerId}", ProviderCommandKinds.LoadBalancerDelete, "mock",
-                "{}", ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow);
+            ProviderCommand failed = ProviderCommand.Create($"vm-backup-{vmId}-20261103", ProviderCommandKinds.VmBackup, "mock",
+                "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
             failed.Lease(leaseId, DateTimeOffset.UtcNow);
             failed.Fail(leaseId, "gave up", retryable: false, DateTimeOffset.UtcNow);
             seed.ProviderCommands.Add(failed);
@@ -136,8 +138,9 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         var queueA = new ProviderCommandQueue(new ProviderCommandRepository(dbA), TimeProvider.System);
         var queueB = new ProviderCommandQueue(new ProviderCommandRepository(dbB), TimeProvider.System);
 
-        await queueA.EnqueueLoadBalancerDeleteAsync(loadBalancerId, "net-x", "2001:db8::1:1", "t-1", "mock");
-        await queueB.EnqueueLoadBalancerDeleteAsync(loadBalancerId, "net-x", "2001:db8::1:1", "t-1", "mock");
+        Guid tenantId = Guid.NewGuid();
+        await queueA.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", tenantId, "mock", BackupDay);
+        await queueB.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", tenantId, "mock", BackupDay);
         await dbA.SaveChangesAsync();
         DbUpdateConcurrencyException lost = await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync());
 

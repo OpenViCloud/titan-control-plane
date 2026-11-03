@@ -89,7 +89,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             LoadBalancer loaded = (await new LoadBalancerRepository(db).FindByIdAsync(lb.Id))!;
-            intent = loaded.RequestUpdate([Dns], [b]);
+            intent = loaded.RequestUpdate([Dns], [b]).RequestId;
             await db.SaveChangesAsync();
         }
         await using (TitanDbContext db = pg.NewDbContext())

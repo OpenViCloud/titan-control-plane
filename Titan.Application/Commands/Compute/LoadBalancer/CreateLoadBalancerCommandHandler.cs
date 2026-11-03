@@ -51,7 +51,8 @@ public class CreateLoadBalancerCommandHandler(
             subnet, network.ClusterId, vip, listeners, backends);
         repo.Add(loadBalancer);
         activity.Stage("load_balancer.create_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
-        await commands.EnqueueLoadBalancerCreateAsync(loadBalancer, TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);
+        await commands.EnqueueLoadBalancerCreateAsync(loadBalancer, loadBalancer.Pending!.Id,
+            TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);
         await repo.SaveAsync(ct);
 
         return new CreateLoadBalancerCommandResult(loadBalancer.Id);
