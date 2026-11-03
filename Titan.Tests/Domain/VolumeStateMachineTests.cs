@@ -350,6 +350,59 @@ public class VolumeStateMachineTests
         Assert.Equal("vol11", v.RequestDelete());
     }
 
+    [Fact]
+    public void DetachWithDeletedVm_ThenThatDeleteFailed_KeepsTheAttachment_WithNothingWaiting()
+    {
+        var v = VolumeIn(Seed.Attached);
+        v.DetachWithDeletedVm();
+
+        v.KeepAttachmentAfterVmDeleteFailed(AttachedVm.Id);
+
+        Assert.Null(v.Transition);
+        Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
+        Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
+    }
+
+    [Theory]
+    [InlineData(Seed.Available)]
+    [InlineData(Seed.Attached)]
+    [InlineData(Seed.Deleted)]
+    public void KeepAttachmentAfterVmDeleteFailed_OnAVolumeNotDetachingFromThatVm_ChangesNothing(Seed seed)
+    {
+        var v = VolumeIn(seed);
+        string before = Shape(v);
+
+        v.KeepAttachmentAfterVmDeleteFailed(AttachedVm.Id);
+
+        Assert.Equal(before, Shape(v));
+    }
+
+    [Fact]
+    public void KeepAttachmentAfterVmDeleteFailed_ForAnotherVm_ChangesNothing()
+    {
+        var v = VolumeIn(Seed.Attached);
+        v.DetachWithDeletedVm();
+
+        string before = Shape(v);
+
+        v.KeepAttachmentAfterVmDeleteFailed(Guid.NewGuid());
+
+        Assert.Equal(before, Shape(v));
+    }
+
+    [Fact]
+    public void KeepAttachmentAfterVmDeleteFailed_WhileTheVolumesOwnDeleteWaits_ChangesNothing()
+    {
+        var v = VolumeIn(Seed.Available);
+        v.RequestDelete();
+        v.MarkObserved(AttachedVm.Id, false);
+        string before = Shape(v);
+
+        v.KeepAttachmentAfterVmDeleteFailed(AttachedVm.Id);
+
+        Assert.Equal(before, Shape(v));
+    }
+
     [Theory]
     [InlineData(Seed.Available)]
     [InlineData(Seed.DetachRequested)]
