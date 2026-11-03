@@ -270,8 +270,9 @@ public class ProviderCommandQueueTests
         }
     }
 
-    // A second revert or delete of the same snapshot is a new request with its own row, never a 409 on the first's open
-    // row (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    // At the queue, a revert or delete under a new request id gets its own row, never a 409 on an open row of the same
+    // snapshot (titan-ops architecture/resource-lifecycle.md#one-key-per-request); a repeat while one waits never reaches
+    // the queue: the handler answers it.
     [Fact]
     public async Task VmSnapshotRevertAndDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
     {

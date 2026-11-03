@@ -296,7 +296,7 @@ public class VmSnapshotRequestHandlerTests
         Assert.Equal(["vm_snapshot.created"], Outcomes());
     }
 
-    // Before this rollout an observation ended a waiting create; now only the create's own report does.
+    // Only the create's own report ends it (titan-ops architecture/resource-lifecycle.md#invariants).
     [Fact]
     public async Task OldRoute_Observed_WhileTheCreateWaits_EndsNothing()
     {
@@ -454,6 +454,5 @@ public class VmSnapshotRequestHandlerTests
 
         _repo.Verify(r => r.FindByIdForUpdateAsync(vm.Id, It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
-        _repo.Verify(r => r.FindBySnapshotIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

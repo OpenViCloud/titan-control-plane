@@ -6,8 +6,9 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/intent-and-observation.md#intent-versus-observation, same split as VmStateMachineTests: a request
-// throws when it cannot be accepted, an observation (Mark*) never throws and ends nothing, Deleted absorbs. How a request
-// ends is VmSnapshotRequestLifecycleTests'. Incus has no status word
+// throws when it cannot be accepted, an observation never throws and ends nothing, Deleted absorbs. MarkCreated,
+// MarkReverted, MarkDeleted and MarkRequestFailed here are replays of the commands' reports (Fakes/ProvisionedOnTheProvider);
+// how a request ends is VmSnapshotRequestLifecycleTests'. Incus has no status word
 // for an instance snapshot, so the model is existence plus the waiting request (titan-ops features/vm/design.md#vm-snapshot-is-existence).
 // The Seed enum names every situation so each "from every other situation" test walks all of them.
 public class VmSnapshotStateMachineTests

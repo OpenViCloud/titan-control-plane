@@ -168,8 +168,11 @@ namespace Titan.Domain.Aggregates.Vm
             snapshot.Pending is { Kind: VmSnapshotRequestKind.Revert } revert
             && snapshot.EndRequest(revert.Id, VmSnapshotRequestEnd.Done(null)) != null;
 
-        /// Incus no longer has it after Titan's delete: its own delete's Done, or its VM's.
-        public static bool MarkDeleted(this VmSnapshot snapshot) => snapshot.EndWithItsVm();
+        /// The delete command's Done. True when a delete was waiting. The VM's delete ending its snapshots is
+        /// EndWithItsVm.
+        public static bool MarkDeleted(this VmSnapshot snapshot) =>
+            snapshot.Pending is { Kind: VmSnapshotRequestKind.Delete } delete
+            && snapshot.EndRequest(delete.Id, VmSnapshotRequestEnd.Done(null)) != null;
     }
 }
 

@@ -71,8 +71,7 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
     }
 
     // The second request waits on the VM's row lock, then sees the first waiting and is a repeat: one request, one
-    // command row, neither scope fails (titan-ops architecture/resource-lifecycle.md#one-key-per-request). Before the lock a
-    // second revert met the first's open row and answered 409 REQUEST_IN_PROGRESS.
+    // command row, neither scope fails (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
     public async Task TwoRevertsOfOneSnapshot_AtOnce_LeaveOneRequest_AndOneCommandRow()
     {
