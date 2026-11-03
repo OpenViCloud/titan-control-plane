@@ -6,6 +6,10 @@ namespace Titan.Domain.Repositories;
 public interface IVmTemplateRepository
 {
     Task<VmTemplate?> FindByIdAsync(Guid id, CancellationToken ct = default);
+    /// The same, with the template's row locked until this context's next save commits: two sync-alls, or a sync-all and
+    /// a report, take turns, and the second sees what the first left waiting
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    Task<VmTemplate?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
     /// What customers in a cluster may pick: templates that cluster's provider was last observed to hold.
     Task<List<VmTemplate>> ListSyncedInClusterAsync(string clusterId, CancellationToken ct = default);
     /// Templates synced in at least one cluster — what a VM anywhere can have been created from.

@@ -6,9 +6,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
+using Titan.Tests.Infrastructure.Incus;
 
 namespace Titan.Tests.Api;
 
@@ -703,7 +705,172 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal((CurrentExistence.Exists, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
-    // What the control plane's environment sets on dev and prd.
+    // ---------- a template's routes, under its cluster ----------
+
+    private const string TemplateCluster = "cluster-a";
+    private const string TemplateAlias = "tpl-callback";
+
+    // A template waiting on its sync in the configured cluster, or one Incus holds there with a re-sync waiting.
+    private async Task<VmTemplate> StoredTemplateWaitingOnASyncAsync(bool resync = false)
+    {
+        VmTemplate template = VmTemplate.Create($"tpl-{Guid.NewGuid():N}"[..14], null, "ubuntu/22.04", 10, Offering);
+        if (resync)
+        {
+            template.EndSyncRequest(TemplateCluster, template.RequestSyncIn(TemplateCluster).Id, VmTemplateRequestEnd.Done(TemplateAlias));
+            template.MarkNotFoundIn(TemplateCluster);
+        }
+        template.RequestSyncIn(TemplateCluster);
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        await db.Database.ExecuteSqlRawAsync(
+            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+        db.VmTemplates.Add(template);
+        await db.SaveChangesAsync();
+        return template;
+    }
+
+    private async Task<VmTemplateCluster> ReloadTemplateClusterAsync(Guid templateId)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        VmTemplate template = await db.VmTemplates.AsNoTracking().Include(t => t.Clusters).SingleAsync(t => t.Id == templateId);
+        return template.Clusters.Single(c => c.ClusterId == TemplateCluster);
+    }
+
+    private static string TemplateRoute(VmTemplate template, string route) =>
+        $"/internal/templates/{template.Id}/clusters/{TemplateCluster}/"
+        + string.Format(route, template.Clusters.Single(c => c.ClusterId == TemplateCluster).Pending!.Id);
+
+    [Fact]
+    public async Task ATemplateSyncDone_InTheWorkersJson_RecordsTheAlias_AndAnswers204()
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, "requests/{0}"),
+            $$"""{"outcome":"Done","externalId":"{{TemplateAlias}}"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal((CurrentExistence.Exists, TemplateAlias), (stored.CurrentExistence, stored.ExternalTemplateId));
+    }
+
+    [Fact]
+    public async Task ATemplateSyncFailed_InTheWorkersJson_RecordsTheReason_AndAnswers204()
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, "requests/{0}"),
+            """{"outcome":"Failed","reason":"Template sync failed due to a system error.","detail":"incus: timeout"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Null(stored.Pending);
+        Assert.Equal(("Template sync failed due to a system error.", "incus: timeout"), (stored.RequestFailureReason, stored.RequestFailureDetail));
+    }
+
+    // A report naming a request the cluster does not wait on is ignored, and still 204: the worker has nothing to retry.
+    [Fact]
+    public async Task ATemplateReport_NamingAnotherRequest_Is204_AndChangesNothing()
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/templates/{template.Id}/clusters/{TemplateCluster}/requests/{Guid.NewGuid()}",
+            $$"""{"outcome":"Done","externalId":"{{TemplateAlias}}"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(VmTemplateRequestKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+    }
+
+    [Fact]
+    public async Task ATemplateObservation_InTheWorkersJson_WritesCurrent_AndLeavesTheSyncWaiting()
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync(resync: true);
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, "observation"), """{"exists":true}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Equal((CurrentExistence.Exists, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Maybe","externalId":"tpl-callback"}""")]
+    [InlineData("requests/{0}", """{"reason":"no outcome"}""")]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":"yes"}""")]
+    public async Task ATemplateReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, route), json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done","externalId":"tpl-callback"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task ATemplateReport_ForNoTemplate_Is404_WithItsCode(string route, string json)
+    {
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/templates/{Guid.NewGuid()}/clusters/{TemplateCluster}/{string.Format(route, Guid.NewGuid())}", json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("TEMPLATE_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done","externalId":"tpl-callback"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task ATemplateReport_ForAClusterNotConfigured_Is404_AndChangesNothing(string route, string json)
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+        Guid requestId = template.Clusters.Single().Pending!.Id;
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/templates/{template.Id}/clusters/vn-hcm-1/{string.Format(route, requestId)}", json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("CLUSTER_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
+        Assert.Equal(VmTemplateRequestKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done","externalId":"tpl-callback"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task EveryTemplateRoute_WithoutTheToken_Is401_AndChangesNothing(string route, string json)
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, route), json, token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    // What the control plane's environment sets on dev and prd, and one cluster for the template routes, which refuse a
+    // cluster the configuration does not name. A cluster needs Titan's TLS identity to start.
     public sealed class CallbackHostFactory() : RealHostFactory(
-        new Dictionary<string, string?> { ["Internal:Token"] = InternalToken }, new Dictionary<string, string>());
+        new Dictionary<string, string?> { ["Internal:Token"] = InternalToken }, OneCluster());
+
+    private static Dictionary<string, string> OneCluster()
+    {
+        var identity = IncusTestKit.NewIdentity();
+        return new Dictionary<string, string>
+        {
+            ["Clusters:0:Id"] = TemplateCluster,
+            ["Clusters:0:Name"] = "Cluster A",
+            ["Clusters:0:Endpoint"] = "https://localhost:8443",
+            ["Clusters:0:ServerFingerprint"] = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f",
+            ["ProviderClientIdentity:CertificatePem"] = identity.CertificatePem,
+            ["ProviderClientIdentity:KeyPem"] = identity.KeyPem,
+        };
+    }
 }

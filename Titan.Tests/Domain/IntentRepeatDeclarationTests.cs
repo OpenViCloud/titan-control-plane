@@ -95,7 +95,7 @@ public class IntentRepeatDeclarationTests
 
         // ── catalog ──
         [typeof(SyncTemplatesCommandHandler)] =
-            new RepeatCheck(typeof(TemplateServiceTests), nameof(TemplateServiceTests.SyncAll_Repeated_KeepsTheSameRequest_AndResendsTheCommand)),
+            new RepeatCheck(typeof(TemplateServiceTests), nameof(TemplateServiceTests.SyncAll_Repeated_KeepsTheSameRequest_AndSendsNothingMore)),
 
         // ── backup ──
         [typeof(ScheduleBackupsCommandHandler)] =

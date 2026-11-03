@@ -76,7 +76,7 @@ public class DesiredCurrentOwnershipTests
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
         Assert.Equal(
             ["FirewallRule.EndRequest", "LoadBalancer.EndRequest", "Network.EndFirewallRuleRequest", "Network.EndRequest", "Vm.EndRequest",
-                "Vm.EndSnapshotRequest", "VmSnapshot.EndRequest", "Volume.EndRequest", "Volume.EndSnapshotRequest",
+                "Vm.EndSnapshotRequest", "VmSnapshot.EndRequest", "VmTemplateCluster.EndRequest", "Volume.EndRequest", "Volume.EndSnapshotRequest",
                 "VolumeSnapshot.EndRequest"],
             reports);
     }

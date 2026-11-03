@@ -11,9 +11,9 @@ namespace Titan.Application.Services.Catalog.VmTemplate;
 public enum TemplateSyncOutcome { AllSynced, TimedOut, HasFailures, NoClusters }
 
 
-// Drives a full template reconcile to completion: enqueue every template into every cluster, then poll the catalog
-// until every (template, cluster) has its alias. It backs the one-shot `sync-templates` CLI of Titan.Host; no deploy step
-// runs it any more. The command only enqueues and the worker reconciles asynchronously, so completion is observed by
+// Drives a full template reconcile to completion: ask a sync of every template in every cluster that lacks it, then
+// poll the catalog until every (template, cluster) has its alias. It backs the one-shot `sync-templates` CLI of
+// Titan.Host; no deploy step runs it any more. The command only enqueues and the worker reconciles asynchronously, so completion is observed by
 // polling. The verdict covers the whole catalog: one cluster whose sync gave up makes the run HasFailures even when the other
 // clusters synced — their sync goes on regardless, the exit code only reports it
 // (titan-ops features/catalog/design.md#template-per-cluster).
@@ -60,7 +60,7 @@ public class TemplateSyncRunner(
                         continue;
                     }
                     bool aliasIsThere = row.CurrentExistence == CurrentExistence.Exists;
-                    bool syncGaveUp = row.RequestFailureReason != null && row.PendingIntentId == null;
+                    bool syncGaveUp = row.RequestFailureReason != null && row.Pending == null;
                     if (aliasIsThere)
                     {
                         synced++;

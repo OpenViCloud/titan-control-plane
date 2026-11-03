@@ -2,12 +2,12 @@ using Titan.Application.Abstractions;
 
 namespace Titan.Application.Queries.Admin.Request.Contracts;
 
-// One request waiting past the threshold (titan-ops architecture/resource-lifecycle.md#lost-and-stale). CommandStatus null:
-// no command row carries this request's key — not a slow worker.
+// One request waiting past the threshold (titan-ops architecture/resource-lifecycle.md#lost-and-stale). TenantId null: a
+// template's sync, which no tenant owns. CommandStatus null: no command row carries this request's key — not a slow worker.
 public record StuckRequestQueryResult(
     string Resource,
     Guid Id,
-    Guid TenantId,
+    Guid? TenantId,
     Guid RequestId,
     string Kind,
     DateTimeOffset AskedAt,

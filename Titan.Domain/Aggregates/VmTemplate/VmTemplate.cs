@@ -107,23 +107,33 @@ public class VmTemplate : AggregateRoot
         return externalTemplateId;
     }
 
-    /// Refused when that cluster has the alias or a sync waiting: the handler recognises the repeat first and
-    /// re-sends the command (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public void RequestSyncIn(string clusterId)
+    /// Refused when that cluster has the alias or a sync waiting: the handler recognises the repeat first and sends
+    /// nothing (titan-ops architecture/resource-lifecycle.md#repeat). The request has no provider id to hand out yet (the
+    /// worker names the alias), so the caller gets the request itself for the command's key and payload.
+    public PendingRequest<VmTemplateRequestKind> RequestSyncIn(string clusterId)
     {
-        RowFor(clusterId).RequestSync();
+        PendingRequest<VmTemplateRequestKind> request = RowFor(clusterId).RequestSync();
         UpdatedAt = DateTimeOffset.UtcNow;
+        return request;
     }
 
-    /// Observations converge (titan-ops architecture/intent-and-observation.md#observation-converges): a report for a
-    /// cluster with no row yet records what was observed there instead of refusing it. Which clusters exist is the
-    /// handler's check, not the aggregate's. Returns whether it ended a waiting sync.
-    public bool MarkCreatedIn(string clusterId, string externalTemplateId)
+    /// The report of a sync's command in one cluster (titan-ops architecture/resource-lifecycle.md#shape): ends that
+    /// cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with no row
+    /// has nothing waiting, so no row is added for it.
+    public PendingRequest<VmTemplateRequestKind>? EndSyncRequest(string clusterId, Guid requestId, VmTemplateRequestEnd end)
     {
-        bool fulfilled = RowFor(clusterId).MarkCreated(externalTemplateId);
-        UpdatedAt = DateTimeOffset.UtcNow;
-        return fulfilled;
+        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        PendingRequest<VmTemplateRequestKind>? ended = cluster?.EndRequest(requestId, end);
+        if (ended != null)
+        {
+            UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        return ended;
     }
+
+    // Observations converge (titan-ops architecture/intent-and-observation.md#observation-converges): a report for a
+    // cluster with no row yet records what was observed there instead of refusing it. Which clusters exist is the
+    // handler's check, not the aggregate's. None ends a sync.
 
     public void MarkObservedIn(string clusterId)
     {
@@ -131,18 +141,17 @@ public class VmTemplate : AggregateRoot
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
+    /// The alias seen, by its name: what the old route's Created records with no sync waiting.
+    public void MarkAliasObservedIn(string clusterId, string externalTemplateId)
+    {
+        RowFor(clusterId).MarkAliasObserved(externalTemplateId);
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
     public void MarkNotFoundIn(string clusterId)
     {
         RowFor(clusterId).MarkNotFound();
         UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    /// Returns whether a waiting sync took the failure; a stale give-up records nothing.
-    public bool MarkRequestFailedIn(string clusterId, string? reason, string? detail)
-    {
-        bool recorded = RowFor(clusterId).MarkRequestFailed(reason, detail);
-        UpdatedAt = DateTimeOffset.UtcNow;
-        return recorded;
     }
 
     private VmTemplateCluster RowFor(string clusterId)

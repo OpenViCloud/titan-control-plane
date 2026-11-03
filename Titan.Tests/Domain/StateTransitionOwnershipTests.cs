@@ -38,6 +38,8 @@ public class StateTransitionOwnershipTests
         ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|Unknown template report"] = "parse: unknown report kind from the worker callback",
         ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the alias exists",
         ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the alias is missing from the sync command's report",
+        ["EndTemplateSyncRequestCommandHandler.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's template sync report",
+        ["EndTemplateSyncRequestCommandHandler.cs|INVALID_STATUS|ExternalId is required when a sync ends Done"] = "payload: the image alias is missing from the sync command's Done",
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|Invalid status"] = "parse: unknown enum value from the admin request",
         // PendingApproval parses as TenantStatus but is not an admin target.
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|A tenant can only be set to"] = "parse: only Active and Suspended are admin targets",
@@ -84,11 +86,6 @@ public class StateTransitionOwnershipTests
         ["Invoice.MarkPaid"] = "intent (an admin presses Mark Paid) named as observation — it DOES " +
                                "validate internally, which is what Tôn Chủ's rule asks; only the name " +
                                "is wrong. Rename to SettleOutsideTitan() when Billing gets a story",
-        ["VmTemplateCluster.MarkCreated"] = "the refusal is about the PAYLOAD, not the transition: Created with " +
-                               "no ExternalTemplateId is a template that reports ready and cannot be " +
-                               "used (VmService raises TEMPLATE_NOT_SYNCED). It reuses the INVALID_STATUS " +
-                               "code this test screens on, so it cannot be told apart mechanically. The " +
-                               "sync worker always sends the id, so no callback can freeze on it",
     };
 
     // Aggregates with a Status but no IsTerminal, i.e. whose terminal state is not absorbing.
@@ -290,6 +287,9 @@ public class StateTransitionOwnershipTests
             "from every existence, carries no required field, and has no terminal state to absorb. " +
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
+        ["VmTemplateCluster.EndRequest"] = "the report of a sync's own command, ignored unless it names the waiting " +
+            "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
+            "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).",
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open row, or a Done row that " +
             "only reruns after failure, absorbs it (returns false); any other finished row runs again. A throw " +
             "would turn a resent intent into an error every handler must recognise first.",

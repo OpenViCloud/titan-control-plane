@@ -458,11 +458,13 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task TemplateSync_CarriesTheImageAlias_AndNoSizing()
     {
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", "Alma-9-DB", null, "almalinux/9", null, 40);
+        Guid requestId = Guid.NewGuid();
+        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", requestId, "Alma-9-DB", null, "almalinux/9", null, 40);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal("almalinux/9", payload.RootElement.GetProperty("osImageName").GetString());
+        Assert.Equal(requestId, payload.RootElement.GetProperty("requestId").GetGuid());
         Assert.False(payload.RootElement.TryGetProperty("cpuUnits", out _));
         Assert.False(payload.RootElement.TryGetProperty("memoryMb", out _));
         Assert.False(payload.RootElement.TryGetProperty("vcpuCount", out _));
@@ -474,8 +476,8 @@ public class ProviderCommandQueueTests
     public async Task TemplateSync_CarriesTheImageUrl_OrAnEmptyOne()
     {
         const string url = "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-{arch}.img";
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", "Ubuntu-22.04-Standard", null, "ubuntu/22.04", url, 25);
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", "Alma-9-DB", null, "almalinux/9", null, 40);
+        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", Guid.NewGuid(), "Ubuntu-22.04-Standard", null, "ubuntu/22.04", url, 25);
+        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", Guid.NewGuid(), "Alma-9-DB", null, "almalinux/9", null, 40);
 
         Assert.Equal(2, _repo.Rows.Count);
         using JsonDocument withUrl = JsonDocument.Parse(_repo.Rows[0].Payload);
@@ -484,17 +486,25 @@ public class ProviderCommandQueueTests
         Assert.Equal("", withoutUrl.RootElement.GetProperty("imageUrl").GetString());
     }
 
+    // One row per sync request of one cluster (titan-ops architecture/resource-lifecycle.md#one-key-per-request): the two
+    // clusters of one sync-all, and a later sync of the same cluster, each get their own.
     [Fact]
     public async Task TemplateSync_IsKeyedPerTemplatePerCluster()
     {
         Guid templateId = Guid.NewGuid();
+        Guid inSingapore = Guid.NewGuid(), inMock = Guid.NewGuid(), inMockAgain = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueTemplateSyncAsync(templateId, "singapore01", "Alma-9-DB", null, "almalinux/9", null, 40);
-        await queue.EnqueueTemplateSyncAsync(templateId, "mock", "Alma-9-DB", null, "almalinux/9", null, 40);
+        await queue.EnqueueTemplateSyncAsync(templateId, "singapore01", inSingapore, "Alma-9-DB", null, "almalinux/9", null, 40);
+        await queue.EnqueueTemplateSyncAsync(templateId, "mock", inMock, "Alma-9-DB", null, "almalinux/9", null, 40);
+        await queue.EnqueueTemplateSyncAsync(templateId, "mock", inMockAgain, "Alma-9-DB", null, "almalinux/9", null, 40);
 
         Assert.Equal(
-            new[] { $"template-sync-{templateId}-singapore01", $"template-sync-{templateId}-mock" },
+            new[]
+            {
+                $"template-sync-{templateId}-singapore01-{inSingapore}", $"template-sync-{templateId}-mock-{inMock}",
+                $"template-sync-{templateId}-mock-{inMockAgain}",
+            },
             _repo.Rows.Select(r => r.Key).ToArray());
     }
 

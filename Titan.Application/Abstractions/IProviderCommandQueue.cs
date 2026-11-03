@@ -59,6 +59,7 @@ public interface IProviderCommandQueue
     Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName, CancellationToken ct = default);
     Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, Guid requestId, string externalNetworkId, string vip, string projectName, string clusterId, CancellationToken ct = default);
 
-    Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, string name, string? description, string osImageName,
-        string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default);
+    // One command per sync request of one cluster; it carries the request it was enqueued for.
+    Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, Guid requestId, string name, string? description,
+        string osImageName, string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default);
 }

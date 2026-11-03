@@ -18,61 +18,60 @@ public class SyncTemplatesCommandHandler(
     IProviderCommandQueue commands,
     ILogger<SyncTemplatesCommandHandler> logger)
 {
-    // Add-only reconcile (titan-ops features/catalog/design.md#template-sync-add-only) into EVERY configured cluster
-    // (titan-ops features/catalog/design.md#template-per-cluster): the worker creates the templates missing on that cluster's
-    // cluster and no-ops the ones whose image alias it finds, never updating or deleting an existing one. One enqueue
-    // failure is counted and logged, not fatal — the other templates and clusters still enqueue, and a re-trigger is safe.
-    // The sync requests and the provider commands are saved once, at the end, so they commit together
+    // Add-only (titan-ops features/catalog/design.md#template-sync-add-only) into EVERY configured cluster
+    // (titan-ops features/catalog/design.md#template-per-cluster): a cluster with no row, or one without the alias and with
+    // nothing waiting, gets a sync request and one command keyed on it. A cluster that has the alias, or whose sync
+    // waits, gets nothing: the repeat sends nothing (titan-ops architecture/resource-lifecycle.md#repeat). One enqueue
+    // failure is counted and logged, not fatal — the other templates and clusters still enqueue. The requests and their
+    // commands are saved once, at the end, so they commit together
     // (titan-ops architecture/provider-and-worker.md#provider-command-table).
     public async Task HandleAsync(SyncTemplatesCommand command, CancellationToken ct = default)
     {
-        var templates = await repo.ListAllAsync(ct);
-
-        // A cluster the template is not yet synced in gets a sync request before it is enqueued, so the admin list
-        // shows it waiting. A cluster that has the alias asks for nothing, and one with a sync waiting is the repeat
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): only its command is enqueued again.
-        // Loaded untracked (ListAllAsync), so the requests are saved through the tracked copy.
-        foreach (var t in templates)
-        {
-            List<string> clustersToAsk = clusters.Clusters.Select(z => z.Id).Where(clusterId => NeedsASyncRequest(t, clusterId)).ToList();
-            if (clustersToAsk.Count == 0)
-            {
-                continue;
-            }
-            var tracked = await repo.FindByIdAsync(t.Id, ct);
-            if (tracked == null)
-            {
-                continue;
-            }
-            foreach (string clusterId in clustersToAsk)
-            {
-                tracked.RequestSyncIn(clusterId);
-            }
-        }
+        // Untracked, to choose which templates to lock. Each chosen one is locked in id order, so two sync-alls (the
+        // admin's and the five-minute tick) take turns on each template in the same order and never deadlock, then read
+        // again under the lock: the second sees what the first left waiting (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+        List<VmTemplateAggregate> templates = await repo.ListAllAsync(ct);
+        List<Guid> toAsk = templates
+            .Where(t => clusters.Clusters.Any(cluster => NeedsASyncRequest(t, cluster.Id)))
+            .Select(t => t.Id)
+            .OrderBy(id => id)
+            .ToList();
 
         int enqueued = 0, failed = 0;
-        foreach (var t in templates)
+        foreach (Guid templateId in toAsk)
         {
+            VmTemplateAggregate? locked = await repo.FindByIdForUpdateAsync(templateId, ct);
+            if (locked == null)
+            {
+                continue;
+            }
             foreach (ClusterConfig cluster in clusters.Clusters)
             {
+                if (!NeedsASyncRequest(locked, cluster.Id))
+                {
+                    continue;
+                }
+                PendingRequest<VmTemplateRequestKind> request = locked.RequestSyncIn(cluster.Id);
                 try
                 {
-                    await commands.EnqueueTemplateSyncAsync(t.Id, cluster.Id, t.Name, t.Description, t.OsImageName,
-                        t.ImageUrl, t.RootDiskSizeGb, ct);
+                    await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, request.Id, locked.Name, locked.Description,
+                        locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
                     enqueued++;
                 }
                 catch (Exception ex)
                 {
                     failed++;
                     logger.LogError(ex, "Template sync enqueue failed for {TemplateId} ({Name}) in cluster {ClusterId}",
-                        t.Id, t.Name, cluster.Id);
+                        locked.Id, locked.Name, cluster.Id);
                 }
             }
         }
         await repo.SaveAsync(ct);
 
-        logger.LogInformation("Template sync-all: {Enqueued} enqueued, {Failed} failed of {Total} (templates × clusters)",
-            enqueued, failed, templates.Count * clusters.Clusters.Count);
+        int total = templates.Count * clusters.Clusters.Count;
+        logger.LogInformation(
+            "Template sync-all: {Enqueued} enqueued, {Failed} failed, {Untouched} there or waiting, of {Total} (templates × clusters)",
+            enqueued, failed, total - enqueued - failed, total);
     }
 
     private static bool NeedsASyncRequest(VmTemplateAggregate template, string clusterId)
@@ -83,7 +82,7 @@ public class SyncTemplatesCommandHandler(
             return true;
         }
         bool aliasIsThere = row.CurrentExistence == CurrentExistence.Exists;
-        bool syncIsWaiting = row.PendingIntentId != null;
+        bool syncIsWaiting = row.Pending != null;
         return !aliasIsThere && !syncIsWaiting;
     }
 }
