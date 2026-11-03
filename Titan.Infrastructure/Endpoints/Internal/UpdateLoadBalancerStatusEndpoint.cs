@@ -5,8 +5,8 @@ using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Internal;
 
-// The old callback route, alive until rollout phase 6: a command without a requestId reports here; commands with one
-// and the reconciler report on the request and observation routes
+// The old callback route, alive until rollout phase 6: a command without a requestId, and the reconciler of a worker
+// from before the request routes, report here; the rest report on the request and observation routes
 // (titan-ops architecture/resource-lifecycle.md#callback-routes).
 public class UpdateLoadBalancerStatusEndpoint(UpdateLoadBalancerStatusCommandHandler handler, IConfiguration config)
     : Endpoint<UpdateLoadBalancerStatusBody>

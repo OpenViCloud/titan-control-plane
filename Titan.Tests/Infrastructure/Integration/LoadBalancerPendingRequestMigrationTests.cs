@@ -118,8 +118,11 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         string replacedKey = $"load-balancer-update-{deleting.Id}-{replaced}";
         await AddCommandAsync(replacedKey, ProviderCommandKinds.LoadBalancerUpdate,
             $$"""{"loadBalancerId":"{{deleting.Id}}","intentId":"{{replaced}}"}""");
-        // A finished row under the old key is history: the migration leaves it keyed as it was.
-        await AddCommandAsync($"load-balancer-delete-{creating.Id}", ProviderCommandKinds.LoadBalancerDelete, "{}", done: true);
+        // A finished row under the key of the waiting request (its report was lost) is history: the migration leaves it
+        // keyed as it was.
+        var deletingReportLost = await SeedLoadBalancerAsync("Exists", "Deleted", waiting: true);
+        string finishedKey = $"load-balancer-delete-{deletingReportLost.Id}";
+        await AddCommandAsync(finishedKey, ProviderCommandKinds.LoadBalancerDelete, "{}", done: true);
 
         await MigrateToLatestAsync();
 
@@ -130,7 +133,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         Assert.Equal(updating.Intent.ToString(), RequestIdIn(payloadByKey[updateKey]));
         Assert.Equal(deleting.Intent.ToString(), RequestIdIn(payloadByKey[$"load-balancer-delete-{deleting.Id}-{deleting.Intent}"]));
         Assert.Equal(replaced.ToString(), RequestIdIn(payloadByKey[replacedKey]));
-        Assert.Equal("{}", payloadByKey[$"load-balancer-delete-{creating.Id}"]);
+        Assert.Equal("{}", payloadByKey[finishedKey]);
         // The rest of the payload is kept.
         using JsonDocument update = JsonDocument.Parse(payloadByKey[updateKey]);
         Assert.Equal(updating.Intent.ToString(), update.RootElement.GetProperty("intentId").GetString());
