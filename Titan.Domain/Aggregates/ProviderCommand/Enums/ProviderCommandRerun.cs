@@ -4,9 +4,9 @@ namespace Titan.Domain.Aggregates.ProviderCommand;
 /// An open row (Pending or Leased) always absorbs the repeat.
 public enum ProviderCommandRerun
 {
-    /// A finished row (Done or Failed) runs again: a key reused for the same resource, such as a template's sync to one
-    /// cluster. A key that carries its request id (VM, volume, volume snapshot, network, firewall rule, VM snapshot, load
-    /// balancer) is never enqueued twice, so the rule never applies to it.
+    /// A finished row (Done or Failed) runs again. Every key that uses it carries its request id (VM, volume, volume
+    /// snapshot, network, firewall rule, VM snapshot, load balancer, template sync) and is never enqueued twice, so the
+    /// rule never applies to it until phase 6 removes it (titan-ops architecture/resource-lifecycle.md#rollout).
     AfterAnyFinish,
 
     /// Only a Failed row runs again; a Done one absorbs the repeat. The two backups: a repeat of what already happened

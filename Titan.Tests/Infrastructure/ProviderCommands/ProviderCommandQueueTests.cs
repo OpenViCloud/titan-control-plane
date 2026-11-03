@@ -489,7 +489,7 @@ public class ProviderCommandQueueTests
     // One row per sync request of one cluster (titan-ops architecture/resource-lifecycle.md#one-key-per-request): the two
     // clusters of one sync-all, and a later sync of the same cluster, each get their own.
     [Fact]
-    public async Task TemplateSync_IsKeyedPerTemplatePerCluster()
+    public async Task TemplateSync_IsKeyedPerTemplatePerClusterPerRequest()
     {
         Guid templateId = Guid.NewGuid();
         Guid inSingapore = Guid.NewGuid(), inMock = Guid.NewGuid(), inMockAgain = Guid.NewGuid();

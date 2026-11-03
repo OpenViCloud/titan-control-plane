@@ -21,10 +21,10 @@ public class SyncTemplatesCommandHandler(
     // Add-only (titan-ops features/catalog/design.md#template-sync-add-only) into EVERY configured cluster
     // (titan-ops features/catalog/design.md#template-per-cluster): a cluster with no row, or one without the alias and with
     // nothing waiting, gets a sync request and one command keyed on it. A cluster that has the alias, or whose sync
-    // waits, gets nothing: the repeat sends nothing (titan-ops architecture/resource-lifecycle.md#repeat). One enqueue
-    // failure is counted and logged, not fatal — the other templates and clusters still enqueue. The requests and their
-    // commands are saved once, at the end, so they commit together
-    // (titan-ops architecture/provider-and-worker.md#provider-command-table).
+    // waits, gets nothing: the repeat sends nothing (titan-ops architecture/resource-lifecycle.md#repeat). The requests and
+    // their commands are saved once, at the end, so they commit together
+    // (titan-ops architecture/provider-and-worker.md#provider-command-table). A failed enqueue fails the whole run and
+    // saves nothing: a request kept without its command would wait for good, since a waiting cluster is sent nothing.
     public async Task HandleAsync(SyncTemplatesCommand command, CancellationToken ct = default)
     {
         // Untracked, to choose which templates to lock. Each chosen one is locked in id order, so two sync-alls (the
@@ -37,7 +37,7 @@ public class SyncTemplatesCommandHandler(
             .OrderBy(id => id)
             .ToList();
 
-        int enqueued = 0, failed = 0;
+        int enqueued = 0;
         foreach (Guid templateId in toAsk)
         {
             VmTemplateAggregate? locked = await repo.FindByIdForUpdateAsync(templateId, ct);
@@ -52,26 +52,17 @@ public class SyncTemplatesCommandHandler(
                     continue;
                 }
                 PendingRequest<VmTemplateRequestKind> request = locked.RequestSyncIn(cluster.Id);
-                try
-                {
-                    await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, request.Id, locked.Name, locked.Description,
-                        locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
-                    enqueued++;
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    logger.LogError(ex, "Template sync enqueue failed for {TemplateId} ({Name}) in cluster {ClusterId}",
-                        locked.Id, locked.Name, cluster.Id);
-                }
+                await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, request.Id, locked.Name, locked.Description,
+                    locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
+                enqueued++;
             }
         }
         await repo.SaveAsync(ct);
 
         int total = templates.Count * clusters.Clusters.Count;
         logger.LogInformation(
-            "Template sync-all: {Enqueued} enqueued, {Failed} failed, {Untouched} there or waiting, of {Total} (templates × clusters)",
-            enqueued, failed, total - enqueued - failed, total);
+            "Template sync-all: {Enqueued} enqueued, {Untouched} there or waiting, of {Total} (templates × clusters)",
+            enqueued, total - enqueued, total);
     }
 
     private static bool NeedsASyncRequest(VmTemplateAggregate template, string clusterId)

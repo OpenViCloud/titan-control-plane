@@ -69,7 +69,7 @@ public class TemplateServiceTests
                     req.Detail),
                 ct);
 
-        public async Task<(int Enqueued, int Failed)> SyncAllAsync(CancellationToken ct = default)
+        public async Task<int> SyncAllAsync(CancellationToken ct = default)
         {
             await sync.HandleAsync(new SyncTemplatesCommand(), ct);
             return syncLog.Counts ?? throw new Xunit.Sdk.XunitException("the sync handler logged no summary line");
@@ -80,7 +80,7 @@ public class TemplateServiceTests
     // not the rendered text, so a wording change in the message does not break the tests.
     private sealed class SyncCountLogger : ILogger<SyncTemplatesCommandHandler>
     {
-        public (int Enqueued, int Failed)? Counts { get; private set; }
+        public int? Counts { get; private set; }
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
@@ -90,8 +90,8 @@ public class TemplateServiceTests
         {
             if (state is not IReadOnlyList<KeyValuePair<string, object?>> values) return;
             var map = values.ToDictionary(kv => kv.Key, kv => kv.Value);
-            if (map.TryGetValue("Enqueued", out var e) && map.TryGetValue("Total", out _) && map.TryGetValue("Failed", out var f))
-                Counts = ((int)e!, (int)f!);
+            if (map.TryGetValue("Enqueued", out var e) && map.TryGetValue("Total", out _))
+                Counts = (int)e!;
         }
     }
 
@@ -635,8 +635,7 @@ public class TemplateServiceTests
         var result = await svc.SyncAllAsync();
 
         // fresh: both clusters · synced: singapore01 only · failed: both · waiting: singapore01 only
-        Assert.Equal(6, result.Enqueued);
-        Assert.Equal(0, result.Failed);
+        Assert.Equal(6, result);
         VerifySync(wf, Times.Exactly(6));
         wf.Verify(w => w.EnqueueTemplateSyncAsync(synced.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
             It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -750,7 +749,7 @@ public class TemplateServiceTests
         var second = await svc.SyncAllAsync();
 
         Assert.Equal(firstRequest, WaitingSyncOf(t, Mock));
-        Assert.Equal((0, 0), second);
+        Assert.Equal(0, second);
         VerifySync(wf, Times.Exactly(2)); // the first run's two clusters
     }
 
@@ -761,25 +760,23 @@ public class TemplateServiceTests
 
         var result = await svc.SyncAllAsync();
 
-        Assert.Equal(0, result.Enqueued);
-        Assert.Equal(0, result.Failed);
+        Assert.Equal(0, result);
         VerifySync(wf, Times.Never());
     }
 
     [Fact] // one cluster's enqueue failing costs neither the other templates nor the other cluster theirs (D-5)
-    public async Task SyncAll_WhenOneEnqueueThrows_CountsFailed_AndContinuesWithTheRest()
+    public async Task SyncAll_WhenAnEnqueueThrows_FailsWhole_AndSavesNoRequest()
     {
         var a = VmTemplate.Create("a", null, "img", 10, TierS);
         var b = VmTemplate.Create("b", null, "img", 10, TierS);
-        var (svc, _, wf) = Make(a, b);
+        var (svc, repo, wf) = Make(a, b);
         wf.Setup(w => w.EnqueueTemplateSyncAsync(a.Id, Singapore, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
                 It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("command queue unavailable"));
 
-        var result = await svc.SyncAllAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SyncAllAsync());
 
-        Assert.Equal(3, result.Enqueued);
-        Assert.Equal(1, result.Failed);
-        VerifySync(wf, Times.Exactly(4)); // all four were attempted
+        // A request saved without its command would wait for good: the next sync-all sends a waiting cluster nothing.
+        Assert.False(repo.Saved);
     }
 }

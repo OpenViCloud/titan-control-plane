@@ -11,8 +11,8 @@ namespace Titan.Application.Services.Catalog.VmTemplate;
 public enum TemplateSyncOutcome { AllSynced, TimedOut, HasFailures, NoClusters }
 
 
-// Drives a full template reconcile to completion: ask a sync of every template in every cluster that lacks it, then
-// poll the catalog until every (template, cluster) has its alias. It backs the one-shot `sync-templates` CLI of
+// Drives a full template reconcile to completion: ask a sync of every template in every cluster that lacks it and has no
+// sync waiting, then poll the catalog until every (template, cluster) has its alias. It backs the one-shot `sync-templates` CLI of
 // Titan.Host; no deploy step runs it any more. The command only enqueues and the worker reconciles asynchronously, so completion is observed by
 // polling. The verdict covers the whole catalog: one cluster whose sync gave up makes the run HasFailures even when the other
 // clusters synced — their sync goes on regardless, the exit code only reports it
@@ -26,7 +26,7 @@ public class TemplateSyncRunner(
     ILogger<TemplateSyncRunner> logger)
 {
     // maxAttempts * pollInterval bounds the wait. `delay` is injected so unit tests run without
-    // real sleeps. Short-circuits on the first (template, cluster) in Error (it won't self-heal this run).
+    // real sleeps. Short-circuits on the first (template, cluster) whose sync gave up (it won't self-heal this run).
     public async Task<TemplateSyncRunResult> RunAsync(
         int maxAttempts,
         TimeSpan pollInterval,

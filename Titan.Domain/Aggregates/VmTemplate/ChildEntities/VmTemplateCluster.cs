@@ -99,10 +99,11 @@ public class VmTemplateCluster : ChildEntity
     // ---- The report of the sync's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends it.
 
-    /// Ends the waiting sync when the report names it; any other report is ignored and returns null. An alias the worker
-    /// found is recorded with Exists whatever the outcome, the first alias kept; Done clears an older failure, Failed
-    /// records the reason (titan-ops architecture/resource-lifecycle.md#kinds). Nothing absorbs a report here: a template is
-    /// never Deleted, so the id check is the whole guard.
+    /// Ends the waiting sync when the report names it; any other report is ignored and returns null. Done clears an older
+    /// failure, Failed records the reason (titan-ops architecture/resource-lifecycle.md#kinds). An alias the worker found
+    /// is recorded with Exists whatever the outcome, the first alias kept, as the give-up of a create that finds its
+    /// object is for every other kind. Nothing absorbs a report here: a template is never Deleted, so the id check is the
+    /// whole guard.
     internal PendingRequest<VmTemplateRequestKind>? EndRequest(Guid requestId, VmTemplateRequestEnd end)
     {
         PendingRequest<VmTemplateRequestKind>? waiting = Pending;

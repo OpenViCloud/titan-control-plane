@@ -242,7 +242,7 @@ public class VmTemplateSyncRequestLifecycleTests
     }
 
     [Fact]
-    public void SeeingTheAliasByItsName_KeepsTheFirstAlias_AndEndsAWaitingSync_NoMoreThanAnyObservation()
+    public void SeeingTheAliasByItsName_KeepsTheFirstAlias_AndLeavesTheSyncWaiting()
     {
         VmTemplate t = NewTemplate();
         t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Done(Alias));
