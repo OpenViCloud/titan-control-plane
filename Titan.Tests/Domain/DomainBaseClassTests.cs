@@ -32,6 +32,7 @@ public class DomainBaseClassTests
         ["NetworkRequestEnded"] = "result of Network.EndRequest: the request it ended, the rules whose delete went with the network, and whether it let go of its /64",
         ["FirewallRuleRequestEnd"] = "input of Network.EndFirewallRuleRequest: how the rule's command ended and the state it read",
         ["VmSnapshotRequestEnd"] = "input of Vm.EndSnapshotRequest: how the snapshot request's command ended",
+        ["VmTemplateRequestEnd"] = "input of VmTemplate.EndSyncRequest: how a cluster's sync command ended and the alias it found",
         ["LoadBalancerRequestEnd"] = "input of LoadBalancer.EndRequest: how the load balancer request's command ended and the VIP it found",
     };
 

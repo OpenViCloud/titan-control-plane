@@ -108,7 +108,7 @@ public class ClusterIdContractTests
 
         // Past the body check and the cluster check: the handler looked the template up, and found none.
         Assert.Equal("TEMPLATE_NOT_FOUND", notFound.Code);
-        templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
+        templates.Verify(t => t.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

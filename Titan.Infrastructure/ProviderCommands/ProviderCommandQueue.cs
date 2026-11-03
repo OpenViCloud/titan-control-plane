@@ -244,13 +244,17 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
                 .ToList()
         };
 
-    // One key per template per cluster: keyed on the template alone, the second cluster's sync would be absorbed by the
-    // first cluster's open row (titan-ops features/catalog/design.md#template-per-cluster).
-    public Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, string name, string? description,
+    // One row per sync request of one cluster (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, Guid requestId, string name, string? description,
         string osImageName, string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default) =>
-        EnqueueAsync($"template-sync-{templateId}-{clusterId}", ProviderCommandKinds.TemplateSync, clusterId,
-            new { templateId, clusterId, name, description = description ?? "", osImageName, imageUrl = imageUrl ?? "", rootDiskSizeGb },
+        EnqueueAsync(TemplateSyncKey(templateId, clusterId, requestId), ProviderCommandKinds.TemplateSync, clusterId,
+            new { templateId, clusterId, requestId, name, description = description ?? "", osImageName, imageUrl = imageUrl ?? "", rootDiskSizeGb },
             ProviderCommandRerun.AfterAnyFinish, ct);
+
+    // `template-sync-{templateId}-{clusterId}-{requestId}`: the stuck-request query rebuilds it from the cluster's
+    // waiting sync (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string TemplateSyncKey(Guid templateId, string clusterId, Guid requestId) =>
+        $"template-sync-{templateId}-{clusterId}-{requestId}";
 
     // A new request on a key of a resource that already exists. The handler read the resource with no such request
     // waiting, so an open row under the key is another request's, committed in between: this one stops with 409

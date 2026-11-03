@@ -1,12 +1,13 @@
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Exceptions;
+using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
 // A template is synced to every cluster on its own (titan-ops features/catalog/design.md#template-per-cluster): each cluster holds
 // whether that cluster has the image alias (existence — Incus has no status word for an alias,
-// titan-ops features/catalog/design.md#template-state-is-existence) and a sync request (PendingIntentId). Sync is
-// add-only, so Exists is the only thing anybody can want.
+// titan-ops features/catalog/design.md#template-state-is-existence) and a sync request (Pending). Sync is add-only, so
+// Exists is the only thing anybody can want. How a sync ends: VmTemplateSyncRequestLifecycleTests.
 public class VmTemplateTests
 {
     private const string Mock = "mock";
@@ -32,8 +33,7 @@ public class VmTemplateTests
     private static VmTemplate SyncedIn(string clusterId, string externalTemplateId)
     {
         var t = NewTemplate();
-        t.RequestSyncIn(clusterId);
-        t.MarkCreatedIn(clusterId, externalTemplateId);
+        t.EndSyncRequest(clusterId, t.RequestSyncIn(clusterId).Id, VmTemplateRequestEnd.Done(externalTemplateId));
         return t;
     }
 
@@ -75,7 +75,7 @@ public class VmTemplateTests
         t.RequestSyncIn(Mock);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.NotNull(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId);
+        Assert.Equal(VmTemplateRequestKind.Sync, t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.Pending!.Kind);
         Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
     }
 
@@ -94,8 +94,7 @@ public class VmTemplateTests
     public void RequestSyncIn_AfterAFailedSync_WaitsForTheWorker_AndKeepsTheReason()
     {
         var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-        t.MarkRequestFailedIn(Mock, "wrong architecture", "raw");
+        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Failed(null, "wrong architecture", "raw"));
 
         t.RequestSyncIn(Mock);
 
@@ -114,7 +113,7 @@ public class VmTemplateTests
         Assert.Equal("NotFound/Exists/Syncing", Shape(t, Mock));
     }
 
-    [Fact] // a repeat is refused; the handler recognises it first and only re-sends the command
+    [Fact] // a repeat is refused; the handler recognises it first and sends nothing
     public void RequestSyncIn_WhileASyncWaitsInThatCluster_IsRefused()
     {
         var t = NewTemplate();
@@ -145,104 +144,25 @@ public class VmTemplateTests
 
     // ── observations ──────────────────────────────────────────────────────
 
-    [Fact]
-    public void MarkCreatedIn_RecordsTheAlias_FulfilsTheSync_AndClearsAnyPriorFailure()
-    {
-        var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-        t.MarkRequestFailedIn(Mock, "earlier error", "raw");
-        t.RequestSyncIn(Mock);
-
-        bool fulfilled = t.MarkCreatedIn(Mock, "tpl-a");
-
-        Assert.True(fulfilled);
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Equal("tpl-a", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureDetail);
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailedAt);
-    }
-
-    [Fact] // a repeated report of the same command fulfils nothing the second time
-    public void MarkCreatedIn_Repeated_FulfilsOnce()
-    {
-        var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-
-        Assert.True(t.MarkCreatedIn(Mock, "tpl-a"));
-        Assert.False(t.MarkCreatedIn(Mock, "tpl-a"));
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-    }
-
     [Fact] // the same template is its own alias on each cluster
-    public void MarkCreatedIn_TwoClusters_KeepTheirOwnProviderIds()
+    public void EachCluster_KeepsItsOwnProviderId()
     {
         var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-        t.RequestSyncIn(Singapore);
+        PendingRequest<VmTemplateRequestKind> inMock = t.RequestSyncIn(Mock);
+        PendingRequest<VmTemplateRequestKind> inSingapore = t.RequestSyncIn(Singapore);
 
-        t.MarkCreatedIn(Mock, "tpl-a");
-        t.MarkCreatedIn(Singapore, "tpl-b");
+        t.EndSyncRequest(Mock, inMock.Id, VmTemplateRequestEnd.Done("tpl-a"));
+        t.EndSyncRequest(Singapore, inSingapore.Id, VmTemplateRequestEnd.Done("tpl-b"));
 
         Assert.Equal("tpl-a", t.ProviderIdIn(Mock));
         Assert.Equal("tpl-b", t.ProviderIdIn(Singapore));
-    }
-
-    [Fact]
-    public void MarkCreatedIn_WithoutAnId_IsRefused()
-    {
-        var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-
-        Assert.Throws<BadRequestException>(() => t.MarkCreatedIn(Mock, ""));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-    }
-
-    [Fact] // observation converges: a report for a cluster Titan holds no row for is recorded, not refused
-    public void MarkCreatedIn_AClusterNeverRequested_RecordsWhatWasObserved()
-    {
-        var t = NewTemplate();
-
-        t.MarkCreatedIn(Singapore, "tpl-b");
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Singapore));
-        Assert.Equal("tpl-b", t.ProviderIdIn(Singapore));
-    }
-
-    [Fact] // the sync gave up: nothing waits any more; existence stays what was last observed
-    public void MarkRequestFailedIn_RecordsWhy_AndEndsTheWait()
-    {
-        var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-
-        bool recorded = t.MarkRequestFailedIn(Mock, "image of another architecture", "raw error");
-
-        Assert.True(recorded);
-        Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
-        VmTemplateCluster cluster = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!;
-        Assert.Equal("image of another architecture", cluster.RequestFailureReason);
-        Assert.Equal("raw error", cluster.RequestFailureDetail);
-        Assert.NotNull(cluster.RequestFailedAt);
-    }
-
-    [Fact] // a give-up with no sync waiting is a stale report of a request already over
-    public void MarkRequestFailedIn_WithNoSyncWaiting_IsStale_AndRecordsNothing()
-    {
-        var t = SyncedIn(Mock, "tpl-a");
-
-        bool recorded = t.MarkRequestFailedIn(Mock, "late", "raw");
-
-        Assert.False(recorded);
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
     [Fact] // the reconciler found the alias gone from one cluster: the other cluster is untouched
     public void MarkNotFoundIn_OnAClusterThatHadIt_KeepsItsProviderId_AndTheOtherCluster()
     {
         var t = SyncedIn(Mock, "tpl-a");
-        t.RequestSyncIn(Singapore);
-        t.MarkCreatedIn(Singapore, "tpl-b");
+        t.EndSyncRequest(Singapore, t.RequestSyncIn(Singapore).Id, VmTemplateRequestEnd.Done("tpl-b"));
 
         t.MarkNotFoundIn(Mock);
 
@@ -256,60 +176,23 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
         t.MarkNotFoundIn(Mock);
-        t.RequestSyncIn(Mock);
-        t.MarkRequestFailedIn(Mock, "image of another architecture", "raw");
+        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Failed(null, "image of another architecture", "raw"));
 
         t.MarkNotFoundIn(Mock);
 
         Assert.Equal("image of another architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
     }
 
-    [Fact] // a sync still waiting ends once the reconciler sees the alias missing
-    public void MarkNotFoundIn_EndsAWaitingSync()
-    {
-        var t = SyncedIn(Mock, "tpl-a");
-        t.MarkNotFoundIn(Mock);
-        t.RequestSyncIn(Mock);
-
-        t.MarkNotFoundIn(Mock);
-
-        Assert.Equal("NotFound/Exists/-", Shape(t, Mock));
-    }
-
-    [Fact] // the reconciler sees an alias recorded lost: it is back, and any old failure no longer describes it
+    [Fact] // the reconciler sees an alias recorded lost: it is back
     public void MarkObservedIn_AfterALoss_RecordsItThereAgain()
     {
         var t = SyncedIn(Mock, "tpl-a");
         t.MarkNotFoundIn(Mock);
-        t.RequestSyncIn(Mock);
-        t.MarkRequestFailedIn(Mock, "boom", "raw");
 
         t.MarkObservedIn(Mock);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
-    }
-
-    [Fact] // the reconciler sees the alias while a sync waits: that sync is done
-    public void MarkObservedIn_FulfilsAWaitingSync()
-    {
-        var t = SyncedIn(Mock, "tpl-a");
-        t.MarkNotFoundIn(Mock);
-        t.RequestSyncIn(Mock);
-
-        t.MarkObservedIn(Mock);
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-    }
-
-    [Fact] // seeing is only possible for a template Titan knows the alias of
-    public void MarkObservedIn_WithNoProviderId_IsRefused()
-    {
-        var t = NewTemplate();
-        t.RequestSyncIn(Mock);
-
-        Assert.Throws<BadRequestException>(() => t.MarkObservedIn(Mock));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
+        Assert.True(t.IsSyncedIn(Mock));
     }
 
     // ── what a VM in a cluster can be created from ───────────────────────────

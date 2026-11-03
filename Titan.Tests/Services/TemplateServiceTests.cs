@@ -30,9 +30,9 @@ public class TemplateServiceTests
         Clusters = [new ClusterConfig { Id = Mock, Name = "Mock" }, new ClusterConfig { Id = Singapore, Name = "Singapore 01" }],
     };
 
-    private static (TemplateFacade svc, StubRepo repo, Mock<IProviderCommandQueue> wf) Make(params VmTemplate[] seed)
+    private static (TemplateFacade svc, FakeVmTemplateRepository repo, Mock<IProviderCommandQueue> wf) Make(params VmTemplate[] seed)
     {
-        var repo = new StubRepo(seed);
+        var repo = new FakeVmTemplateRepository(seed);
         var wf = new Mock<IProviderCommandQueue>();
         wf.SetReturnsDefault(Task.CompletedTask);
         var syncLog = new SyncCountLogger();
@@ -69,7 +69,7 @@ public class TemplateServiceTests
                     req.Detail),
                 ct);
 
-        public async Task<(int Enqueued, int Failed)> SyncAllAsync(CancellationToken ct = default)
+        public async Task<int> SyncAllAsync(CancellationToken ct = default)
         {
             await sync.HandleAsync(new SyncTemplatesCommand(), ct);
             return syncLog.Counts ?? throw new Xunit.Sdk.XunitException("the sync handler logged no summary line");
@@ -80,7 +80,7 @@ public class TemplateServiceTests
     // not the rendered text, so a wording change in the message does not break the tests.
     private sealed class SyncCountLogger : ILogger<SyncTemplatesCommandHandler>
     {
-        public (int Enqueued, int Failed)? Counts { get; private set; }
+        public int? Counts { get; private set; }
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(LogLevel logLevel) => true;
@@ -90,8 +90,8 @@ public class TemplateServiceTests
         {
             if (state is not IReadOnlyList<KeyValuePair<string, object?>> values) return;
             var map = values.ToDictionary(kv => kv.Key, kv => kv.Value);
-            if (map.TryGetValue("Enqueued", out var e) && map.TryGetValue("Total", out _) && map.TryGetValue("Failed", out var f))
-                Counts = ((int)e!, (int)f!);
+            if (map.TryGetValue("Enqueued", out var e) && map.TryGetValue("Total", out _))
+                Counts = (int)e!;
         }
     }
 
@@ -139,12 +139,15 @@ public class TemplateServiceTests
     }
 
     private static void VerifySync(Mock<IProviderCommandQueue> wf, Times times) =>
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), times);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), times);
+
+    private static Guid WaitingSyncOf(VmTemplate t, string clusterId) =>
+        t.Clusters.Single(candidate => candidate.ClusterId == clusterId).Pending!.Id;
 
     // ── Templates never asked into a cluster (titan-ops features/catalog/design.md#template-sync-never-asked) ──
 
-    private static Task RunNeverAsked(StubRepo repo, Mock<IProviderCommandQueue> wf) =>
+    private static Task RunNeverAsked(FakeVmTemplateRepository repo, Mock<IProviderCommandQueue> wf) =>
         Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService.RunOnceAsync(
             new ListClustersWithNeverAskedTemplatesQueryHandler(repo, Clusters),
             new SyncTemplatesCommandHandler(repo, Clusters, wf.Object, new SyncCountLogger()),
@@ -161,8 +164,8 @@ public class TemplateServiceTests
         await RunNeverAsked(repo, wf);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Singapore));
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Singapore, It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<string>(),
-            It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Singapore, WaitingSyncOf(t, Singapore), It.IsAny<string>(),
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.True(repo.Saved);
     }
 
@@ -248,7 +251,7 @@ public class TemplateServiceTests
 
         await svc.SyncAllAsync();
 
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Mock, "a", null, "img", url, 10,
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Mock, WaitingSyncOf(t, Mock), "a", null, "img", url, 10,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -484,6 +487,57 @@ public class TemplateServiceTests
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
+    // The old route lives until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes), mapped onto
+    // the cluster's waiting sync: a worker from before the request routes reports on it.
+    [Fact]
+    public async Task UpdateStatus_Created_EndsTheWaitingSync()
+    {
+        var t = PendingTemplate();
+        var (svc, repo, _) = Make(t);
+
+        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
+
+        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).Pending);
+        Assert.Equal([t.Id], repo.Locked);
+    }
+
+    [Fact] // nothing waits: the alias seen is recorded as an observation would
+    public async Task UpdateStatus_Created_WithNothingWaiting_RecordsTheAliasAndExists()
+    {
+        var t = VmTemplate.Create("a", null, "img", 10, TierS);
+        var (svc, _, _) = Make(t);
+
+        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
+
+        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
+        Assert.Equal("tpl-205", t.ProviderIdIn(Mock));
+    }
+
+    [Fact] // a give-up with nothing waiting is the stale report of a sync already over
+    public async Task UpdateStatus_RequestFailed_WithNothingWaiting_RecordsNothing()
+    {
+        var t = SyncedTemplate("Ubuntu", "205");
+        var (svc, _, _) = Make(t);
+
+        await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "late", detail: "raw"));
+
+        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
+        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).RequestFailureReason);
+    }
+
+    [Fact] // an observation ends no sync, on the old route too
+    public async Task UpdateStatus_ObservedThere_WhileAReSyncWaits_LeavesItWaiting()
+    {
+        var t = SyncedTemplate("Ubuntu", "205");
+        t.MarkNotFoundIn(Mock);
+        t.RequestSyncIn(Mock);
+        var (svc, _, _) = Make(t);
+
+        await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: true));
+
+        Assert.Equal("Exists/Exists/Syncing", Shape(t, Mock));
+    }
+
     // The template reconciler reports what the cluster holds.
     [Fact]
     public async Task UpdateStatus_ObservedNotThere_RecordsNotFound_AndHidesItFromCustomers()
@@ -567,19 +621,26 @@ public class TemplateServiceTests
 
     // ── SyncAll (admin trigger) ─────────────────────────────────────
 
-    [Fact] // every template into every cluster, whatever its state there
-    public async Task SyncAll_EnqueuesEveryTemplate_RegardlessOfStatus()
+    // A command goes with each sync it asks, and only with those: a cluster that has the alias, or whose sync waits,
+    // gets nothing (titan-ops architecture/resource-lifecycle.md#repeat).
+    [Fact]
+    public async Task SyncAll_SendsACommand_OnlyForTheSyncsItAsks()
     {
-        var pending = VmTemplate.Create("a-pending", null, "img", 10, TierS);
+        var fresh = VmTemplate.Create("a-fresh", null, "img", 10, TierS);
         var synced = SyncedTemplate("b-synced", "50");
         var failed = FailedTemplate("c-failed", "boom");
-        var (svc, _, wf) = Make(pending, synced, failed);
+        var waiting = PendingTemplate();
+        var (svc, _, wf) = Make(fresh, synced, failed, waiting);
 
         var result = await svc.SyncAllAsync();
 
-        Assert.Equal(6, result.Enqueued); // 3 templates × 2 clusters
-        Assert.Equal(0, result.Failed);
+        // fresh: both clusters · synced: singapore01 only · failed: both · waiting: singapore01 only
+        Assert.Equal(6, result);
         VerifySync(wf, Times.Exactly(6));
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(synced.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(waiting.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact] // one command per cluster, each carrying its cluster — the worker resolves that cluster from it
@@ -592,9 +653,38 @@ public class TemplateServiceTests
 
         foreach (string clusterId in new[] { Mock, Singapore })
         {
-            wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, "a", null, "img", null, 10,
+            wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, WaitingSyncOf(t, clusterId), "a", null, "img", null, 10,
                 It.IsAny<CancellationToken>()), Times.Once);
         }
+    }
+
+    // Two sync-alls at once take turns on each template's row (titan-ops architecture/resource-lifecycle.md#one-key-per-request);
+    // in the order of the ids, so two of them never wait on each other.
+    [Fact]
+    public async Task SyncAll_LocksEachTemplateItAsks_InTheOrderOfTheirIds()
+    {
+        var a = VmTemplate.Create("a", null, "img", 10, TierS);
+        var b = VmTemplate.Create("b", null, "img", 10, TierS);
+        var c = VmTemplate.Create("c", null, "img", 10, TierS);
+        var (svc, repo, _) = Make(c, a, b);
+
+        await svc.SyncAllAsync();
+
+        Assert.Equal(new[] { a.Id, b.Id, c.Id }.OrderBy(id => id), repo.Locked);
+    }
+
+    // Nothing to ask of a template there in every cluster: its row is not locked.
+    [Fact]
+    public async Task SyncAll_LocksNoTemplate_ThatHasNothingToAsk()
+    {
+        var t = SyncedTemplate("everywhere", "1", Mock);
+        t.MarkCreatedIn(Singapore, "2");
+        var (svc, repo, wf) = Make(t);
+
+        await svc.SyncAllAsync();
+
+        Assert.Empty(repo.Locked);
+        VerifySync(wf, Times.Never());
     }
 
     // A cluster the template is not on yet gets a sync REQUEST before it is enqueued.
@@ -620,8 +710,8 @@ public class TemplateServiceTests
         var t = VmTemplate.Create("a", null, "img", 10, TierS);
         var (svc, repo, wf) = Make(t);
         List<bool> savedAtEnqueue = new();
-        wf.Setup(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        wf.Setup(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .Callback(() => savedAtEnqueue.Add(repo.Saved))
             .Returns(Task.CompletedTask);
 
@@ -646,21 +736,21 @@ public class TemplateServiceTests
         Assert.Equal("NotCreated/Exists/Syncing", Shape(fresh, Singapore));
     }
 
-    // The repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): a second press while a sync
-    // waits asks for nothing new — the same request stays — and only enqueues the command again.
+    // The repeat (titan-ops architecture/resource-lifecycle.md#repeat): a second press while a sync waits asks for nothing
+    // new — the same request stays — and sends nothing more.
     [Fact]
-    public async Task SyncAll_Repeated_KeepsTheSameRequest_AndResendsTheCommand()
+    public async Task SyncAll_Repeated_KeepsTheSameRequest_AndSendsNothingMore()
     {
         var t = FailedTemplate("a", "boom");
         var (svc, _, wf) = Make(t);
         await svc.SyncAllAsync();
-        Guid? firstRequest = t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId;
+        Guid firstRequest = WaitingSyncOf(t, Mock);
 
-        await svc.SyncAllAsync();
+        var second = await svc.SyncAllAsync();
 
-        Assert.NotNull(firstRequest);
-        Assert.Equal(firstRequest, t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.PendingIntentId);
-        VerifySync(wf, Times.Exactly(4)); // two runs × two clusters
+        Assert.Equal(firstRequest, WaitingSyncOf(t, Mock));
+        Assert.Equal(0, second);
+        VerifySync(wf, Times.Exactly(2)); // the first run's two clusters
     }
 
     [Fact]
@@ -670,52 +760,23 @@ public class TemplateServiceTests
 
         var result = await svc.SyncAllAsync();
 
-        Assert.Equal(0, result.Enqueued);
-        Assert.Equal(0, result.Failed);
+        Assert.Equal(0, result);
         VerifySync(wf, Times.Never());
     }
 
-    [Fact] // one cluster's enqueue failing costs neither the other templates nor the other cluster theirs (D-5)
-    public async Task SyncAll_WhenOneEnqueueThrows_CountsFailed_AndContinuesWithTheRest()
+    [Fact]
+    public async Task SyncAll_WhenAnEnqueueThrows_FailsWhole_AndSavesNoRequest()
     {
         var a = VmTemplate.Create("a", null, "img", 10, TierS);
         var b = VmTemplate.Create("b", null, "img", 10, TierS);
-        var (svc, _, wf) = Make(a, b);
-        wf.Setup(w => w.EnqueueTemplateSyncAsync(a.Id, Singapore, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        var (svc, repo, wf) = Make(a, b);
+        wf.Setup(w => w.EnqueueTemplateSyncAsync(a.Id, Singapore, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("command queue unavailable"));
 
-        var result = await svc.SyncAllAsync();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SyncAllAsync());
 
-        Assert.Equal(3, result.Enqueued);
-        Assert.Equal(1, result.Failed);
-        VerifySync(wf, Times.Exactly(4)); // all four were attempted
-    }
-
-    private sealed class StubRepo(params VmTemplate[] seed) : IVmTemplateRepository
-    {
-        private readonly List<VmTemplate> _items = [.. seed];
-        public bool Saved { get; private set; }
-
-        public Task<VmTemplate?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
-            Task.FromResult(_items.FirstOrDefault(t => t.Id == id));
-
-        // Deliberately unsorted (insertion order): ordering is the SERVICE's job, so the
-        // ordering test fails if the service stops sorting.
-        public Task<List<VmTemplate>> ListSyncedInClusterAsync(string clusterId, CancellationToken ct = default) =>
-            Task.FromResult(_items.Where(t => t.IsSyncedIn(clusterId)).ToList());
-
-        public Task<List<VmTemplate>> ListSyncedInAnyClusterAsync(CancellationToken ct = default) =>
-            Task.FromResult(_items.Where(t => t.Clusters.Any(z => z.CurrentExistence == CurrentExistence.Exists)).ToList());
-
-        public Task<List<VmTemplate>> ListReconcilableInClusterAsync(string clusterId, CancellationToken ct = default) =>
-            Task.FromResult(_items.Where(t => t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId) != null && t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId)!.ExternalTemplateId != null).ToList());
-
-        public Task<List<VmTemplate>> ListAllAsync(CancellationToken ct = default) =>
-            Task.FromResult(_items.OrderBy(t => t.Name).ToList());
-
-        public void Add(VmTemplate template) => _items.Add(template);
-
-        public Task SaveAsync(CancellationToken ct = default) { Saved = true; return Task.CompletedTask; }
+        // A request saved without its command would wait for good: the next sync-all sends a waiting cluster nothing.
+        Assert.False(repo.Saved);
     }
 }

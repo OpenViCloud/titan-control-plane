@@ -1,14 +1,18 @@
 using Microsoft.Extensions.Logging;
 using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Options;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 
-// Worker callback — an observation of one cluster (titan-ops architecture/intent-and-observation.md#observation-converges).
-// Created and the give-up come from the sync command, Observed from that cluster's template reconciler, which never
-// reports Deleted: a template is never removed (titan-ops features/catalog/design.md#template-reports).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): each
+// report of a worker that predates the request routes is mapped onto the sync the cluster is waiting on. Created and the
+// give-up come from the sync command, Observed from that cluster's template reconciler, which never reports Deleted: a
+// template is never removed (titan-ops features/catalog/design.md#template-reports). The template's row is locked like
+// every lifecycle handler's.
 public class UpdateTemplateStatusCommandHandler(
     IVmTemplateRepository repo,
     ClusterOptions clusters,
@@ -42,12 +46,15 @@ public class UpdateTemplateStatusCommandHandler(
         // The aggregate records an observation for any cluster it is handed; whether the cluster exists is checked here.
         clusters.ClusterOf(req.ClusterId);
 
-        var template = await repo.FindByIdAsync(req.TemplateId, ct)
+        var template = await repo.FindByIdForUpdateAsync(req.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
+        PendingRequest<VmTemplateRequestKind>? waiting =
+            template.Clusters.FirstOrDefault(candidate => candidate.ClusterId == req.ClusterId)?.Pending;
         switch (req.Report)
         {
             case "Observed":
+                // Seeing the alias ends nothing: only a command's own report does.
                 bool aliasIsThere = req.Exists == true;
                 if (aliasIsThere)
                 {
@@ -59,10 +66,23 @@ public class UpdateTemplateStatusCommandHandler(
                 }
                 break;
             case "Created":
-                template.MarkCreatedIn(req.ClusterId, req.ExternalId!);
+                // With nothing waiting, the alias the command saw is recorded as an observation would.
+                if (waiting != null)
+                {
+                    template.EndSyncRequest(req.ClusterId, waiting.Id, VmTemplateRequestEnd.Done(req.ExternalId));
+                }
+                else
+                {
+                    template.MarkAliasObservedIn(req.ClusterId, req.ExternalId!);
+                }
                 break;
             case "RequestFailed":
-                template.MarkRequestFailedIn(req.ClusterId, req.Reason, req.Detail);
+                // With nothing waiting the give-up is the stale report of a sync already over, and records nothing.
+                if (waiting != null)
+                {
+                    template.EndSyncRequest(req.ClusterId, waiting.Id,
+                        VmTemplateRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                }
                 break;
         }
 

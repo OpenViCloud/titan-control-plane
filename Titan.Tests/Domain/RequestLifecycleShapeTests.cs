@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
 
@@ -15,8 +16,9 @@ namespace Titan.Tests.Domain;
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
 // semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
-// NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests and LoadBalancerRequestLifecycleTests hold those). A child entity (VolumeSnapshot,
-// FirewallRule, VmSnapshot) is on the shape with internal methods, reached through its root.
+// NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
+// VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
+// VmTemplateCluster) is on the shape with internal methods, reached through its root.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
@@ -65,6 +67,12 @@ public class RequestLifecycleShapeTests
             network.EndRequest(network.Pending!.Id,
                 NetworkRequestEnd.Done("net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1")));
             return network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        },
+        [typeof(VmTemplateCluster)] = () =>
+        {
+            VmTemplate template = VmTemplate.Create("shape", null, "ubuntu/22.04", 10, "m");
+            template.RequestSyncIn("cluster-a");
+            return template.Clusters.Single();
         },
     };
 
@@ -128,6 +136,7 @@ public class RequestLifecycleShapeTests
         if (type == typeof(Network)) return NetworkRequestEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
         if (type == typeof(FirewallRule)) return FirewallRuleRequestEnd.Done("foreign", FirewallRuleState.enabled);
         if (type == typeof(LoadBalancer)) return LoadBalancerRequestEnd.Done("foreign");
+        if (type == typeof(VmTemplateCluster)) return VmTemplateRequestEnd.Done("foreign");
         throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
     }
 
@@ -175,6 +184,15 @@ public class RequestLifecycleShapeTests
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "LoadBalancer")],
             except: ["CreateLoadBalancerCommandHandler", "RenameLoadBalancerCommandHandler"], atLeast: 5, "load balancer");
+    }
+
+    // Every template handler is a request or a report on rows that already exist: sync-all locks each template it asks
+    // a sync of, the two callbacks and the old route lock the template they report on.
+    [Fact]
+    public void EveryTemplateLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks([Path.Combine("Titan.Application", "Commands", "Catalog", "VmTemplate")],
+            except: [], atLeast: 4, "template");
     }
 
     private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
@@ -257,6 +275,17 @@ public class RequestLifecycleShapeTests
             if (!inline && !throughTheHelper) without.Add("EnqueueLoadBalancer" + m.Groups[1].Value);
         }
         Assert.True(without.Count == 0, "Load balancer command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
+    }
+
+    [Fact]
+    public void EveryTemplateCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        Match enqueue = Regex.Match(src, @"public Task EnqueueTemplateSyncAsync\([\s\S]*?ProviderCommandRerun\.\w+, ct\);");
+        Assert.True(enqueue.Success, "EnqueueTemplateSyncAsync not found: the scan is blind");
+
+        Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
+            "The template sync payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
     }
 
     [Fact]

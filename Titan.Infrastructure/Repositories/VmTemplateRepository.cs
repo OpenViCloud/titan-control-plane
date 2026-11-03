@@ -11,6 +11,13 @@ public class VmTemplateRepository(TitanDbContext db) : IVmTemplateRepository
     public async Task<VmTemplate?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         await db.VmTemplates.Include(t => t.Clusters).FirstOrDefaultAsync(t => t.Id == id, ct);
 
+    // The template's row, not its cluster rows: a cluster row a sync-all adds does not exist yet to be locked.
+    public async Task<VmTemplate?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.vm_templates WHERE id = {id} FOR UPDATE", ct);
+        return await FindByIdAsync(id, ct);
+    }
+
     // Unordered: ListTemplatesQueryHandler owns the customer-facing name ordering.
     public async Task<List<VmTemplate>> ListSyncedInClusterAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmTemplates

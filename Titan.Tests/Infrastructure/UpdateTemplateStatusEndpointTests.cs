@@ -35,7 +35,7 @@ public class UpdateTemplateStatusEndpointTests
         await ep.HandleAsync(ValidRequest, CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        templates.Verify(t => t.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public class UpdateTemplateStatusEndpointTests
         await ep.HandleAsync(ValidRequest, CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        templates.Verify(t => t.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A worker older than per-cluster templates reports no cluster: whose alias it is cannot be told, so nothing is
@@ -67,6 +67,6 @@ public class UpdateTemplateStatusEndpointTests
         await ep.HandleAsync(new UpdateTemplateStatusRequest(Report: "Created", ClusterId: null, ExternalId: "tpl-205"), CancellationToken.None);
 
         Assert.Equal(400, ep.HttpContext.Response.StatusCode);
-        templates.Verify(t => t.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        templates.Verify(t => t.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

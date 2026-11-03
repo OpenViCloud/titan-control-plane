@@ -4,11 +4,11 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
 
-/// Reads core.pending_requests, the view over every lifecycle table's waiting request (today: vms, volumes,
-/// volume_snapshots, networks, firewall_rules, vm_snapshots, load_balancers; each rollout phase adds its table —
-/// titan-ops architecture/resource-lifecycle.md#rollout), and joins the command row whose key the request names:
-/// `{resource}-{kind}-{id}-{requestId}` (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key, FirewallRule*Key,
-/// VmSnapshot*Key, LoadBalancer*Key).
+/// Reads core.pending_requests, the view over every lifecycle table's waiting request (vms, volumes, volume_snapshots,
+/// networks, firewall_rules, vm_snapshots, load_balancers, vm_template_clusters), and joins the command row whose key the
+/// request names: `{resource}-{kind}-{id}-{requestId}` (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key,
+/// FirewallRule*Key, VmSnapshot*Key, LoadBalancer*Key), with the cluster before the request id for a template's sync
+/// (TemplateSyncKey), the one row of the view that carries a cluster.
 public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
 {
     public async Task<IReadOnlyList<StuckRequest>> ListStuckAsync(TimeSpan olderThan, CancellationToken ct = default)
@@ -20,7 +20,8 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
                    p.kind AS "Kind", p.asked_at AS "AskedAt", c.status AS "CommandStatus"
             FROM core.pending_requests p
             LEFT JOIN core.provider_commands c
-                   ON c.key = p.resource || '-' || lower(p.kind) || '-' || p.id::text || '-' || p.request_id::text
+                   ON c.key = p.resource || '-' || lower(p.kind) || '-' || p.id::text || '-'
+                              || coalesce(p.cluster_id || '-', '') || p.request_id::text
             WHERE p.asked_at < {cutoff}
             ORDER BY p.asked_at
             """).ToListAsync(ct);
@@ -32,7 +33,7 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
     {
         public string Resource { get; set; } = default!;
         public Guid Id { get; set; }
-        public Guid TenantId { get; set; }
+        public Guid? TenantId { get; set; }
         public Guid RequestId { get; set; }
         public string Kind { get; set; } = default!;
         public DateTimeOffset AskedAt { get; set; }

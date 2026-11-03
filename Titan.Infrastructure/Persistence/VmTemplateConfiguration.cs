@@ -98,7 +98,11 @@ public class VmTemplateClusterConfiguration : IEntityTypeConfiguration<VmTemplat
         // Incus has no status word for an image alias: existence only (titan-ops features/catalog/design.md#template-state-is-existence).
         builder.Property(z => z.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(z => z.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(z => z.PendingIntentId).HasColumnName("pending_intent_id");
+        // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
+        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
+        builder.Property<VmTemplateRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Ignore(z => z.Pending);
         builder.Property(z => z.RequestFailureReason).HasColumnName("request_failure_reason").HasColumnType("text");
         builder.Property(z => z.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(z => z.RequestFailedAt).HasColumnName("request_failed_at");

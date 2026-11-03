@@ -2,12 +2,14 @@ using FastEndpoints;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
+using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Compute.Volume;
 using Titan.Application.Commands.Compute.VmSnapshot;
 using Titan.Application.Commands.Compute.VolumeSnapshot;
 using Titan.Application.Commands.Networking.FirewallRule;
 using Titan.Application.Commands.Networking.Network;
+using Titan.Application.Options;
 using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Endpoints.VolumeSnapshots;
@@ -39,6 +41,49 @@ public class InternalTokenCallbackTests
     private static IActivityRecorder StrictActivity() => new Mock<IActivityRecorder>(MockBehavior.Strict).Object;
 
     private static ILoadBalancerRepository StrictLoadBalancers() => new Mock<ILoadBalancerRepository>(MockBehavior.Strict).Object;
+
+    private static IVmTemplateRepository StrictTemplates() => new Mock<IVmTemplateRepository>(MockBehavior.Strict).Object;
+
+    private static readonly ClusterOptions OneCluster = new() { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task EndTemplateSyncRequest_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<EndTemplateSyncRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["templateId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["clusterId"] = "mock";
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new EndTemplateSyncRequestCommandHandler(StrictTemplates(), OneCluster), ConfigWithToken());
+
+        await ep.HandleAsync(new EndTemplateSyncRequestBody("Done", ExternalId: "tpl-1"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveTemplate_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveTemplateEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["templateId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["clusterId"] = "mock";
+                SetToken(ctx, token);
+            },
+            new ObserveTemplateCommandHandler(StrictTemplates(), OneCluster), ConfigWithToken());
+
+        await ep.HandleAsync(new ObserveTemplateBody(false), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
 
     [Theory]
     [InlineData(null)]
