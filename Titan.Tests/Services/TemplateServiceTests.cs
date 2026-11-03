@@ -764,7 +764,7 @@ public class TemplateServiceTests
         VerifySync(wf, Times.Never());
     }
 
-    [Fact] // one cluster's enqueue failing costs neither the other templates nor the other cluster theirs (D-5)
+    [Fact]
     public async Task SyncAll_WhenAnEnqueueThrows_FailsWhole_AndSavesNoRequest()
     {
         var a = VmTemplate.Create("a", null, "img", 10, TierS);

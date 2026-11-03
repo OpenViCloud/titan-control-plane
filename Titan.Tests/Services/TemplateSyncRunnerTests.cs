@@ -137,7 +137,7 @@ public class TemplateSyncRunnerTests
         Assert.Equal(TemplateSyncOutcome.TimedOut, res.Outcome);
     }
 
-    [Fact] // D-5: the verdict covers the whole catalog — one failed cluster fails the run though the other synced
+    [Fact] // The verdict covers the whole catalog — one failed cluster fails the run though the other synced
     public async Task OneClusterFailed_IsHasFailures_EvenWhenTheOtherClusterSynced()
     {
         _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "Failed")]);

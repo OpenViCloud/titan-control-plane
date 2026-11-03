@@ -244,8 +244,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
                 .ToList()
         };
 
-    // One row per sync request of one cluster (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The
-    // cluster stays in the key so the key says whose sync it is, and the stuck-request query rebuilds it.
+    // One row per sync request of one cluster (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueTemplateSyncAsync(Guid templateId, string clusterId, Guid requestId, string name, string? description,
         string osImageName, string? imageUrl, int? rootDiskSizeGb, CancellationToken ct = default) =>
         EnqueueAsync(TemplateSyncKey(templateId, clusterId, requestId), ProviderCommandKinds.TemplateSync, clusterId,
