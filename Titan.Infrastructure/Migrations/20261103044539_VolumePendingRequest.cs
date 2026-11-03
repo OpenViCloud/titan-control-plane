@@ -37,9 +37,10 @@ UPDATE core.volume_snapshots SET
     pending_request_asked_at = now()
 WHERE pending_request_id IS NOT NULL;";
 
-        /// A detach with no open command has no report coming: the one Volume.DetachWithDeletedVm left never had one, and
-        /// a customer's whose command closed was waiting for an observation that no longer ends it. The desired attachment
-        /// stays as asked, which is what a VM's delete now leaves on a volume with nothing waiting.
+        /// A detach with no open command has no report coming: the one Volume.DetachWithDeletedVm left never had one, and a
+        /// customer's whose command already closed sends none either; until rollout phase 6 only an observation showing the
+        /// volume free would still end it. Both end here, the desired attachment staying as asked, which is what a VM's
+        /// delete now leaves on a volume with nothing waiting.
         private const string EndTheDetachesWithoutAnOpenCommandSql = @"
 UPDATE core.volumes v SET pending_request_id = NULL, pending_request_kind = NULL, pending_request_asked_at = NULL
 WHERE v.pending_request_kind = 'Detach'
