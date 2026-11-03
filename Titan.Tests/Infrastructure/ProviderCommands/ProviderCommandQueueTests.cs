@@ -76,8 +76,6 @@ public class ProviderCommandQueueTests
     // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
     // handler saves nothing of this request.
     [Theory]
-    [InlineData("vm-snapshot-revert")]
-    [InlineData("vm-snapshot-delete")]
     [InlineData("load-balancer-delete")]
     public async Task NewRequest_OnTheOpenRowOfItsKey_IsRequestInProgress(string key)
     {
@@ -98,8 +96,6 @@ public class ProviderCommandQueueTests
 
     private static Task EnqueueNewAsync(ProviderCommandQueue queue, string key, Guid id) => key switch
     {
-        "vm-snapshot-revert" => queue.EnqueueVmSnapshotRevertAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
-        "vm-snapshot-delete" => queue.EnqueueVmSnapshotDeleteAsync(id, Guid.Empty, "s-x", "t-1", "mock"),
         "load-balancer-delete" => queue.EnqueueLoadBalancerDeleteAsync(id, "net-x", "2001:db8::1:1", "t-1", "mock"),
         _ => throw new ArgumentOutOfRangeException(nameof(key), key, "not a resource key"),
     };
@@ -235,6 +231,64 @@ public class ProviderCommandQueueTests
             [
                 $"network-delete-{networkId}-{requests[0]}", $"network-delete-{networkId}-{requests[1]}",
                 $"firewall-rule-delete-{ruleId}-{requests[2]}", $"firewall-rule-delete-{ruleId}-{requests[3]}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
+    }
+
+    // A VM snapshot's keys carry the request id, as the network's: each request its own row, and the payload names the
+    // request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public async Task VmSnapshotRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
+    {
+        Guid snapshotId = Guid.NewGuid();
+        Guid vmId = Guid.NewGuid();
+        Guid create = Guid.NewGuid();
+        Guid revert = Guid.NewGuid();
+        Guid delete = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueVmSnapshotCreateAsync(snapshotId, create, vmId, "vm-x", "nightly", "t-1", "mock");
+        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, revert, vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, delete, vmId, "vm-x/s-x", "t-1", "mock");
+
+        Assert.Equal(
+            [
+                $"vm-snapshot-create-{snapshotId}-{create}", $"vm-snapshot-revert-{snapshotId}-{revert}",
+                $"vm-snapshot-delete-{snapshotId}-{delete}",
+            ],
+            _repo.Rows.Select(r => r.Key));
+        Assert.Equal(
+            [ProviderCommandKinds.VmSnapshotCreate, ProviderCommandKinds.VmSnapshotRevert, ProviderCommandKinds.VmSnapshotDelete],
+            _repo.Rows.Select(r => r.Kind));
+        Guid[] requests = [create, revert, delete];
+        for (int i = 0; i < requests.Length; i++)
+        {
+            using JsonDocument payload = JsonDocument.Parse(_repo.Rows[i].Payload);
+            Assert.Equal(requests[i].ToString(), payload.RootElement.GetProperty("requestId").GetString());
+            Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
+        }
+    }
+
+    // A second revert or delete of the same snapshot is a new request with its own row, never a 409 on the first's open
+    // row (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public async Task VmSnapshotRevertAndDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
+    {
+        Guid snapshotId = Guid.NewGuid();
+        Guid vmId = Guid.NewGuid();
+        Guid[] requests = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, requests[0], vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, requests[1], vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, requests[2], vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, requests[3], vmId, "vm-x/s-x", "t-1", "mock");
+
+        Assert.Equal(
+            [
+                $"vm-snapshot-revert-{snapshotId}-{requests[0]}", $"vm-snapshot-revert-{snapshotId}-{requests[1]}",
+                $"vm-snapshot-delete-{snapshotId}-{requests[2]}", $"vm-snapshot-delete-{snapshotId}-{requests[3]}",
             ],
             _repo.Rows.Select(r => r.Key));
         Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
@@ -533,11 +587,11 @@ public class ProviderCommandQueueTests
             case ProviderCommandKinds.VolumeSnapshotRestore:
                 return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, Guid.NewGuid(), "vol-x/snap-x", "restored", project, cluster);
             case ProviderCommandKinds.VmSnapshotCreate:
-                return queue.EnqueueVmSnapshotCreateAsync(id, other, "vm-x", "before-upgrade", project, cluster);
+                return queue.EnqueueVmSnapshotCreateAsync(id, Guid.NewGuid(), other, "vm-x", "before-upgrade", project, cluster);
             case ProviderCommandKinds.VmSnapshotRevert:
-                return queue.EnqueueVmSnapshotRevertAsync(id, other, "vm-x/snap-x", project, cluster);
+                return queue.EnqueueVmSnapshotRevertAsync(id, Guid.NewGuid(), other, "vm-x/snap-x", project, cluster);
             case ProviderCommandKinds.VmSnapshotDelete:
-                return queue.EnqueueVmSnapshotDeleteAsync(id, other, "vm-x/snap-x", project, cluster);
+                return queue.EnqueueVmSnapshotDeleteAsync(id, Guid.NewGuid(), other, "vm-x/snap-x", project, cluster);
             case ProviderCommandKinds.VmBackup:
                 return queue.EnqueueVmBackupAsync(id, "vm-x", project, other, cluster, new DateOnly(2026, 10, 26));
             case ProviderCommandKinds.VolumeBackup:

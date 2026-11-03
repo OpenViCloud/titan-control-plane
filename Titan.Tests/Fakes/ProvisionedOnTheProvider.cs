@@ -134,6 +134,42 @@ namespace Titan.Domain.Aggregates.Vm
                 vm.EndRequest(create.Id, VmRequestEnd.Failed(externalId, null, reason, detail));
             }
         }
+        /// The snapshot's create command's Done with the snapshot's provider id.
+        public static void MarkSnapshotCreated(this Vm vm, Guid snapshotId, string externalId)
+        {
+            VmSnapshot snapshot = vm.Snapshots.Single(s => s.Id == snapshotId);
+            if (snapshot.Pending is { Kind: VmSnapshotRequestKind.Create } create)
+            {
+                vm.EndSnapshotRequest(snapshotId, create.Id, VmSnapshotRequestEnd.Done(externalId));
+            }
+        }
+    }
+
+    /// The same replays on one VM snapshot, for tests that build a snapshot's history directly, through the real
+    /// EndRequest. A replay for a request not waiting does nothing, like the report it stands for.
+    public static class VmSnapshotProvisionedOnTheProvider
+    {
+        /// The create command's Done with the snapshot's provider id. True when it ended the create.
+        public static bool MarkCreated(this VmSnapshot snapshot, string externalId) =>
+            snapshot.Pending is { Kind: VmSnapshotRequestKind.Create } create
+            && snapshot.EndRequest(create.Id, VmSnapshotRequestEnd.Done(externalId)) != null;
+
+        /// The create command's give-up.
+        public static void MarkRequestFailed(this VmSnapshot snapshot, string? reason, string? detail)
+        {
+            if (snapshot.Pending is { Kind: VmSnapshotRequestKind.Create } create)
+            {
+                snapshot.EndRequest(create.Id, VmSnapshotRequestEnd.Failed(null, reason, detail));
+            }
+        }
+
+        /// The revert command's Done. True when a revert was waiting.
+        public static bool MarkReverted(this VmSnapshot snapshot) =>
+            snapshot.Pending is { Kind: VmSnapshotRequestKind.Revert } revert
+            && snapshot.EndRequest(revert.Id, VmSnapshotRequestEnd.Done(null)) != null;
+
+        /// Incus no longer has it after Titan's delete: its own delete's Done, or its VM's.
+        public static bool MarkDeleted(this VmSnapshot snapshot) => snapshot.EndWithItsVm();
     }
 }
 

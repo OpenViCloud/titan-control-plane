@@ -2,6 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 using VmSnapshotTransition = Titan.Domain.Aggregates.Vm.VmSnapshotTransition;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
@@ -18,15 +19,17 @@ public class DeleteVmSnapshotCommandHandler(
     {
         var callerId = currentUser.RequireTenantId();
         var vmId = command.VmId;
-        var vm = await ComputeOwnership.RequireVmAsync(vmRepo, callerId, vmId, ct);
+        // Locked, so two deletes of the snapshot take turns and the second sees the first waiting
+        // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+        var vm = await ComputeOwnership.RequireVmForUpdateAsync(vmRepo, callerId, vmId, ct);
 
         // A snapshot of another VM answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-        // This delete was already requested, or the snapshot is already deleted.
-        // Answer like the first request: nothing recorded, nothing sent.
+        // This delete is still waiting, or the snapshot is already deleted. A delete that failed is not a repeat:
+        // it falls through and the aggregate decides. Answer like the first request: nothing recorded, nothing sent.
         bool alreadyRequestedOrDone = snapshot.Transition == VmSnapshotTransition.Deleting || snapshot.IsTerminal;
         if (alreadyRequestedOrDone)
         {
@@ -45,11 +48,12 @@ public class DeleteVmSnapshotCommandHandler(
             return;
         }
 
-        string externalSnapshotId = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket ticket = vm.RequestSnapshotDelete(snapshot.Id);
         activity.Stage("vm_snapshot.delete_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with RequestDelete
 
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, vmId, externalSnapshotId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, ticket.RequestId, vmId, ticket.ProviderId, projectName,
+            vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
     }
 }

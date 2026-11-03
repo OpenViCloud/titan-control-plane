@@ -318,11 +318,10 @@ public class Vm : AggregateRoot
 
     // ---- Snapshots: the VM counts its snapshots, keeps the "no delete under a snapshot command" rule, and routes each
     // call to the snapshot it names (titan-ops architecture/code-structure.md#child-entity). Logic stays on VmSnapshot;
-    // this is the way in. The snapshot keeps today's request shape until its own rollout phase
-    // (titan-ops architecture/resource-lifecycle.md#rollout).
+    // this is the way in.
 
     /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable). The create request is the
-    /// snapshot's own PendingIntentId.
+    /// snapshot's own Pending.
     public VmSnapshotTicket AddSnapshot(string name)
     {
         EnsureSnapshottable();
@@ -346,40 +345,32 @@ public class Vm : AggregateRoot
     }
 
     /// Intent on one snapshot: the VM must accept a revert (its own rule first), then the snapshot must rest on
-    /// Incus; returns the snapshot's provider id for the command. Titan does not stop or start the VM for it.
-    public string RevertSnapshot(Guid snapshotId)
+    /// Incus; returns the request and the snapshot's provider id for the command. Titan does not stop or start the VM
+    /// for it.
+    public RequestTicket RevertSnapshot(Guid snapshotId)
     {
         VmSnapshot snapshot = RequireSnapshot(snapshotId);
         EnsureSnapshottable();
         return snapshot.Revert();
     }
 
-    /// Intent on one snapshot: its delete goes through Incus; returns the snapshot's provider id for the command.
-    public string RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
+    /// Intent on one snapshot: its delete goes through Incus; returns the request and the snapshot's provider id for
+    /// the command.
+    public RequestTicket RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
 
     /// Intent on one snapshot whose create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
     public void DeleteSnapshotLocally(Guid snapshotId) => RequireSnapshot(snapshotId).DeleteLocally();
 
-    /// The snapshot's revert or delete command gave up (titan-ops architecture/desired-and-current.md#abandoned-request).
-    public void AbandonSnapshotRequest(Guid snapshotId, string? reason, string? detail) =>
-        RequireSnapshot(snapshotId).AbandonRequest(reason, detail);
+    /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
+    /// another request than the one the snapshot waits on.
+    public PendingRequest<VmSnapshotRequestKind>? EndSnapshotRequest(Guid snapshotId, Guid requestId, VmSnapshotRequestEnd end) =>
+        RequireSnapshot(snapshotId).EndRequest(requestId, end);
 
-    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges), each
-    // returning what the snapshot's own method returns.
+    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
-    public bool MarkSnapshotCreated(Guid snapshotId, string externalId) =>
-        RequireSnapshot(snapshotId).MarkCreated(externalId);
-
-    public bool MarkSnapshotObserved(Guid snapshotId) => RequireSnapshot(snapshotId).MarkObserved();
-
-    public bool MarkSnapshotReverted(Guid snapshotId) => RequireSnapshot(snapshotId).MarkReverted();
+    public void MarkSnapshotObserved(Guid snapshotId) => RequireSnapshot(snapshotId).MarkObserved();
 
     public void MarkSnapshotNotFound(Guid snapshotId) => RequireSnapshot(snapshotId).MarkNotFound();
-
-    public bool MarkSnapshotDeleted(Guid snapshotId) => RequireSnapshot(snapshotId).MarkDeleted();
-
-    public void MarkSnapshotRequestFailed(Guid snapshotId, string? reason, string? detail) =>
-        RequireSnapshot(snapshotId).MarkRequestFailed(reason, detail);
 
     /// Intent, Titan-side display name only. The aggregate carries it out itself, so the check sits inside
     /// the mutation (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
@@ -457,7 +448,7 @@ public class Vm : AggregateRoot
                 PublicIpv6Address = null;
                 foreach (VmSnapshot snapshot in _snapshots)
                 {
-                    bool itsOwnDeleteWasWaiting = snapshot.MarkDeleted();
+                    bool itsOwnDeleteWasWaiting = snapshot.EndWithItsVm();
                     if (itsOwnDeleteWasWaiting)
                     {
                         snapshotsWhoseDeleteEnded.Add(snapshot);

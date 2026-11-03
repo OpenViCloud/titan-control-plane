@@ -227,7 +227,10 @@ public class VmSnapshotChildTests
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.DeleteSnapshotLocally(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.RevertSnapshot(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.RequestSnapshotDelete(foreign.Id)).Code);
-        Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.MarkSnapshotDeleted(foreign.Id)).Code);
+        Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(
+            () => vm.EndSnapshotRequest(foreign.Id, foreign.Pending!.Id, VmSnapshotRequestEnd.Done("vm42/s9"))).Code);
+        Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.MarkSnapshotObserved(foreign.Id)).Code);
+        Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.MarkSnapshotNotFound(foreign.Id)).Code);
     }
 
     // A revert checks the VM first, then the snapshot, in one call on the root.
@@ -248,7 +251,7 @@ public class VmSnapshotChildTests
 
         var ready = resting.WithSnapshot("ready");
         ready.MarkCreated("vm42/s2");
-        Assert.Equal("vm42/s2", resting.RevertSnapshot(ready.Id));
+        Assert.Equal("vm42/s2", resting.RevertSnapshot(ready.Id).ProviderId);
         Assert.Equal(VmSnapshotTransition.Reverting, ready.Transition);
     }
 
@@ -260,22 +263,27 @@ public class VmSnapshotChildTests
         var snapshot = vm.WithSnapshot("s");
         var untouched = vm.WithSnapshot("u");
 
-        Assert.True(vm.MarkSnapshotCreated(snapshot.Id, "vm42/s1"));
-        Assert.False(vm.MarkSnapshotObserved(snapshot.Id));
-        Assert.Equal("vm42/s1", vm.RevertSnapshot(snapshot.Id));
-        Assert.True(vm.MarkSnapshotReverted(snapshot.Id));
-        Assert.False(vm.MarkSnapshotReverted(snapshot.Id));
+        Assert.Equal(VmSnapshotRequestKind.Create,
+            vm.EndSnapshotRequest(snapshot.Id, snapshot.Pending!.Id, VmSnapshotRequestEnd.Done("vm42/s1"))!.Kind);
+        vm.MarkSnapshotObserved(snapshot.Id);
+        RequestTicket revert = vm.RevertSnapshot(snapshot.Id);
+        Assert.Equal("vm42/s1", revert.ProviderId);
+        Assert.Equal(VmSnapshotRequestKind.Revert,
+            vm.EndSnapshotRequest(snapshot.Id, revert.RequestId, VmSnapshotRequestEnd.Done(null))!.Kind);
+        Assert.Null(vm.EndSnapshotRequest(snapshot.Id, revert.RequestId, VmSnapshotRequestEnd.Done(null)));
 
-        Assert.Equal("vm42/s1", vm.RequestSnapshotDelete(snapshot.Id));
+        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id);
+        Assert.Equal("vm42/s1", delete.ProviderId);
         Assert.Equal(VmSnapshotTransition.Deleting, snapshot.Transition);
-        vm.AbandonSnapshotRequest(snapshot.Id, "refused", "raw");
+        vm.EndSnapshotRequest(snapshot.Id, delete.RequestId, VmSnapshotRequestEnd.Failed(null, "refused", "raw"));
         Assert.Null(snapshot.Transition);
         Assert.Equal("refused", snapshot.RequestFailureReason);
 
         vm.MarkSnapshotNotFound(snapshot.Id);
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
-        vm.RequestSnapshotDelete(snapshot.Id);
-        Assert.True(vm.MarkSnapshotDeleted(snapshot.Id));
+        RequestTicket again = vm.RequestSnapshotDelete(snapshot.Id);
+        Assert.NotNull(vm.EndSnapshotRequest(snapshot.Id, again.RequestId, VmSnapshotRequestEnd.Done(null)));
+        Assert.True(snapshot.IsTerminal);
 
         Assert.Equal(VmSnapshotTransition.Creating, untouched.Transition);
         Assert.Null(untouched.ExternalId);
@@ -286,7 +294,7 @@ public class VmSnapshotChildTests
     {
         var vm = RunningVm();
         var failed = vm.WithSnapshot("failed");
-        vm.MarkSnapshotRequestFailed(failed.Id, "reason", "detail");
+        vm.EndSnapshotRequest(failed.Id, failed.Pending!.Id, VmSnapshotRequestEnd.Failed(null, "reason", "detail"));
 
         vm.DeleteSnapshotLocally(failed.Id);
 

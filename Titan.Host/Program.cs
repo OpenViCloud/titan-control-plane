@@ -272,6 +272,8 @@ builder.Services.AddScoped<VmSnapCmd.CreateVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.RevertVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.DeleteVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.UpdateVmSnapshotStatusCommandHandler>();
+builder.Services.AddScoped<VmSnapCmd.EndVmSnapshotRequestCommandHandler>();
+builder.Services.AddScoped<VmSnapCmd.ObserveVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapQry.ListVmSnapshotsQueryHandler>();
 builder.Services.AddScoped<VmSnapQry.ListReconcilableVmSnapshotsQueryHandler>();
 builder.Services.AddScoped<ListReconcilableVmsQueryHandler>();

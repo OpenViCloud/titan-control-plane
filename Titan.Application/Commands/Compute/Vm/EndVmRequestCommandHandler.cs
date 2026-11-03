@@ -21,7 +21,7 @@ public class EndVmRequestCommandHandler(
     public async Task HandleAsync(EndVmRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the VM is loaded: a malformed report is the worker's bug, whatever the VM.
-        RequestOutcome outcome = ParseOutcome(command.Outcome);
+        RequestOutcome outcome = VmReports.ParseOutcome(command.Outcome);
         VmObservation? observed = VmReports.ParseObservation(command.Observed);
 
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
@@ -47,18 +47,5 @@ public class EndVmRequestCommandHandler(
 
         await VmReports.RecordEndedAsync(vm, ended, outcome, activity, volumeRepo, ct);
         await repo.SaveAsync(ct);
-    }
-
-    private static RequestOutcome ParseOutcome(string outcome)
-    {
-        switch (outcome)
-        {
-            case "Done":
-                return RequestOutcome.Done;
-            case "Failed":
-                return RequestOutcome.Failed;
-            default:
-                throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
-        }
     }
 }
