@@ -20,7 +20,7 @@ public class FirewallRuleLifecycleTests
     }
 
     [Fact]
-    public void MarkCreated_RecordsTheIdAndThatIncusHasIt_KeepingTheFirstId_AndLeavesTheStateToTheReconciler()
+    public void MarkCreated_RecordsTheIdAndThatIncusHasIt_EndsTheCreate_KeepingTheFirstId_AndLeavesTheStateToTheReconciler()
     {
         var rule = NewRule();
 
@@ -30,21 +30,6 @@ public class FirewallRuleLifecycleTests
         Assert.Equal("acl-n/rule-1", rule.ExternalId);
         Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
         Assert.Null(rule.CurrentState);
-        Assert.Equal(FirewallRuleTransition.Creating, rule.Transition);
-    }
-
-    [Fact]
-    public void FirstObservation_FulfilsTheCreateOnce()
-    {
-        var rule = NewRule();
-        rule.MarkCreated("acl-n/rule-1");
-
-        bool first = rule.MarkObserved(FirewallRuleState.enabled);
-        bool repeat = rule.MarkObserved(FirewallRuleState.enabled);
-
-        Assert.True(first);
-        Assert.False(repeat);
-        Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
         Assert.Null(rule.Transition);
     }
 
@@ -69,9 +54,8 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.RequestDelete();
 
-        bool fulfilled = rule.MarkObserved(FirewallRuleState.enabled);
+        rule.MarkObserved(FirewallRuleState.enabled);
 
-        Assert.False(fulfilled);
         Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
     }
@@ -100,17 +84,6 @@ public class FirewallRuleLifecycleTests
 
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
         Assert.True(rule.MarkDeleted());
-    }
-
-    [Fact]
-    public void NotFound_EndsAWaitingCreate()
-    {
-        var rule = NewRule();
-        rule.MarkCreated("acl-n/rule-1");
-
-        rule.MarkNotFound();
-
-        Assert.Null(rule.Transition);
     }
 
     [Fact]
@@ -150,28 +123,6 @@ public class FirewallRuleLifecycleTests
         Assert.Null(rule.RequestFailureReason);
     }
 
-    [Fact]
-    public void AbandonRequest_OnAWaitingDelete_GivesTheRuleBack_WithTheReason_AndTheNextDeleteTriesAgain()
-    {
-        var rule = ActiveRule();
-        rule.RequestDelete();
-
-        rule.AbandonRequest("Firewall rule deletion failed.", "raw");
-
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
-        Assert.Null(rule.Transition);
-        Assert.Equal("Firewall rule deletion failed.", rule.RequestFailureReason);
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete());
-    }
-
-    [Fact]
-    public void AbandonRequest_WithNoDeleteWaiting_IsRefused()
-    {
-        var rule = ActiveRule();
-
-        Assert.Equal("FIREWALL_RULE_INVALID_STATE", Assert.Throws<BusinessException>(() => rule.AbandonRequest("r", "d")).Code);
-    }
-
     // ── RequestDelete ──
 
     [Fact]
@@ -179,7 +130,7 @@ public class FirewallRuleLifecycleTests
     {
         var rule = ActiveRule();
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete());
+        Assert.Equal("acl-n/rule-1", rule.RequestDelete().ProviderId);
         Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
@@ -193,7 +144,7 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.MarkObserved(state);
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete());
+        Assert.Equal("acl-n/rule-1", rule.RequestDelete().ProviderId);
     }
 
     [Fact]
@@ -202,7 +153,7 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.MarkNotFound();
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete());
+        Assert.Equal("acl-n/rule-1", rule.RequestDelete().ProviderId);
     }
 
     [Fact]
@@ -233,7 +184,7 @@ public class FirewallRuleLifecycleTests
     // ── Deleted ──
 
     [Fact]
-    public void MarkDeleted_OnAWaitingDelete_FulfilsIt_AndIsTerminal()
+    public void MarkDeleted_OnAWaitingDelete_EndsIt_Once_AndIsTerminal()
     {
         var rule = ActiveRule();
         rule.RequestDelete();
@@ -245,14 +196,38 @@ public class FirewallRuleLifecycleTests
         Assert.Null(rule.CurrentState);
     }
 
-    // The network's delete takes its ACL, and the rule with it: Deleted with no delete of its own asked fulfils nothing.
+    // The network's delete takes its ACL, and the rule with it, whatever the rule waited on; only the rule's own delete
+    // is named, so its outcome is recorded once.
     [Fact]
-    public void MarkDeleted_WithNoDeleteOfItsOwn_FulfilsNothing_ButIsTerminal()
+    public void EndWithItsNetwork_WithNoDeleteOfItsOwn_NamesNothing_ButIsTerminal()
     {
         var rule = ActiveRule();
 
-        Assert.False(rule.MarkDeleted());
+        Assert.False(rule.EndWithItsNetwork());
         Assert.True(rule.IsTerminal);
+        Assert.Null(rule.Pending);
+    }
+
+    [Fact]
+    public void EndWithItsNetwork_WhileItsOwnDeleteWaits_SaysSo_Once()
+    {
+        var rule = ActiveRule();
+        rule.RequestDelete();
+
+        Assert.True(rule.EndWithItsNetwork());
+        Assert.False(rule.EndWithItsNetwork());
+        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Null(rule.Transition);
+    }
+
+    [Fact]
+    public void EndWithItsNetwork_WhileItsCreateWaits_EndsTheCreate_AndIsTerminal()
+    {
+        var rule = NewRule();
+
+        Assert.False(rule.EndWithItsNetwork());
+        Assert.True(rule.IsTerminal);
+        Assert.Null(rule.Transition);
     }
 
     [Fact]
@@ -262,7 +237,7 @@ public class FirewallRuleLifecycleTests
         rule.RequestDelete();
         rule.MarkDeleted();
 
-        Assert.False(rule.MarkObserved(FirewallRuleState.enabled));
+        rule.MarkObserved(FirewallRuleState.enabled);
         rule.MarkNotFound();
         rule.MarkCreated("acl-n/other");
         rule.MarkRequestFailed("late", "late");

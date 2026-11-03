@@ -140,6 +140,88 @@ public class InternalTokenCallbackTests
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }
 
+    private static INetworkRepository StrictNetworks() => new Mock<INetworkRepository>(MockBehavior.Strict).Object;
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task EndNetworkRequest_WithoutTheToken_Returns401(string? token)
+    {
+        var handler = new EndNetworkRequestCommandHandler(StrictNetworks(),
+            new Titan.Domain.Services.NetworkRoutes(new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object), StrictActivity());
+        var ep = Factory.Create<EndNetworkRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            handler, ConfigWithToken());
+
+        await ep.HandleAsync(new EndNetworkRequestBody("Done", ExternalId: "net-7",
+            Observed: new NetworkObservedBody("Created", "10.0.0.0/24", "10.0.0.1")), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveNetwork_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveNetworkEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new ObserveNetworkCommandHandler(StrictNetworks()), ConfigWithToken());
+
+        await ep.HandleAsync(new ObserveNetworkBody(Exists: true, new NetworkObservedBody("Created")), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task EndFirewallRuleRequest_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<EndFirewallRuleRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["ruleId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new EndFirewallRuleRequestCommandHandler(StrictNetworks(), StrictActivity()), ConfigWithToken());
+
+        await ep.HandleAsync(new EndFirewallRuleRequestBody("Done", ExternalId: "acl/rule-1",
+            Observed: new FirewallRuleObservedBody("enabled")), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveFirewallRule_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveFirewallRuleEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["ruleId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new ObserveFirewallRuleCommandHandler(StrictNetworks()), ConfigWithToken());
+
+        await ep.HandleAsync(new ObserveFirewallRuleBody(Exists: true, new FirewallRuleObservedBody("enabled")), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
     private static string SolutionRoot()
     {
         DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);

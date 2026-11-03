@@ -28,6 +28,7 @@ public class DesiredCurrentOwnershipTests
         ["VmSnapshot.DeleteLocally"] = "delete of a snapshot whose create failed before Incus had it: nothing to observe",
         ["LoadBalancer.DeleteLocally"] = "delete of a load balancer whose create failed before Incus had it: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndRequest: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.EndWithItsNetwork"] = "part of Network.EndRequest: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -66,12 +67,16 @@ public class DesiredCurrentOwnershipTests
 
     // The report of a request's own command (EndRequest, titan-ops architecture/resource-lifecycle.md#shape) is the one
     // method that may write both: what the worker saw is current, and a failed request puts desired back. It is
-    // neither an intent nor an observation, so both scans skip it; every aggregate on the new shape gets one.
+    // neither an intent nor an observation, so both scans skip it; every aggregate on the new shape gets one, and a root
+    // reaches a child's through End<Child>Request.
     [Fact]
     public void ReportMethods_AreOnlyEndRequest()
     {
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
-        Assert.Equal(["Vm.EndRequest", "Volume.EndRequest", "VolumeSnapshot.EndRequest"], reports);
+        Assert.Equal(
+            ["FirewallRule.EndRequest", "Network.EndFirewallRuleRequest", "Network.EndRequest", "Vm.EndRequest",
+                "Volume.EndRequest", "Volume.EndSnapshotRequest", "VolumeSnapshot.EndRequest"],
+            reports);
     }
 
     [Fact]
@@ -123,7 +128,8 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        public bool IsReport => Key.EndsWith(".EndRequest", StringComparison.Ordinal);
+        // End<Child>Request: a root's way in to its child's EndRequest (titan-ops architecture/code-structure.md#child-entity).
+        public bool IsReport => Regex.IsMatch(Key, @"\.End\w*Request$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

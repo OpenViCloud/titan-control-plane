@@ -1,6 +1,7 @@
 using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 
 namespace Titan.Domain.Services;
 
@@ -20,32 +21,28 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
         return route.RouterAddressIn(block56);
     }
 
-    /// The create command gave up. A network that let go of its /64 gives the route back now, so its number waits at the
-    /// back of the line. The held route is read without a lock: no create locks a held route.
-    public async Task RecordCreateGaveUpAsync(Network network, string? reason, string? detail, CancellationToken ct = default)
+    /// The report of the network's own command (titan-ops architecture/resource-lifecycle.md#callback-routes), ended here
+    /// so the route follows it: a create that failed before Incus had the network let go of its /64, and a delete done
+    /// means Incus no longer has the network nor its router; either way the route goes back, its number waiting at the
+    /// back of the line. The held route is read without a lock: no create locks a held route. A repeated report
+    /// ends nothing and touches no route, and a network without public IPv6 never held one.
+    public async Task<NetworkRequestEnded?> RecordEndedAsync(Network network, Guid requestId, NetworkRequestEnd end,
+        CancellationToken ct = default)
     {
-        bool letGoOfItsSubnet = network.MarkRequestFailed(reason, detail);
-        if (!letGoOfItsSubnet)
+        NetworkRequestEnded? ended = network.EndRequest(requestId, end);
+        if (ended == null)
         {
-            return;
+            return null;
         }
-        ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);
-        if (route != null)
+        bool deleteDone = ended.Request.Kind == NetworkRequestKind.Delete && end.Outcome == RequestOutcome.Done;
+        if (ended.LetGoOfPublicIpv6 || deleteDone)
         {
-            route.TakeBack(DateTimeOffset.UtcNow);
+            ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);
+            if (route != null)
+            {
+                route.TakeBack(DateTimeOffset.UtcNow);
+            }
         }
-    }
-
-    /// The delete command confirmed Incus no longer has the network, nor its router: the route goes back. A repeat finds
-    /// no route held, and a network without public IPv6 never held one.
-    public async Task<NetworkDeletionOutcome> RecordDeletedAsync(Network network, CancellationToken ct = default)
-    {
-        NetworkDeletionOutcome outcome = network.MarkDeleted();
-        ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);
-        if (route != null)
-        {
-            route.TakeBack(DateTimeOffset.UtcNow);
-        }
-        return outcome;
+        return ended;
     }
 }

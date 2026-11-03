@@ -17,13 +17,13 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
+    // A rule of a network being deleted is still observed (titan-ops architecture/resource-lifecycle.md#reconciler): the
+    // network's delete may give up and leave it in force.
     public async Task<List<FirewallRule>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.FirewallRules
             .Where(r => r.ExternalId != null
                      && r.CurrentExistence != CurrentExistence.Deleted
-                     && db.Networks.Any(n => n.Id == r.NetworkId
-                                          && n.ClusterId == clusterId
-                                          && n.DesiredExistence == DesiredExistence.Exists))
+                     && db.Networks.Any(n => n.Id == r.NetworkId && n.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);
 }

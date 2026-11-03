@@ -14,7 +14,7 @@ public class ProviderCommand : AggregateRoot
 
     public Guid Id { get; private set; }
 
-    /// UNIQUE: `network-delete-{networkId}`, `vm-stop-{vmId}-{requestId}`, … One key, one row. A resource's key is reused by
+    /// UNIQUE: `load-balancer-delete-{id}`, `vm-stop-{vmId}-{requestId}`, … One key, one row. A resource's key is reused by
     /// a repeat according to Rerun; a key carrying a request id is never reused
     /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public string Key { get; private set; } = default!;

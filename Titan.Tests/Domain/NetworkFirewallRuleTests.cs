@@ -79,7 +79,7 @@ public class NetworkFirewallRuleTests
     // The network's delete took its ACL and every rule in it (titan-ops features/network/design.md#network-lifecycle).
     // Only a rule whose own delete was waiting is named: its request is done here, once.
     [Fact]
-    public void MarkDeleted_MarksEveryLiveRuleDeleted_AndNamesOnlyTheRulesWhoseOwnDeleteWasWaiting()
+    public void DeleteDone_MarksEveryLiveRuleDeleted_AndNamesOnlyTheRulesWhoseOwnDeleteWasWaiting()
     {
         var network = UsableNetwork();
         var enabled = Rule(network, 22);
@@ -91,44 +91,47 @@ public class NetworkFirewallRuleTests
         alreadyGone.MarkActive("sg-24");
         alreadyGone.RequestDelete();
         alreadyGone.MarkDeleted();
+        var creating = Rule(network, 25);
         network.RequestDelete();
 
-        NetworkDeletionOutcome outcome = network.MarkDeleted();
+        NetworkRequestEnded? outcome = network.MarkDeleted();
 
-        Assert.True(outcome.FulfilledNetworkDelete);
+        Assert.Equal(NetworkRequestKind.Delete, outcome!.Request.Kind);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.All(network.FirewallRules, r => Assert.Equal(CurrentExistence.Deleted, r.CurrentExistence));
-        Assert.Equal([deleting.Id], outcome.RulesWhoseDeleteWasFulfilled.Select(r => r.Id));
+        Assert.All(network.FirewallRules, r => Assert.Null(r.Pending));
+        Assert.Equal([deleting.Id], outcome.RulesWhoseDeleteEnded.Select(r => r.Id));
+        Assert.Null(creating.Transition);
     }
 
     [Fact]
-    public void MarkDeleted_WithNoRules_NamesNone()
+    public void DeleteDone_WithNoRules_NamesNone()
     {
         var network = UsableNetwork();
         network.RequestDelete();
 
-        NetworkDeletionOutcome outcome = network.MarkDeleted();
+        NetworkRequestEnded? outcome = network.MarkDeleted();
 
-        Assert.True(outcome.FulfilledNetworkDelete);
-        Assert.Empty(outcome.RulesWhoseDeleteWasFulfilled);
+        Assert.NotNull(outcome);
+        Assert.Empty(outcome.RulesWhoseDeleteEnded);
     }
 
     // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs): a repeat changes nothing
     // and names nothing again.
     [Fact]
-    public void MarkDeleted_Repeated_IsAbsorbed_AndNamesNothingAgain()
+    public void DeleteDone_Repeated_IsIgnored_AndNamesNothingAgain()
     {
         var network = UsableNetwork();
         var deleting = Rule(network, 23);
         deleting.MarkActive("sg-23");
         deleting.RequestDelete();
-        network.RequestDelete();
-        network.MarkDeleted();
+        Guid deleteId = network.RequestDelete().RequestId;
+        network.EndRequest(deleteId, NetworkRequestEnd.Done(null, null));
 
-        NetworkDeletionOutcome repeat = network.MarkDeleted();
+        NetworkRequestEnded? repeat = network.EndRequest(deleteId, NetworkRequestEnd.Done(null, null));
 
-        Assert.False(repeat.FulfilledNetworkDelete);
-        Assert.Empty(repeat.RulesWhoseDeleteWasFulfilled);
+        Assert.Null(repeat);
+        Assert.Equal(CurrentExistence.Deleted, deleting.CurrentExistence);
     }
 
     // A rule the network does not have answers like a missing one (titan-ops features/network/design.md#firewall-rule-soft-delete).
@@ -144,7 +147,12 @@ public class NetworkFirewallRuleTests
         var ex = Assert.Throws<NotFoundException>(() => network.DeleteFirewallRuleLocally(foreign.Id));
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.RequestFirewallRuleDelete(foreign.Id)).Code);
-        Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.MarkFirewallRuleDeleted(foreign.Id)).Code);
+        Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(
+            () => network.EndFirewallRuleRequest(foreign.Id, foreign.Pending!.Id, FirewallRuleRequestEnd.Done("sg-22", null))).Code);
+        Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(
+            () => network.MarkFirewallRuleObserved(foreign.Id, FirewallRuleState.enabled)).Code);
+        Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.MarkFirewallRuleNotFound(foreign.Id)).Code);
+        Assert.Equal(FirewallRuleTransition.Creating, foreign.Transition);
     }
 
     // The root routes to the rule and returns what the rule returns: the same answers the rule gave when handlers
@@ -156,21 +164,24 @@ public class NetworkFirewallRuleTests
         var rule = Rule(network, 22);
         var untouched = Rule(network, 23);
 
-        network.MarkFirewallRuleCreated(rule.Id, "sg-22");
-        Assert.True(network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.enabled));
-        Assert.False(network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.disabled));
+        Guid createId = rule.Pending!.Id;
+        Assert.Equal(createId, network.EndFirewallRuleRequest(rule.Id, createId, FirewallRuleRequestEnd.Done("sg-22", null))!.Id);
+        network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.disabled);
         Assert.Equal(FirewallRuleState.disabled, rule.CurrentState);
 
-        Assert.Equal("sg-22", network.RequestFirewallRuleDelete(rule.Id));
+        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id);
+        Assert.Equal("sg-22", delete.ProviderId);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
-        network.AbandonFirewallRuleRequest(rule.Id, "refused", "raw");
+        network.EndFirewallRuleRequest(rule.Id, delete.RequestId, FirewallRuleRequestEnd.Failed(null, "refused", "raw"));
         Assert.Null(rule.Transition);
         Assert.Equal("refused", rule.RequestFailureReason);
 
         network.MarkFirewallRuleNotFound(rule.Id);
         Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
-        network.RequestFirewallRuleDelete(rule.Id);
-        Assert.True(network.MarkFirewallRuleDeleted(rule.Id));
+        RequestTicket again = network.RequestFirewallRuleDelete(rule.Id);
+        Assert.Equal(FirewallRuleRequestKind.Delete,
+            network.EndFirewallRuleRequest(rule.Id, again.RequestId, FirewallRuleRequestEnd.Done(null, null))!.Kind);
+        Assert.True(rule.IsTerminal);
 
         Assert.Equal(FirewallRuleTransition.Creating, untouched.Transition);
         Assert.Null(untouched.ExternalId);
@@ -181,7 +192,7 @@ public class NetworkFirewallRuleTests
     {
         var network = UsableNetwork();
         var failed = Rule(network, 22);
-        network.MarkFirewallRuleRequestFailed(failed.Id, "reason", "detail");
+        network.EndFirewallRuleRequest(failed.Id, failed.Pending!.Id, FirewallRuleRequestEnd.Failed(null, "reason", "detail"));
 
         network.DeleteFirewallRuleLocally(failed.Id);
 

@@ -86,7 +86,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            It.IsAny<Guid>(), NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
+            added.Id, added.Pending!.Id, NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
             "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -113,7 +113,7 @@ public class FirewallServiceTests
         await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Egress", "UDP", 53, 53, "0.0.0.0/0"), default);
 
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            It.IsAny<Guid>(), NetworkId, "Egress", "UDP", 53, 53, "0.0.0.0/0",
+            It.IsAny<Guid>(), It.IsAny<Guid>(), NetworkId, "Egress", "UDP", 53, 53, "0.0.0.0/0",
             "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -164,7 +164,7 @@ public class FirewallServiceTests
         Assert.Equal(20, network.FirewallRules.Count);
         _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(),
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -188,7 +188,8 @@ public class FirewallServiceTests
         Assert.Equal("FIREWALL_QUOTA_EXCEEDED", ex.Code);
     }
 
-    // A rule whose delete is waiting stopped counting the moment it was asked for (DCS-Q1), so the cap is not full.
+    // A rule whose delete is waiting stopped counting the moment it was asked for
+    // (titan-ops features/network/design.md#firewall-rule-quota-counting), so the cap is not full.
     [Fact]
     public async Task Create_AtTheCapWithOneRuleBeingDeleted_IsAccepted()
     {
@@ -286,7 +287,7 @@ public class FirewallServiceTests
     {
         SetupCurrentUser();
         var network = MakeActiveNetwork(TestTenant.WithRoomToSpare()); // different tenant
-        _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
+        _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
             () => CreateService().DeleteAsync(NetworkId, Guid.NewGuid(), default));
@@ -309,8 +310,44 @@ public class FirewallServiceTests
         Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
+        // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Locked, so two deletes of the rule take turns and the second sees the first waiting
+    // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public async Task Delete_LoadsTheNetworkForUpdate_NotTheUnlockedRead()
+    {
+        SetupCurrentUser();
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.Active);
+
+        await CreateService().DeleteAsync(NetworkId, rule.Id, default);
+
+        _networkRepo.Verify(r => r.FindByIdForUpdateAsync(NetworkId, It.IsAny<CancellationToken>()), Times.Once);
+        _networkRepo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // A second delete while the first waits is the same request: no new key, so no second command and no second
+    // activity (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    [Fact]
+    public async Task Delete_TwiceWhileTheFirstWaits_SendsOneCommand_AndRecordsOneRequest()
+    {
+        SetupCurrentUser();
+        Network network = SetupActiveNetwork();
+        FirewallRule rule = MakeRule(network, Seed.Active);
+        await CreateService().DeleteAsync(NetworkId, rule.Id, default);
+        Guid first = rule.Pending!.Id;
+
+        await CreateService().DeleteAsync(NetworkId, rule.Id, default);
+
+        Assert.Equal(first, rule.Pending!.Id);
+        _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _activity.Verify(a => a.Stage("firewall_rule.delete_requested", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Once);
+        _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers like the first.
@@ -330,7 +367,7 @@ public class FirewallServiceTests
         _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _activity.VerifyNoOtherCalls();
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A rule whose create failed never gets an ExternalId, so refusing it as NOT_READY would make it
@@ -349,7 +386,7 @@ public class FirewallServiceTests
 
         Assert.Equal("null/Exists/Deleted/Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -367,7 +404,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _activity.Verify(a => a.StageOutcome(TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -384,7 +421,7 @@ public class FirewallServiceTests
 
         Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -400,7 +437,7 @@ public class FirewallServiceTests
 
         Assert.Equal("FIREWALL_RULE_NOT_READY", ex.Code);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -436,14 +473,13 @@ public class FirewallServiceTests
     private void SetupCurrentUser() =>
         _currentUser.Setup(u => u.TenantId).Returns(TenantId);
 
-    /// The network every handler loads: unlocked for a read or a delete, locked for a create, by rule id for a
-    /// callback. One instance, so a test reads the handler's writes off it.
+    /// The network every handler loads by the route's network id: unlocked for a read, locked for a create, a delete
+    /// or a callback. One instance, so a test reads the handler's writes off it.
     private Network SetupActiveNetwork()
     {
         Network network = MakeActiveNetwork(TenantIdOwner);
         _networkRepo.Setup(r => r.FindByIdAsync(NetworkId, default)).ReturnsAsync(network);
         _networkRepo.Setup(r => r.FindByIdForUpdateAsync(NetworkId, default)).ReturnsAsync(network);
-        _networkRepo.Setup(r => r.FindByFirewallRuleIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync(network);
         return network;
     }
 

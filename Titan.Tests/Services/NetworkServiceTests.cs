@@ -112,7 +112,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public class NetworkServiceTests
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", null, FirewallPolicy.Deny, FirewallPolicy.Allow), default);
 
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Deny", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Deny", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A cluster Titan does not have must not fall through to a default cluster
@@ -294,11 +294,13 @@ public class NetworkServiceTests
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // RULES-ON-NETWORK-DELETE: the rules stay as Incus holds them until the network's delete takes the ACL.
+    // The rules stay as Incus holds them until the network's delete takes the ACL.
     [Fact]
     public async Task Delete_LeavesTheRulesAlone()
     {
@@ -329,7 +331,7 @@ public class NetworkServiceTests
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A load balancer lives on the network on Incus (titan-ops features/load-balancer/design.md#lb-and-vm-network).
@@ -347,7 +349,7 @@ public class NetworkServiceTests
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -379,7 +381,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -397,7 +399,7 @@ public class NetworkServiceTests
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── RenameAsync ───────────────────────────────────────────────
@@ -578,7 +580,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    // RULES-ON-NETWORK-DELETE: the network's delete took its ACL, so every rule left in it is gone too; the rows stay.
+    // The network's delete took its ACL, so every rule left in it is gone too; the rows stay.
     [Fact]
     public async Task UpdateStatus_Deleted_MarksEveryLiveRuleOfTheNetworkDeleted()
     {
@@ -614,6 +616,21 @@ public class NetworkServiceTests
         var ruleOutcome = Assert.Single(_activity.Events, e => e.Action == "firewall_rule.deleted");
         Assert.Equal(deleting.Id, ruleOutcome.ResourceId);
         Assert.Equal(TenantId, ruleOutcome.OutcomeTenantId);
+    }
+
+    // Only a delete's own report ends a network: with no delete waiting, Deleted is Incus no longer having it, never
+    // Deleted (titan-ops architecture/desired-and-current.md#existence-axis).
+    [Fact]
+    public async Task UpdateStatus_Deleted_WithNoDeleteWaiting_IsNotFound_AndRecordsNothing()
+    {
+        var network = MakeActiveNetwork();
+        _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
+
+        await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
+
+        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
+        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.Empty(_activity.Events);
     }
 
     // ── Reconciler observations ─────────────────────
@@ -685,7 +702,7 @@ public class NetworkServiceTests
         Assert.NotNull(added);
         Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.RequestedCidr);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A delete that failed leaves the customer free to press Delete again — a new request, a new command.
@@ -702,7 +719,7 @@ public class NetworkServiceTests
         await CreateService().DeleteAsync(network.Id, default);
 
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
+            network.Id, It.IsAny<Guid>(), "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -775,7 +792,7 @@ public class NetworkServiceTests
     // ── titan-ops features/activity/design.md#outcome-source: outcomes are recorded from the fulfilled request ──────────
 
     [Fact]
-    public async Task UpdateStatus_FirstCreated_RecordsNetworkCreated_ForTheNetworksTenant_Once()
+    public async Task UpdateStatus_Created_RecordsNetworkCreated_ForTheNetworksTenant_Once_TheReconcilersLaterCreatedRecordsNothing()
     {
         var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
@@ -825,22 +842,26 @@ public class NetworkServiceTests
         Assert.Equal("Network deletion failed.", network.RequestFailureReason);
     }
 
-    [Fact]
-    public async Task UpdateStatus_ErroredWhileACreateWaits_EndsTheCreate_AndRecordsNothing()
+    // An observation ends no request (titan-ops architecture/resource-lifecycle.md#invariants): Incus showing the network
+    // Errored or Created while its create waits is the network's state; only the create command's own report ends it.
+    [Theory]
+    [InlineData("Errored", NetworkStatus.Errored)]
+    [InlineData("Created", NetworkStatus.Created)]
+    public async Task UpdateStatus_ObservedWhileACreateWaits_WritesTheState_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
     {
         var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
-        await CreateService().UpdateStatusAsync(network.Id, CreatedReport("13", "10.0.0.0/24", "10.0.0.1"));
 
-        await CreateService().UpdateStatusAsync(network.Id, Observed("Errored"));
+        await CreateService().UpdateStatusAsync(network.Id, Observed(word));
 
-        Assert.Equal(NetworkStatus.Errored, network.CurrentState);
-        Assert.Null(network.Transition);
+        Assert.Equal(expected, network.CurrentState);
+        Assert.Equal(NetworkTransition.Creating, network.Transition);
         Assert.Empty(_activity.Events);
     }
 
+    // The old create command's Created is the create's Done; the status is left to the reconciler.
     [Fact]
-    public async Task UpdateStatus_Created_StoresTheIdAndAddress_AndTheCreateKeepsWaiting()
+    public async Task UpdateStatus_Created_EndsTheCreateDone_StoresTheIdAndAddress_AndRecordsNetworkCreated()
     {
         var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
@@ -851,29 +872,29 @@ public class NetworkServiceTests
         Assert.Equal("10.0.0.0/24", network.Cidr);
         Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
         Assert.Null(network.CurrentState);
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
-        Assert.Empty(_activity.Events);
+        Assert.Null(network.Pending);
+        Assert.Equal("network.created", Assert.Single(_activity.Events).Action);
+        _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // The network exists on Incus, so it must not be forgotten locally.
+    // The create gave up after Incus made the network: it exists on Incus, so it must not be forgotten locally.
     [Fact]
-    public async Task Delete_AfterCreatedThenRequestFailed_GoesToTheProvider()
+    public async Task Delete_AfterACreateThatFailedCarryingTheId_GoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
         var network = TestAggregates.Network(TenantIdOwner, "my-net", "cluster-1");
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
-        await CreateService().UpdateStatusAsync(network.Id, CreatedReport("cs-net-id", "10.0.0.0/24", "10.0.0.1"));
-        await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed."));
+        await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1"));
         await CreateService().DeleteAsync(network.Id, default);
 
-        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, network.CurrentExistence);
     }
 
     [Fact]
-    public async Task UpdateStatus_RequestFailed_WhileADeleteWaits_GivesTheNetworkBack_WithTheReason()
+    public async Task UpdateStatus_RequestFailed_WhileADeleteWaits_GivesTheNetworkBack_WithTheReason_AndRecordsDeleteFailed()
     {
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork();
@@ -889,7 +910,8 @@ public class NetworkServiceTests
         Assert.Equal("Network deletion failed.", network.RequestFailureReason);
         Assert.Equal("raw incus error", network.RequestFailureDetail);
         Assert.Null(network.Transition);
-        Assert.Empty(_activity.Events);
+        var outcome = Assert.Single(_activity.Events);
+        Assert.Equal(("network.delete_failed", TenantId), (outcome.Action, outcome.OutcomeTenantId));
     }
 
     [Fact] // the create report was lost, the give-up report carries the id
@@ -952,7 +974,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Public IPv6: one route of the cluster per network ──
@@ -1018,7 +1040,7 @@ public class NetworkServiceTests
         Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
         Assert.Equal(added.Id, RouteRow(3).NetworkId);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
+            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
             "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }

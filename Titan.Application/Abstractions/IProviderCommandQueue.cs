@@ -10,11 +10,11 @@ public interface IProviderCommandQueue
 {
     // publicIpv6Subnet/publicIpv6RouterAddress: both null when the network has no public IPv6
     // (titan-ops infra/incus/design.md#ipv6-address-plan).
-    Task EnqueueNetworkCreateAsync(Guid networkId, string name, string clusterId, string projectName, string? cidr, string defaultIngressPolicy, string defaultEgressPolicy, string? publicIpv6Subnet, string? publicIpv6RouterAddress, CancellationToken ct = default);
-    Task EnqueueNetworkDeleteAsync(Guid networkId, string externalNetworkId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueNetworkCreateAsync(Guid networkId, Guid requestId, string name, string clusterId, string projectName, string? cidr, string defaultIngressPolicy, string defaultEgressPolicy, string? publicIpv6Subnet, string? publicIpv6RouterAddress, CancellationToken ct = default);
+    Task EnqueueNetworkDeleteAsync(Guid networkId, Guid requestId, string externalNetworkId, string projectName, string clusterId, CancellationToken ct = default);
 
-    Task EnqueueFirewallRuleCreateAsync(Guid ruleId, Guid networkId, string direction, string protocol, int? startPort, int? endPort, string cidr, string externalNetworkId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid networkId, string externalRuleId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueFirewallRuleCreateAsync(Guid ruleId, Guid requestId, Guid networkId, string direction, string protocol, int? startPort, int? endPort, string cidr, string externalNetworkId, string projectName, string clusterId, CancellationToken ct = default);
+    Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid requestId, Guid networkId, string externalRuleId, string projectName, string clusterId, CancellationToken ct = default);
 
     // cpuUnits/vcpuCount/memoryMb come from the selected VM offering (titan-ops features/catalog/design.md#vm-offering-sizing): the
     // worker has no access to Titan's catalog, so the resolved sizing travels with the command. vendorData is Titan's own

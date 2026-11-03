@@ -27,7 +27,10 @@ public class DomainBaseClassTests
         ["VolumeRequestEnd"] = "input of Volume.EndRequest: how the request's command ended and what the worker saw",
         ["VolumeRequestEnded"] = "result of Volume.EndRequest: the request it ended and the snapshots whose delete went with the volume",
         ["VolumeSnapshotRequestEnd"] = "input of Volume.EndSnapshotRequest: how the snapshot request's command ended",
-        ["NetworkDeletionOutcome"] = "result of Network.MarkDeleted: the network's own outcome and the rules whose delete it finished",
+        ["NetworkObservation"] = "input of a network request's report: the status, range and gateway the worker read",
+        ["NetworkRequestEnd"] = "input of Network.EndRequest: how the request's command ended and what the worker saw",
+        ["NetworkRequestEnded"] = "result of Network.EndRequest: the request it ended, the rules whose delete went with the network, and whether it let go of its /64",
+        ["FirewallRuleRequestEnd"] = "input of Network.EndFirewallRuleRequest: how the rule's command ended and the state it read",
     };
 
     [Fact]

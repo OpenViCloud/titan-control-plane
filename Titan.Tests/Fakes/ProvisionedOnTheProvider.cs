@@ -1,29 +1,93 @@
-// Test setup for a resource the provider already holds. The create command reports the id and the reconciler reports
-// the Incus state (titan-ops architecture/desired-and-current.md#desired-and-current); these replay both reports in order,
-// under the one-call names the setups used before the two were split. A volume or a snapshot has no state word on
-// Incus, so its create command's Done is the whole of it.
+// Test setup for a resource the provider already holds: these replay the worker's reports under the one-call names the
+// setups used before (titan-ops architecture/desired-and-current.md#desired-and-current). A volume or a snapshot has no
+// state word on Incus, so its create command's Done is the whole of it.
 //
 // Each class lives in its aggregate's namespace so a test that uses the aggregate sees the extension without a using.
 
 namespace Titan.Domain.Aggregates.Network
 {
+    /// A network's and a firewall rule's requests end by their own command's report
+    /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
+    /// test setups used before, through the real EndRequest and MarkObserved. A replay for a request not waiting does
+    /// nothing, like the report it stands for.
     public static class NetworkProvisionedOnTheProvider
     {
+        /// The create command's Done with the name and address, reading the network Created. True when it ended the
+        /// create; with none waiting it is the reconciler's Created.
         public static bool MarkActive(this Network network, string externalId, string? cidr, string? gateway)
         {
-            network.MarkCreated(externalId, cidr, gateway);
-            return network.MarkObserved(NetworkStatus.Created);
+            if (network.Pending is { Kind: NetworkRequestKind.Create } create)
+            {
+                return network.EndRequest(create.Id,
+                    NetworkRequestEnd.Done(externalId, new NetworkObservation(NetworkStatus.Created, cidr, gateway))) != null;
+            }
+            network.MarkObserved(NetworkStatus.Created);
+            return false;
+        }
+
+        /// The create command's Done with the name and address, before Incus shows a status.
+        public static void MarkCreated(this Network network, string externalId, string? cidr, string? gateway)
+        {
+            if (network.Pending is { Kind: NetworkRequestKind.Create } create)
+            {
+                network.EndRequest(create.Id, NetworkRequestEnd.Done(externalId, new NetworkObservation(null, cidr, gateway)));
+            }
+        }
+
+        /// The delete command's Done.
+        public static NetworkRequestEnded? MarkDeleted(this Network network) =>
+            network.Pending is { Kind: NetworkRequestKind.Delete } delete
+                ? network.EndRequest(delete.Id, NetworkRequestEnd.Done(null, null))
+                : null;
+
+        /// The create command's give-up. True when the network let go of its /64.
+        public static bool MarkRequestFailed(this Network network, string? reason, string? detail, string? externalId = null)
+        {
+            if (network.Pending is { Kind: NetworkRequestKind.Create } create)
+            {
+                NetworkRequestEnded? ended = network.EndRequest(create.Id,
+                    NetworkRequestEnd.Failed(externalId, null, reason, detail));
+                return ended is { LetGoOfPublicIpv6: true };
+            }
+            return false;
         }
     }
 
     public static class FirewallRuleProvisionedOnTheProvider
     {
-        /// The create command's id, then the reconciler's first read of the rule in its ACL.
+        /// The create command's Done with the rule's id, reading it enabled in the ACL. True when it ended the create.
         public static bool MarkActive(this FirewallRule rule, string externalId)
         {
-            rule.MarkCreated(externalId);
-            return rule.MarkObserved(FirewallRuleState.enabled);
+            if (rule.Pending is { Kind: FirewallRuleRequestKind.Create } create)
+            {
+                return rule.EndRequest(create.Id, FirewallRuleRequestEnd.Done(externalId, FirewallRuleState.enabled)) != null;
+            }
+            rule.MarkObserved(FirewallRuleState.enabled);
+            return false;
         }
+
+        /// The create command's Done with the rule's id, before the rule's state is read.
+        public static void MarkCreated(this FirewallRule rule, string externalId)
+        {
+            if (rule.Pending is { Kind: FirewallRuleRequestKind.Create } create)
+            {
+                rule.EndRequest(create.Id, FirewallRuleRequestEnd.Done(externalId, null));
+            }
+        }
+
+        /// The create command's give-up.
+        public static void MarkRequestFailed(this FirewallRule rule, string? reason, string? detail, string? externalId = null)
+        {
+            if (rule.Pending is { Kind: FirewallRuleRequestKind.Create } create)
+            {
+                rule.EndRequest(create.Id, FirewallRuleRequestEnd.Failed(externalId, reason, detail));
+            }
+        }
+
+        /// The rule's own delete Done. True when its delete was waiting.
+        public static bool MarkDeleted(this FirewallRule rule) =>
+            rule.Pending is { Kind: FirewallRuleRequestKind.Delete } delete
+            && rule.EndRequest(delete.Id, FirewallRuleRequestEnd.Done(null, null)) != null;
     }
 }
 

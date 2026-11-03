@@ -62,80 +62,131 @@ public class NetworkRoutesTests
         Assert.False(network.HasPublicIpv6);
     }
 
+    private static NetworkRequestEnd CreateFailed(string? externalId = null) =>
+        NetworkRequestEnd.Failed(externalId, null, "Network creation failed.", "raw");
+
     [Fact]
-    public async Task CreateGaveUpBeforeIncusHadIt_LetsGoOfTheSubnet_AndTheRouteGoesBack()
+    public async Task CreateFailedBeforeIncusHadIt_LetsGoOfTheSubnet_AndTheRouteGoesBack()
     {
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
 
-        await Routes().RecordCreateGaveUpAsync(network, "Network creation failed.", "raw");
+        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed());
 
+        Assert.True(ended!.LetGoOfPublicIpv6);
         Assert.False(network.HasPublicIpv6);
         Assert.Equal("Network creation failed.", network.RequestFailureReason);
         Assert.True(route.IsFree);
         Assert.NotNull(route.ReleasedAt);
     }
 
+    // Incus made the network, router and all, before the command gave up: the /64 and its route stay until the delete.
     [Fact]
-    public async Task CreateGaveUpAfterIncusHadIt_KeepsTheSubnet_AndTheRoute()
+    public async Task CreateFailedAfterIncusHadIt_KeepsTheSubnet_AndTheRoute()
     {
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
-        network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
 
-        await Routes().RecordCreateGaveUpAsync(network, "Network creation failed.", "raw");
+        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed("net-x"));
 
+        Assert.False(ended!.LetGoOfPublicIpv6);
         Assert.True(network.HasPublicIpv6);
         Assert.False(RouteOf(network).IsFree);
     }
 
     [Fact]
-    public async Task Deleted_TakesTheRouteBack_Once()
+    public async Task CreateDone_KeepsTheSubnet_AndTheRoute()
+    {
+        Network network = WantingPublicIpv6();
+        await Routes().GiveAsync(network, Block56);
+
+        await Routes().RecordEndedAsync(network, network.Pending!.Id,
+            NetworkRequestEnd.Done("net-x", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+
+        Assert.True(network.HasPublicIpv6);
+        Assert.False(RouteOf(network).IsFree);
+    }
+
+    // Only the waiting request's own report ends it, so a stale give-up cannot take back a route a live network holds.
+    [Fact]
+    public async Task AReportForAnotherRequest_EndsNothing_AndKeepsTheRoute()
+    {
+        Network network = WantingPublicIpv6();
+        await Routes().GiveAsync(network, Block56);
+
+        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, Guid.NewGuid(), CreateFailed());
+
+        Assert.Null(ended);
+        Assert.Equal(NetworkTransition.Creating, network.Transition);
+        Assert.True(network.HasPublicIpv6);
+        Assert.False(RouteOf(network).IsFree);
+    }
+
+    [Fact]
+    public async Task DeleteDone_TakesTheRouteBack_Once()
     {
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
+        Guid deleteId = network.RequestDelete().RequestId;
 
-        NetworkDeletionOutcome first = await Routes().RecordDeletedAsync(network);
+        NetworkRequestEnded? first = await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
         DateTimeOffset? releasedAt = route.ReleasedAt;
-        NetworkDeletionOutcome second = await Routes().RecordDeletedAsync(network);
+        NetworkRequestEnded? second = await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
 
         Assert.True(network.IsTerminal);
         Assert.True(route.IsFree);
         Assert.NotNull(releasedAt);
         Assert.Equal(releasedAt, route.ReleasedAt);
-        Assert.False(first.FulfilledNetworkDelete); // no delete was waiting: MarkActive is the network on Incus, untouched
-        Assert.False(second.FulfilledNetworkDelete);
+        Assert.Equal(NetworkRequestKind.Delete, first!.Request.Kind);
+        Assert.Null(second);
     }
 
     [Fact]
-    public async Task Deleted_ANetworkWithoutPublicIpv6_TouchesNoRoute()
+    public async Task DeleteFailed_KeepsTheRoute()
+    {
+        Network network = WantingPublicIpv6();
+        await Routes().GiveAsync(network, Block56);
+        network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
+        Guid deleteId = network.RequestDelete().RequestId;
+
+        await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Failed(null, null, "Network deletion failed.", "raw"));
+
+        Assert.False(network.IsTerminal);
+        Assert.True(network.HasPublicIpv6);
+        Assert.False(RouteOf(network).IsFree);
+    }
+
+    [Fact]
+    public async Task DeleteDone_OfANetworkWithoutPublicIpv6_TouchesNoRoute()
     {
         Network network = WithoutPublicIpv6();
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
+        Guid deleteId = network.RequestDelete().RequestId;
 
-        await Routes().RecordDeletedAsync(network);
+        await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
 
         Assert.True(network.IsTerminal);
         Assert.All(_rows, route => Assert.True(route.IsFree));
     }
 
-    // A network whose create gave up before Incus let go of its /64 there; one still holding it would keep its route once
-    // deleted locally, since no delete report follows. The reconciler only reports networks with a provider id, so no
-    // path reaches this today.
+    // A network holding a /64 with no provider id is one whose create still waits: an observation ends no create, and
+    // a create that fails before Incus lets go of the /64. A local delete then would keep the route, since no delete
+    // report follows.
     [Fact]
     public async Task DeleteLocally_ANetworkStillHoldingItsSubnet_IsRefused()
     {
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
-        network.MarkNotFound(); // ends the waiting create without a give-up, so the /64 stays
+        network.MarkNotFound();
 
         BusinessException ex = Assert.Throws<BusinessException>(() => network.DeleteLocally());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
         Assert.False(network.IsTerminal);
+        Assert.False(RouteOf(network).IsFree);
     }
 
     // The compiler keeps Titan.Application off these, so NetworkRoutes is the only way a route and a /64 move.
@@ -148,8 +199,8 @@ public class NetworkRoutesTests
 
         Assert.Contains(nameof(Network.MarkObserved), network);
         Assert.DoesNotContain(nameof(Network.ReceivePublicIpv6), network);
-        Assert.DoesNotContain(nameof(Network.MarkRequestFailed), network);
-        Assert.DoesNotContain(nameof(Network.MarkDeleted), network);
+        // EndRequest lets go of the /64 on a create that failed before Incus, and a delete it ends gives the route back.
+        Assert.DoesNotContain(nameof(Network.EndRequest), network);
         Assert.Contains(nameof(ClusterIpv6Route.NextToGive), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.HandTo), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.TakeBack), route);

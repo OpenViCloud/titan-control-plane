@@ -30,7 +30,11 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.RequestFailureReason).HasColumnName("request_failure_reason");
         builder.Property(r => r.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(r => r.RequestFailedAt).HasColumnName("request_failed_at");
-        builder.Property(r => r.PendingIntentId).HasColumnName("pending_intent_id");
+        // The rule's own waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
+        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
+        builder.Property<FirewallRuleRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Ignore(r => r.Pending);
         builder.Ignore(r => r.Transition);
         builder.Ignore(r => r.Ports);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");

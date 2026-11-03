@@ -1,18 +1,19 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
-using Titan.Application.Services.Networking.FirewallRule;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
-using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
-// Worker callback — authenticated by X-Internal-Token at the endpoint, so no ownership check here. The create and
-// delete commands and the firewall reconciler all report here. Outcomes are recorded once per request: the aggregate
-// says whether a report fulfilled the waiting one (titan-ops features/activity/design.md#outcome-source).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): each
+// report is mapped onto the request the rule is waiting on. Authenticated by X-Internal-Token at the endpoint, so no
+// ownership check here. The rule is reached through the network the route names, with the network's row locked
+// (titan-ops architecture/code-structure.md#child-entity).
 public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRepo, IActivityRecorder activity)
 {
     public async Task HandleAsync(UpdateFirewallRuleStatusCommand command, CancellationToken ct = default)
@@ -28,7 +29,7 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 }
                 if (command.Exists == true)
                 {
-                    observedState = ParseIncusState(command.State);
+                    observedState = NetworkReports.ParseState(command.State);
                 }
                 break;
             case "Created":
@@ -44,16 +45,13 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 throw new BadRequestException("INVALID_STATUS", $"Unknown firewall rule report: '{command.Report}'");
         }
 
-        // The rule is reached through its network (titan-ops architecture/code-structure.md#child-entity); a rule no
-        // network has is not found, the same answer as before the rule became the network's.
-        NetworkAggregate? network = await networkRepo.FindByFirewallRuleIdAsync(command.RuleId, ct);
-        if (network == null)
-        {
-            throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
-        }
+        NetworkAggregate network = await networkRepo.FindByIdForUpdateAsync(command.NetworkId, ct)
+            ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        string? outcome = null;
+        PendingRequest<FirewallRuleRequestKind>? waiting = rule.Pending;
+        PendingRequest<FirewallRuleRequestKind>? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (command.Report)
         {
             case "Observed":
@@ -63,63 +61,43 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 }
                 else
                 {
-                    bool created = network.MarkFirewallRuleObserved(rule.Id, observedState.Value);
-                    if (created)
-                    {
-                        outcome = "firewall_rule.created";
-                    }
+                    network.MarkFirewallRuleObserved(rule.Id, observedState.Value);
                 }
                 break;
             case "Created":
-                network.MarkFirewallRuleCreated(rule.Id, command.ExternalRuleId!);
+                // The old create command reports the rule's id as soon as it is in the ACL: the create's Done.
+                if (waiting is { Kind: FirewallRuleRequestKind.Create })
+                {
+                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id,
+                        FirewallRuleRequestEnd.Done(command.ExternalRuleId, null));
+                }
                 break;
             case "RequestFailed":
-                // A give-up report carries the provider id when the Created report never arrived.
-                bool carriesAnId = !string.IsNullOrEmpty(command.ExternalRuleId);
-                if (carriesAnId)
+                // The waiting request ends Failed, keeping an id the create's give-up found.
+                if (waiting != null)
                 {
-                    network.MarkFirewallRuleCreated(rule.Id, command.ExternalRuleId!);
-                }
-                // A failed delete gives the rule back — it is still in the ACL and still enforced
-                // (titan-ops architecture/desired-and-current.md#abandoned-request).
-                bool deleteWasWaiting = rule.Transition == FirewallRuleTransition.Deleting;
-                if (deleteWasWaiting)
-                {
-                    network.AbandonFirewallRuleRequest(rule.Id, command.Reason, command.Detail);
-                }
-                else
-                {
-                    network.MarkFirewallRuleRequestFailed(rule.Id, command.Reason, command.Detail);
+                    outcome = RequestOutcome.Failed;
+                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id,
+                        FirewallRuleRequestEnd.Failed(command.ExternalRuleId, command.Reason, command.Detail));
                 }
                 break;
             case "Deleted":
-                bool deleted = network.MarkFirewallRuleDeleted(rule.Id);
-                if (deleted)
+                if (waiting is { Kind: FirewallRuleRequestKind.Delete })
                 {
-                    outcome = "firewall_rule.deleted";
+                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id, FirewallRuleRequestEnd.Done(null, null));
+                }
+                else
+                {
+                    network.MarkFirewallRuleNotFound(rule.Id);
                 }
                 break;
         }
 
-        if (outcome != null)
+        if (ended != null)
         {
-            activity.StageOutcome(rule.TenantId, outcome, "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule));
+            NetworkReports.RecordRuleEnded(rule, ended, outcome, activity);
         }
 
         await networkRepo.SaveAsync(ct);
-    }
-
-    // The worker sends the Incus ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-    // Matched by name, exactly: Enum.TryParse would also take "1" or "Enabled".
-    private static FirewallRuleState ParseIncusState(string? state)
-    {
-        foreach (FirewallRuleState known in Enum.GetValues<FirewallRuleState>())
-        {
-            if (known.ToString() == state)
-            {
-                return known;
-            }
-        }
-        throw new BadRequestException("INVALID_STATUS", $"Unknown firewall rule state: '{state}'");
     }
 }

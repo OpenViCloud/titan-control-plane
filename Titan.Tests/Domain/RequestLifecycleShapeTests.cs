@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
@@ -12,8 +13,9 @@ namespace Titan.Tests.Domain;
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
-// semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests and VolumeRequestLifecycleTests hold
-// those). A child entity (VolumeSnapshot) is on the shape with internal methods, reached through its root.
+// semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests and
+// NetworkRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule) is on the shape with internal
+// methods, reached through its root.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
@@ -36,7 +38,18 @@ public class RequestLifecycleShapeTests
             volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done("vol-shape", null));
             return volume.AddSnapshot("shape").Snapshot;
         },
+        [typeof(Network)] = () => ANetwork(),
+        [typeof(FirewallRule)] = () =>
+        {
+            Network network = ANetwork();
+            network.EndRequest(network.Pending!.Id,
+                NetworkRequestEnd.Done("net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1")));
+            return network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        },
     };
+
+    private static Network ANetwork() =>
+        Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("shape"), "cluster-a", null, wantsPublicIpv6: false);
 
     [Fact]
     public void EveryAggregateOnTheShape_HasTheFourMethods_AndIsKnownHere()
@@ -92,6 +105,8 @@ public class RequestLifecycleShapeTests
         if (type == typeof(Vm)) return VmRequestEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null));
         if (type == typeof(Volume)) return VolumeRequestEnd.Done("foreign", new VolumeObservation(Guid.NewGuid(), true));
         if (type == typeof(VolumeSnapshot)) return VolumeSnapshotRequestEnd.Done("foreign");
+        if (type == typeof(Network)) return NetworkRequestEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
+        if (type == typeof(FirewallRule)) return FirewallRuleRequestEnd.Done("foreign", FirewallRuleState.enabled);
         throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
     }
 
@@ -117,6 +132,15 @@ public class RequestLifecycleShapeTests
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "Volume"), Path.Combine("Titan.Application", "Commands", "Compute", "VolumeSnapshot")],
             except: ["CreateVolumeCommandHandler"], atLeast: 12, "volume");
+    }
+
+    // A network's create makes a new row, so it has nothing to lock; a rule's create locks its network for the cap.
+    [Fact]
+    public void EveryNetworkLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks(
+            [Path.Combine("Titan.Application", "Commands", "Networking", "Network"), Path.Combine("Titan.Application", "Commands", "Networking", "FirewallRule")],
+            except: ["CreateNetworkCommandHandler", "RenameNetworkCommandHandler"], atLeast: 9, "network");
     }
 
     private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
@@ -159,5 +183,17 @@ public class RequestLifecycleShapeTests
 
         var without = enqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVolume" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "Volume command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
+    }
+
+    [Fact]
+    public void EveryNetworkCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        var enqueues = Regex.Matches(src, @"public Task Enqueue(NetworkCreate|NetworkDelete|FirewallRuleCreate|FirewallRuleDelete)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+            .Cast<Match>().ToList();
+        Assert.Equal(4, enqueues.Count);
+
+        var without = enqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "Enqueue" + m.Groups[1].Value).ToList();
+        Assert.True(without.Count == 0, "Network and firewall rule command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
     }
 }

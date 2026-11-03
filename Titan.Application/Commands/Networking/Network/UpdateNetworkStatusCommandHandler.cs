@@ -1,18 +1,19 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.Network.Contracts;
-using Titan.Application.Services.Networking.FirewallRule;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
-using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using Titan.Domain.Values;
 
 namespace Titan.Application.Commands.Networking.Network;
 
-// Worker callback — an observation of Incus (titan-ops architecture/intent-and-observation.md#intent-versus-observation:
-// observation converges). The create and delete commands report here when they finish, the network reconciler every
-// cycle. Outcomes are recorded once: the aggregate says whether a report fulfilled the waiting request
-// (titan-ops features/activity/design.md#outcome-source).
+// The old callback route, alive until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes): a
+// worker that predates the request routes reports the reconciler's observation and the commands' results here, none of
+// them naming a request. Each report is mapped onto the request the network is waiting on, so the network ends up as
+// the new routes would leave it. No ICurrentUser on purpose: authenticated by X-Internal-Token at the endpoint, acting
+// for no tenant. Locked like every lifecycle handler.
 public class UpdateNetworkStatusCommandHandler(
     INetworkRepository repo,
     NetworkRoutes routes,
@@ -33,7 +34,7 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 if (req.Exists == true)
                 {
-                    observedStatus = ParseIncusStatus(req.Status);
+                    observedStatus = NetworkReports.ParseStatus(req.Status);
                 }
                 break;
             case "Created":
@@ -49,10 +50,13 @@ public class UpdateNetworkStatusCommandHandler(
                 throw new BadRequestException("INVALID_STATUS", $"Unknown network report: '{req.Report}'");
         }
 
-        var network = await repo.FindByIdAsync(req.NetworkId, ct)
+        Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(req.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
-        string? outcome = null;
+        PendingRequest<NetworkRequestKind>? waiting = network.Pending;
+        NetworkObservation addresses = new(null, req.Cidr, req.Gateway);
+        NetworkRequestEnded? ended = null;
+        RequestOutcome outcome = RequestOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -62,71 +66,47 @@ public class UpdateNetworkStatusCommandHandler(
                 }
                 else
                 {
-                    bool createdNow = network.MarkObserved(observedStatus.Value);
-                    if (createdNow)
-                    {
-                        outcome = "network.created";
-                    }
+                    network.MarkObserved(observedStatus.Value);
                 }
                 break;
             case "Created":
-                network.MarkCreated(req.ExternalId!, req.Cidr, req.Gateway);
+                // The old create command reports the network name and address as soon as Incus holds it: the create's
+                // Done. The status is left to the reconciler, as before.
+                if (waiting is { Kind: NetworkRequestKind.Create })
+                {
+                    ended = await routes.RecordEndedAsync(network, waiting.Id,
+                        NetworkRequestEnd.Done(req.ExternalId, addresses), ct);
+                }
                 break;
             case "RequestFailed":
-                // A give-up report carries the provider id when the Created report never arrived.
-                bool carriesAnIdNotYetStored = !string.IsNullOrEmpty(req.ExternalId) && network.ExternalId == null;
-                if (carriesAnIdNotYetStored)
+                // The waiting request ends Failed, keeping an id and address the create's give-up found.
+                if (waiting != null)
                 {
-                    network.MarkCreated(req.ExternalId!, req.Cidr, req.Gateway);
-                }
-                // A delete Incus refused gives the network back (titan-ops architecture/desired-and-current.md#abandoned-request).
-                bool deleteWasWaiting = network.Transition == NetworkTransition.Deleting;
-                if (deleteWasWaiting)
-                {
-                    network.AbandonRequest(req.Reason, req.Detail);
-                }
-                else
-                {
-                    await routes.RecordCreateGaveUpAsync(network, req.Reason, req.Detail, ct);
+                    outcome = RequestOutcome.Failed;
+                    ended = await routes.RecordEndedAsync(network, waiting.Id,
+                        NetworkRequestEnd.Failed(req.ExternalId, addresses, req.Reason, req.Detail), ct);
                 }
                 break;
             case "Deleted":
-                // The network takes its rules with it (titan-ops features/network/design.md#network-lifecycle) and names
-                // the ones whose own delete was waiting: their own delete command will only find them already Deleted,
-                // so their outcome is recorded now.
-                NetworkDeletionOutcome deletion = await routes.RecordDeletedAsync(network, ct);
-                if (deletion.FulfilledNetworkDelete)
+                // Only a delete's own report ends a network; with no delete waiting the network is gone from Incus,
+                // which is what NotFound records.
+                if (waiting is { Kind: NetworkRequestKind.Delete })
                 {
-                    outcome = "network.deleted";
+                    ended = await routes.RecordEndedAsync(network, waiting.Id, NetworkRequestEnd.Done(null, null), ct);
                 }
-                foreach (FirewallRuleEntity rule in deletion.RulesWhoseDeleteWasFulfilled)
+                else
                 {
-                    activity.StageOutcome(rule.TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id,
-                        FirewallRuleLabel.Describe(rule));
+                    network.MarkNotFound();
                 }
                 break;
         }
 
-        if (outcome != null)
+        if (ended != null)
         {
-            activity.StageOutcome(network.TenantId, outcome, "network", network.Id, network.Name.Value);
+            NetworkReports.RecordEnded(network, ended, outcome, activity);
         }
 
         // A route given back above commits with the network that let go of it.
         await repo.SaveAsync(ct);
-    }
-
-    // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-    // Matched by name, exactly: Enum.TryParse would also take "1" or "created".
-    private static NetworkStatus ParseIncusStatus(string? status)
-    {
-        foreach (NetworkStatus known in Enum.GetValues<NetworkStatus>())
-        {
-            if (known.ToString() == status)
-            {
-                return known;
-            }
-        }
-        throw new BadRequestException("INVALID_STATUS", $"Unknown network status: '{status}'");
     }
 }

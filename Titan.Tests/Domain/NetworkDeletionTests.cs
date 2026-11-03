@@ -51,26 +51,28 @@ public class NetworkDeletionTests
     }
 
     [Fact]
-    public async Task AnEmptyNetworkOnIncus_HandsOutItsProviderId_AndWaitsForTheDeleteCommand()
+    public async Task AnEmptyNetworkOnIncus_HandsOutItsProviderIdAndRequest_AndWaitsForTheDeleteCommand()
     {
         Network network = OnIncus();
 
-        string? providerId = await Deletion().RequestAsync(network);
+        RequestTicket? ticket = await Deletion().RequestAsync(network);
 
-        Assert.Equal("net-ext", providerId);
+        Assert.Equal("net-ext", ticket!.ProviderId);
+        Assert.Equal((NetworkRequestKind.Delete, ticket.RequestId), (network.Pending!.Kind, network.Pending.Id));
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
     [Fact]
-    public async Task AnEmptyNetworkThatNeverReachedIncus_IsDeletedHere_WithNoProviderId()
+    public async Task AnEmptyNetworkThatNeverReachedIncus_IsDeletedHere_WithNoTicket()
     {
         Network network = TestAggregates.Network(_tenant, "net-nd", "cluster-1");
         network.MarkRequestFailed("create gave up", null);
 
-        string? providerId = await Deletion().RequestAsync(network);
+        RequestTicket? ticket = await Deletion().RequestAsync(network);
 
-        Assert.Null(providerId);
+        Assert.Null(ticket);
+        Assert.Null(network.Pending);
         Assert.True(network.IsTerminal);
     }
 
