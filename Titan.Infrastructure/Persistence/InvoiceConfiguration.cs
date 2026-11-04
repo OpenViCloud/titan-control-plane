@@ -54,7 +54,8 @@ public class InvoiceItemConfiguration : IEntityTypeConfiguration<InvoiceItem>
             .HasConversion(v => v.ToDbString(), s => UsageResourceTypeExtensions.FromDbString(s))
             .IsRequired();
         builder.Property(i => i.ResourceId).HasColumnName("resource_id").IsRequired();
-        builder.Property(i => i.ResourceName).HasColumnName("resource_name").HasMaxLength(64).IsRequired();
+        // As long as the longest name of a metered resource (UsageRecordSchemaTests.ResourceName_HoldsTheLongestNameOfEveryMeteredResource).
+        builder.Property(i => i.ResourceName).HasColumnName("resource_name").HasMaxLength(100).IsRequired();
         builder.Property(i => i.Amount).HasColumnName("amount").HasColumnType("bigint").IsRequired();
         builder.Property(i => i.Currency).HasColumnName("currency").IsRequired();
     }

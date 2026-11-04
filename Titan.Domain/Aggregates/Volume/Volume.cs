@@ -7,6 +7,9 @@ namespace Titan.Domain.Aggregates.Volume;
 
 public class Volume : AggregateRoot
 {
+    /// A volume's name: 1 to 100 characters, not blank, any characters. The validators read it.
+    public const int NameMaxLength = 100;
+
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
@@ -108,6 +111,14 @@ public class Volume : AggregateRoot
         string name, string clusterId, string volumeOfferingId, int sizeGb,
         VolumeSnapshot? restoredFrom = null)
     {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > NameMaxLength)
+        {
+            throw new BusinessException("INVALID_VOLUME_NAME", $"A volume name is 1 to {NameMaxLength} characters, not blank.");
+        }
+        if (sizeGb <= 0)
+        {
+            throw new BusinessException("INVALID_VOLUME_SIZE", "A volume is at least 1 GB.");
+        }
         if (restoredFrom != null)
         {
             restoredFrom.EnsureRestorable();

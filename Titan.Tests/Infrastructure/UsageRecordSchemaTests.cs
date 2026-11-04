@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.UsageRecord;
+using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure;
@@ -31,6 +34,20 @@ public class UsageRecordSchemaTests
     // annotation directly is what lets this pin the configured precision without a real database.
     private static string? ConfiguredColumnType(IProperty property) =>
         property.FindAnnotation(RelationalAnnotationNames.ColumnType)?.Value as string;
+
+    // The name a usage record and its invoice line keep is the metered resource's own, whole: a column shorter than the
+    // longest name the Domain allows makes the insert fail, and the meter stops on that row
+    // (UsageRecordNameLengthDbTests stores one on Postgres).
+    [Fact]
+    public void ResourceName_HoldsTheLongestNameOfEveryMeteredResource()
+    {
+        var options = new DbContextOptionsBuilder<TitanDbContext>().UseInMemoryDatabase($"schema-{Guid.NewGuid()}").Options;
+        using var db = new TitanDbContext(options);
+        int longest = new[] { Vm.NameMaxLength, Volume.NameMaxLength, VmSnapshot.NameMaxLength, VolumeSnapshot.NameMaxLength }.Max();
+
+        Assert.True(db.Model.FindEntityType(typeof(UsageRecord))!.FindProperty(nameof(UsageRecord.ResourceName))!.GetMaxLength() >= longest);
+        Assert.True(db.Model.FindEntityType(typeof(InvoiceItem))!.FindProperty(nameof(InvoiceItem.ResourceName))!.GetMaxLength() >= longest);
+    }
 
     [Fact]
     public void UniquePerResourceAndBucket()

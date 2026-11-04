@@ -425,8 +425,8 @@ namespace Titan.Infrastructure.Migrations
 
                     b.Property<string>("ResourceName")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("resource_name");
 
                     b.Property<string>("ResourceType")
@@ -1256,8 +1256,8 @@ namespace Titan.Infrastructure.Migrations
 
                     b.Property<string>("ResourceName")
                         .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("resource_name");
 
                     b.Property<string>("ResourceType")

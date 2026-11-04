@@ -7,6 +7,15 @@ namespace Titan.Domain.Aggregates.Vm;
 
 public class Vm : AggregateRoot
 {
+    /// A VM's name: 1 to 64 letters, digits or hyphens, starting with a letter or digit (RFC 952 host name). The
+    /// validators read these two, so the /v1 spec carries the same pattern (titan-ops features/vm/design.md#vm-name-limit).
+    public const int NameMaxLength = 64;
+    public const string NamePattern = "^[a-zA-Z0-9][a-zA-Z0-9-]*$";
+
+    /// The disk size that asks for no override: the worker sizes the root disk only above it, so the VM gets its
+    /// image's own size (OpenViCloud/titan-incus-worker:resource/vm/create.go).
+    public const int ImageDiskSize = 0;
+
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public Guid NetworkId { get; private set; }
@@ -113,6 +122,12 @@ public class Vm : AggregateRoot
         int diskSizeGb,
         string? userData = null)
     {
+        RequireName(name);
+        if (diskSizeGb < ImageDiskSize)
+        {
+            throw new BusinessException("INVALID_VM_DISK_SIZE",
+                $"A VM disk is {ImageDiskSize} (the image's own size) or a positive number of GB.");
+        }
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new Vm
         {
@@ -397,7 +412,19 @@ public class Vm : AggregateRoot
     {
         if (IsTerminal)
             throw new BusinessException("VM_INVALID_STATUS", "VM cannot be renamed in its current state.");
+        RequireName(newName);
         Name = newName;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex NameShape = new(NamePattern, System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static void RequireName(string? name)
+    {
+        if (name == null || name.Length == 0 || name.Length > NameMaxLength || !NameShape.IsMatch(name))
+        {
+            throw new BusinessException("INVALID_VM_NAME",
+                $"A VM name is 1 to {NameMaxLength} letters, digits or hyphens, starting with a letter or digit.");
+        }
     }
 
     /// Intent: a VM that never reached the provider has no command and no observation coming, so the

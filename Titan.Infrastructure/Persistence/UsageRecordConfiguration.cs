@@ -18,7 +18,8 @@ public class UsageRecordConfiguration : IEntityTypeConfiguration<UsageRecord>
             .HasConversion(v => v.ToDbString(), s => UsageResourceTypeExtensions.FromDbString(s))
             .IsRequired();
         builder.Property(r => r.ResourceId).HasColumnName("resource_id").IsRequired();
-        builder.Property(r => r.ResourceName).HasColumnName("resource_name").HasMaxLength(64).IsRequired();
+        // As long as the longest name of a metered resource (UsageRecordSchemaTests.ResourceName_HoldsTheLongestNameOfEveryMeteredResource).
+        builder.Property(r => r.ResourceName).HasColumnName("resource_name").HasMaxLength(100).IsRequired();
         builder.Property(r => r.TenantId).HasColumnName("tenant_id").IsRequired();
         builder.Property(r => r.Bucket).HasColumnName("bucket").IsRequired();
         builder.Property(r => r.IntervalMinutes).HasColumnName("interval_minutes").IsRequired();
