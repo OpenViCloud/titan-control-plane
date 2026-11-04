@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -55,6 +56,14 @@ public class LoadBalancer : AggregateRoot
             ? null
             : PendingRequest<LoadBalancerRequestKind>.Of(
                 PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
+
+    /// Counts toward MaxLoadBalancers (titan-ops features/load-balancer/design.md#lb-quota-and-billing): what Incus holds
+    /// or is about to, unless its delete was pressed. A create that failed before Incus had it, or one Incus no longer
+    /// has, does not count. Written once here; the repository counts with it in SQL.
+    public static Expression<Func<LoadBalancer, bool>> OccupiesQuota { get; } = lb =>
+        lb.DesiredExistence == DesiredExistence.Exists
+        && (lb.CurrentExistence == CurrentExistence.Exists
+            || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingRequestId != null));
 
     private LoadBalancer() { }
 

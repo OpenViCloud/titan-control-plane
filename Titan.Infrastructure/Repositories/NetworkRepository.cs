@@ -31,23 +31,13 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Counted by occupancy: what Incus holds or is about to hold. A network being deleted stops counting against
-    // the quota; its name and CIDR stay taken until the delete command confirms it gone
-    // (titan-ops features/network/design.md#network-name-reuse).
+    // A network being deleted stops counting against the quota; its name and CIDR stay taken until the delete command
+    // confirms it gone (titan-ops features/network/design.md#network-name-reuse).
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        await db.Networks.CountAsync(
-            n => n.TenantId == tenantId &&
-                 n.DesiredExistence == DesiredExistence.Exists &&
-                 (n.CurrentExistence == CurrentExistence.Exists
-                  || (n.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(n, "PendingRequestId") != null)), ct);
+        await db.Networks.Where(n => n.TenantId == tenantId).CountAsync(Network.OccupiesQuota, ct);
 
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        await db.Networks.CountAsync(
-            n => n.TenantId == tenantId &&
-                 n.PublicIpv6Subnet != null &&
-                 n.DesiredExistence == DesiredExistence.Exists &&
-                 (n.CurrentExistence == CurrentExistence.Exists
-                  || (n.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(n, "PendingRequestId") != null)), ct);
+        await db.Networks.Where(n => n.TenantId == tenantId).CountAsync(Network.OccupiesPublicIpv6Quota, ct);
 
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(

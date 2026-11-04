@@ -18,7 +18,7 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
 
     public async Task<List<VolumeSnapshot>> ListBillableAsync(CancellationToken ct = default) =>
         await db.VolumeSnapshots
-            .Where(s => s.CurrentExistence == CurrentExistence.Exists)
+            .Where(VolumeSnapshot.IsBilled)
             .AsNoTracking()
             .ToListAsync(ct);
 

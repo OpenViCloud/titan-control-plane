@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -40,6 +41,10 @@ public class VmSnapshot : ChildEntity
             ? null
             : PendingRequest<VmSnapshotRequestKind>.Of(
                 PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
+
+    /// Billed while Incus holds it, a revert or a delete in flight included (titan-ops
+    /// features/vm/design.md#vm-snapshot-counting). The repository lists with it in SQL.
+    public static Expression<Func<VmSnapshot, bool>> IsBilled { get; } = s => s.CurrentExistence == CurrentExistence.Exists;
 
     private VmSnapshot() { }
 
