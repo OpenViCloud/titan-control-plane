@@ -17,8 +17,7 @@ public class ProviderCommandLeaseTests
 
     private ProviderCommand Seed(string key, string kind, DateTimeOffset createdAt)
     {
-        ProviderCommand command = ProviderCommand.Create(key, kind, "mock", "{\"vmId\":\"x\"}",
-            ProviderCommandRerun.AfterAnyFinish, createdAt);
+        ProviderCommand command = ProviderCommand.Create(key, kind, "mock", "{\"vmId\":\"x\"}", createdAt);
         _repo.Add(command);
         return command;
     }

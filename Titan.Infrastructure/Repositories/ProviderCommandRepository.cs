@@ -40,6 +40,9 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
 
     public void Add(ProviderCommand command) => db.ProviderCommands.Add(command);
 
+    public Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct) =>
+        db.ProviderCommands.Where(ProviderCommand.FinishedAndCreatedBefore(cutoff)).ExecuteDeleteAsync(ct);
+
     public async Task SaveChangesAsync(CancellationToken ct)
     {
         try

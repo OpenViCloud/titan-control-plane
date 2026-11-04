@@ -216,7 +216,7 @@ public class RequestLifecycleShapeTests
     public void EveryVmCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var vmEnqueues = Regex.Matches(src, @"public Task EnqueueVm(Create|Delete|Stop|Start)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+        var vmEnqueues = Regex.Matches(src, @"public Task EnqueueVm(Create|Delete|Stop|Start)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
         Assert.Equal(4, vmEnqueues.Count);
 
@@ -229,7 +229,7 @@ public class RequestLifecycleShapeTests
     public void EveryVolumeCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var enqueues = Regex.Matches(src, @"public Task EnqueueVolume(Create|Attach|Detach|Delete|SnapshotCreate|SnapshotDelete|SnapshotRestore)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+        var enqueues = Regex.Matches(src, @"public Task EnqueueVolume(Create|Attach|Detach|Delete|SnapshotCreate|SnapshotDelete|SnapshotRestore)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
         Assert.Equal(7, enqueues.Count);
 
@@ -241,7 +241,7 @@ public class RequestLifecycleShapeTests
     public void EveryVmSnapshotCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var enqueues = Regex.Matches(src, @"public Task EnqueueVmSnapshot(Create|Revert|Delete)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+        var enqueues = Regex.Matches(src, @"public Task EnqueueVmSnapshot(Create|Revert|Delete)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
         Assert.Equal(3, enqueues.Count);
 
@@ -255,7 +255,7 @@ public class RequestLifecycleShapeTests
     public void EveryLoadBalancerCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var enqueues = Regex.Matches(src, @"public Task EnqueueLoadBalancer(Create|Update|Delete)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+        var enqueues = Regex.Matches(src, @"public Task EnqueueLoadBalancer(Create|Update|Delete)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
         Assert.Equal(3, enqueues.Count);
 
@@ -269,7 +269,7 @@ public class RequestLifecycleShapeTests
         foreach (Match m in enqueues)
         {
             bool inline = Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]");
-            Match call = Regex.Match(m.Value, @"LoadBalancerPayload\((?<args>[^;]*?)\),\s*ProviderCommandRerun");
+            Match call = Regex.Match(m.Value, @"LoadBalancerPayload\((?<args>[^;]*?)\),\s*ct\)");
             bool throughTheHelper = call.Success && helperWritesIt
                                     && call.Groups["args"].Value.Split(',').Select(a => a.Trim()).ElementAtOrDefault(requestIdPosition) == "requestId";
             if (!inline && !throughTheHelper) without.Add("EnqueueLoadBalancer" + m.Groups[1].Value);
@@ -281,7 +281,7 @@ public class RequestLifecycleShapeTests
     public void EveryTemplateCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        Match enqueue = Regex.Match(src, @"public Task EnqueueTemplateSyncAsync\([\s\S]*?ProviderCommandRerun\.\w+, ct\);");
+        Match enqueue = Regex.Match(src, @"public Task EnqueueTemplateSyncAsync\([\s\S]*?,\s*ct\);");
         Assert.True(enqueue.Success, "EnqueueTemplateSyncAsync not found: the scan is blind");
 
         Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
@@ -292,7 +292,7 @@ public class RequestLifecycleShapeTests
     public void EveryNetworkCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var enqueues = Regex.Matches(src, @"public Task Enqueue(NetworkCreate|NetworkDelete|FirewallRuleCreate|FirewallRuleDelete)Async\([\s\S]*?ProviderCommandRerun\.\w+, ct\);")
+        var enqueues = Regex.Matches(src, @"public Task Enqueue(NetworkCreate|NetworkDelete|FirewallRuleCreate|FirewallRuleDelete)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
         Assert.Equal(4, enqueues.Count);
 

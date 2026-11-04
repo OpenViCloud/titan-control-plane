@@ -5,7 +5,8 @@ namespace Titan.Application.Abstractions;
 /// Enqueues work for the provider worker (titan-ops architecture/provider-and-worker.md#provider-command-table). Each call
 /// stages a row in the scope's DbContext: it is written by the handler's own SaveAsync, in the same transaction as
 /// the aggregate change, so call it BEFORE saving. Nothing reaches the worker until that commit.
-/// A repeat of the same key follows the row's rerun rule (titan-ops architecture/provider-and-worker.md#provider-command-key).
+/// A repeat of a key that has a row is absorbed while the row is open or Done, and reopens a Failed one
+/// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
 public interface IProviderCommandQueue
 {
     // publicIpv6Subnet/publicIpv6RouterAddress: both null when the network has no public IPv6

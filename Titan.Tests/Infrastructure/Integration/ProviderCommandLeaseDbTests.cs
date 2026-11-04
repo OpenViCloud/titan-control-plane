@@ -24,7 +24,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     {
         await using TitanDbContext db = pg.NewDbContext();
         ProviderCommand command = ProviderCommand.Create("test-" + Guid.NewGuid(), kind, "mock", "{}",
-            ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow.AddSeconds(-1));
+            DateTimeOffset.UtcNow.AddSeconds(-1));
         db.ProviderCommands.Add(command);
         await db.SaveChangesAsync();
         return command.Id;
@@ -103,8 +103,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         }
         await using (TitanDbContext second = pg.NewDbContext())
         {
-            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmBackup, "mock", "{}",
-                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
+            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmBackup, "mock", "{}", DateTimeOffset.UtcNow));
             DbUpdateException clash = await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
             // Two schedulers at once reach the caller as "in progress", not as a 500.
             ErrorStatus status = ErrorStatus.For(clash);
@@ -127,7 +126,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             ProviderCommand failed = ProviderCommand.Create($"vm-backup-{vmId}-20261103", ProviderCommandKinds.VmBackup, "mock",
-                "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+                "{}", DateTimeOffset.UtcNow);
             failed.Lease(leaseId, DateTimeOffset.UtcNow);
             failed.Fail(leaseId, "gave up", retryable: false, DateTimeOffset.UtcNow);
             seed.ProviderCommands.Add(failed);

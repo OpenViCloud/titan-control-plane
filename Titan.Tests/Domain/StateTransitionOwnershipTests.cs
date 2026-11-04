@@ -97,8 +97,8 @@ public class StateTransitionOwnershipTests
         ["TopUp/TopUp"] = "no story yet (Billing): Confirmed/Failed are terminal and guarded by Confirm()/Fail()",
         // A promo TopUp is BORN Confirmed via GrantPromo() — a factory, not a transition — so it adds no
         // status mutation to guard here; Confirm()/Fail() still refuse it (already terminal).
-        ["ProviderCommand/ProviderCommand"] = "Done/Failed are not absorbing on purpose: a repeat of the key reopens a " +
-            "finished row per its Rerun rule (titan-ops architecture/provider-and-worker.md#provider-command-key)",
+        ["ProviderCommand/ProviderCommand"] = "Failed is not absorbing on purpose: a repeat of the key reopens a " +
+            "Failed row (titan-ops architecture/resource-lifecycle.md#one-key-per-request)",
         ["BackupRecord/BackupRecord"] = "a row of the cache the backup refresh keeps from the bucket, not a state machine: Complete or " +
             "Incomplete only reports what barman wrote, and the next refresh rewrites it from the bucket",
         ["PaymentGatewayTransaction/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
@@ -290,9 +290,9 @@ public class StateTransitionOwnershipTests
         ["VmTemplateCluster.EndRequest"] = "the report of a sync's own command, ignored unless it names the waiting " +
             "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
             "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).",
-        ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open row, or a Done row that " +
-            "only reruns after failure, absorbs it (returns false); any other finished row runs again. A throw " +
-            "would turn a resent intent into an error every handler must recognise first.",
+        ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
+            "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
+            "handler must recognise first.",
         ["Vm.Accept"] = "private helper, reached only from RequestStop/RequestStart/RequestDelete, each of " +
             "which refuses every state it cannot accept before calling it; it records the request those " +
             "methods already validated. A check here would repeat theirs.",

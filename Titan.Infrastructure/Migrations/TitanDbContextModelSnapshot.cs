@@ -936,12 +936,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload");
 
-                    b.Property<string>("Rerun")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("rerun");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -960,6 +954,8 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasIndex("LeaseId")
                         .IsUnique();
+
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.HasIndex("Status", "Kind", "AvailableAt");
 

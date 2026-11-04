@@ -43,6 +43,15 @@ public class ProviderCommandSchemaTests
         Assert.True(uniqueOnLease);
     }
 
+    // The retention pass finds finished rows by status and age (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    [Fact]
+    public void StatusAndCreatedAt_AreIndexedTogether()
+    {
+        bool retentionIndex = EntityType().GetIndexes().Any(i =>
+            i.Properties.Select(p => p.Name).SequenceEqual([nameof(ProviderCommand.Status), nameof(ProviderCommand.CreatedAt)]));
+        Assert.True(retentionIndex);
+    }
+
     [Fact]
     public void Version_IsTheConcurrencyToken()
     {

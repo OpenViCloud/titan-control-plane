@@ -59,13 +59,8 @@ VALUES ({templateId}, {clusterId}, 'NotCreated', 'Exists', {intent}, now())");
     private async Task AddCommandAsync(string key, string clusterId, string payload, bool done = false)
     {
         await using TitanDbContext seed = NewDbContext();
-        seed.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.TemplateSync, clusterId, payload,
-            ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow));
-        await seed.SaveChangesAsync();
-        if (done)
-        {
-            await seed.Database.ExecuteSqlInterpolatedAsync($"UPDATE core.provider_commands SET status = 'Done' WHERE key = {key}");
-        }
+        await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, key, ProviderCommandKinds.TemplateSync, clusterId, payload,
+            done ? "Done" : "Pending");
     }
 
     private async Task<VmTemplateCluster> RowAsync(Guid templateId, string clusterId)

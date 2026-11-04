@@ -19,5 +19,9 @@ public interface IProviderCommandRepository
 
     void Add(ProviderCommand command);
 
+    /// Deletes at once, outside the scope's SaveChanges, the rows of ProviderCommand.FinishedAndCreatedBefore; returns
+    /// how many.
+    Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct);
+
     Task SaveChangesAsync(CancellationToken ct);
 }

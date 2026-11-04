@@ -39,7 +39,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
             seed.Vms.Add(vm);
             Guid lease = Guid.NewGuid();
             ProviderCommand gaveUp = ProviderCommand.Create($"vm-delete-{vm.Id}", ProviderCommandKinds.VmDelete,
-                "cluster-1", "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+                "cluster-1", "{}", DateTimeOffset.UtcNow);
             gaveUp.Lease(lease, DateTimeOffset.UtcNow);
             gaveUp.Fail(lease, "gave up", retryable: false, DateTimeOffset.UtcNow);
             seed.ProviderCommands.Add(gaveUp);

@@ -94,15 +94,10 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Guid stillOpen = await SeedVmAsync("Deleted", "Running", true, waiting: true);
         await using (TitanDbContext seed = NewDbContext())
         {
-            Guid lease = Guid.NewGuid();
-            ProviderCommand failed = ProviderCommand.Create($"vm-delete-{gaveUp}", ProviderCommandKinds.VmDelete, "cluster-a", "{}",
-                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
-            failed.Lease(lease, DateTimeOffset.UtcNow);
-            failed.Fail(lease, "gave up", retryable: false, DateTimeOffset.UtcNow);
-            seed.ProviderCommands.Add(failed);
-            seed.ProviderCommands.Add(ProviderCommand.Create($"vm-delete-{stillOpen}", ProviderCommandKinds.VmDelete, "cluster-a", "{}",
-                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
-            await seed.SaveChangesAsync();
+            await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, $"vm-delete-{gaveUp}", ProviderCommandKinds.VmDelete,
+                "cluster-a", "{}", "Failed", "AfterFailureOnly");
+            await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, $"vm-delete-{stillOpen}", ProviderCommandKinds.VmDelete,
+                "cluster-a", "{}", "Pending", "AfterFailureOnly");
         }
 
         await MigrateToLatestAsync();
@@ -154,14 +149,12 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         {
             stopIntent = (await seed.Database
                 .SqlQuery<Guid>($"SELECT pending_intent_id AS \"Value\" FROM core.vms WHERE id = {stopping}").ToListAsync()).Single();
-            ProviderCommand Open(string key, string kind) => ProviderCommand.Create(key, kind, "cluster-a", "{\"vmId\":\"x\"}",
-                ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow);
-            seed.ProviderCommands.AddRange(
-                Open($"vm-provision-{creating}", ProviderCommandKinds.VmCreate),
-                Open($"vm-delete-{deleting}", ProviderCommandKinds.VmDelete),
-                Open($"vm-stop-{stopping}-{stopIntent}", ProviderCommandKinds.VmStop),
-                Open($"vm-delete-{resting}", ProviderCommandKinds.VmDelete));
-            await seed.SaveChangesAsync();
+            Task Open(string key, string kind) =>
+                ProviderCommandRowsBeforeOneRule.InsertAsync(seed, key, kind, "cluster-a", "{\"vmId\":\"x\"}");
+            await Open($"vm-provision-{creating}", ProviderCommandKinds.VmCreate);
+            await Open($"vm-delete-{deleting}", ProviderCommandKinds.VmDelete);
+            await Open($"vm-stop-{stopping}-{stopIntent}", ProviderCommandKinds.VmStop);
+            await Open($"vm-delete-{resting}", ProviderCommandKinds.VmDelete);
         }
 
         await MigrateToLatestAsync();

@@ -34,7 +34,8 @@ public record ErrorStatus(int Status, string Code)
         _                              => new ErrorStatus(500, InternalErrorCode)
     };
 
-    // Two identical repeats at once both reopen the same finished row: the version token lets one commit.
+    // Two identical repeats at once both reopen the same Failed row (a backup of the day): the version token lets one
+    // commit.
     private static bool TouchesAProviderCommand(DbUpdateConcurrencyException ex) =>
         ex.Entries.Any(entry => entry.Entity is ProviderCommand);
 
