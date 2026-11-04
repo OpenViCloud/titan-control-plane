@@ -9,6 +9,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

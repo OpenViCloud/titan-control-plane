@@ -24,8 +24,8 @@ public class SePayWebhookDbTests(PostgresFixture pg)
     private static readonly DateTimeOffset PaidAt = new(2026, 8, 27, 9, 0, 0, TimeSpan.Zero);
 
     private static ReceiveSePayPaymentCommandHandler NewService(TitanDbContext db, IWalletMutationPublisher bus) =>
-        new(new PaymentGatewayTransactionRepository(db), new CreditRepository(db), new WalletRepository(db),
-            new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new CreditRepository(db), new WalletLedger(new WalletTransactionRepository(db))),
+        new(new PaymentGatewayTransactionRepository(db), new TopUpRepository(db), new WalletRepository(db),
+            new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new TopUpRepository(db), new WalletLedger(new WalletTransactionRepository(db))),
             bus, NullLogger<ReceiveSePayPaymentCommandHandler>.Instance);
 
     // Applies a mutation exactly as the single-writer consumer would — drain, no bus.

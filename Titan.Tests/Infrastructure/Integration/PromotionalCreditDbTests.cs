@@ -8,7 +8,7 @@ using Titan.Domain.Services;
 namespace Titan.Tests.Infrastructure.Integration;
 
 // The DB-layer proof for the admin-grant money path. A promo grant is a TopUp with
-// Source=PromotionalCredit; these run the real CreditRepository + WalletRepository against a real
+// Source=PromotionalCredit; these run the real TopUpRepository + WalletRepository against a real
 // Postgres with the actual migration applied, so they prove what
 // metadata/mocks cannot:
 //   1. a promo TopUp round-trips through `top_ups` with the `reason` column, and
@@ -36,20 +36,20 @@ public class PromotionalCreditDbTests(PostgresFixture pg)
         Guid topUpId;
         await using (var db = pg.NewDbContext())
         {
-            var creditRepo = new CreditRepository(db);
+            var topUpRepo = new TopUpRepository(db);
             var walletRepo = new WalletRepository(db);
             var topUp = TopUp.GrantPromo(tenantId, 500_000L, "VND", "welcome", "admin-1");
             topUpId = topUp.Id;
             var wallet = await walletRepo.GetByTenantForUpdateAsync(tenantId, default);
             new WalletLedger(new WalletTransactionRepository(db)).Credit(wallet!, WalletTransactionType.Promo, 500_000L, topUp.Id);
-            creditRepo.AddTopUp(topUp);
+            topUpRepo.AddTopUp(topUp);
             await walletRepo.SaveChangesAsync(default);
         }
 
         await using (var db = pg.NewDbContext())
         {
             // The promo TopUp is listable via the filtered query, with reason + admin preserved.
-            var list = await new CreditRepository(db).ListTopUpsAsync(TopUpSource.PromotionalCredit, default);
+            var list = await new TopUpRepository(db).ListTopUpsAsync(TopUpSource.PromotionalCredit, default);
             var stored = Assert.Single(list, t => t.Id == topUpId);
             Assert.Equal(500_000L, stored.Amount);
             Assert.Equal("welcome", stored.Reason);
@@ -81,7 +81,7 @@ public class PromotionalCreditDbTests(PostgresFixture pg)
         Guid promoId, realId;
         await using (var db = pg.NewDbContext())
         {
-            var repo = new CreditRepository(db);
+            var repo = new TopUpRepository(db);
             var promo = TopUp.GrantPromo(tenantId, 100_000L, "VND", "gift", "admin-1");
             var real = TopUp.Create(tenantId, 200_000L, "VND");
             real.Confirm(TopUpSource.SePay, "webhook", "txn-1");
@@ -94,7 +94,7 @@ public class PromotionalCreditDbTests(PostgresFixture pg)
 
         await using (var db = pg.NewDbContext())
         {
-            var list = (await new CreditRepository(db).ListTopUpsAsync(TopUpSource.PromotionalCredit, default))
+            var list = (await new TopUpRepository(db).ListTopUpsAsync(TopUpSource.PromotionalCredit, default))
                 .Where(t => t.TenantId == tenantId).ToList();
             Assert.Contains(list, t => t.Id == promoId);
             Assert.DoesNotContain(list, t => t.Id == realId);

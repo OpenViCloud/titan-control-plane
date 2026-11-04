@@ -74,7 +74,7 @@ public class QueryParameterValidationEndpointTests
 
     private static ListTopUpsAdminEndpoint TopUpsEndpoint()
     {
-        var repo = new Mock<ICreditRepository>();
+        var repo = new Mock<ITopUpRepository>();
         repo.Setup(r => r.ListTopUpsAsync(It.IsAny<TopUpSource?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<TopUpAggregate>());
         return Factory.Create<ListTopUpsAdminEndpoint>(new ListTopUpsQueryHandler(repo.Object));

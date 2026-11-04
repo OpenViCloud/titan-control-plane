@@ -3,6 +3,7 @@ using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Services.Platform.Tenant;
 

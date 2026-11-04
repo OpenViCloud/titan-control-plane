@@ -19,7 +19,7 @@ namespace Titan.Tests.Services;
 public class SePayWebhookServiceTests
 {
     private readonly Mock<IPaymentGatewayTransactionRepository> _payments = new();
-    private readonly Mock<ICreditRepository> _credit = new();
+    private readonly Mock<ITopUpRepository> _credit = new();
     private readonly Mock<IWalletRepository> _walletRepo = new();
     private readonly Mock<IWalletMutationRepository> _mutationRepo = new();
     private readonly Mock<IWalletMutationPublisher> _bus = new();

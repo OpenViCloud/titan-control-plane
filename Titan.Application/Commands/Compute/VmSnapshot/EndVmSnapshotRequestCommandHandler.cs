@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 

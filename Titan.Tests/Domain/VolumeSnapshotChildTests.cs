@@ -142,7 +142,7 @@ public class VolumeSnapshotChildTests
         Assert.DoesNotContain(volume.Snapshots, s => s.Id == foreign.Id);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.DeleteSnapshotLocally(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.RequestSnapshotDelete(foreign.Id)).Code);
-        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.BeginSnapshotRestore(foreign.Id)).Code);
+        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.ProviderIdForSnapshotRestore(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(
             () => volume.EndSnapshotRequest(foreign.Id, foreign.Pending!.Id, VolumeSnapshotRequestEnd.Done("vol11/s1"))).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.MarkSnapshotNotFound(foreign.Id)).Code);
@@ -160,7 +160,7 @@ public class VolumeSnapshotChildTests
         Assert.Equal(createRequestId,
             volume.EndSnapshotRequest(snapshot.Id, createRequestId, VolumeSnapshotRequestEnd.Done("vol11/s1"))!.Id);
         volume.MarkSnapshotObserved(snapshot.Id);
-        Assert.Equal("vol11/s1", volume.BeginSnapshotRestore(snapshot.Id));
+        Assert.Equal("vol11/s1", volume.ProviderIdForSnapshotRestore(snapshot.Id));
 
         RequestTicket refused = volume.RequestSnapshotDelete(snapshot.Id);
         Assert.Equal("vol11/s1", refused.ProviderId);

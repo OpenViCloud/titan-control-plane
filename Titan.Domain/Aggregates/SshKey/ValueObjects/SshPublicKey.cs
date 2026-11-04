@@ -40,7 +40,7 @@ public sealed record SshPublicKey : ValueObject
         ReadResult result = Read(text);
         if (result.Key == null)
         {
-            throw new BadRequestException("INVALID_SSH_KEY", result.Problem);
+            throw new BusinessException("INVALID_SSH_KEY", result.Problem);
         }
 
         return result.Key;

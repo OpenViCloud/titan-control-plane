@@ -86,7 +86,7 @@ public class SshPublicKeyTests
     public void Parse_Malformed_IsRefused(string text)
     {
         Assert.NotNull(SshPublicKey.FindProblem(text));
-        BadRequestException refused = Assert.Throws<BadRequestException>(() => SshPublicKey.Parse(text));
+        BusinessException refused = Assert.Throws<BusinessException>(() => SshPublicKey.Parse(text));
         Assert.Equal("INVALID_SSH_KEY", refused.Code);
     }
 

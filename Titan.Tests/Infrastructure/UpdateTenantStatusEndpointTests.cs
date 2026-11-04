@@ -10,6 +10,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Infrastructure.Endpoints.Tenant;
 using Titan.Tests.Fakes;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Infrastructure;
 

@@ -114,7 +114,7 @@ public class LoadBalancer : AggregateRoot
     /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
-    /// The network is checked by the caller through Network.BeginLoadBalancer: this aggregate holds no Network type
+    /// The network is checked by the caller through Network.ProviderIdForLoadBalancer: this aggregate holds no Network type
     /// (titan-ops architecture/code-structure.md#module-boundary).
     public static LoadBalancer Create(
         Guid tenantId, string name, Guid networkId, string externalNetworkId,
@@ -336,7 +336,7 @@ public class LoadBalancer : AggregateRoot
             {
                 throw new BusinessException("LOAD_BALANCER_BACKEND_INVALID", $"VM '{vm.Id}' is not one of this tenant's.");
             }
-            asked.Add((vm.Id, vm.BeginLoadBalancerBackend(NetworkId)));
+            asked.Add((vm.Id, vm.ProviderIdForLoadBalancerBackend(NetworkId)));
         }
 
         foreach (LoadBalancerListener row in _listeners)

@@ -4,7 +4,7 @@ using Titan.Domain.Repositories;
 namespace Titan.Application.Queries.Billing.TopUp;
 
 /// Admin TopUp history, newest first, across every tenant — no ICurrentUser: platform-admin only.
-public class ListTopUpsQueryHandler(ICreditRepository repo)
+public class ListTopUpsQueryHandler(ITopUpRepository repo)
 {
     public async Task<IReadOnlyList<TopUpQueryResult>> HandleAsync(ListTopUpsQuery query, CancellationToken ct = default)
     {

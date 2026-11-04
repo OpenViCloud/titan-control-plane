@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
-using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 

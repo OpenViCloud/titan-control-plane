@@ -1,6 +1,7 @@
 using System.Reflection;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Api;
 
@@ -54,8 +55,11 @@ public class ErrorStatusTests
     public void NoDomainException_MapsToAStatusTheEdgeReplaces()
     {
         int[] replacedByTheEdge = [502, 504];
+        // The Domain's exceptions and the Application's request exceptions: every exception type of Titan's own that
+        // ErrorStatus maps.
         List<Type> exceptionTypes = typeof(NotFoundException).Assembly.GetTypes()
-            .Where(t => t.Namespace == typeof(NotFoundException).Namespace)
+            .Concat(typeof(BadRequestException).Assembly.GetTypes())
+            .Where(t => t.Namespace == typeof(NotFoundException).Namespace || t.Namespace == typeof(BadRequestException).Namespace)
             .Where(t => typeof(Exception).IsAssignableFrom(t) && !t.IsAbstract)
             .ToList();
         Assert.True(exceptionTypes.Count >= 7, $"the scan found only {exceptionTypes.Count} exception types");

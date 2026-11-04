@@ -108,7 +108,7 @@ public class LegalServiceTests
         await CreateService().RecordAcceptanceAsync("203.0.113.7");
 
         Assert.NotNull(captured);
-        Assert.Equal(Subject, captured!.SubjectId);
+        Assert.Equal(Subject, captured!.KeycloakUserId);
         Assert.Equal("terms", captured.DocumentKey);
         Assert.Equal("v0-placeholder", captured.DocumentVersion);
         Assert.Equal("203.0.113.7", captured.SourceIp);

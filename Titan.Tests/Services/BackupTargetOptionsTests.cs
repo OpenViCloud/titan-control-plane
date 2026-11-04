@@ -1,5 +1,6 @@
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

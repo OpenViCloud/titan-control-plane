@@ -6,6 +6,7 @@ using Titan.Application.Options;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Incus;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Infrastructure.Incus;
 

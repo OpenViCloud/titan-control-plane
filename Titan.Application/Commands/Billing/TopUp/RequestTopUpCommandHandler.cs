@@ -8,7 +8,7 @@ namespace Titan.Application.Commands.Billing.TopUp;
 
 /// A Pending TopUp with a generated PaymentRef the customer pays against. ConfirmTopUp or the SePay
 /// webhook credits the wallet later.
-public class RequestTopUpCommandHandler(ICreditRepository repo, ICurrentUser currentUser, CreditOptions options)
+public class RequestTopUpCommandHandler(ITopUpRepository repo, ICurrentUser currentUser, CreditOptions options)
 {
     public async Task<RequestTopUpCommandResult> HandleAsync(RequestTopUpCommand command, CancellationToken ct = default)
     {

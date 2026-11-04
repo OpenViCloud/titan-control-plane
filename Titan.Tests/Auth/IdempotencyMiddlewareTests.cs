@@ -4,6 +4,7 @@ using Moq;
 using Titan.Application.Services.Platform;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Auth;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Auth;
 

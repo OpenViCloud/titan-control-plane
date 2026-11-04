@@ -64,7 +64,7 @@ public class ApiTokenTests
     public void Create_AnyOtherLifetime_IsRefused(int days)
     {
         Assert.Equal("INVALID_API_TOKEN",
-            Assert.Throws<BadRequestException>(() => Create(days: days)).Code);
+            Assert.Throws<BusinessException>(() => Create(days: days)).Code);
     }
 
     [Theory]
@@ -78,7 +78,7 @@ public class ApiTokenTests
     public void Create_MalformedSecret_IsRefused(string secret)
     {
         Assert.Equal("INVALID_API_TOKEN",
-            Assert.Throws<BadRequestException>(() => Create(secret: secret)).Code);
+            Assert.Throws<BusinessException>(() => Create(secret: secret)).Code);
     }
 
     [Theory]
@@ -87,13 +87,13 @@ public class ApiTokenTests
     public void Create_BlankName_IsRefused(string name)
     {
         Assert.Equal("INVALID_API_TOKEN_NAME",
-            Assert.Throws<BadRequestException>(() => Create(name: name)).Code);
+            Assert.Throws<BusinessException>(() => Create(name: name)).Code);
     }
 
     [Fact]
     public void Create_NameLongerThan64_IsRefused()
     {
-        Assert.Throws<BadRequestException>(() => Create(name: new string('t', 65)));
+        Assert.Throws<BusinessException>(() => Create(name: new string('t', 65)));
         Assert.NotNull(Create(name: new string('t', 64)));
     }
 

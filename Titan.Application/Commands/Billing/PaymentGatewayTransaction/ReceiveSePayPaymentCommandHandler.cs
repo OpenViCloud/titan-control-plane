@@ -17,7 +17,7 @@ namespace Titan.Application.Commands.Billing.PaymentGatewayTransaction;
 /// on the credit mutation. Not tenant-scoped: the webhook attributes by PaymentRef.
 public partial class ReceiveSePayPaymentCommandHandler(
     IPaymentGatewayTransactionRepository payments,
-    ICreditRepository credit,
+    ITopUpRepository credit,
     IWalletRepository walletRepo,
     TopUpCredit topUpCredit,
     IWalletMutationPublisher walletBus,

@@ -533,7 +533,7 @@ public class VmStateMachineTests
     public void SnapshotAndAttach_FromEveryStatusIncusAllows_HandOutTheId(Seed from)
     {
         Assert.Equal("42", VmIn(from).AddSnapshot("s").ExternalVmId);
-        Assert.Equal("42", VmIn(from).BeginVolumeAttach());
+        Assert.Equal("42", VmIn(from).ProviderIdForVolumeAttach());
     }
 
     [Theory]
@@ -545,7 +545,7 @@ public class VmStateMachineTests
     public void SnapshotAndAttach_FromAnythingElse_Throw(Seed from)
     {
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot("s")).Code);
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).BeginVolumeAttach()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).ProviderIdForVolumeAttach()).Code);
     }
 
     [Theory] // a stop or delete waiting races any other command against this VM
@@ -557,16 +557,16 @@ public class VmStateMachineTests
         if (waiting == VmRequestKind.Stop) vm.RequestStop(); else vm.RequestDelete();
 
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.AddSnapshot("s")).Code);
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.BeginVolumeAttach()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.ProviderIdForVolumeAttach()).Code);
     }
 
     [Fact] // a waiting START does not block: the VM is Stopped, and attach is legal from Stopped
-    public void BeginVolumeAttach_WhileAStartIsWaiting_IsAllowed()
+    public void ProviderIdForVolumeAttach_WhileAStartIsWaiting_IsAllowed()
     {
         var vm = VmIn(Seed.Stopped);
         vm.RequestStart();
 
-        Assert.Equal("42", vm.BeginVolumeAttach());
+        Assert.Equal("42", vm.ProviderIdForVolumeAttach());
     }
 
     // ---------- Intent: rename ----------

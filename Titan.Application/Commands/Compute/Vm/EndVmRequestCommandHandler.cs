@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.Vm;
 

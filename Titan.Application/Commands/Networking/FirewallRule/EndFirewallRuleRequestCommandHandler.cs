@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 

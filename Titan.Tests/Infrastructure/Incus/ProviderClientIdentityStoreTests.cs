@@ -1,8 +1,8 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
-using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Incus;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Infrastructure.Incus;
 

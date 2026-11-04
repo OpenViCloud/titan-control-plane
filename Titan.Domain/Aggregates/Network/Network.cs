@@ -311,7 +311,7 @@ public class Network : AggregateRoot
 
     /// A VM is instantiated on its network's cluster, so it must ask for the network's own cluster
     /// (titan-ops features/catalog/design.md#cluster-is-a-real-choice). Checked before the state: another cluster is never right.
-    public string BeginVmDeployment(string vmClusterId)
+    public string ProviderIdForVm(string vmClusterId)
     {
         bool vmIsInAnotherCluster = vmClusterId != ClusterId;
         if (vmIsInAnotherCluster)
@@ -379,7 +379,7 @@ public class Network : AggregateRoot
 
     /// A load balancer needs the network's public /64 for its VIP: Incus refuses one on a network with no uplink
     /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
-    public string BeginLoadBalancer()
+    public string ProviderIdForLoadBalancer()
     {
         if (!HasPublicIpv6)
             throw new BusinessException("LOAD_BALANCER_NEEDS_PUBLIC_IPV6", "A load balancer needs a network with public IPv6.");

@@ -17,7 +17,7 @@ public class TopUpCreditTests
     private static readonly Guid TenantId = Guid.NewGuid();
     private readonly Mock<IWalletRepository> _wallets = new();
     private readonly Mock<IWalletMutationRepository> _mutations = new();
-    private readonly Mock<ICreditRepository> _topUps = new();
+    private readonly Mock<ITopUpRepository> _topUps = new();
     private readonly Mock<IWalletTransactionRepository> _transactions = new();
     private readonly Wallet _wallet = Wallet.Open(TenantId, "VND");
 

@@ -10,7 +10,7 @@ public class Acceptance : AggregateRoot
     public Guid Id { get; private set; }
 
     /// Keycloak `sub` of the accepting user.
-    public string SubjectId { get; private set; } = default!;
+    public string KeycloakUserId { get; private set; } = default!;
 
     /// e.g. "terms". Bound with DocumentVersion so the proof is tied to the exact text the user saw.
     public string DocumentKey { get; private set; } = default!;
@@ -24,10 +24,10 @@ public class Acceptance : AggregateRoot
 
     private Acceptance() { }
 
-    public static Acceptance Record(string subjectId, string documentKey, string documentVersion, string? sourceIp)
+    public static Acceptance Record(string keycloakUserId, string documentKey, string documentVersion, string? sourceIp)
     {
-        if (string.IsNullOrWhiteSpace(subjectId))
-            throw new ArgumentException("subjectId is required.", nameof(subjectId));
+        if (string.IsNullOrWhiteSpace(keycloakUserId))
+            throw new ArgumentException("keycloakUserId is required.", nameof(keycloakUserId));
         if (string.IsNullOrWhiteSpace(documentKey))
             throw new ArgumentException("documentKey is required.", nameof(documentKey));
         if (string.IsNullOrWhiteSpace(documentVersion))
@@ -36,7 +36,7 @@ public class Acceptance : AggregateRoot
         return new Acceptance
         {
             Id = Guid.NewGuid(),
-            SubjectId = subjectId,
+            KeycloakUserId = keycloakUserId,
             DocumentKey = documentKey,
             DocumentVersion = documentVersion,
             AcceptedAt = DateTimeOffset.UtcNow,

@@ -4,6 +4,7 @@ using Titan.Application.Commands.Platform.BackupTarget.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

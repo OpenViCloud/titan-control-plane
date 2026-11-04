@@ -55,7 +55,7 @@ public class CreateVmCommandHandler(
 
         // The network answers whether it can host a VM and hands over the provider id in one call: no
         // `network.ExternalId!` at the enqueue below.
-        var externalNetworkId = network.BeginVmDeployment(req.ClusterId);
+        var externalNetworkId = network.ProviderIdForVm(req.ClusterId);
 
         // Resolve the sizing tier here (titan-ops features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
         // the control plane passes the concrete CPU/vCPU/memory it sets on the instance.

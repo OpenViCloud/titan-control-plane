@@ -6,6 +6,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 

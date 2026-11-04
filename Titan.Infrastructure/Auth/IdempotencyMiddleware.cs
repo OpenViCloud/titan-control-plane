@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
 using Titan.Application.Services.Platform;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Auth;
 

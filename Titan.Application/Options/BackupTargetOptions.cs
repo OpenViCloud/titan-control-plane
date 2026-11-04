@@ -1,5 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Options;
 

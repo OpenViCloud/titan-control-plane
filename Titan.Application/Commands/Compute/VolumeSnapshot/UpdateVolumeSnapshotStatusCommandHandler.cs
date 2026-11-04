@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 

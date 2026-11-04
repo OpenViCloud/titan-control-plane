@@ -58,12 +58,12 @@ public class Tenant : AggregateRoot
         Status = TenantStatus.Active;
     }
 
-    /// BadRequestException (400), not BusinessException (422), to keep the status code of
-    /// PATCH /v1/tenants/{id}/status.
+    /// A repeat is refused as a rule; PATCH /v1/tenants/{id}/status answers it as done before calling this
+    /// (UpdateTenantStatusCommandHandler).
     public void Suspend()
     {
         if (Status == TenantStatus.Suspended)
-            throw new BadRequestException("INVALID_STATUS", $"Tenant is already {TenantStatus.Suspended}.");
+            throw new BusinessException("INVALID_STATUS", $"Tenant is already {TenantStatus.Suspended}.");
         Status = TenantStatus.Suspended;
     }
 
@@ -75,7 +75,7 @@ public class Tenant : AggregateRoot
     {
         if (Status == TenantStatus.Active)
         {
-            throw new BadRequestException("INVALID_STATUS", $"Tenant is already {TenantStatus.Active}.");
+            throw new BusinessException("INVALID_STATUS", $"Tenant is already {TenantStatus.Active}.");
         }
 
         Status = TenantStatus.Active;

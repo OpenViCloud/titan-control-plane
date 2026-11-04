@@ -5,8 +5,8 @@ using Titan.Application.Services.Billing;
 using Titan.Application.Queries.Billing.UsageRecord;
 using Titan.Application.Queries.Billing.UsageRecord.Contracts;
 using Titan.Domain.Aggregates.UsageRecord;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

@@ -15,7 +15,7 @@ public class AcceptanceTests
         var a = Acceptance.Record("kc-user-1", "terms", "v0-placeholder", "203.0.113.7");
 
         Assert.NotEqual(Guid.Empty, a.Id);
-        Assert.Equal("kc-user-1", a.SubjectId);
+        Assert.Equal("kc-user-1", a.KeycloakUserId);
         Assert.Equal("terms", a.DocumentKey);
         Assert.Equal("v0-placeholder", a.DocumentVersion);
         Assert.Equal("203.0.113.7", a.SourceIp);
