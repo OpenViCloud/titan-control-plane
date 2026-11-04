@@ -11,7 +11,8 @@ namespace Titan.Infrastructure.Migrations
     public partial class ProviderCommandOneRule : Migration
     {
         /// The mode the image just before this migration writes for each key: the two backups, keyed by their day, rerun
-        /// only after a failure; every other key after any finish. Older rows written with another mode get that one.
+        /// only after a failure; every other key after any finish. Older rows written with another mode get their key's
+        /// mode too, not the one they had.
         private const string RestoreTheRerunOfEachRowSql = @"
 UPDATE core.provider_commands SET rerun = 'AfterFailureOnly'
 WHERE key LIKE 'vm-backup-%' OR key LIKE 'volume-backup-%';";

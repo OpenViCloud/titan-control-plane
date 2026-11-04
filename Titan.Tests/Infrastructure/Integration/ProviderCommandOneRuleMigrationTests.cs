@@ -9,8 +9,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// A database whose provider command rows carry a rerun mode meets the migration that gives every key one rule
 /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request): the column goes, every row keeps its status and
 /// payload, and the index the retention pass reads is there. Down gives each row the mode the image before this
-/// migration writes for its key. The column name and its values below are the schema before it, by necessity. Category=Integration — its own CI step; needs real
-/// Postgres.
+/// migration writes for its key. The column name and its values below are the schema before it, by necessity.
+/// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class ProviderCommandOneRuleMigrationTests : IAsyncLifetime
 {
