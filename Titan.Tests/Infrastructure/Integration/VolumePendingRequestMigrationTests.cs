@@ -74,9 +74,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
     private async Task AddOpenCommandAsync(string key, string kind)
     {
         await using TitanDbContext seed = NewDbContext();
-        seed.ProviderCommands.Add(ProviderCommand.Create(key, kind, "cluster-a", "{}", ProviderCommandRerun.AfterAnyFinish,
-            DateTimeOffset.UtcNow));
-        await seed.SaveChangesAsync();
+        await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, key, kind, "cluster-a", "{}");
     }
 
     private async Task<Volume> VolumeAsync(Guid id)

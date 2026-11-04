@@ -24,7 +24,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     {
         await using TitanDbContext db = pg.NewDbContext();
         ProviderCommand command = ProviderCommand.Create("test-" + Guid.NewGuid(), kind, "mock", "{}",
-            ProviderCommandRerun.AfterAnyFinish, DateTimeOffset.UtcNow.AddSeconds(-1));
+            DateTimeOffset.UtcNow.AddSeconds(-1));
         db.ProviderCommands.Add(command);
         await db.SaveChangesAsync();
         return command.Id;
@@ -103,8 +103,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         }
         await using (TitanDbContext second = pg.NewDbContext())
         {
-            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmBackup, "mock", "{}",
-                ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow));
+            second.ProviderCommands.Add(ProviderCommand.Create(key, ProviderCommandKinds.VmBackup, "mock", "{}", DateTimeOffset.UtcNow));
             DbUpdateException clash = await Assert.ThrowsAsync<DbUpdateException>(() => second.SaveChangesAsync());
             // Two schedulers at once reach the caller as "in progress", not as a 500.
             ErrorStatus status = ErrorStatus.For(clash);
@@ -116,18 +115,18 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == key));
     }
 
-    // Two identical repeats at the same instant both reopen one finished row (a failed backup of the day, asked twice at
+    // Two identical repeats at the same instant both reopen one Failed row (a failed backup of the day, asked twice at
     // once): the version token lets one commit; the other reaches the caller as 409, not 500. A backup, not a resource's
     // request: those keys are never reused (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
-    public async Task TwoConcurrentReopens_OfOneFinishedRow_TheSecondIs409()
+    public async Task TwoConcurrentReopens_OfOneFailedRow_TheSecondIs409()
     {
         Guid vmId = Guid.NewGuid();
         Guid leaseId = Guid.NewGuid();
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             ProviderCommand failed = ProviderCommand.Create($"vm-backup-{vmId}-20261103", ProviderCommandKinds.VmBackup, "mock",
-                "{}", ProviderCommandRerun.AfterFailureOnly, DateTimeOffset.UtcNow);
+                "{}", DateTimeOffset.UtcNow);
             failed.Lease(leaseId, DateTimeOffset.UtcNow);
             failed.Fail(leaseId, "gave up", retryable: false, DateTimeOffset.UtcNow);
             seed.ProviderCommands.Add(failed);

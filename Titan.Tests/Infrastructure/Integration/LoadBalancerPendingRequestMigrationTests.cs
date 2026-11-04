@@ -61,13 +61,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
     private async Task AddCommandAsync(string key, string kind, string payload, bool done = false)
     {
         await using TitanDbContext seed = NewDbContext();
-        seed.ProviderCommands.Add(ProviderCommand.Create(key, kind, "cluster-a", payload, ProviderCommandRerun.AfterAnyFinish,
-            DateTimeOffset.UtcNow));
-        await seed.SaveChangesAsync();
-        if (done)
-        {
-            await seed.Database.ExecuteSqlInterpolatedAsync($"UPDATE core.provider_commands SET status = 'Done' WHERE key = {key}");
-        }
+        await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, key, kind, "cluster-a", payload, done ? "Done" : "Pending");
     }
 
     private async Task<LoadBalancer> LoadBalancerAsync(Guid id)

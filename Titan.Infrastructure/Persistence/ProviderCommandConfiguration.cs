@@ -18,7 +18,6 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.ClusterId).HasColumnName("cluster_id").HasMaxLength(64).IsRequired();
         builder.Property(c => c.Payload).HasColumnName("payload").HasColumnType("jsonb").IsRequired();
         // titan-ops architecture/code-structure.md#enum-storage
-        builder.Property(c => c.Rerun).HasColumnName("rerun").HasConversion<string>().HasMaxLength(32).IsRequired();
         builder.Property(c => c.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();
         builder.Property(c => c.Attempts).HasColumnName("attempts").IsRequired();
         builder.Property(c => c.AvailableAt).HasColumnName("available_at").IsRequired();
@@ -36,5 +35,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.HasIndex(c => c.LeaseId).IsUnique();
         // The lease scan: open rows of some kinds, oldest first.
         builder.HasIndex(c => new { c.Status, c.Kind, c.AvailableAt });
+        // The retention pass: finished rows by age (ProviderCommand.FinishedAndCreatedBefore).
+        builder.HasIndex(c => new { c.Status, c.CreatedAt });
     }
 }

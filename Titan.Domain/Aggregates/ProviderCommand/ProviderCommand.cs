@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
@@ -14,9 +15,8 @@ public class ProviderCommand : AggregateRoot
 
     public Guid Id { get; private set; }
 
-    /// UNIQUE: `vm-backup-{vmId}-{yyyyMMdd}`, `vm-stop-{vmId}-{requestId}`, … One key, one row. A resource's key is reused by
-    /// a repeat according to Rerun; a key carrying a request id is never reused
-    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    /// UNIQUE: `vm-backup-{vmId}-{yyyyMMdd}`, `vm-stop-{vmId}-{requestId}`, … One key, one row; a repeat of the key meets
+    /// that row (Reopen, titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public string Key { get; private set; } = default!;
 
     /// What the worker does: `vm.create`, `vm.delete`, … (ProviderCommandKinds).
@@ -27,7 +27,6 @@ public class ProviderCommand : AggregateRoot
     /// JSON the worker reads; its property names are the wire format.
     public string Payload { get; private set; } = default!;
 
-    public ProviderCommandRerun Rerun { get; private set; }
     public ProviderCommandStatus Status { get; private set; }
 
     /// Counts leases taken for the current run; a repeat that reopens the row starts it at 0 again.
@@ -50,7 +49,7 @@ public class ProviderCommand : AggregateRoot
     private ProviderCommand() { }
 
     public static ProviderCommand Create(
-        string key, string kind, string clusterId, string payload, ProviderCommandRerun rerun, DateTimeOffset now)
+        string key, string kind, string clusterId, string payload, DateTimeOffset now)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("A provider command needs a key.", nameof(key));
@@ -64,7 +63,6 @@ public class ProviderCommand : AggregateRoot
             Kind = kind,
             ClusterId = clusterId,
             Payload = payload,
-            Rerun = rerun,
             Status = ProviderCommandStatus.Pending,
             Attempts = 0,
             AvailableAt = now,
@@ -79,17 +77,19 @@ public class ProviderCommand : AggregateRoot
 
     public bool IsOpen => Status is ProviderCommandStatus.Pending or ProviderCommandStatus.Leased;
 
+    /// The rows the retention job deletes: finished and created before the cutoff. An open row is never one, however old:
+    /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-request). An expression, so
+    /// the database runs the same rule the tests do.
+    public static Expression<Func<ProviderCommand, bool>> FinishedAndCreatedBefore(DateTimeOffset cutoff) =>
+        c => (c.Status == ProviderCommandStatus.Done || c.Status == ProviderCommandStatus.Failed) && c.CreatedAt < cutoff;
+
     /// A handler enqueued this key again. Returns true when the row runs again (with the new payload), false when the
-    /// repeat is absorbed. Not an intent of the aggregate: the decision is the Rerun rule, applied the same every time.
+    /// repeat is absorbed: an open or Done row absorbs it, a Failed one runs again
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request). Not an intent of the aggregate: one rule,
+    /// applied the same every time.
     public bool Reopen(string payload, DateTimeOffset now)
     {
-        if (IsOpen)
-        {
-            return false;
-        }
-        bool doneAndOnlyFailuresRerun =
-            Status == ProviderCommandStatus.Done && Rerun == ProviderCommandRerun.AfterFailureOnly;
-        if (doneAndOnlyFailuresRerun)
+        if (Status != ProviderCommandStatus.Failed)
         {
             return false;
         }

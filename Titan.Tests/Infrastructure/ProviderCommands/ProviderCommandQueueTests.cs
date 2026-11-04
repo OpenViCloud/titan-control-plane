@@ -2,16 +2,13 @@ using System.Text.Json;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Exceptions;
-using Titan.Infrastructure.Endpoints;
 using Titan.Infrastructure.ProviderCommands;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure.ProviderCommands;
 
-// titan-ops architecture/provider-and-worker.md#provider-command-key: keys are the former workflow ids, so a repeat keeps
-// the shape titan-ops architecture/intent-and-observation.md#intent-has-identity describes; the keys of a resource on the
-// request lifecycle carry the request id (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+// The keys of a resource carry the request id, a backup's the day, and a repeat of a key follows one rule
+// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
 public class ProviderCommandQueueTests
 {
     private readonly FakeProviderCommandRepository _repo = new();
@@ -74,34 +71,85 @@ public class ProviderCommandQueueTests
         Assert.Contains(second.ToString(), _repo.Rows[1].Payload);
     }
 
-    // A request the handler took as new, on a resource key whose row is open: another request committed it first
-    // (titan-ops architecture/provider-and-worker.md#provider-command-key). Refused before the row is touched, so the
-    // handler saves nothing of this request. No enqueue takes this path any more (every resource's keys carry their
-    // request id), so it runs on a key of its own until rollout phase 6 removes it; a finished row still reopens.
-    [Fact]
-    public async Task NewRequest_OnTheOpenRowOfItsKey_IsRequestInProgress_AndAFinishedRowReopens()
+    // One rule for every key (titan-ops architecture/resource-lifecycle.md#one-key-per-request): a key that already has a
+    // row is absorbed while the row is open or Done, and reopened when it is Failed. A resource's key carries its request
+    // id, so only a resent request meets its own row; a backup's key is the day's, so every hourly ask does.
+    public static TheoryData<string> KeyShapes() => new() { "resource", "backup" };
+
+    private Task EnqueueTheSameKey(ProviderCommandQueue queue, string shape, Guid resourceId, Guid requestId, string externalId)
     {
-        string key = $"test-request-{Guid.NewGuid()}";
+        if (shape == "resource")
+        {
+            return queue.EnqueueVmDeleteAsync(resourceId, requestId, externalId, "t-1", "mock");
+        }
+        return queue.EnqueueVmBackupAsync(resourceId, externalId, "t-1", requestId, "mock", new DateOnly(2026, 10, 26));
+    }
+
+    private static ProviderCommand Finish(ProviderCommand row, ProviderCommandStatus status, DateTimeOffset now)
+    {
+        Guid lease = Guid.NewGuid();
+        row.Lease(lease, now);
+        if (status == ProviderCommandStatus.Leased)
+        {
+            return row;
+        }
+        if (status == ProviderCommandStatus.Done)
+        {
+            row.Complete(lease, now);
+            return row;
+        }
+        row.Fail(lease, "gave up", retryable: false, now);
+        return row;
+    }
+
+    [Theory]
+    [MemberData(nameof(KeyShapes))]
+    public async Task ARepeatOfAKey_OnItsOpenRow_IsAbsorbed(string shape)
+    {
+        Guid resourceId = Guid.NewGuid(), requestId = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
-        await queue.EnqueueRequestAsync(key, ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 1 },
-            ProviderCommandRerun.AfterAnyFinish, default);
-        ProviderCommand row = Assert.Single(_repo.Rows);
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "first");
+        ProviderCommand pending = Assert.Single(_repo.Rows);
+        string payload = pending.Payload;
+
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "second");
+        Assert.Equal((ProviderCommandStatus.Pending, payload), (Assert.Single(_repo.Rows).Status, pending.Payload));
+
+        Finish(pending, ProviderCommandStatus.Leased, _clock.GetUtcNow());
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "third");
+        Assert.Equal((ProviderCommandStatus.Leased, 1, payload), (pending.Status, pending.Attempts, pending.Payload));
+    }
+
+    [Theory]
+    [MemberData(nameof(KeyShapes))]
+    public async Task ARepeatOfAKey_OnItsDoneRow_IsAbsorbed(string shape)
+    {
+        Guid resourceId = Guid.NewGuid(), requestId = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "first");
+        ProviderCommand row = Finish(Assert.Single(_repo.Rows), ProviderCommandStatus.Done, _clock.GetUtcNow());
         string payload = row.Payload;
 
-        ConflictException refused = await Assert.ThrowsAsync<ConflictException>(() => queue.EnqueueRequestAsync(key,
-            ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 2 }, ProviderCommandRerun.AfterAnyFinish, default));
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "second");
 
-        Assert.Equal(ErrorStatus.RequestInProgressCode, refused.Code);
         Assert.Same(row, Assert.Single(_repo.Rows));
-        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
-        Assert.Equal(payload, row.Payload);
+        Assert.Equal((ProviderCommandStatus.Done, payload), (row.Status, row.Payload));
+    }
 
-        Guid lease = Guid.NewGuid();
-        row.Lease(lease, _clock.GetUtcNow());
-        row.Fail(lease, "gave up", retryable: false, _clock.GetUtcNow());
-        await queue.EnqueueRequestAsync(key, ProviderCommandKinds.LoadBalancerDelete, "mock", new { n = 3 },
-            ProviderCommandRerun.AfterAnyFinish, default);
-        Assert.Equal(ProviderCommandStatus.Pending, Assert.Single(_repo.Rows).Status);
+    [Theory]
+    [MemberData(nameof(KeyShapes))]
+    public async Task ARepeatOfAKey_OnItsFailedRow_ReopensIt_WithTheNewPayload(string shape)
+    {
+        Guid resourceId = Guid.NewGuid(), requestId = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "first");
+        ProviderCommand row = Finish(Assert.Single(_repo.Rows), ProviderCommandStatus.Failed, _clock.GetUtcNow());
+
+        await EnqueueTheSameKey(queue, shape, resourceId, requestId, "second");
+
+        Assert.Same(row, Assert.Single(_repo.Rows));
+        Assert.Equal((ProviderCommandStatus.Pending, 0), (row.Status, row.Attempts));
+        Assert.Contains("second", row.Payload);
     }
 
     // A load balancer's keys carry the request id, as the network's: each request its own row, and the payload names the

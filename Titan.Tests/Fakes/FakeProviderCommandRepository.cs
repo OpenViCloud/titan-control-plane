@@ -28,6 +28,12 @@ public class FakeProviderCommandRepository : IProviderCommandRepository
 
     public void Add(ProviderCommand command) => Rows.Add(command);
 
+    public Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct)
+    {
+        Func<ProviderCommand, bool> retired = ProviderCommand.FinishedAndCreatedBefore(cutoff).Compile();
+        return Task.FromResult(Rows.RemoveAll(c => retired(c)));
+    }
+
     public Task SaveChangesAsync(CancellationToken ct)
     {
         Saves++;

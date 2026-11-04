@@ -73,9 +73,7 @@ VALUES ({id}, {vmId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {current
     private async Task AddOpenCommandAsync(string key, string kind)
     {
         await using TitanDbContext seed = NewDbContext();
-        seed.ProviderCommands.Add(ProviderCommand.Create(key, kind, "cluster-a", "{}", ProviderCommandRerun.AfterAnyFinish,
-            DateTimeOffset.UtcNow));
-        await seed.SaveChangesAsync();
+        await ProviderCommandRowsBeforeOneRule.InsertAsync(seed, key, kind, "cluster-a", "{}");
     }
 
     private async Task<VmSnapshot> SnapshotAsync(Guid vmId, Guid snapshotId)

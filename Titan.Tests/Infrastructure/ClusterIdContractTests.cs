@@ -116,7 +116,7 @@ public class ClusterIdContractTests
     {
         var repo = new FakeProviderCommandRepository();
         var t0 = new DateTimeOffset(2026, 10, 27, 0, 0, 0, TimeSpan.Zero);
-        repo.Add(ProviderCommand.Create("vm-provision-1", ProviderCommandKinds.VmCreate, "mock", "{}", ProviderCommandRerun.AfterAnyFinish, t0));
+        repo.Add(ProviderCommand.Create("vm-provision-1", ProviderCommandKinds.VmCreate, "mock", "{}", t0));
         Guid leaseId = Guid.NewGuid();
         await new Titan.Application.Commands.Platform.ProviderCommand.LeaseProviderCommandCommandHandler(repo, new FixedClock(t0))
             .HandleAsync(new Titan.Application.Commands.Platform.ProviderCommand.Contracts.LeaseProviderCommandCommand(leaseId, [ProviderCommandKinds.VmCreate]));

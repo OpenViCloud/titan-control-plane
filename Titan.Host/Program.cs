@@ -291,6 +291,8 @@ builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IdempotencyMiddleware>();
 builder.Services.AddOptions<IdempotencyCleanupOptions>().BindConfiguration(IdempotencyCleanupOptions.SectionName);
 builder.Services.AddHostedService<IdempotencyCleanupService>();
+builder.Services.AddOptions<ProviderCommandRetentionOptions>().BindConfiguration(ProviderCommandRetentionOptions.SectionName);
+builder.Services.AddHostedService<ProviderCommandRetention>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
 // and nothing alerts on its absence (/healthz/wallet only reports it). Its SKIP LOCKED does not keep it off
 // a mutation the subscriber is applying (titan-ops features/billing/wallet/design.md#wallet-debts).

@@ -3,17 +3,18 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/provider-and-worker.md#provider-command-table and #provider-command-key.
+// titan-ops architecture/provider-and-worker.md#provider-command-table; a repeat of a key and the retention rule:
+// titan-ops architecture/resource-lifecycle.md#one-key-per-request.
 public class ProviderCommandTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 10, 8, 0, 0, 0, TimeSpan.Zero);
 
-    private static ProviderCommand NewCommand(ProviderCommandRerun rerun = ProviderCommandRerun.AfterAnyFinish) =>
-        ProviderCommand.Create("vm-provision-x", ProviderCommandKinds.VmCreate, "mock", "{\"a\":1}", rerun, T0);
+    private static ProviderCommand NewCommand(DateTimeOffset? createdAt = null) =>
+        ProviderCommand.Create("vm-provision-x", ProviderCommandKinds.VmCreate, "mock", "{\"a\":1}", createdAt ?? T0);
 
-    private static ProviderCommand Leased(Guid leaseId, ProviderCommandRerun rerun = ProviderCommandRerun.AfterAnyFinish)
+    private static ProviderCommand Leased(Guid leaseId, DateTimeOffset? createdAt = null)
     {
-        ProviderCommand command = NewCommand(rerun);
+        ProviderCommand command = NewCommand(createdAt);
         command.Lease(leaseId, T0);
         return command;
     }
@@ -207,43 +208,68 @@ public class ProviderCommandTests
         Assert.Equal(ProviderCommandStatus.Leased, leased.Status);
     }
 
+    // Under every key: what already happened does not happen twice. A resource's key carries its request id and only a
+    // resent request meets it; a backup's key is the day's, asked every hour.
     [Fact]
-    public void Reopen_ADoneRow_RunsAgain_UnderAfterAnyFinish()
+    public void Reopen_ADoneRow_IsAbsorbed()
     {
         Guid leaseId = Guid.NewGuid();
-        ProviderCommand command = Leased(leaseId, ProviderCommandRerun.AfterAnyFinish);
+        ProviderCommand command = Leased(leaseId);
         command.Complete(leaseId, T0);
 
-        bool reopened = command.Reopen("{\"b\":2}", T0);
+        Assert.False(command.Reopen("{\"b\":2}", T0));
+        Assert.Equal(ProviderCommandStatus.Done, command.Status);
+        Assert.Equal("{\"a\":1}", command.Payload);
+    }
 
-        Assert.True(reopened);
+    [Fact]
+    public void Reopen_AFailedRow_RunsAgain_WithTheNewPayload()
+    {
+        Guid leaseId = Guid.NewGuid();
+        ProviderCommand command = Leased(leaseId);
+        command.Fail(leaseId, "gave up", retryable: false, T0);
+        DateTimeOffset later = T0.AddMinutes(1);
+
+        Assert.True(command.Reopen("{\"b\":2}", later));
         Assert.Equal(ProviderCommandStatus.Pending, command.Status);
         Assert.Equal(0, command.Attempts);
         Assert.Equal("{\"b\":2}", command.Payload);
-    }
-
-    [Fact]
-    public void Reopen_ADoneRow_IsAbsorbed_UnderAfterFailureOnly()
-    {
-        Guid leaseId = Guid.NewGuid();
-        ProviderCommand command = Leased(leaseId, ProviderCommandRerun.AfterFailureOnly);
-        command.Complete(leaseId, T0);
-
-        Assert.False(command.Reopen("{}", T0));
-        Assert.Equal(ProviderCommandStatus.Done, command.Status);
-    }
-
-    [Theory]
-    [InlineData(ProviderCommandRerun.AfterAnyFinish)]
-    [InlineData(ProviderCommandRerun.AfterFailureOnly)]
-    public void Reopen_AFailedRow_RunsAgain(ProviderCommandRerun rerun)
-    {
-        Guid leaseId = Guid.NewGuid();
-        ProviderCommand command = Leased(leaseId, rerun);
-        command.Fail(leaseId, "gave up", retryable: false, T0);
-
-        Assert.True(command.Reopen("{}", T0));
-        Assert.Equal(ProviderCommandStatus.Pending, command.Status);
+        Assert.Equal(later, command.AvailableAt);
         Assert.Null(command.LastError);
+        Assert.Null(command.FinishedAt);
+    }
+
+    // The retention rule: a finished row older than the cutoff goes; an open row stays however old, since a worker may
+    // still lease it; a row of the cutoff instant or younger stays.
+    [Theory]
+    [InlineData(ProviderCommandStatus.Done, -31, true)]
+    [InlineData(ProviderCommandStatus.Failed, -31, true)]
+    [InlineData(ProviderCommandStatus.Pending, -31, false)]
+    [InlineData(ProviderCommandStatus.Leased, -31, false)]
+    [InlineData(ProviderCommandStatus.Done, -30, false)]
+    [InlineData(ProviderCommandStatus.Failed, -29, false)]
+    public void FinishedAndCreatedBefore_TakesOnlyFinishedRowsOlderThanTheCutoff(ProviderCommandStatus status, int ageDays,
+        bool retired)
+    {
+        DateTimeOffset createdAt = T0.AddDays(ageDays);
+        ProviderCommand command = NewCommand(createdAt);
+        if (status != ProviderCommandStatus.Pending)
+        {
+            Guid leaseId = Guid.NewGuid();
+            command.Lease(leaseId, createdAt);
+            if (status == ProviderCommandStatus.Done)
+            {
+                command.Complete(leaseId, createdAt);
+            }
+            if (status == ProviderCommandStatus.Failed)
+            {
+                command.Fail(leaseId, "gave up", retryable: false, createdAt);
+            }
+        }
+
+        bool taken = ProviderCommand.FinishedAndCreatedBefore(T0.AddDays(-30)).Compile()(command);
+
+        Assert.Equal(status, command.Status);
+        Assert.Equal(retired, taken);
     }
 }
