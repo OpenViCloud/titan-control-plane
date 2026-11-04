@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.Volume;
 

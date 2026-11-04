@@ -11,7 +11,7 @@ namespace Titan.Domain.Services;
 /// spans the top-up, the wallet and the credit, so it is a domain service; TopUp.Confirm and GrantPromo are internal.
 /// Everything commits in the caller's save.
 public class TopUpCredit(
-    IWalletRepository wallets, IWalletMutationRepository mutations, ICreditRepository topUps, WalletLedger ledger)
+    IWalletRepository wallets, IWalletMutationRepository mutations, ITopUpRepository topUps, WalletLedger ledger)
 {
     /// Money is in, and the credit is enqueued, not applied (titan-ops architecture/money-and-wallet.md#single-writer-outbox):
     /// crediting here would let two confirms of one top-up race on the balance. The mutation commits with the Confirmed

@@ -5,6 +5,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 

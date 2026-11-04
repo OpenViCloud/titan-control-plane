@@ -8,10 +8,10 @@ namespace Titan.Infrastructure.Repositories;
 
 public class AcceptanceRepository(TitanDbContext db) : IAcceptanceRepository
 {
-    public Task<bool> ExistsAsync(string subjectId, string documentKey, string documentVersion, CancellationToken ct = default) =>
+    public Task<bool> ExistsAsync(string keycloakUserId, string documentKey, string documentVersion, CancellationToken ct = default) =>
         db.LegalAcceptances
             .AsNoTracking()
-            .AnyAsync(a => a.SubjectId == subjectId
+            .AnyAsync(a => a.KeycloakUserId == keycloakUserId
                        && a.DocumentKey == documentKey
                        && a.DocumentVersion == documentVersion, ct);
 
@@ -25,15 +25,15 @@ public class AcceptanceRepository(TitanDbContext db) : IAcceptanceRepository
         catch (DbUpdateException ex)
             when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            // The (subject, key, version) unique index rejected a racing double-accept. One row already stands:
+            // The (user, key, version) unique index rejected a racing double-accept. One row already stands:
             // detach ours and treat it as success.
             db.Entry(acceptance).State = EntityState.Detached;
         }
     }
 
-    public async Task<IReadOnlyList<Acceptance>> ListBySubjectAsync(string subjectId, CancellationToken ct = default) =>
+    public async Task<IReadOnlyList<Acceptance>> ListByKeycloakUserIdAsync(string keycloakUserId, CancellationToken ct = default) =>
         await db.LegalAcceptances
             .AsNoTracking()
-            .Where(a => a.SubjectId == subjectId)
+            .Where(a => a.KeycloakUserId == keycloakUserId)
             .ToListAsync(ct);
 }

@@ -12,6 +12,7 @@ using Titan.Application.Queries.Compute.Vm.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Sessions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Endpoints.Vm;
 

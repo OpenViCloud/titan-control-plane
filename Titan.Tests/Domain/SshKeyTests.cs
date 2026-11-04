@@ -27,7 +27,7 @@ public class SshKeyTests
         var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
 
         Assert.Equal("INVALID_SSH_KEY",
-            Assert.Throws<BadRequestException>(() => SshKey.Create(tenant.Id, "laptop", "ssh-ed25519 nope")).Code);
+            Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, "laptop", "ssh-ed25519 nope")).Code);
     }
 
     [Theory]
@@ -37,7 +37,7 @@ public class SshKeyTests
     {
         var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
 
-        Assert.Throws<BadRequestException>(() => SshKey.Create(tenant.Id, name, SshPublicKeyTests.Ed25519));
+        Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, name, SshPublicKeyTests.Ed25519));
     }
 
     [Fact]
@@ -45,7 +45,7 @@ public class SshKeyTests
     {
         var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
 
-        Assert.Throws<BadRequestException>(() => SshKey.Create(tenant.Id, new string('k', 65), SshPublicKeyTests.Ed25519));
+        Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, new string('k', 65), SshPublicKeyTests.Ed25519));
         Assert.NotNull(SshKey.Create(tenant.Id, new string('k', 64), SshPublicKeyTests.Ed25519));
     }
 }

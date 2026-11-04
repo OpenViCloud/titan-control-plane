@@ -269,16 +269,18 @@ public class ReadWriteSeparationTests
             "Namespace does not match folder path under Commands/Queries/Services: " + string.Join(" | ", offenders));
     }
 
-    // titan-ops architecture/code-structure.md#services-branch: keeps a sixth kind of folder from growing back at the
+    // titan-ops architecture/code-structure.md#services-branch: keeps a seventh kind of folder from growing back at the
     // root unnoticed; a new module-level service belongs in Services/<Module>/.
     //
-    // Silent about: what sits INSIDE the five allowed folders. A service dropped into Abstractions/
+    // Exceptions/ holds the request exceptions (400, 403, 503) the Domain does not throw (DomainExceptionTests).
+    //
+    // Silent about: what sits INSIDE the six allowed folders. A service dropped into Abstractions/
     // passes here; that folder is a named non-module (QuotaOwnershipTests.NonModuleDirs, titan-ops architecture/code-structure.md#debt-and-accepted-risks).
     private static readonly string[] AllowedApplicationRootDirs =
-        [Commands, Queries, Services, "Abstractions", "Options", "bin", "obj"];
+        [Commands, Queries, Services, "Abstractions", "Exceptions", "Options", "bin", "obj"];
 
     [Fact]
-    public void ApplicationRoot_HoldsOnlyTheThreeBranchesAndTwoPortFolders()
+    public void ApplicationRoot_HoldsOnlyTheBranchesAndNamedFolders()
     {
         var root = Path.Combine(RepoRoot.ControlPlane, "Titan.Application");
         var present = Directory.EnumerateDirectories(root)
@@ -295,7 +297,7 @@ public class ReadWriteSeparationTests
             .ToList();
 
         Assert.True(unexpected.Count == 0 && missing.Count == 0,
-            "Titan.Application/ root must hold only Commands/, Queries/, Services/, Abstractions/ and "
+            "Titan.Application/ root must hold only Commands/, Queries/, Services/, Abstractions/, Exceptions/ and "
             + "Options/ (docs/architecture/code-structure.md#services-branch). Move a module-level service into Services/<Module>/[<Aggregate>/]. "
             + $"Unexpected: [{string.Join(", ", unexpected)}]  Missing: [{string.Join(", ", missing)}]");
     }

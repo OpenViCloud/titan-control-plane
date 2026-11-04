@@ -35,7 +35,7 @@ public class CreateLoadBalancerCommandHandler(
         // load balancer (titan-ops architecture/domain-services.md#cross-aggregate-lock).
         var network = await NetworkOwnership.RequireNetworkForUpdateAsync(networkRepo, callerId, req.NetworkId, ct);
         // titan-ops features/load-balancer/design.md#lb-needs-public-ipv6: the VIP lives in the network's /64.
-        string externalNetworkId = network.BeginLoadBalancer();
+        string externalNetworkId = network.ProviderIdForLoadBalancer();
         string subnet = network.PublicIpv6Subnet!;
 
         var listeners = LoadBalancerRequest.Listeners(req.Listeners);

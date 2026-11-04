@@ -693,10 +693,10 @@ public class VolumeStateMachineTests
     [Fact]
     public void Snapshot_Restore_OnlyWhenIncusHasItAndNothingWaits()
     {
-        Assert.Equal("vol11/s5", SnapshotIn(SnapSeed.Exists).BeginRestore());
+        Assert.Equal("vol11/s5", SnapshotIn(SnapSeed.Exists).ProviderIdForRestore());
         foreach (SnapSeed seed in AllSnapSeeds.Where(s => s != SnapSeed.Exists))
         {
-            var ex = Assert.Throws<BusinessException>(() => SnapshotIn(seed).BeginRestore());
+            var ex = Assert.Throws<BusinessException>(() => SnapshotIn(seed).ProviderIdForRestore());
             Assert.Equal("VOLUME_SNAPSHOT_INVALID_STATE", ex.Code);
         }
     }

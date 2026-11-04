@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 

@@ -101,7 +101,7 @@ public class TenantActivationTests
     {
         var t = Active();
 
-        var ex = Assert.Throws<BadRequestException>(() => t.RequestActivation());
+        var ex = Assert.Throws<BusinessException>(() => t.RequestActivation());
 
         Assert.Equal("INVALID_STATUS", ex.Code);
     }
@@ -112,7 +112,7 @@ public class TenantActivationTests
         var t = Active();
         t.Suspend();
 
-        var ex = Assert.Throws<BadRequestException>(() => t.Suspend());
+        var ex = Assert.Throws<BusinessException>(() => t.Suspend());
 
         Assert.Equal("INVALID_STATUS", ex.Code);
     }
@@ -177,7 +177,7 @@ public class TenantActivationTests
     {
         var t = Active();
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() => Activation().ActivateAsync(t, "VND"));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => Activation().ActivateAsync(t, "VND"));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         _wallets.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);

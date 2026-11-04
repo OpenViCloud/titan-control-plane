@@ -119,7 +119,7 @@ public class VmTemplateTests
         var t = NewTemplate();
         t.RequestSyncIn(Mock);
 
-        Assert.Throws<BadRequestException>(() => t.RequestSyncIn(Mock));
+        Assert.Throws<BusinessException>(() => t.RequestSyncIn(Mock));
     }
 
     [Fact] // already there: nothing to ask for
@@ -127,7 +127,7 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
 
-        Assert.Throws<BadRequestException>(() => t.RequestSyncIn(Mock));
+        Assert.Throws<BusinessException>(() => t.RequestSyncIn(Mock));
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
     }
 

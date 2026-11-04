@@ -34,8 +34,8 @@ public class TopUpConfirmDbTests(PostgresFixture pg)
         public Task ConfirmAsync(
             Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef, DateTimeOffset? confirmedAt = null)
             => TopUpConfirmation.ConfirmAsync(
-                new CreditRepository(db), new WalletRepository(db),
-                new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new CreditRepository(db), new WalletLedger(new WalletTransactionRepository(db))), bus,
+                new TopUpRepository(db), new WalletRepository(db),
+                new TopUpCredit(new WalletRepository(db), new WalletMutationRepository(db), new TopUpRepository(db), new WalletLedger(new WalletTransactionRepository(db))), bus,
                 topUpId, source, confirmedBy, paymentTxnRef, confirmedAt, CancellationToken.None);
     }
 

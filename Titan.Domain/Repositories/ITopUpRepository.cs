@@ -2,7 +2,7 @@ using Titan.Domain.Aggregates.TopUp;
 
 namespace Titan.Domain.Repositories;
 
-public interface ICreditRepository
+public interface ITopUpRepository
 {
     /// Newest first; `source` null lists every TopUp. Ordered by ConfirmedAt then CreatedAt so a Pending TopUp
     /// (no ConfirmedAt yet) still sorts sensibly.

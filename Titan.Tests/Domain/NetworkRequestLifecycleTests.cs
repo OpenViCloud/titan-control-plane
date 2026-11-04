@@ -80,7 +80,7 @@ public class NetworkRequestLifecycleTests
             (network.ExternalId, network.CurrentExistence, network.CurrentState));
         Assert.Equal(("10.0.0.0/24", "10.0.0.1"), (network.Cidr, network.Gateway));
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal("net-ext", network.BeginVmDeployment("cluster-1"));
+        Assert.Equal("net-ext", network.ProviderIdForVm("cluster-1"));
     }
 
     // A worker from before the request routes reports the create's Done with no status (the old Created): the network
@@ -97,11 +97,11 @@ public class NetworkRequestLifecycleTests
         Assert.Equal(("net-ext", CurrentExistence.Exists), (network.ExternalId, network.CurrentExistence));
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", Assert.Throws<BusinessException>(() => NewRule(network, 22)).Code);
         Assert.Equal("NETWORK_NOT_ACTIVE",
-            Assert.Throws<BusinessException>(() => network.BeginVmDeployment("cluster-1")).Code);
+            Assert.Throws<BusinessException>(() => network.ProviderIdForVm("cluster-1")).Code);
 
         network.MarkObserved(NetworkStatus.Created);
 
-        Assert.Equal("net-ext", network.BeginVmDeployment("cluster-1"));
+        Assert.Equal("net-ext", network.ProviderIdForVm("cluster-1"));
         Assert.Equal("net-ext", network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP,
             PortRange.Of(22, 22), FirewallCidr.Parse("0.0.0.0/0")).ExternalNetworkId);
     }

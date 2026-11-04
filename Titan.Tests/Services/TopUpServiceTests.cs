@@ -28,7 +28,7 @@ namespace Titan.Tests.Services;
 // (TopUpConfirmDbTests).
 public class TopUpServiceTests
 {
-    private readonly Mock<ICreditRepository> _repo = new();
+    private readonly Mock<ITopUpRepository> _repo = new();
     private readonly Mock<IWalletRepository> _walletRepo = new();
     private readonly Mock<IWalletTransactionRepository> _transactions = new();
     private readonly Mock<IWalletMutationRepository> _mutationRepo = new();
@@ -54,7 +54,7 @@ public class TopUpServiceTests
         new(_repo.Object, _walletRepo.Object, _transactions.Object, _mutationRepo.Object, _bus.Object, _currentUser.Object, _options);
 
     private sealed class TopUpFacade(
-        ICreditRepository repo,
+        ITopUpRepository repo,
         IWalletRepository walletRepo,
         IWalletTransactionRepository transactions,
         IWalletMutationRepository mutationRepo,

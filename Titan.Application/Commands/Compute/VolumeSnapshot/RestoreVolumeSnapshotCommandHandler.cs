@@ -41,7 +41,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         var activeVolumeCount = await volumeRepo.CountActiveByTenantAsync(callerId, ct);
 
         // A snapshot that cannot be restored answers that first, whatever the quota.
-        var externalSnapshotId = sourceVolume.BeginSnapshotRestore(snapshot.Id);
+        var externalSnapshotId = sourceVolume.ProviderIdForSnapshotRestore(snapshot.Id);
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Volume, activeVolumeCount);
         var newVolume = VolumeAggregate.Create(
             tenant.Id, command.Name, sourceVolume.ClusterId,

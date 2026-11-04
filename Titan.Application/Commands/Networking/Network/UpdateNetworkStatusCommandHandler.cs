@@ -6,6 +6,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Networking.Network;
 

@@ -81,11 +81,11 @@ public class VmTemplateCluster : ChildEntity
         bool aliasIsThere = CurrentExistence == CurrentExistence.Exists;
         if (syncIsWaiting)
         {
-            throw new BadRequestException("INVALID_STATUS", $"A sync is already waiting in cluster '{ClusterId}'.");
+            throw new BusinessException("INVALID_STATUS", $"A sync is already waiting in cluster '{ClusterId}'.");
         }
         if (aliasIsThere)
         {
-            throw new BadRequestException("INVALID_STATUS", $"The template is already on cluster '{ClusterId}'.");
+            throw new BusinessException("INVALID_STATUS", $"The template is already on cluster '{ClusterId}'.");
         }
 
         PendingRequest<VmTemplateRequestKind> request =
@@ -145,7 +145,7 @@ public class VmTemplateCluster : ChildEntity
     internal void MarkObserved()
     {
         if (string.IsNullOrEmpty(ExternalTemplateId))
-            throw new BadRequestException("PROVIDER_ID_MISSING", "A template with no provider id cannot have been seen on the provider.");
+            throw new BusinessException("PROVIDER_ID_MISSING", "A template with no provider id cannot have been seen on the provider.");
 
         CurrentExistence = CurrentExistence.Exists;
         UpdatedAt = DateTimeOffset.UtcNow;

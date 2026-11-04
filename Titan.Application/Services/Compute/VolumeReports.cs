@@ -1,10 +1,10 @@
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.Volume;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Services.Compute;
 

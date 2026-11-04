@@ -8,6 +8,7 @@ using Titan.Domain.Aggregates.ApiToken;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

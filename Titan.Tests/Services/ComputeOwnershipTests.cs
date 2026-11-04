@@ -7,6 +7,7 @@ using VolSnapQry = Titan.Application.Queries.Compute.VolumeSnapshot;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

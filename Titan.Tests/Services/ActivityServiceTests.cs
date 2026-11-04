@@ -3,8 +3,8 @@ using Titan.Application.Abstractions;
 using Titan.Application.Queries.Platform.ActivityEvent.Contracts;
 using ActivityService = Titan.Application.Queries.Platform.ActivityEvent.ListActivityEventsQueryHandler;
 using Titan.Domain.Aggregates.ActivityEvent;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

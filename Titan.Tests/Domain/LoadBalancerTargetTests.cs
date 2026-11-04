@@ -34,7 +34,7 @@ public class LoadBalancerTargetTests
     {
         Network network = UsableNetwork(true);
 
-        Assert.Equal("net-ext", network.BeginLoadBalancer());
+        Assert.Equal("net-ext", network.ProviderIdForLoadBalancer());
     }
 
     // titan-ops features/load-balancer/design.md#lb-needs-public-ipv6: Incus refuses an isolated OVN network.
@@ -44,7 +44,7 @@ public class LoadBalancerTargetTests
         Network noIpv6 = Network.Create(Owner.Id, NetworkName.Parse("net-1"), "cluster-a", null, false);
 
         Assert.Equal("LOAD_BALANCER_NEEDS_PUBLIC_IPV6",
-            Assert.Throws<BusinessException>(() => noIpv6.BeginLoadBalancer()).Code);
+            Assert.Throws<BusinessException>(() => noIpv6.ProviderIdForLoadBalancer()).Code);
     }
 
     [Fact]
@@ -54,8 +54,8 @@ public class LoadBalancerTargetTests
         Network deleting = UsableNetwork(true);
         deleting.RequestDelete();
 
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.BeginLoadBalancer()).Code);
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => deleting.BeginLoadBalancer()).Code);
+        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.ProviderIdForLoadBalancer()).Code);
+        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => deleting.ProviderIdForLoadBalancer()).Code);
     }
 
     private static Vm VmOnIncus(Guid networkId)
@@ -70,7 +70,7 @@ public class LoadBalancerTargetTests
     {
         Guid networkId = Guid.NewGuid();
 
-        Assert.Equal("vmabc", VmOnIncus(networkId).BeginLoadBalancerBackend(networkId));
+        Assert.Equal("vmabc", VmOnIncus(networkId).ProviderIdForLoadBalancerBackend(networkId));
     }
 
     // Stopped is fine: the health check takes it out of rotation (titan-ops features/load-balancer/design.md#lb-and-vm-network).
@@ -81,7 +81,7 @@ public class LoadBalancerTargetTests
         Vm vm = VmOnIncus(networkId);
         vm.MarkStopped();
 
-        Assert.Equal("vmabc", vm.BeginLoadBalancerBackend(networkId));
+        Assert.Equal("vmabc", vm.ProviderIdForLoadBalancerBackend(networkId));
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class LoadBalancerTargetTests
         foreach (Vm vm in new[] { elsewhere, creating, deleting })
         {
             Assert.Equal("LOAD_BALANCER_BACKEND_INVALID",
-                Assert.Throws<BusinessException>(() => vm.BeginLoadBalancerBackend(networkId)).Code);
+                Assert.Throws<BusinessException>(() => vm.ProviderIdForLoadBalancerBackend(networkId)).Code);
         }
     }
 }

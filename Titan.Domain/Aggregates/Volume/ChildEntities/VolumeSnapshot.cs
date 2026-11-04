@@ -9,7 +9,7 @@ namespace Titan.Domain.Aggregates.Volume;
 /// (titan-ops features/volume/design.md#volume-snapshot). A child of Volume (titan-ops architecture/code-structure.md#child-entity):
 /// "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
 /// are the volume's invariants, so only the root reaches the methods below, and handlers go through
-/// Volume.AddSnapshot, RequestSnapshotDelete, BeginSnapshotRestore, EndSnapshotRequest and MarkSnapshot*.
+/// Volume.AddSnapshot, RequestSnapshotDelete, ProviderIdForSnapshotRestore, EndSnapshotRequest and MarkSnapshot*.
 public class VolumeSnapshot : ChildEntity
 {
     /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
@@ -123,7 +123,7 @@ public class VolumeSnapshot : ChildEntity
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Restore creates a new volume and leaves this snapshot alone, so the check is called from
-    /// Volume.Create and Volume.BeginSnapshotRestore, never from a handler.
+    /// Volume.Create and Volume.ProviderIdForSnapshotRestore, never from a handler.
     internal void EnsureRestorable()
     {
         if (!RestsOnIncus)
@@ -163,8 +163,8 @@ public class VolumeSnapshot : ChildEntity
     }
 
     /// Volume.Create checks the same rule; this hands out the id, and the caller needs both,
-    /// so neither can be skipped. Reached through Volume.BeginSnapshotRestore.
-    internal string BeginRestore()
+    /// so neither can be skipped. Reached through Volume.ProviderIdForSnapshotRestore.
+    internal string ProviderIdForRestore()
     {
         EnsureRestorable();
         return ExternalId ?? throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");

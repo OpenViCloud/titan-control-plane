@@ -49,7 +49,7 @@ public class QuotaOwnershipTests
     // A branch missing from this list is read as a module name (TheScanReachesTheHandlerTree turns red).
     private static readonly string[] Branches = ["Commands", "Queries", "Services"];
     private static readonly string[] NonModuleDirs =
-        ["Abstractions", "Options", "bin", "obj", .. Branches];
+        ["Abstractions", "Exceptions", "Options", "bin", "obj", .. Branches];
 
     // Page-size caps, not tenant resource quota. ListAdminAuditLogQueryHandler.MaxLimit=200 and
     // ListActivityEventsQueryHandler.MaxLimit=50 bound how many rows one API response may carry; they are not

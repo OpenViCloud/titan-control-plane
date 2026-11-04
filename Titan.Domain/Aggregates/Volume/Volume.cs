@@ -154,7 +154,7 @@ public class Volume : AggregateRoot
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
-    /// Checks the volume, the VM (Vm.BeginVolumeAttach) and the cluster; the provider ids come out only past all
+    /// Checks the volume, the VM (Vm.ProviderIdForVolumeAttach) and the cluster; the provider ids come out only past all
     /// three (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
     /// waits for Incus to be seen using the volume.
     public VolumeAttachProviderIds Attach(Vm.Vm vm)
@@ -162,7 +162,7 @@ public class Volume : AggregateRoot
         bool available = RestsOnIncus && !IsInUse;
         if (!available)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
-        var vmExternalId = vm.BeginVolumeAttach();
+        var vmExternalId = vm.ProviderIdForVolumeAttach();
         if (ClusterId != vm.ClusterId)
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 
@@ -289,7 +289,7 @@ public class Volume : AggregateRoot
 
     /// A restore starts from a snapshot resting on Incus and hands out its provider id
     /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is Create's.
-    public string BeginSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).BeginRestore();
+    public string ProviderIdForSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).ProviderIdForRestore();
 
     /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
     /// another request than the one the snapshot waits on.

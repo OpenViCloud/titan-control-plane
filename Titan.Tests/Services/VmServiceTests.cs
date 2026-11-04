@@ -17,6 +17,7 @@ using Titan.Domain.Repositories;
 using Titan.Application.Queries.Admin.Vm.Contracts;
 using Titan.Tests.Domain;
 using Titan.Tests.Fakes;
+using Titan.Application.Exceptions;
 
 
 namespace Titan.Tests.Services;

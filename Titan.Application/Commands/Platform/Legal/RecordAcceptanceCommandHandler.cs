@@ -18,13 +18,13 @@ public class RecordAcceptanceCommandHandler(
         var sourceIp = command.SourceIp;
 
         var d = catalog.Current;
-        var subjectId = currentUser.KeycloakUserId;
+        var keycloakUserId = currentUser.KeycloakUserId;
 
         // Idempotent: already accepted this version = nothing to record. The unique index is the true
         // concurrency guard (two racing clicks); this is the common-case fast path.
-        if (await acceptances.ExistsAsync(subjectId, d.Key, d.Version, ct))
+        if (await acceptances.ExistsAsync(keycloakUserId, d.Key, d.Version, ct))
             return;
 
-        await acceptances.AddAsync(Acceptance.Record(subjectId, d.Key, d.Version, sourceIp), ct);
+        await acceptances.AddAsync(Acceptance.Record(keycloakUserId, d.Key, d.Version, sourceIp), ct);
     }
 }

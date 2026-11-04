@@ -118,7 +118,7 @@ builder.Services.AddScoped<IVmRepository, VmRepository>();
 builder.Services.AddScoped<ISnapshotOfferingRepository, SnapshotOfferingRepository>();
 builder.Services.AddScoped<IUsageRecordRepository, UsageRecordRepository>();
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
-builder.Services.AddScoped<ICreditRepository, CreditRepository>();
+builder.Services.AddScoped<ITopUpRepository, TopUpRepository>();
 builder.Services.AddScoped<IWalletRepository, WalletRepository>();
 builder.Services.AddScoped<IWalletTransactionRepository, WalletTransactionRepository>();
 builder.Services.AddScoped<WalletLedger>();

@@ -1,10 +1,10 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Network;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Services.Networking.Network;
 

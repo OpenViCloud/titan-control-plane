@@ -1,8 +1,8 @@
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.LoadBalancer;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Services.Compute.LoadBalancer;
 

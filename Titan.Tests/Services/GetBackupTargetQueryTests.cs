@@ -2,6 +2,7 @@ using System.Text.Json;
 using Titan.Application.Queries.Platform.BackupTarget;
 using Titan.Application.Queries.Platform.BackupTarget.Contracts;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Services;
 

@@ -39,18 +39,18 @@ public class ApiToken : AggregateRoot
         string trimmedName = name.Trim();
         if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
         {
-            throw new BadRequestException("INVALID_API_TOKEN_NAME", $"The token name must be 1 to {MaxNameLength} characters.");
+            throw new BusinessException("INVALID_API_TOKEN_NAME", $"The token name must be 1 to {MaxNameLength} characters.");
         }
 
         if (!ApiTokenSecret.IsWellFormed(secret))
         {
-            throw new BadRequestException("INVALID_API_TOKEN", "The token must be ovc_ followed by 43 base64url characters.");
+            throw new BusinessException("INVALID_API_TOKEN", "The token must be ovc_ followed by 43 base64url characters.");
         }
 
         bool lifetimeAllowed = expiresInDays == null || Lifetimes.Contains(expiresInDays.Value);
         if (!lifetimeAllowed)
         {
-            throw new BadRequestException("INVALID_API_TOKEN", "The token lifetime must be 30, 90 or 365 days, or none.");
+            throw new BusinessException("INVALID_API_TOKEN", "The token lifetime must be 30, 90 or 365 days, or none.");
         }
 
         DateTimeOffset? expiresAt = null;

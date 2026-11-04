@@ -17,10 +17,10 @@ public class NetworkTests
     }
 
     [Fact]
-    public void BeginVmDeployment_WhenCreated_YieldsTheProviderId_AndMutatesNothing()
+    public void ProviderIdForVm_WhenCreated_YieldsTheProviderId_AndMutatesNothing()
     {
         var network = MakeActiveNetwork();
-        Assert.Equal("cs-net-id", network.BeginVmDeployment("cluster-1"));
+        Assert.Equal("cs-net-id", network.ProviderIdForVm("cluster-1"));
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
     }
@@ -34,26 +34,26 @@ public class NetworkTests
     [InlineData(Seed.Errored)]
     [InlineData(Seed.Pending)]
     [InlineData(Seed.NotFound)]
-    public void BeginVmDeployment_WhenNotUsable_Throws(Seed seed)
+    public void ProviderIdForVm_WhenNotUsable_Throws(Seed seed)
     {
         var network = NetworkIn(seed);
-        Assert.Equal("NETWORK_NOT_ACTIVE", Assert.Throws<BusinessException>(() => network.BeginVmDeployment("cluster-1")).Code);
+        Assert.Equal("NETWORK_NOT_ACTIVE", Assert.Throws<BusinessException>(() => network.ProviderIdForVm("cluster-1")).Code);
     }
 
     // A VM lands on its network's cluster (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
     [Fact]
-    public void BeginVmDeployment_ForAVmOfAnotherCluster_IsRefused()
+    public void ProviderIdForVm_ForAVmOfAnotherCluster_IsRefused()
     {
         var network = MakeActiveNetwork();
-        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-cluster"));
+        var ex = Assert.Throws<BusinessException>(() => network.ProviderIdForVm("other-cluster"));
         Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
     [Fact]
-    public void BeginVmDeployment_AnotherCluster_IsAnsweredBeforeTheState()
+    public void ProviderIdForVm_AnotherCluster_IsAnsweredBeforeTheState()
     {
         var network = NetworkIn(Seed.Creating);
-        var ex = Assert.Throws<BusinessException>(() => network.BeginVmDeployment("other-cluster"));
+        var ex = Assert.Throws<BusinessException>(() => network.ProviderIdForVm("other-cluster"));
         Assert.Equal("NETWORK_CLUSTER_MISMATCH", ex.Code);
     }
 
@@ -66,7 +66,7 @@ public class NetworkTests
     private static FirewallRuleTicket AddARule(Network network) =>
         network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"));
 
-    // A DIFFERENT code from BeginVmDeployment, on purpose: the firewall endpoint answers FIREWALL_NETWORK_NOT_READY.
+    // A DIFFERENT code from ProviderIdForVm, on purpose: the firewall endpoint answers FIREWALL_NETWORK_NOT_READY.
     [Theory]
     [InlineData(Seed.Creating)]
     [InlineData(Seed.DeleteRequested)]

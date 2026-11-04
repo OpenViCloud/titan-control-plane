@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
 
-public class CreditRepository(TitanDbContext db) : ICreditRepository
+public class TopUpRepository(TitanDbContext db) : ITopUpRepository
 {
     /// `source` null = every TopUp. Ordered by ConfirmedAt then CreatedAt, so a still-Pending TopUp
     /// (ConfirmedAt null) sorts by when it was started.

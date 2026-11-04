@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using Titan.Domain.Exceptions;
 using Titan.Application.Options;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 

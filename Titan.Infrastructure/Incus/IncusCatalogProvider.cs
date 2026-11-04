@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 

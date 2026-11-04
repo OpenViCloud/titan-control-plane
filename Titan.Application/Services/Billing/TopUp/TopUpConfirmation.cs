@@ -13,7 +13,7 @@ public static class TopUpConfirmation
 {
     /// Not tenant-scoped: an admin or the SePay webhook calls it.
     public static async Task ConfirmAsync(
-        ICreditRepository repo,
+        ITopUpRepository repo,
         IWalletRepository walletRepo,
         TopUpCredit topUpCredit,
         IWalletMutationPublisher walletBus,

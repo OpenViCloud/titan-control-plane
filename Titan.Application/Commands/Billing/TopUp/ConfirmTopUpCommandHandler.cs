@@ -11,7 +11,7 @@ namespace Titan.Application.Commands.Billing.TopUp;
 /// not applied (titan-ops architecture/money-and-wallet.md#single-writer-outbox), so the endpoint answers 202
 /// (titan-ops architecture/http-contract.md#async-actions-return-202).
 public class ConfirmTopUpCommandHandler(
-    ICreditRepository repo,
+    ITopUpRepository repo,
     IWalletRepository walletRepo,
     TopUpCredit topUpCredit,
     IWalletMutationPublisher walletBus,

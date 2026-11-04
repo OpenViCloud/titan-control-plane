@@ -1,4 +1,4 @@
-using Titan.Domain.Exceptions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Abstractions;
 

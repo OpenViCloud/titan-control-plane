@@ -278,7 +278,7 @@ public class Vm : AggregateRoot
 
     /// The VM half of Volume.Attach. It runs BEFORE the cluster check there, so a VM in the wrong state
     /// answers VM_INVALID_STATUS even when the clusters also differ. An allowlist: a new VmState is refused.
-    public string BeginVolumeAttach()
+    public string ProviderIdForVolumeAttach()
     {
         if (!IncusCanAttachOrSnapshot())
             throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped or Frozen to attach a volume.");
@@ -290,7 +290,7 @@ public class Vm : AggregateRoot
     /// Any Incus state will do — the health check takes a stopped VM out of rotation
     /// (titan-ops features/load-balancer/design.md#lb-and-vm-network). Hands out the instance name the worker reads the
     /// MAC from (titan-ops features/load-balancer/design.md#backend-address).
-    public string BeginLoadBalancerBackend(Guid networkId)
+    public string ProviderIdForLoadBalancerBackend(Guid networkId)
     {
         bool usable = NetworkId == networkId
                       && DesiredExistence == DesiredExistence.Exists

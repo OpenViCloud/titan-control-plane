@@ -16,6 +16,7 @@ using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Sessions;
 using Titan.Tests.Fakes;
 using Titan.Tests.Infrastructure.Incus;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Infrastructure;
 

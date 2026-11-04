@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.RegularExpressions;
+using Titan.Application.Exceptions;
 
 namespace Titan.Tests.Domain;
 
@@ -109,7 +110,7 @@ public class StateTransitionOwnershipTests
     //
     // `vm.ExternalId!` is a claim the application layer cannot prove — that a Running VM carries an id is an
     // invariant of Vm. The id is handed out by the method that validated the state (Vm.RequestStop,
-    // Volume.Attach, Network.BeginVmDeployment, …), so there is no id to be had without the check.
+    // Volume.Attach, Network.ProviderIdForVm, …), so there is no id to be had without the check.
     //
     // Only `req.X!` passes: worker callback payload, already checked by a FastEndpoints validator, owned by no
     // aggregate. Comments are stripped before matching, so prose that names the pattern does not trip the guard.

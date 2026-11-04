@@ -26,7 +26,7 @@ public class SshKey : AggregateRoot
         string trimmedName = name.Trim();
         if (trimmedName.Length == 0 || trimmedName.Length > MaxNameLength)
         {
-            throw new BadRequestException("INVALID_SSH_KEY_NAME", $"The key name must be 1 to {MaxNameLength} characters.");
+            throw new BusinessException("INVALID_SSH_KEY_NAME", $"The key name must be 1 to {MaxNameLength} characters.");
         }
 
         SshPublicKey key = SshPublicKey.Parse(publicKeyText);

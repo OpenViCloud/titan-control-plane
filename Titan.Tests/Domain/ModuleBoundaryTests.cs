@@ -28,11 +28,11 @@ public class ModuleBoundaryTests
         ["Billing", "Catalog", "Compute", "Networking", "Platform", "Admin"];
 
     // The Application module each repository belongs to, read by the Application guard to label a handler's edge
-    // through a repository. A table, not a folder: Titan.Domain.Repositories is flat, and six repositories have no
-    // Application folder of their aggregate's name (ICreditRepository serves TopUp, for one).
+    // through a repository. A table, not a folder: Titan.Domain.Repositories is flat, and some repositories have no
+    // Application folder of their aggregate's name (IAcceptanceRepository serves Legal, for one).
     private static readonly Dictionary<string, string> RepositoryModule = new(StringComparer.Ordinal)
     {
-        ["ICreditRepository"] = "Billing",
+        ["ITopUpRepository"] = "Billing",
         ["IInvoiceRepository"] = "Billing",
         ["IPaymentGatewayTransactionRepository"] = "Billing",
         ["IUsageRecordRepository"] = "Billing",
@@ -107,10 +107,10 @@ public class ModuleBoundaryTests
     {
         // A rule that spans two aggregates is checked by the one being changed, on the other's state.
         ["LoadBalancer.Create(backends) -> Vm"] =
-            "each backend must be the tenant's VM and accept the network (Vm.BeginLoadBalancerBackend), checked in the factory",
+            "each backend must be the tenant's VM and accept the network (Vm.ProviderIdForLoadBalancerBackend), checked in the factory",
         ["LoadBalancer.RequestUpdate(backends) -> Vm"] = "the same backend rule, on an update",
         ["Volume.Attach(vm) -> Vm"] =
-            "the VM's side of an attach (Vm.BeginVolumeAttach) is checked before the provider ids are handed out",
+            "the VM's side of an attach (Vm.ProviderIdForVolumeAttach) is checked before the provider ids are handed out",
 
         // Not a rule on another aggregate's state: an enum another aggregate owns, used as a value.
         ["InvoiceItem.Create(resourceType) -> UsageResourceType"] =

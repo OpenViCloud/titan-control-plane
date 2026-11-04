@@ -272,7 +272,7 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         t.RequestSyncIn(Mock);
 
-        Assert.Equal("PROVIDER_ID_MISSING", Assert.Throws<BadRequestException>(() => t.MarkObservedIn(Mock)).Code);
+        Assert.Equal("PROVIDER_ID_MISSING", Assert.Throws<BusinessException>(() => t.MarkObservedIn(Mock)).Code);
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
     }
 }

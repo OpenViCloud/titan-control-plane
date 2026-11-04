@@ -24,18 +24,3 @@ public class BusinessException(string code, string message) : Exception(message)
 {
     public string Code { get; } = code;
 }
-
-public class ForbiddenException(string code, string message) : Exception(message)
-{
-    public string Code { get; } = code;
-}
-
-public class BadRequestException(string code, string message) : Exception(message)
-{
-    public string Code { get; } = code;
-}
-
-public class ServiceUnavailableException(string code, string message) : Exception(message)
-{
-    public string Code { get; } = code;
-}

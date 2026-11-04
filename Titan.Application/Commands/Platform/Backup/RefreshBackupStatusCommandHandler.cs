@@ -5,8 +5,8 @@ using Titan.Application.Commands.Platform.Backup.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Aggregates.BackupObservation;
 using Titan.Domain.Aggregates.BackupRecord;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Platform.Backup;
 
