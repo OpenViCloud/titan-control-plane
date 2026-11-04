@@ -90,7 +90,7 @@ public class VmSnapshotRequestLifecycleTests
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vm42/s1", snapshot.ExternalId);
         Assert.NotNull(snapshot.RequestFailureReason);
-        Assert.Equal("vm42/s1", vm.RequestSnapshotDelete(snapshot.Id).ProviderId);
+        Assert.Equal("vm42/s1", vm.RequestSnapshotDelete(snapshot.Id)!.ProviderId);
     }
 
     // ---------- the revert ----------
@@ -147,7 +147,7 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id)!;
 
         PendingRequest<VmSnapshotRequestKind>? ended = vm.EndSnapshotRequest(snapshot.Id, delete.RequestId, VmSnapshotRequestEnd.Done(null));
 
@@ -162,7 +162,7 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        RequestTicket first = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket first = vm.RequestSnapshotDelete(snapshot.Id)!;
         Assert.Equal(0, vm.SnapshotQuotaUsage);
 
         vm.EndSnapshotRequest(snapshot.Id, first.RequestId, Failed());
@@ -170,7 +170,7 @@ public class VmSnapshotRequestLifecycleTests
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("The snapshot request could not be completed.", snapshot.RequestFailureReason);
         Assert.Equal(1, vm.SnapshotQuotaUsage);
-        RequestTicket second = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket second = vm.RequestSnapshotDelete(snapshot.Id)!;
         Assert.NotEqual(first.RequestId, second.RequestId);
     }
 
@@ -237,7 +237,7 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id)!;
         vm.EndSnapshotRequest(snapshot.Id, delete.RequestId, VmSnapshotRequestEnd.Done(null));
 
         vm.MarkSnapshotObserved(snapshot.Id);
@@ -299,7 +299,7 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot deleting = Ready(vm);
-        RequestTicket snapshotDelete = vm.RequestSnapshotDelete(deleting.Id);
+        RequestTicket snapshotDelete = vm.RequestSnapshotDelete(deleting.Id)!;
         RequestTicket vmDelete = vm.RequestDelete()!;
 
         VmRequestEnded? ended = vm.EndRequest(vmDelete.RequestId, VmRequestEnd.Failed(null, null, "refused", "raw"));

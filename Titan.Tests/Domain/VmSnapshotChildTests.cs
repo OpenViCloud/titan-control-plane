@@ -224,7 +224,6 @@ public class VmSnapshotChildTests
         vm.WithSnapshot("mine");
 
         Assert.DoesNotContain(vm.Snapshots, s => s.Id == foreign.Id);
-        Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.DeleteSnapshotLocally(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.RevertSnapshot(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.RequestSnapshotDelete(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(
@@ -272,7 +271,7 @@ public class VmSnapshotChildTests
             vm.EndSnapshotRequest(snapshot.Id, revert.RequestId, VmSnapshotRequestEnd.Done(null))!.Kind);
         Assert.Null(vm.EndSnapshotRequest(snapshot.Id, revert.RequestId, VmSnapshotRequestEnd.Done(null)));
 
-        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = vm.RequestSnapshotDelete(snapshot.Id)!;
         Assert.Equal("vm42/s1", delete.ProviderId);
         Assert.Equal(VmSnapshotTransition.Deleting, snapshot.Transition);
         vm.EndSnapshotRequest(snapshot.Id, delete.RequestId, VmSnapshotRequestEnd.Failed(null, "refused", "raw"));
@@ -281,7 +280,7 @@ public class VmSnapshotChildTests
 
         vm.MarkSnapshotNotFound(snapshot.Id);
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
-        RequestTicket again = vm.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket again = vm.RequestSnapshotDelete(snapshot.Id)!;
         Assert.NotNull(vm.EndSnapshotRequest(snapshot.Id, again.RequestId, VmSnapshotRequestEnd.Done(null)));
         Assert.True(snapshot.IsTerminal);
 
@@ -290,13 +289,13 @@ public class VmSnapshotChildTests
     }
 
     [Fact]
-    public void DeleteSnapshotLocally_OnASnapshotWhoseCreateFailed_WritesBothPairs()
+    public void RequestSnapshotDelete_OfASnapshotWhoseCreateFailed_WritesBothPairs_WithNoTicket()
     {
         var vm = RunningVm();
         var failed = vm.WithSnapshot("failed");
         vm.EndSnapshotRequest(failed.Id, failed.Pending!.Id, VmSnapshotRequestEnd.Failed(null, "reason", "detail"));
 
-        vm.DeleteSnapshotLocally(failed.Id);
+        Assert.Null(vm.RequestSnapshotDelete(failed.Id));
 
         Assert.Equal(CurrentExistence.Deleted, failed.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, failed.DesiredExistence);

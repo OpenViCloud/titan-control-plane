@@ -28,9 +28,7 @@ public class DeleteNetworkCommandHandler(
         // The aggregate refuses a repeat, so it is recognised here first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete was already requested, or
         // the network is already deleted. A repeat answers like the first request: nothing recorded, nothing sent.
-        bool deleteIsWaiting = network.Transition == NetworkTransition.Deleting;
-        bool alreadyRequestedOrDone = deleteIsWaiting || network.IsTerminal;
-        if (alreadyRequestedOrDone)
+        if (network.IsDeletedOrDeleting)
         {
             return;
         }

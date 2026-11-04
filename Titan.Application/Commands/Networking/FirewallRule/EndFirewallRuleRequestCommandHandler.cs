@@ -7,7 +7,6 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
@@ -31,17 +30,6 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
         NetworkAggregate network = await networkRepo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
-
-        // A create that ends Done must name the rule, or it would be left with nothing to delete through.
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && rule.Pending is { Kind: FirewallRuleRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && rule.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         FirewallRuleRequestEnd end = new(outcome, command.ExternalId, state, command.Reason, command.Detail);
         PendingRequest<FirewallRuleRequestKind>? ended = network.EndFirewallRuleRequest(rule.Id, command.RequestId, end);

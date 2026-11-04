@@ -492,7 +492,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Snapshot creation failed.", snap.RequestFailureReason);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
-        Assert.Equal("cs-snap-abc", vm.RequestSnapshotDelete(snap.Id).ProviderId);
+        Assert.Equal("cs-snap-abc", vm.RequestSnapshotDelete(snap.Id)!.ProviderId);
     }
 
     [Fact]

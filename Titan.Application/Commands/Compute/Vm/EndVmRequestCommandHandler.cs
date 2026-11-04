@@ -5,7 +5,6 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
@@ -27,17 +26,6 @@ public class EndVmRequestCommandHandler(
 
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
-
-        // A create that ends Done must name the instance, or the VM would be left with nothing to delete through.
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && vm.Pending is { Kind: VmRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && vm.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         VmRequestEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
         VmRequestEnded? ended = vm.EndRequest(command.RequestId, end);

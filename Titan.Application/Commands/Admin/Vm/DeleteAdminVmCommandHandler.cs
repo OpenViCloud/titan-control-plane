@@ -41,8 +41,7 @@ public class DeleteAdminVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted, or a delete still
         // waiting: nothing to audit (titan-ops features/vm/design.md#admin-delete-audit), nothing to send
         // (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool deleteIsWaiting = vm.Pending?.Kind == VmRequestKind.Delete;
-        if (vm.IsTerminal || deleteIsWaiting)
+        if (vm.IsDeletedOrDeleting)
         {
             return;
         }

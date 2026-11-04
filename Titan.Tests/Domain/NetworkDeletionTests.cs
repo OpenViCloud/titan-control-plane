@@ -76,7 +76,7 @@ public class NetworkDeletionTests
         Assert.True(network.IsTerminal);
     }
 
-    // The compiler keeps Titan.Application off these two, so NetworkDeletion is the only way to delete a network.
+    // The compiler keeps Titan.Application off RequestDelete, so NetworkDeletion is the only way to delete a network.
     [Fact]
     public void OnlyNetworkDeletionDeletesANetwork()
     {
@@ -84,6 +84,5 @@ public class NetworkDeletionTests
         string[] publicMethods = [.. typeof(Network).GetMethods(surface).Select(m => m.Name)];
         Assert.Contains(nameof(Network.Rename), publicMethods);
         Assert.DoesNotContain(nameof(Network.RequestDelete), publicMethods);
-        Assert.DoesNotContain(nameof(Network.DeleteLocally), publicMethods);
     }
 }

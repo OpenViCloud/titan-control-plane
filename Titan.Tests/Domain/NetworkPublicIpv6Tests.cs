@@ -138,12 +138,12 @@ public class NetworkPublicIpv6Tests
     // The only other way a network row ends is a local delete of a failed create that has no provider id; a give-up
     // before Incus had the network already let the subnet go (the first assertion), so the local delete has none to keep.
     [Fact]
-    public void DeleteLocally_OfACreateThatGaveUpBeforeIncus_EndsDeleted_WithNoSubnetLeftToKeep()
+    public void RequestDelete_OfACreateThatGaveUpBeforeIncus_EndsDeleted_WithNoSubnetLeftToKeep()
     {
         Network network = HoldingASubnet();
         Assert.True(network.MarkRequestFailed("Network creation failed.", null));
 
-        network.DeleteLocally();
+        Assert.Null(network.RequestDelete());
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.False(network.HasPublicIpv6);

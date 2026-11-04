@@ -13,7 +13,7 @@ public class NetworkTests
     public void RequestDelete_YieldsTheProviderId()
     {
         var network = MakeActiveNetwork();
-        Assert.Equal("cs-net-id", network.RequestDelete().ProviderId);
+        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
     }
 
     [Fact]
@@ -256,7 +256,7 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.MarkObserved(status);
 
-        Assert.Equal("cs-net-id", network.RequestDelete().ProviderId);
+        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -265,7 +265,7 @@ public class NetworkTests
     {
         var network = NetworkIn(Seed.NotFound);
 
-        Assert.Equal("cs-net-id", network.RequestDelete().ProviderId);
+        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -283,7 +283,7 @@ public class NetworkTests
     public void RequestDelete_Twice_IsRefused_AndKeepsTheFirstRequest()
     {
         var network = MakeActiveNetwork();
-        Guid first = network.RequestDelete().RequestId;
+        Guid first = network.RequestDelete()!.RequestId;
 
         var ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
 
@@ -295,14 +295,6 @@ public class NetworkTests
     public void RequestDelete_WhenDeleted_Throws()
     {
         var network = NetworkIn(Seed.Deleted);
-
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.RequestDelete()).Code);
-    }
-
-    [Fact]
-    public void RequestDelete_OfAFailedCreateWithNoId_Throws_ItIsDeletedLocally()
-    {
-        var network = NetworkIn(Seed.CreateFailed);
 
         Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.RequestDelete()).Code);
     }
@@ -399,14 +391,14 @@ public class NetworkTests
         Assert.False(network.HasPublicIpv6);
     }
 
-    // ── DeleteLocally ──────────────────────────────────────────────────────
+    // ── Delete of a network that never reached Incus ───────────────────────
 
     [Fact]
-    public void DeleteLocally_OnAFailedCreateWithNoId_EndsDeleted()
+    public void RequestDelete_OnAFailedCreateWithNoId_EndsDeleted_WithNoTicket()
     {
         var network = NetworkIn(Seed.CreateFailed);
 
-        network.DeleteLocally();
+        Assert.Null(network.RequestDelete());
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
@@ -417,11 +409,11 @@ public class NetworkTests
     [InlineData(Seed.Creating)]
     [InlineData(Seed.Active)]
     [InlineData(Seed.NotFound)]
-    public void DeleteLocally_OnANetworkIncusMayHold_OrWhileItsCreateWaits_IsRefused(Seed seed)
+    public void RequestDelete_OfANetworkIncusMayHold_OrWhileItsCreateWaits_DoesNotDeleteHere(Seed seed)
     {
         var network = NetworkIn(seed);
 
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(network.DeleteLocally).Code);
+        Assert.False(LocalDelete.DeletedHere(() => network.RequestDelete()));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

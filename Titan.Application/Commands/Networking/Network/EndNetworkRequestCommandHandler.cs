@@ -6,7 +6,6 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -32,17 +31,6 @@ public class EndNetworkRequestCommandHandler(
 
         Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
-
-        // A create that ends Done must name the network, or it would be left with nothing to delete through.
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && network.Pending is { Kind: NetworkRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && network.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         bool sawTheNetwork = status != null || command.Cidr != null || command.Gateway != null;
         NetworkObservation? observed = sawTheNetwork ? new NetworkObservation(status, command.Cidr, command.Gateway) : null;

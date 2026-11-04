@@ -43,7 +43,7 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Vm.Pending is built from them on read. Private properties, mapped by name.
+        // Vm.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
         builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
         builder.Property<VmRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
         builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");

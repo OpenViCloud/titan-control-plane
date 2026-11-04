@@ -78,11 +78,11 @@ public class VolumeRequestHandlerTests
     }
 
     [Fact]
-    public async Task Done_OfTheCreate_WithoutTheVolumeName_Is400_AndSavesNothing()
+    public async Task Done_OfTheCreate_WithoutTheVolumeName_Is422_AndSavesNothing()
     {
         Volume volume = Given(NewVolume());
 
-        var refused = await Assert.ThrowsAsync<BadRequestException>(() =>
+        var refused = await Assert.ThrowsAsync<BusinessException>(() =>
             EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
@@ -125,7 +125,7 @@ public class VolumeRequestHandlerTests
                 attachedTo = ["vm-ext"];
                 break;
             default:
-                requestId = volume.RequestDelete().RequestId;
+                requestId = volume.RequestDelete()!.RequestId;
                 break;
         }
 
@@ -159,7 +159,7 @@ public class VolumeRequestHandlerTests
         VolumeSnapshot leaving = volume.AddSnapshot("leaving").Snapshot;
         volume.MarkSnapshotCreated(leaving.Id, "vol-ext/s1");
         volume.RequestSnapshotDelete(leaving.Id);
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, delete.RequestId, "Done"));
 
@@ -172,7 +172,7 @@ public class VolumeRequestHandlerTests
     public async Task AReport_NamingAnotherRequest_IsIgnored_RecordsNothing_AndSavesNothing()
     {
         Volume volume = Given(RestingVolume());
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
@@ -207,7 +207,7 @@ public class VolumeRequestHandlerTests
     public async Task AnObservation_WritesCurrent_AndLeavesADeleteWaiting()
     {
         Volume volume = Given(RestingVolume());
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         await ObserveHandler().HandleAsync(new ObserveVolumeCommand(volume.Id, false));
 
@@ -262,12 +262,26 @@ public class VolumeRequestHandlerTests
     }
 
     [Fact]
+    public async Task Done_OfASnapshotCreate_WithoutTheSnapshotId_Is422_AndSavesNothing()
+    {
+        Volume volume = Given(RestingVolume());
+        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(() => EndSnapshotHandler().HandleAsync(
+            new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done")));
+
+        Assert.Equal("INVALID_STATUS", refused.Code);
+        Assert.NotNull(snapshot.Pending);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task Failed_OfASnapshotDelete_GivesItBack_AndRecordsTheFailedOutcomeOnce()
     {
         Volume volume = Given(RestingVolume());
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
         volume.MarkSnapshotCreated(snapshot.Id, "vol-ext/s1");
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
 
         await EndSnapshotHandler().HandleAsync(
             new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, delete.RequestId, "Failed", Reason: "could not"));

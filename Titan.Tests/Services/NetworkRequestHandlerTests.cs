@@ -118,11 +118,11 @@ public class NetworkRequestHandlerTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public async Task Done_OfTheCreate_WithoutTheNetworkName_Is400_AndSavesNothing(string? externalId)
+    public async Task Done_OfTheCreate_WithoutTheNetworkName_Is422_AndSavesNothing(string? externalId)
     {
         Network network = Given(NewNetwork());
 
-        var refused = await Assert.ThrowsAsync<BadRequestException>(() =>
+        var refused = await Assert.ThrowsAsync<BusinessException>(() =>
             EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Done", externalId)));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
@@ -185,7 +185,7 @@ public class NetworkRequestHandlerTests
         FirewallRule staying = ActiveRule(network);
         FirewallRule leaving = ActiveRule(network);
         network.RequestFirewallRuleDelete(leaving.Id);
-        RequestTicket delete = network.RequestDelete();
+        RequestTicket delete = network.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.RequestId, "Done"));
 
@@ -202,7 +202,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = CreatingNetworkHoldingARoute();
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
-        RequestTicket delete = network.RequestDelete();
+        RequestTicket delete = network.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.RequestId, "Done"));
 
@@ -215,7 +215,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = CreatingNetworkHoldingARoute();
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
-        RequestTicket delete = network.RequestDelete();
+        RequestTicket delete = network.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.RequestId, "Failed",
             Reason: "Network deletion failed.", Detail: "raw"));
@@ -232,7 +232,7 @@ public class NetworkRequestHandlerTests
     public async Task AReport_NamingAnotherRequest_IsIgnored_RecordsNothing_AndSavesNothing()
     {
         Network network = Given(ActiveNetwork());
-        RequestTicket delete = network.RequestDelete();
+        RequestTicket delete = network.RequestDelete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
@@ -291,7 +291,7 @@ public class NetworkRequestHandlerTests
     public async Task AnObservation_NotFound_WritesNotFound_AndLeavesTheDeleteWaiting()
     {
         Network network = Given(ActiveNetwork());
-        RequestTicket delete = network.RequestDelete();
+        RequestTicket delete = network.RequestDelete()!;
 
         await ObserveHandler().HandleAsync(new ObserveNetworkCommand(network.Id, false));
 
@@ -343,12 +343,12 @@ public class NetworkRequestHandlerTests
     }
 
     [Fact]
-    public async Task RuleDone_OfTheCreate_WithoutTheRuleId_Is400_AndSavesNothing()
+    public async Task RuleDone_OfTheCreate_WithoutTheRuleId_Is422_AndSavesNothing()
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
 
-        var refused = await Assert.ThrowsAsync<BadRequestException>(() => EndRuleHandler().HandleAsync(
+        var refused = await Assert.ThrowsAsync<BusinessException>(() => EndRuleHandler().HandleAsync(
             new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Pending!.Id, "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
@@ -376,7 +376,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
-        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id);
+        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id)!;
 
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.RequestId, "Done"));
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.RequestId, "Done"));
@@ -391,7 +391,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
-        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id);
+        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id)!;
 
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.RequestId, "Failed",
             Reason: "Firewall rule deletion failed."));
@@ -407,7 +407,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
-        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id);
+        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id)!;
 
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, Guid.NewGuid(), "Done"));
 
@@ -474,7 +474,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
-        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id);
+        RequestTicket delete = network.RequestFirewallRuleDelete(rule.Id)!;
 
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, false));
 
