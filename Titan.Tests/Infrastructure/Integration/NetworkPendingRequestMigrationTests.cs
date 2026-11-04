@@ -94,13 +94,13 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
 
         Network delete = await NetworkAsync(deleting);
-        Assert.Equal(NetworkRequestKind.Delete, delete.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, delete.Pending!.Kind);
         Assert.True(delete.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(NetworkRequestKind.Create, (await NetworkAsync(creating)).Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(creating)).Pending!.Kind);
         Network rest = await NetworkAsync(resting);
         Assert.Null(rest.Pending);
-        Assert.Equal(FirewallRuleRequestKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
-        Assert.Equal(FirewallRuleRequestKind.Create, rest.FirewallRules.Single(r => r.Id == ruleCreating).Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleCreating).Pending!.Kind);
     }
 
     // A create whose command already reported the provider id waited only for the reconciler's Created, which no longer
@@ -123,12 +123,12 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         Network ended = await NetworkAsync(reported);
         Assert.Null(ended.Pending);
         Assert.Equal($"net-{reported:N}", ended.ExternalId);
-        Assert.Equal(NetworkRequestKind.Create, (await NetworkAsync(notReported)).Pending!.Kind);
-        Assert.Equal(NetworkRequestKind.Delete, (await NetworkAsync(deleting)).Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(notReported)).Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, (await NetworkAsync(deleting)).Pending!.Kind);
         Network rest = await NetworkAsync(resting);
         Assert.Null(rest.FirewallRules.Single(r => r.Id == ruleReported).Pending);
-        Assert.Equal(FirewallRuleRequestKind.Create, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Pending!.Kind);
-        Assert.Equal(FirewallRuleRequestKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
     }
 
     [Fact]
@@ -175,8 +175,8 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Network withARule = Network.Create(tenantId, NetworkName.Parse("after"), "cluster-a", null, wantsPublicIpv6: false);
-        withARule.EndRequest(withARule.Pending!.Id,
-            NetworkRequestEnd.Done("net-after", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+        withARule.EndOperation(withARule.Pending!.Id,
+            NetworkOperationEnd.Done("net-after", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
         withARule.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         Network creating = Network.Create(tenantId, NetworkName.Parse("creating"), "cluster-a", null, wantsPublicIpv6: false);
         await using (TitanDbContext db = NewDbContext())

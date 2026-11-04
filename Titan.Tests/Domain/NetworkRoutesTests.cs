@@ -62,8 +62,8 @@ public class NetworkRoutesTests
         Assert.False(network.HasPublicIpv6);
     }
 
-    private static NetworkRequestEnd CreateFailed(string? externalId = null) =>
-        NetworkRequestEnd.Failed(externalId, null, "Network creation failed.", "raw");
+    private static NetworkOperationEnd CreateFailed(string? externalId = null) =>
+        NetworkOperationEnd.Failed(externalId, null, "Network creation failed.", "raw");
 
     [Fact]
     public async Task CreateFailedBeforeIncusHadIt_LetsGoOfTheSubnet_AndTheRouteGoesBack()
@@ -72,11 +72,11 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
 
-        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed());
+        NetworkOperationEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed());
 
         Assert.True(ended!.LetGoOfPublicIpv6);
         Assert.False(network.HasPublicIpv6);
-        Assert.Equal("Network creation failed.", network.RequestFailureReason);
+        Assert.Equal("Network creation failed.", network.OperationFailureReason);
         Assert.True(route.IsFree);
         Assert.NotNull(route.ReleasedAt);
     }
@@ -88,7 +88,7 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed("net-x"));
+        NetworkOperationEnded? ended = await Routes().RecordEndedAsync(network, network.Pending!.Id, CreateFailed("net-x"));
 
         Assert.False(ended!.LetGoOfPublicIpv6);
         Assert.True(network.HasPublicIpv6);
@@ -102,7 +102,7 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
 
         await Routes().RecordEndedAsync(network, network.Pending!.Id,
-            NetworkRequestEnd.Done("net-x", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+            NetworkOperationEnd.Done("net-x", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
 
         Assert.True(network.HasPublicIpv6);
         Assert.False(RouteOf(network).IsFree);
@@ -115,7 +115,7 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        NetworkRequestEnded? ended = await Routes().RecordEndedAsync(network, Guid.NewGuid(), CreateFailed());
+        NetworkOperationEnded? ended = await Routes().RecordEndedAsync(network, Guid.NewGuid(), CreateFailed());
 
         Assert.Null(ended);
         Assert.Equal(NetworkTransition.Creating, network.Transition);
@@ -130,17 +130,17 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete()!.RequestId;
+        Guid deleteId = network.Delete()!.OperationId;
 
-        NetworkRequestEnded? first = await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
+        NetworkOperationEnded? first = await Routes().RecordEndedAsync(network, deleteId, NetworkOperationEnd.Done(null, null));
         DateTimeOffset? releasedAt = route.ReleasedAt;
-        NetworkRequestEnded? second = await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
+        NetworkOperationEnded? second = await Routes().RecordEndedAsync(network, deleteId, NetworkOperationEnd.Done(null, null));
 
         Assert.True(network.IsTerminal);
         Assert.True(route.IsFree);
         Assert.NotNull(releasedAt);
         Assert.Equal(releasedAt, route.ReleasedAt);
-        Assert.Equal(NetworkRequestKind.Delete, first!.Request.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, first!.Operation.Kind);
         Assert.Null(second);
     }
 
@@ -150,9 +150,9 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete()!.RequestId;
+        Guid deleteId = network.Delete()!.OperationId;
 
-        await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Failed(null, null, "Network deletion failed.", "raw"));
+        await Routes().RecordEndedAsync(network, deleteId, NetworkOperationEnd.Failed(null, null, "Network deletion failed.", "raw"));
 
         Assert.False(network.IsTerminal);
         Assert.True(network.HasPublicIpv6);
@@ -164,9 +164,9 @@ public class NetworkRoutesTests
     {
         Network network = WithoutPublicIpv6();
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete()!.RequestId;
+        Guid deleteId = network.Delete()!.OperationId;
 
-        await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
+        await Routes().RecordEndedAsync(network, deleteId, NetworkOperationEnd.Done(null, null));
 
         Assert.True(network.IsTerminal);
         Assert.All(_rows, route => Assert.True(route.IsFree));
@@ -182,7 +182,7 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         network.MarkNotFound();
 
-        BusinessException ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
+        BusinessException ex = Assert.Throws<BusinessException>(() => network.Delete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
         Assert.False(network.IsTerminal);
@@ -199,8 +199,8 @@ public class NetworkRoutesTests
 
         Assert.Contains(nameof(Network.MarkObserved), network);
         Assert.DoesNotContain(nameof(Network.ReceivePublicIpv6), network);
-        // EndRequest lets go of the /64 on a create that failed before Incus, and a delete it ends gives the route back.
-        Assert.DoesNotContain(nameof(Network.EndRequest), network);
+        // EndOperation lets go of the /64 on a create that failed before Incus, and a delete it ends gives the route back.
+        Assert.DoesNotContain(nameof(Network.EndOperation), network);
         Assert.Contains(nameof(ClusterIpv6Route.NextToGive), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.HandTo), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.TakeBack), route);

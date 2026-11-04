@@ -20,7 +20,7 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
     public async Task HandleAsync(EndFirewallRuleRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the rule is loaded: a malformed report is the worker's bug, whatever the rule.
-        RequestOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
         FirewallRuleState? state = null;
         if (command.State != null)
         {
@@ -31,8 +31,8 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        FirewallRuleRequestEnd end = new(outcome, command.ExternalId, state, command.Reason, command.Detail);
-        PendingRequest<FirewallRuleRequestKind>? ended = network.EndFirewallRuleRequest(rule.Id, command.RequestId, end);
+        FirewallRuleOperationEnd end = new(outcome, command.ExternalId, state, command.Reason, command.Detail);
+        PendingOperation<FirewallRuleOperationKind>? ended = network.EndFirewallRuleOperation(rule.Id, command.RequestId, end);
         if (ended == null)
         {
             return;

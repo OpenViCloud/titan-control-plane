@@ -28,11 +28,11 @@ public class NetworkRequestsDbTests(PostgresFixture pg)
     {
         Network network = Network.Create(Tenant, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]), "cluster-a", null,
             wantsPublicIpv6: false);
-        network.EndRequest(network.Pending!.Id,
-            NetworkRequestEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+        network.EndOperation(network.Pending!.Id,
+            NetworkOperationEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
         FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null,
             FirewallCidr.Parse("10.0.0.0/8")).Rule;
-        network.EndFirewallRuleRequest(rule.Id, rule.Pending!.Id, FirewallRuleRequestEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
+        network.EndFirewallRuleOperation(rule.Id, rule.Pending!.Id, FirewallRuleOperationEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
         await using TitanDbContext db = pg.NewDbContext();
         db.Networks.Add(network);
         await db.SaveChangesAsync();
@@ -71,7 +71,7 @@ public class NetworkRequestsDbTests(PostgresFixture pg)
 
         await using TitanDbContext db = pg.NewDbContext();
         Network stored = await db.Networks.Include(n => n.FirewallRules).SingleAsync(n => n.Id == network.Id);
-        Assert.Equal(FirewallRuleRequestKind.Delete, stored.FirewallRules.Single().Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Delete, stored.FirewallRules.Single().Pending!.Kind);
         int rows = await db.Set<ProviderCommand>().CountAsync(c => c.Key.StartsWith($"firewall-rule-delete-{rule.Id}-"));
         Assert.Equal(1, rows);
     }

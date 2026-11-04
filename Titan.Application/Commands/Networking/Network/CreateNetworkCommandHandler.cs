@@ -70,9 +70,9 @@ public class CreateNetworkCommandHandler(
         repo.Add(network);
         activity.Stage("network.create_requested", "network", network.Id, network.Name.Value); // atomic with the network insert
         string? heldCidr = null;
-        if (network.RequestedCidr != null)
+        if (network.ChosenCidr != null)
         {
-            heldCidr = network.RequestedCidr.Value;
+            heldCidr = network.ChosenCidr.Value;
         }
         await commands.EnqueueNetworkCreateAsync(network.Id, network.Pending!.Id, network.Name.Value, network.ClusterId, TenantAggregate.ProjectNameFor(tenant.Id), heldCidr,
             network.DefaultIngressPolicy.ToString(), network.DefaultEgressPolicy.ToString(),

@@ -50,9 +50,9 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        PendingRequest<FirewallRuleRequestKind>? waiting = rule.Pending;
-        PendingRequest<FirewallRuleRequestKind>? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        PendingOperation<FirewallRuleOperationKind>? waiting = rule.Pending;
+        PendingOperation<FirewallRuleOperationKind>? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (command.Report)
         {
             case "Observed":
@@ -67,25 +67,25 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 break;
             case "Created":
                 // The old create command reports the rule's id as soon as it is in the ACL: the create's Done.
-                if (waiting is { Kind: FirewallRuleRequestKind.Create })
+                if (waiting is { Kind: FirewallRuleOperationKind.Create })
                 {
-                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id,
-                        FirewallRuleRequestEnd.Done(command.ExternalRuleId, null));
+                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id,
+                        FirewallRuleOperationEnd.Done(command.ExternalRuleId, null));
                 }
                 break;
             case "RequestFailed":
                 // The waiting request ends Failed, keeping an id the create's give-up found.
                 if (waiting != null)
                 {
-                    outcome = RequestOutcome.Failed;
-                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id,
-                        FirewallRuleRequestEnd.Failed(command.ExternalRuleId, command.Reason, command.Detail));
+                    outcome = OperationOutcome.Failed;
+                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id,
+                        FirewallRuleOperationEnd.Failed(command.ExternalRuleId, command.Reason, command.Detail));
                 }
                 break;
             case "Deleted":
-                if (waiting is { Kind: FirewallRuleRequestKind.Delete })
+                if (waiting is { Kind: FirewallRuleOperationKind.Delete })
                 {
-                    ended = network.EndFirewallRuleRequest(rule.Id, waiting.Id, FirewallRuleRequestEnd.Done(null, null));
+                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id, FirewallRuleOperationEnd.Done(null, null));
                 }
                 else
                 {

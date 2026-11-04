@@ -24,7 +24,7 @@ public class MarkVmIntentFailedEndpointTests
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        intentId = vm.RequestStop().RequestId;
+        intentId = vm.Stop().OperationId;
         return vm;
     }
 
@@ -67,7 +67,7 @@ public class MarkVmIntentFailedEndpointTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        Assert.Equal(VmRequestKind.Stop, vm.Pending?.Kind);
+        Assert.Equal(VmOperationKind.Stop, vm.Pending?.Kind);
         Assert.Equal(StatusCodes.Status401Unauthorized, ep.HttpContext.Response.StatusCode);
     }
 }

@@ -114,8 +114,8 @@ public class VmSnapshotRequestHandlerTests
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vm42/s1", snapshot.ExternalId);
-        Assert.Equal("The snapshot request could not be completed.", snapshot.RequestFailureReason);
-        Assert.Equal("raw", snapshot.RequestFailureDetail);
+        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
+        Assert.Equal("raw", snapshot.OperationFailureDetail);
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -125,7 +125,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid revert = vm.RevertSnapshot(snapshot.Id).RequestId;
+        Guid revert = vm.RevertSnapshot(snapshot.Id).OperationId;
 
         await End(vm, snapshot, revert, "Done");
         await End(vm, snapshot, revert, "Done");
@@ -139,13 +139,13 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid revert = vm.RevertSnapshot(snapshot.Id).RequestId;
+        Guid revert = vm.RevertSnapshot(snapshot.Id).OperationId;
 
         await End(vm, snapshot, revert, "Failed");
         await End(vm, snapshot, revert, "Failed");
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("The snapshot request could not be completed.", snapshot.RequestFailureReason);
+        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
         Assert.Equal(["vm_snapshot.revert_failed"], Outcomes());
     }
 
@@ -154,7 +154,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.RequestSnapshotDelete(snapshot.Id)!.RequestId;
+        Guid delete = vm.DeleteSnapshot(snapshot.Id)!.OperationId;
 
         await End(vm, snapshot, delete, "Done");
         await End(vm, snapshot, delete, "Done");
@@ -168,12 +168,12 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.RequestSnapshotDelete(snapshot.Id)!.RequestId;
+        Guid delete = vm.DeleteSnapshot(snapshot.Id)!.OperationId;
 
         await End(vm, snapshot, delete, "Failed");
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("The snapshot request could not be completed.", snapshot.RequestFailureReason);
+        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
         Assert.Equal(["vm_snapshot.delete_failed"], Outcomes());
     }
 
@@ -261,7 +261,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        vm.RequestSnapshotDelete(snapshot.Id);
+        vm.DeleteSnapshot(snapshot.Id);
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, false));
 
@@ -324,7 +324,7 @@ public class VmSnapshotRequestHandlerTests
         Assert.Equal(["vm_snapshot.reverted"], Outcomes());
 
         VmSnapshot deleting = Ready(vm);
-        vm.RequestSnapshotDelete(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id);
         await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, deleting.Id, "Reverted"));
         Assert.Equal(VmSnapshotTransition.Deleting, deleting.Transition);
     }
@@ -336,7 +336,7 @@ public class VmSnapshotRequestHandlerTests
         VmSnapshot reverting = Ready(vm);
         vm.RevertSnapshot(reverting.Id);
         VmSnapshot deleting = Ready(vm);
-        vm.RequestSnapshotDelete(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id);
         VmSnapshot creating = Creating(vm);
 
         foreach (VmSnapshot snapshot in new[] { reverting, deleting, creating })
@@ -346,7 +346,7 @@ public class VmSnapshotRequestHandlerTests
         }
 
         Assert.All(new[] { reverting, deleting, creating }, s => Assert.Null(s.Pending));
-        Assert.All(new[] { reverting, deleting, creating }, s => Assert.Equal("raw", s.RequestFailureDetail));
+        Assert.All(new[] { reverting, deleting, creating }, s => Assert.Equal("raw", s.OperationFailureDetail));
         Assert.Equal(DesiredExistence.Exists, deleting.DesiredExistence);
         Assert.Equal(["vm_snapshot.revert_failed", "vm_snapshot.delete_failed"], Outcomes());
     }
@@ -356,7 +356,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot deleting = Ready(vm);
-        vm.RequestSnapshotDelete(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id);
         VmSnapshot resting = Ready(vm);
 
         await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, deleting.Id, "Deleted"));

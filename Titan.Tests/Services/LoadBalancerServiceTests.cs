@@ -204,7 +204,7 @@ public class LoadBalancerServiceTests
         LoadBalancer first = await OnIncusAsync(network, vm);
 
         string code = await CodeOf(() => CreateHandler().HandleAsync(new CreateLoadBalancerCommand(first.Name, network.Id, [Http], Backends(vm))));
-        first.RequestDelete();
+        first.Delete();
         first.MarkDeleted();
         var again = await CreateHandler().HandleAsync(new CreateLoadBalancerCommand(first.Name, network.Id, [Http], Backends(vm)));
 
@@ -231,7 +231,7 @@ public class LoadBalancerServiceTests
         LoadBalancer first = await OnIncusAsync(network, vm);
 
         var second = await CreateHandler().HandleAsync(new CreateLoadBalancerCommand("api", network.Id, [Http], Backends(vm)));
-        first.RequestDelete();
+        first.Delete();
         first.MarkDeleted();
         var third = await CreateHandler().HandleAsync(new CreateLoadBalancerCommand("dns", network.Id, [Dns], Backends(vm)));
 
@@ -423,7 +423,7 @@ public class LoadBalancerServiceTests
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { 80 }, lb.DesiredListeners.Select(l => l.Port));
-        Assert.Equal("Load balancer update failed.", lb.RequestFailureReason);
+        Assert.Equal("Load balancer update failed.", lb.OperationFailureReason);
         Assert.Equal(new[] { "load_balancer.update_requested", "load_balancer.update_failed" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -442,7 +442,7 @@ public class LoadBalancerServiceTests
             Reason: "Load balancer update failed."));
 
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        Assert.Null(lb.RequestFailureReason);
+        Assert.Null(lb.OperationFailureReason);
     }
 
     [Fact]
@@ -473,7 +473,7 @@ public class LoadBalancerServiceTests
         Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
         Assert.Null(lb.Transition);
         Assert.Equal(lb.Vip, lb.ExternalId);
-        Assert.Equal("x", lb.RequestFailureReason);
+        Assert.Equal("x", lb.OperationFailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -517,7 +517,7 @@ public class LoadBalancerServiceTests
         LoadBalancer kept = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(kept.Id, [Http, Dns], Backends(a)));
         LoadBalancer gone = await OnIncusAsync(network, a);
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
 
         List<LoadBalancerQueryResult> rows = await new ListLoadBalancersQueryHandler(_repo, _currentUser.Object)

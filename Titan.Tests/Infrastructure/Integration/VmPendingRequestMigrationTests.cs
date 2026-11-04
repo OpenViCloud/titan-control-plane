@@ -107,10 +107,10 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.Null(ended.Pending);
         Assert.Equal(DesiredExistence.Exists, ended.DesiredExistence);
         Assert.Equal(CurrentExistence.Exists, ended.CurrentExistence);
-        Assert.NotNull(ended.RequestFailureReason);
-        Assert.NotNull(ended.RequestFailedAt);
+        Assert.NotNull(ended.OperationFailureReason);
+        Assert.NotNull(ended.OperationFailedAt);
         Vm waiting = await read.Vms.SingleAsync(v => v.Id == stillOpen);
-        Assert.Equal(VmRequestKind.Delete, waiting.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Delete, waiting.Pending!.Kind);
         Assert.Equal(DesiredExistence.Deleted, waiting.DesiredExistence);
     }
 
@@ -129,7 +129,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Vm over = await read.Vms.SingleAsync(v => v.Id == named);
         Assert.Null(over.Pending);
         Assert.Equal("ext", over.ExternalId);
-        Assert.Null(over.RequestFailureReason);
+        Assert.Null(over.OperationFailureReason);
         Assert.Equal("Create", (await PendingColumnsAsync(unnamed)).Kind);
     }
 
@@ -195,6 +195,6 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
             .ToListAsync();
         Assert.Equal([false], olds);
         Vm stored = await read.Vms.SingleAsync(v => v.Id == vm.Id);
-        Assert.Equal(VmRequestKind.Create, stored.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Create, stored.Pending!.Kind);
     }
 }

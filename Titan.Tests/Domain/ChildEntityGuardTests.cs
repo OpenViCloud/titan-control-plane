@@ -47,7 +47,7 @@ public class ChildEntityGuardTests
     }
 
     private static bool MentionsAChild(Type type) =>
-        ItselfAndGenericArguments(type).Any(t => typeof(ChildEntity).IsAssignableFrom(t));
+        ItselfAndGenericArguments(type).Any(t => typeof(IEntity).IsAssignableFrom(t));
 
     // A *ForUpdateAsync loads one root for writing: one that hands out children is the aggregate boundary done by hand.
     [Fact]
@@ -61,7 +61,7 @@ public class ChildEntityGuardTests
             {
                 Type returned = x.Method.ReturnType;
                 bool isTaskOfOne = returned.IsGenericType && returned.GetGenericTypeDefinition() == typeof(Task<>);
-                return !isTaskOfOne || !typeof(AggregateRoot).IsAssignableFrom(returned.GetGenericArguments()[0]);
+                return !isTaskOfOne || !typeof(IAggregateRoot).IsAssignableFrom(returned.GetGenericArguments()[0]);
             })
             .Select(x => $"{x.Repository.Name}.{x.Method.Name} returns {x.Method.ReturnType}")
             .ToList();
@@ -113,7 +113,7 @@ public class ChildEntityGuardTests
     public void AChildsOwnRepository_OnlyHandsOutChildren()
     {
         var childNames = DomainAssembly.GetExportedTypes()
-            .Where(t => typeof(ChildEntity).IsAssignableFrom(t) && !t.IsAbstract)
+            .Where(t => typeof(IEntity).IsAssignableFrom(t) && !t.IsAbstract)
             .Select(t => $"I{t.Name}Repository")
             .ToHashSet(StringComparer.Ordinal);
         var childRepositories = RepositoryInterfaces().Where(r => childNames.Contains(r.Name)).ToList();
@@ -141,7 +141,7 @@ public class ChildEntityGuardTests
     [Fact]
     public void ChildEntities_ExposeNoPublicMethodBeyondTheAllowlist()
     {
-        var children = DomainAssembly.GetExportedTypes().Where(t => typeof(ChildEntity).IsAssignableFrom(t) && !t.IsAbstract).ToList();
+        var children = DomainAssembly.GetExportedTypes().Where(t => typeof(IEntity).IsAssignableFrom(t) && !t.IsAbstract).ToList();
         Assert.NotEmpty(children);
 
         const BindingFlags surface = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -162,7 +162,7 @@ public class ChildEntityGuardTests
     [Fact]
     public void ChildEntities_HaveNoPublicSetterFieldOrConstructor()
     {
-        var children = DomainAssembly.GetExportedTypes().Where(t => typeof(ChildEntity).IsAssignableFrom(t) && !t.IsAbstract).ToList();
+        var children = DomainAssembly.GetExportedTypes().Where(t => typeof(IEntity).IsAssignableFrom(t) && !t.IsAbstract).ToList();
         Assert.NotEmpty(children);
 
         var offenders = new List<string>();
@@ -200,7 +200,7 @@ public class ChildEntityGuardTests
     public void ApplicationThirdSegment_IsAnAggregate_OrANamedException()
     {
         var aggregates = DomainAssembly.GetExportedTypes()
-            .Where(t => typeof(AggregateRoot).IsAssignableFrom(t) && !t.IsAbstract)
+            .Where(t => typeof(IAggregateRoot).IsAssignableFrom(t) && !t.IsAbstract)
             .Select(t => t.Name)
             .ToHashSet(StringComparer.Ordinal);
         Assert.NotEmpty(aggregates);

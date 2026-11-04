@@ -137,7 +137,7 @@ public class VmServiceTests
     private VmTemplate SyncedTemplate(string externalId, string clusterId = "cluster-1")
     {
         var t = VmTemplate.Create("Ubuntu-Web", null, "Ubuntu-22.04", 20, TemplateOwnTier);
-        t.RequestSyncIn(clusterId);
+        t.SyncIn(clusterId);
         t.MarkCreatedIn(clusterId, externalId);
         _knownTemplates[t.Id] = t;
         return t;
@@ -318,7 +318,7 @@ public class VmServiceTests
         network.MarkActive("cs-net-2", "10.0.1.0/24", "10.0.1.1");
         _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var template = SyncedTemplate(externalId: "99", clusterId: "cluster-1");
-        template.RequestSyncIn("cluster-2");
+        template.SyncIn("cluster-2");
         template.MarkCreatedIn("cluster-2", "3");
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-2", null), default);
@@ -601,7 +601,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Equal(VmState.Running, vm.CurrentState); // reconciler handles transition, not CP
-        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -1012,8 +1012,8 @@ public class VmServiceTests
             Reason: "VM provisioning failed due to a system error. Please try again or contact support.",
             Detail: "instance create failed: operation timed out"), default);
 
-        Assert.Equal("VM provisioning failed due to a system error. Please try again or contact support.", vm.RequestFailureReason);
-        Assert.Equal("instance create failed: operation timed out", vm.RequestFailureDetail);
+        Assert.Equal("VM provisioning failed due to a system error. Please try again or contact support.", vm.OperationFailureReason);
+        Assert.Equal("instance create failed: operation timed out", vm.OperationFailureDetail);
         Assert.Null(vm.CurrentState);
         Assert.Null(vm.Pending);
     }
@@ -1109,7 +1109,7 @@ public class VmServiceTests
     public async Task UpdateStatus_Deleted_WithADeleteWaiting_EndsTheVm()
     {
         var vm = MakeVm(VmSeed.Running);
-        vm.RequestDelete();
+        vm.Delete();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
@@ -1126,12 +1126,12 @@ public class VmServiceTests
     public async Task UpdateStatus_Deleted_WhileAStopWaits_IsNotFound_AndTheStopKeepsWaiting()
     {
         var vm = MakeVm(VmSeed.Running);
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
-        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal(stop.OperationId, vm.Pending!.Id);
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.Empty(_activity.Events);
     }
@@ -1162,8 +1162,8 @@ public class VmServiceTests
         ready.MarkCreated("cs-vm-id/s1");
         var leaving = vm.WithSnapshot("leaving");
         leaving.MarkCreated("cs-vm-id/s2");
-        vm.RequestSnapshotDelete(leaving.Id);
-        vm.RequestDelete();
+        vm.DeleteSnapshot(leaving.Id);
+        vm.Delete();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
@@ -1196,7 +1196,7 @@ public class VmServiceTests
         Assert.Null(volume.Transition);
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
-        volume.RequestDelete();
+        volume.Delete();
     }
 
     // Seen detached by the VM's Deleted whether or not the volume's detach was asked (a repeat that found it detaching,
@@ -1207,7 +1207,7 @@ public class VmServiceTests
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         Volume volume = AttachedVolume(vm);
-        vm.RequestDelete();
+        vm.Delete();
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
 
@@ -1837,7 +1837,7 @@ public class VmServiceTests
             new UpdateVmStatusCommand(vm.Id, "RequestFailed", Reason: "IPv6 could not be assigned."), default);
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
-        Assert.Null(vm.RequestFailureReason);
+        Assert.Null(vm.OperationFailureReason);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, vm.CurrentExistence);
@@ -1883,7 +1883,7 @@ public class VmServiceTests
 
         await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "RequestFailed", ExternalId: "cs-vm-abc"), default);
 
-        Assert.NotNull(vm.RequestFailedAt);
+        Assert.NotNull(vm.OperationFailedAt);
         Assert.Equal("cs-vm-abc", vm.ExternalId);
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
     }
@@ -1968,7 +1968,7 @@ public class VmServiceTests
 
         await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, Guid.NewGuid()), default);
 
-        Assert.Equal(VmRequestKind.Stop, vm.Pending?.Kind);
+        Assert.Equal(VmOperationKind.Stop, vm.Pending?.Kind);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -2025,7 +2025,7 @@ public class VmServiceTests
             case VmSeed.Frozen: vm.MarkRunning("cs-vm-id", "10.0.0.2"); vm.MarkObserved(VmState.Frozen, "10.0.0.2"); break;
             case VmSeed.Error: vm.MarkRunning("cs-vm-id", "10.0.0.2"); vm.MarkObserved(VmState.Error, null); break;
             case VmSeed.NotFound: vm.MarkRunning("cs-vm-id", "10.0.0.2"); vm.MarkNotFound(); break;
-            case VmSeed.Deleted: vm.MarkRunning("cs-vm-id", "10.0.0.2"); vm.RequestDelete(); vm.MarkDeleted(); break;
+            case VmSeed.Deleted: vm.MarkRunning("cs-vm-id", "10.0.0.2"); vm.Delete(); vm.MarkDeleted(); break;
         }
         return vm;
     }

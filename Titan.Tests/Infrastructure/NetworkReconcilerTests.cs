@@ -47,9 +47,9 @@ public class NetworkReconcilerTests
         var lost = ActiveIn(Cluster, "lost");
         lost.MarkNotFound();
         var leaving = ActiveIn(Cluster, "leaving");
-        leaving.RequestDelete();
+        leaving.Delete();
         var gone = ActiveIn(Cluster, "gone");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         var creating = TestAggregates.Network(TestTenant.WithRoomToSpare(), "creating", Cluster);
         var otherCluster = ActiveIn("vn-han-1", "elsewhere");
@@ -68,7 +68,7 @@ public class NetworkReconcilerTests
     {
         using var db = NewDb();
         var leaving = ActiveIn(Cluster, "leaving");
-        leaving.RequestDelete();
+        leaving.Delete();
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
         var heartbeat = new ReconcilerHeartbeat();

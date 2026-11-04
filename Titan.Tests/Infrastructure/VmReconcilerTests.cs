@@ -60,7 +60,7 @@ public class VmReconcilerTests
         lost.MarkNotFound();
         Vm destroyed = VmIn(Cluster, "destroyed");
         destroyed.MarkRunning("43", "10.0.0.7");
-        destroyed.RequestDelete();
+        destroyed.Delete();
         destroyed.MarkDeleted();
         Vm withoutId = VmIn(Cluster, "without-id");
         Vm otherCluster = VmIn("vn-han-1", "other-cluster");
@@ -89,7 +89,7 @@ public class VmReconcilerTests
 
         List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
 
-        Assert.Equal("The VM could not be created.", refused.RequestFailureReason);
+        Assert.Equal("The VM could not be created.", refused.OperationFailureReason);
         Assert.Equal("45", refused.ExternalId);
         Assert.Contains(listed, v => v.Id == refused.Id);
     }

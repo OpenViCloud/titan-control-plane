@@ -45,9 +45,9 @@ public class VmRepositoryStateTests
         Vm notFound = Seen("not-found", VmState.Running);
         notFound.MarkNotFound();
         Vm deleting = Seen("deleting", VmState.Running);
-        deleting.RequestDelete();
+        deleting.Delete();
         Vm deleted = Seen("deleted", VmState.Running);
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
 
         return new List<Vm>

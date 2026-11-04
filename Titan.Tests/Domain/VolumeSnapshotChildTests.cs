@@ -29,13 +29,13 @@ public class VolumeSnapshotChildTests
         volume.WithSnapshot("ready").MarkCreated("vol11/s1"); // counts
         var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
-        leaving.RequestDelete();
+        leaving.Delete();
         var lost = volume.WithSnapshot("lost");
         lost.MarkCreated("vol11/s3");
         lost.MarkNotFound();
         var gone = volume.WithSnapshot("gone");
         gone.MarkCreated("vol11/s4");
-        volume.EndSnapshotRequest(gone.Id, volume.RequestSnapshotDelete(gone.Id)!.RequestId, VolumeSnapshotRequestEnd.Done(null));
+        volume.EndSnapshotOperation(gone.Id, volume.DeleteSnapshot(gone.Id)!.OperationId, VolumeSnapshotOperationEnd.Done(null));
         volume.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
         return volume;
     }
@@ -85,16 +85,16 @@ public class VolumeSnapshotChildTests
         volume.MarkSnapshotNotFound(lost.Id);
         var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
-        volume.RequestSnapshotDelete(leaving.Id);
+        volume.DeleteSnapshot(leaving.Id);
         var alreadyGone = volume.WithSnapshot("gone");
         alreadyGone.MarkCreated("vol11/s3");
-        volume.EndSnapshotRequest(alreadyGone.Id, volume.RequestSnapshotDelete(alreadyGone.Id)!.RequestId,
-            VolumeSnapshotRequestEnd.Done(null));
-        RequestTicket delete = volume.RequestDelete()!; // lost, leaving and gone do not count, so the delete is accepted
+        volume.EndSnapshotOperation(alreadyGone.Id, volume.DeleteSnapshot(alreadyGone.Id)!.OperationId,
+            VolumeSnapshotOperationEnd.Done(null));
+        OperationTicket delete = volume.Delete()!; // lost, leaving and gone do not count, so the delete is accepted
 
-        VolumeRequestEnded? ended = volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        VolumeOperationEnded? ended = volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
-        Assert.Equal(VolumeRequestKind.Delete, ended!.Request.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, ended!.Operation.Kind);
         Assert.Equal(CurrentExistence.Deleted, volume.CurrentExistence);
         Assert.All(volume.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(volume.Snapshots, s => Assert.Null(s.Pending));
@@ -105,9 +105,9 @@ public class VolumeSnapshotChildTests
     public void MarkDeleted_WithNoSnapshots_NamesNone()
     {
         var volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete()!;
+        OperationTicket delete = volume.Delete()!;
 
-        VolumeRequestEnded? ended = volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        VolumeOperationEnded? ended = volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
         Assert.NotNull(ended);
         Assert.Empty(ended.SnapshotsWhoseDeleteEnded);
@@ -121,11 +121,11 @@ public class VolumeSnapshotChildTests
         var volume = RestingVolume();
         var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol11/s2");
-        volume.RequestSnapshotDelete(leaving.Id);
-        RequestTicket delete = volume.RequestDelete()!;
-        volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        volume.DeleteSnapshot(leaving.Id);
+        OperationTicket delete = volume.Delete()!;
+        volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
-        VolumeRequestEnded? repeat = volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        VolumeOperationEnded? repeat = volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
         Assert.Null(repeat);
     }
@@ -140,10 +140,10 @@ public class VolumeSnapshotChildTests
         volume.WithSnapshot("mine");
 
         Assert.DoesNotContain(volume.Snapshots, s => s.Id == foreign.Id);
-        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.RequestSnapshotDelete(foreign.Id)).Code);
+        Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.DeleteSnapshot(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.ProviderIdForSnapshotRestore(foreign.Id)).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(
-            () => volume.EndSnapshotRequest(foreign.Id, foreign.Pending!.Id, VolumeSnapshotRequestEnd.Done("vol11/s1"))).Code);
+            () => volume.EndSnapshotOperation(foreign.Id, foreign.Pending!.Id, VolumeSnapshotOperationEnd.Done("vol11/s1"))).Code);
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => volume.MarkSnapshotNotFound(foreign.Id)).Code);
     }
 
@@ -157,22 +157,22 @@ public class VolumeSnapshotChildTests
         Guid createRequestId = snapshot.Pending!.Id;
 
         Assert.Equal(createRequestId,
-            volume.EndSnapshotRequest(snapshot.Id, createRequestId, VolumeSnapshotRequestEnd.Done("vol11/s1"))!.Id);
+            volume.EndSnapshotOperation(snapshot.Id, createRequestId, VolumeSnapshotOperationEnd.Done("vol11/s1"))!.Id);
         volume.MarkSnapshotObserved(snapshot.Id);
         Assert.Equal("vol11/s1", volume.ProviderIdForSnapshotRestore(snapshot.Id));
 
-        RequestTicket refused = volume.RequestSnapshotDelete(snapshot.Id)!;
+        OperationTicket refused = volume.DeleteSnapshot(snapshot.Id)!;
         Assert.Equal("vol11/s1", refused.ProviderId);
         Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
-        volume.EndSnapshotRequest(snapshot.Id, refused.RequestId, VolumeSnapshotRequestEnd.Failed(null, "refused", "raw"));
+        volume.EndSnapshotOperation(snapshot.Id, refused.OperationId, VolumeSnapshotOperationEnd.Failed(null, "refused", "raw"));
         Assert.Null(snapshot.Transition);
-        Assert.Equal("refused", snapshot.RequestFailureReason);
+        Assert.Equal("refused", snapshot.OperationFailureReason);
 
         volume.MarkSnapshotNotFound(snapshot.Id);
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
-        Assert.Equal(delete.RequestId,
-            volume.EndSnapshotRequest(snapshot.Id, delete.RequestId, VolumeSnapshotRequestEnd.Done(null))!.Id);
+        OperationTicket delete = volume.DeleteSnapshot(snapshot.Id)!;
+        Assert.Equal(delete.OperationId,
+            volume.EndSnapshotOperation(snapshot.Id, delete.OperationId, VolumeSnapshotOperationEnd.Done(null))!.Id);
         Assert.Equal(CurrentExistence.Deleted, snapshot.CurrentExistence);
 
         Assert.Equal(VolumeSnapshotTransition.Creating, untouched.Transition);
@@ -184,9 +184,9 @@ public class VolumeSnapshotChildTests
     {
         var volume = RestingVolume();
         var failed = volume.WithSnapshot("failed");
-        volume.EndSnapshotRequest(failed.Id, failed.Pending!.Id, VolumeSnapshotRequestEnd.Failed(null, "reason", "detail"));
+        volume.EndSnapshotOperation(failed.Id, failed.Pending!.Id, VolumeSnapshotOperationEnd.Failed(null, "reason", "detail"));
 
-        Assert.Null(volume.RequestSnapshotDelete(failed.Id));
+        Assert.Null(volume.DeleteSnapshot(failed.Id));
 
         Assert.Equal(CurrentExistence.Deleted, failed.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, failed.DesiredExistence);

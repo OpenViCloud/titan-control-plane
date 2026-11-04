@@ -23,6 +23,6 @@ public record AdminTemplateClusterQueryResult(
             transition = z.Transition.ToString();
         }
         return new(z.ClusterId, z.CurrentExistence.ToString(), z.DesiredExistence.ToString(), transition,
-            z.RequestFailureReason, z.RequestFailureDetail, z.RequestFailedAt, z.ExternalTemplateId);
+            z.OperationFailureReason, z.OperationFailureDetail, z.OperationFailedAt, z.ExternalTemplateId);
     }
 }

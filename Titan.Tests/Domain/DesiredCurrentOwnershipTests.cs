@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
-// (EndRequest), writes CurrentState, apart from the allowlist below. The two
+// (EndOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -22,14 +22,14 @@ public class DesiredCurrentOwnershipTests
     {
         ["Vm.DeleteLocally"] = "delete of a VM with no provider id: nothing to terminate, no reconciler to report it",
         ["Network.DeleteLocally"] = "delete of a network whose create failed before Incus had it: nothing to observe",
-        ["FirewallRule.RequestDelete"] = "the delete of a rule whose create failed (no provider id) happens in the request: nothing to observe",
-        ["Volume.RequestDelete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VolumeSnapshot.RequestDelete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VmSnapshot.RequestDelete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
-        ["LoadBalancer.RequestDelete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndRequest: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["FirewallRule.EndWithItsNetwork"] = "part of Network.EndRequest: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["VmSnapshot.EndWithItsVm"] = "part of Vm.EndRequest: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.Delete"] = "the delete of a rule whose create failed (no provider id) happens in the request: nothing to observe",
+        ["Volume.Delete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
+        ["VolumeSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
+        ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
+        ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
+        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.EndWithItsNetwork"] = "part of Network.EndOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VmSnapshot.EndWithItsVm"] = "part of Vm.EndOperation: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -66,18 +66,18 @@ public class DesiredCurrentOwnershipTests
         Assert.True(stale.Count == 0, "IntentWritesCurrentAllowlist rows that no longer write CurrentState:\n  " + string.Join("\n  ", stale));
     }
 
-    // The report of a request's own command (EndRequest, titan-ops architecture/resource-lifecycle.md#shape) is the one
+    // The report of a request's own command (EndOperation, titan-ops architecture/resource-lifecycle.md#shape) is the one
     // method that may write both: what the worker saw is current, and a failed request puts desired back. It is
     // neither an intent nor an observation, so both scans skip it; every aggregate on the new shape gets one, and a root
-    // reaches a child's through End<Child>Request.
+    // reaches a child's through End<Child>Operation.
     [Fact]
     public void ReportMethods_AreOnlyEndRequest()
     {
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
         Assert.Equal(
-            ["FirewallRule.EndRequest", "LoadBalancer.EndRequest", "Network.EndFirewallRuleRequest", "Network.EndRequest", "Vm.EndRequest",
-                "Vm.EndSnapshotRequest", "VmSnapshot.EndRequest", "VmTemplateCluster.EndRequest", "Volume.EndRequest", "Volume.EndSnapshotRequest",
-                "VolumeSnapshot.EndRequest"],
+            ["FirewallRule.EndOperation", "LoadBalancer.EndOperation", "Network.EndFirewallRuleOperation", "Network.EndOperation", "Vm.EndOperation",
+                "Vm.EndSnapshotOperation", "VmSnapshot.EndOperation", "VmTemplateCluster.EndOperation", "Volume.EndOperation", "Volume.EndSnapshotOperation",
+                "VolumeSnapshot.EndOperation"],
             reports);
     }
 
@@ -130,8 +130,8 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        // End<Child>Request: a root's way in to its child's EndRequest (titan-ops architecture/code-structure.md#child-entity).
-        public bool IsReport => Regex.IsMatch(Key, @"\.End\w*Request$");
+        // End<Child>Operation: a root's way in to its child's EndOperation (titan-ops architecture/code-structure.md#child-entity).
+        public bool IsReport => Regex.IsMatch(Key, @"\.End\w*Operation$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

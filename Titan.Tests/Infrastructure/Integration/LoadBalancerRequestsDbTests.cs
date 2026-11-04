@@ -29,11 +29,11 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         string offeringId = await SeedOfferingAsync();
         Guid networkId = Guid.NewGuid();
         Vm vm = Vm.Create(Tenant, networkId, $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-a", 20);
-        vm.EndRequest(vm.Pending!.Id,
-            VmRequestEnd.Done($"vm{Guid.NewGuid():N}"[..20], new VmObservation(VmState.Running, "10.0.0.5", null)));
+        vm.EndOperation(vm.Pending!.Id,
+            VmOperationEnd.Done($"vm{Guid.NewGuid():N}"[..20], new VmObservation(VmState.Running, "10.0.0.5", null)));
         LoadBalancer lb = LoadBalancer.Create(Tenant, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [vm]);
-        lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
+        lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
         await using TitanDbContext db = pg.NewDbContext();
         db.Vms.Add(vm);
         db.LoadBalancers.Add(lb);
@@ -91,7 +91,7 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(UpdateThroughTheHandlerAsync(lb.Id, backend.Id), UpdateThroughTheHandlerAsync(lb.Id, backend.Id));
 
         LoadBalancer stored = await StoredAsync(lb.Id);
-        Assert.Equal(LoadBalancerRequestKind.Update, stored.Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Update, stored.Pending!.Kind);
         Assert.Equal([$"load-balancer-update-{lb.Id}-{stored.Pending.Id}"], await KeysAsync($"load-balancer-update-{lb.Id}-"));
     }
 
@@ -103,7 +103,7 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(DeleteThroughTheHandlerAsync(lb.Id), DeleteThroughTheHandlerAsync(lb.Id));
 
         LoadBalancer stored = await StoredAsync(lb.Id);
-        Assert.Equal(LoadBalancerRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Delete, stored.Pending!.Kind);
         Assert.Equal([$"load-balancer-delete-{lb.Id}-{stored.Pending.Id}"], await KeysAsync($"load-balancer-delete-{lb.Id}-"));
     }
 

@@ -27,13 +27,13 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(r => r.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(r => r.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(r => r.RequestFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(r => r.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(r => r.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(r => r.OperationFailureReason).HasColumnName("request_failure_reason");
+        builder.Property(r => r.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(r => r.OperationFailedAt).HasColumnName("request_failed_at");
         // The rule's own waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<FirewallRuleRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<FirewallRuleOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(r => r.Pending);
         builder.Ignore(r => r.Transition);
         builder.Ignore(r => r.Ports);

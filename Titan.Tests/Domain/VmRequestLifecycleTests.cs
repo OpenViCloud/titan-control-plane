@@ -16,12 +16,12 @@ public class VmRequestLifecycleTests
     private static Vm RunningVm()
     {
         Vm vm = NewVm();
-        vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Done("42", Running));
+        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("42", Running));
         return vm;
     }
 
-    private static VmRequestEnd Failed(string reason = "The VM could not be stopped.", string detail = "raw") =>
-        VmRequestEnd.Failed(null, null, reason, detail);
+    private static VmOperationEnd Failed(string reason = "The VM could not be stopped.", string detail = "raw") =>
+        VmOperationEnd.Failed(null, null, reason, detail);
 
     // ---------- the create ----------
 
@@ -31,7 +31,7 @@ public class VmRequestLifecycleTests
         Vm vm = NewVm();
 
         Assert.NotNull(vm.Pending);
-        Assert.Equal(VmRequestKind.Create, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Create, vm.Pending!.Kind);
         Assert.NotEqual(Guid.Empty, vm.Pending.Id);
         Assert.True(vm.Pending.AskedAt <= DateTimeOffset.UtcNow);
         Assert.Equal(VmTransition.Creating, vm.Transition);
@@ -43,17 +43,17 @@ public class VmRequestLifecycleTests
         Vm vm = NewVm();
         Guid createId = vm.Pending!.Id;
 
-        VmRequestEnded? ended = vm.EndRequest(createId, VmRequestEnd.Done("42", Running));
+        VmOperationEnded? ended = vm.EndOperation(createId, VmOperationEnd.Done("42", Running));
 
         Assert.NotNull(ended);
-        Assert.Equal(VmRequestKind.Create, ended!.Request.Kind);
-        Assert.Equal(createId, ended.Request.Id);
+        Assert.Equal(VmOperationKind.Create, ended!.Operation.Kind);
+        Assert.Equal(createId, ended.Operation.Id);
         Assert.Null(vm.Pending);
         Assert.Equal("42", vm.ExternalId);
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Equal("10.0.0.5", vm.IpAddress);
-        Assert.Null(vm.RequestFailureReason);
+        Assert.Null(vm.OperationFailureReason);
     }
 
     [Fact] // the instance was made but never answered: it exists, and its create failed
@@ -61,7 +61,7 @@ public class VmRequestLifecycleTests
     {
         Vm vm = NewVm();
 
-        VmRequestEnded? ended = vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Failed("45", null, "VM provisioning failed.", "raw"));
+        VmOperationEnded? ended = vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Failed("45", null, "VM provisioning failed.", "raw"));
 
         Assert.NotNull(ended);
         Assert.Null(vm.Pending);
@@ -70,9 +70,9 @@ public class VmRequestLifecycleTests
         Assert.Null(vm.CurrentState);
         Assert.Equal(VmDesiredState.Running, vm.DesiredState);
         Assert.Equal(DesiredExistence.Exists, vm.DesiredExistence);
-        Assert.Equal("VM provisioning failed.", vm.RequestFailureReason);
-        Assert.Equal("raw", vm.RequestFailureDetail);
-        Assert.NotNull(vm.RequestFailedAt);
+        Assert.Equal("VM provisioning failed.", vm.OperationFailureReason);
+        Assert.Equal("raw", vm.OperationFailureDetail);
+        Assert.NotNull(vm.OperationFailedAt);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class VmRequestLifecycleTests
     {
         Vm vm = NewVm();
 
-        vm.EndRequest(vm.Pending!.Id, Failed("VM provisioning failed."));
+        vm.EndOperation(vm.Pending!.Id, Failed("VM provisioning failed."));
 
         Assert.Null(vm.Pending);
         Assert.Null(vm.ExternalId);
@@ -93,14 +93,14 @@ public class VmRequestLifecycleTests
     public void AReport_WithAnotherId_ChangesNothing_AndReturnsNull()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
         Guid before = vm.Pending!.Id;
 
-        VmRequestEnded? ended = vm.EndRequest(Guid.NewGuid(), VmRequestEnd.Done(null, Stopped));
+        VmOperationEnded? ended = vm.EndOperation(Guid.NewGuid(), VmOperationEnd.Done(null, Stopped));
 
         Assert.Null(ended);
         Assert.Equal(before, vm.Pending!.Id);
-        Assert.Equal(stop.RequestId, vm.Pending.Id);
+        Assert.Equal(stop.OperationId, vm.Pending.Id);
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
     }
@@ -111,35 +111,35 @@ public class VmRequestLifecycleTests
         Vm vm = RunningVm();
         Guid oldId = Guid.NewGuid();
 
-        Assert.Null(vm.EndRequest(oldId, VmRequestEnd.Done(null, Stopped)));
-        Assert.Null(vm.EndRequest(oldId, Failed()));
+        Assert.Null(vm.EndOperation(oldId, VmOperationEnd.Done(null, Stopped)));
+        Assert.Null(vm.EndOperation(oldId, Failed()));
 
         Assert.Null(vm.Pending);
         Assert.Equal(VmState.Running, vm.CurrentState);
-        Assert.Null(vm.RequestFailureReason);
+        Assert.Null(vm.OperationFailureReason);
     }
 
     [Fact]
     public void TheSameDone_Twice_EndsTheRequestOnce()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
-        Assert.NotNull(vm.EndRequest(stop.RequestId, VmRequestEnd.Done(null, Stopped)));
-        Assert.Null(vm.EndRequest(stop.RequestId, VmRequestEnd.Done(null, Stopped)));
+        Assert.NotNull(vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Stopped)));
+        Assert.Null(vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Stopped)));
     }
 
     [Fact] // a give-up re-sent after the customer pressed a new request must not free the new one
     public void AStaleGiveUp_AfterANewRequest_IsIgnored()
     {
         Vm vm = RunningVm();
-        RequestTicket firstStop = vm.RequestStop();
-        vm.EndRequest(firstStop.RequestId, Failed());
-        RequestTicket secondStop = vm.RequestStop();
+        OperationTicket firstStop = vm.Stop();
+        vm.EndOperation(firstStop.OperationId, Failed());
+        OperationTicket secondStop = vm.Stop();
 
-        Assert.Null(vm.EndRequest(firstStop.RequestId, Failed()));
+        Assert.Null(vm.EndOperation(firstStop.OperationId, Failed()));
 
-        Assert.Equal(secondStop.RequestId, vm.Pending!.Id);
+        Assert.Equal(secondStop.OperationId, vm.Pending!.Id);
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
     }
 
@@ -147,13 +147,13 @@ public class VmRequestLifecycleTests
     public void ADeletedVm_AbsorbsEveryReportAndObservation()
     {
         Vm vm = RunningVm();
-        RequestTicket delete = vm.RequestDelete()!;
-        vm.EndRequest(delete.RequestId, VmRequestEnd.Done(null, null));
+        OperationTicket delete = vm.Delete()!;
+        vm.EndOperation(delete.OperationId, VmOperationEnd.Done(null, null));
         Assert.True(vm.IsTerminal);
 
         vm.MarkObserved(Running);
-        Assert.Null(vm.EndRequest(delete.RequestId, VmRequestEnd.Done(null, Running)));
-        Assert.Null(vm.EndRequest(Guid.NewGuid(), Failed()));
+        Assert.Null(vm.EndOperation(delete.OperationId, VmOperationEnd.Done(null, Running)));
+        Assert.Null(vm.EndOperation(Guid.NewGuid(), Failed()));
 
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.Null(vm.CurrentState);
@@ -166,11 +166,11 @@ public class VmRequestLifecycleTests
     public void Done_OfAStop_RecordsWhatTheWorkerSaw_AndEndsIt()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
-        VmRequestEnded? ended = vm.EndRequest(stop.RequestId, VmRequestEnd.Done(null, Stopped));
+        VmOperationEnded? ended = vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Stopped));
 
-        Assert.Equal(VmRequestKind.Stop, ended!.Request.Kind);
+        Assert.Equal(VmOperationKind.Stop, ended!.Operation.Kind);
         Assert.Null(vm.Pending);
         Assert.Equal(VmState.Stopped, vm.CurrentState);
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
@@ -185,12 +185,12 @@ public class VmRequestLifecycleTests
         vm.MarkSnapshotCreated(resting.Snapshot.Id, "s-1");
         VmSnapshotTicket deleting = vm.AddSnapshot("deleting");
         vm.MarkSnapshotCreated(deleting.Snapshot.Id, "s-2");
-        vm.RequestSnapshotDelete(deleting.Snapshot.Id);
-        RequestTicket delete = vm.RequestDelete()!;
+        vm.DeleteSnapshot(deleting.Snapshot.Id);
+        OperationTicket delete = vm.Delete()!;
 
-        VmRequestEnded? ended = vm.EndRequest(delete.RequestId, VmRequestEnd.Done(null, null));
+        VmOperationEnded? ended = vm.EndOperation(delete.OperationId, VmOperationEnd.Done(null, null));
 
-        Assert.Equal(VmRequestKind.Delete, ended!.Request.Kind);
+        Assert.Equal(VmOperationKind.Delete, ended!.Operation.Kind);
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.Null(vm.CurrentState);
         Assert.Null(vm.IpAddress);
@@ -203,16 +203,16 @@ public class VmRequestLifecycleTests
     public void Done_ClearsAnOlderFailureReason()
     {
         Vm vm = RunningVm();
-        RequestTicket firstStop = vm.RequestStop();
-        vm.EndRequest(firstStop.RequestId, Failed());
-        Assert.NotNull(vm.RequestFailureReason);
-        RequestTicket secondStop = vm.RequestStop();
+        OperationTicket firstStop = vm.Stop();
+        vm.EndOperation(firstStop.OperationId, Failed());
+        Assert.NotNull(vm.OperationFailureReason);
+        OperationTicket secondStop = vm.Stop();
 
-        vm.EndRequest(secondStop.RequestId, VmRequestEnd.Done(null, Stopped));
+        vm.EndOperation(secondStop.OperationId, VmOperationEnd.Done(null, Stopped));
 
-        Assert.Null(vm.RequestFailureReason);
-        Assert.Null(vm.RequestFailureDetail);
-        Assert.Null(vm.RequestFailedAt);
+        Assert.Null(vm.OperationFailureReason);
+        Assert.Null(vm.OperationFailureDetail);
+        Assert.Null(vm.OperationFailedAt);
     }
 
     // ---------- Failed by kind: desired goes back to current ----------
@@ -221,15 +221,15 @@ public class VmRequestLifecycleTests
     public void Failed_OfAStop_PutsDesiredBackToRunning_AndRecordsTheReason()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
-        VmRequestEnded? ended = vm.EndRequest(stop.RequestId, Failed("The VM could not be stopped."));
+        VmOperationEnded? ended = vm.EndOperation(stop.OperationId, Failed("The VM could not be stopped."));
 
-        Assert.Equal(VmRequestKind.Stop, ended!.Request.Kind);
+        Assert.Equal(VmOperationKind.Stop, ended!.Operation.Kind);
         Assert.Null(vm.Pending);
         Assert.Equal(VmDesiredState.Running, vm.DesiredState);
         Assert.Equal(VmState.Running, vm.CurrentState);
-        Assert.Equal("The VM could not be stopped.", vm.RequestFailureReason);
+        Assert.Equal("The VM could not be stopped.", vm.OperationFailureReason);
         Assert.Null(vm.Transition);
     }
 
@@ -238,9 +238,9 @@ public class VmRequestLifecycleTests
     {
         Vm vm = RunningVm();
         vm.MarkObserved(Stopped);
-        RequestTicket start = vm.RequestStart();
+        OperationTicket start = vm.Start();
 
-        vm.EndRequest(start.RequestId, Failed("The VM could not be started."));
+        vm.EndOperation(start.OperationId, Failed("The VM could not be started."));
 
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
         Assert.Null(vm.Pending);
@@ -250,11 +250,11 @@ public class VmRequestLifecycleTests
     public void Failed_OfADelete_PutsDesiredExistenceBackToExists_AndKeepsTheInstance()
     {
         Vm vm = RunningVm();
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
 
-        VmRequestEnded? ended = vm.EndRequest(delete.RequestId, Failed("The VM could not be deleted."));
+        VmOperationEnded? ended = vm.EndOperation(delete.OperationId, Failed("The VM could not be deleted."));
 
-        Assert.Equal(VmRequestKind.Delete, ended!.Request.Kind);
+        Assert.Equal(VmOperationKind.Delete, ended!.Operation.Kind);
         Assert.Equal(DesiredExistence.Exists, vm.DesiredExistence);
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
         Assert.Equal("42", vm.ExternalId);
@@ -266,13 +266,13 @@ public class VmRequestLifecycleTests
     public void AfterAFailedStop_AnotherStop_IsANewRequest()
     {
         Vm vm = RunningVm();
-        RequestTicket first = vm.RequestStop();
-        vm.EndRequest(first.RequestId, Failed());
+        OperationTicket first = vm.Stop();
+        vm.EndOperation(first.OperationId, Failed());
 
-        RequestTicket second = vm.RequestStop();
+        OperationTicket second = vm.Stop();
 
-        Assert.NotEqual(first.RequestId, second.RequestId);
-        Assert.Equal(second.RequestId, vm.Pending!.Id);
+        Assert.NotEqual(first.OperationId, second.OperationId);
+        Assert.Equal(second.OperationId, vm.Pending!.Id);
     }
 
     // ---------- an observation never ends a request ----------
@@ -281,11 +281,11 @@ public class VmRequestLifecycleTests
     public void AnObservation_ReachingWhatWasAsked_LeavesTheRequestWaiting()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
         vm.MarkObserved(Stopped);
 
-        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal(stop.OperationId, vm.Pending!.Id);
         Assert.Equal(VmState.Stopped, vm.CurrentState);
         Assert.Equal(VmTransition.Stopping, vm.Transition);
     }
@@ -307,11 +307,11 @@ public class VmRequestLifecycleTests
     public void NotFound_LeavesAWaitingDeleteWaiting_AndClearsTheAddresses()
     {
         Vm vm = RunningVm();
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
 
         vm.MarkNotFound();
 
-        Assert.Equal(delete.RequestId, vm.Pending!.Id);
+        Assert.Equal(delete.OperationId, vm.Pending!.Id);
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.Null(vm.CurrentState);
         Assert.Null(vm.IpAddress);
@@ -336,9 +336,9 @@ public class VmRequestLifecycleTests
     public void RequestDelete_WithoutAProviderId_AfterTheCreateFailed_HandsOutNoTicket()
     {
         Vm vm = NewVm();
-        vm.EndRequest(vm.Pending!.Id, Failed("VM provisioning failed."));
+        vm.EndOperation(vm.Pending!.Id, Failed("VM provisioning failed."));
 
-        RequestTicket? ticket = vm.RequestDelete();
+        OperationTicket? ticket = vm.Delete();
 
         Assert.Null(ticket);
         Assert.Null(vm.Pending);
@@ -348,16 +348,16 @@ public class VmRequestLifecycleTests
     public void RequestDelete_ReplacesAWaitingStop_WithANewId()
     {
         Vm vm = RunningVm();
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
 
-        Assert.NotEqual(stop.RequestId, delete.RequestId);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending!.Kind);
+        Assert.NotEqual(stop.OperationId, delete.OperationId);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending!.Kind);
         Assert.Equal("42", delete.ProviderId);
         // the stop's own report arrives later and is ignored
-        Assert.Null(vm.EndRequest(stop.RequestId, VmRequestEnd.Done(null, Stopped)));
-        Assert.Equal(delete.RequestId, vm.Pending!.Id);
+        Assert.Null(vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Stopped)));
+        Assert.Equal(delete.OperationId, vm.Pending!.Id);
     }
 
     // ---------- the value objects ----------
@@ -365,13 +365,13 @@ public class VmRequestLifecycleTests
     [Fact]
     public void RequestTicket_RefusesAnEmptyProviderId()
     {
-        Assert.Throws<Titan.Domain.Exceptions.BusinessException>(() => RequestTicket.Of(Guid.NewGuid(), ""));
+        Assert.Throws<Titan.Domain.Exceptions.BusinessException>(() => OperationTicket.Of(Guid.NewGuid(), ""));
     }
 
     [Fact]
     public void PendingRequest_RefusesAnEmptyId()
     {
         Assert.Throws<Titan.Domain.Exceptions.BusinessException>(
-            () => PendingRequest<VmRequestKind>.Of(Guid.Empty, VmRequestKind.Stop, DateTimeOffset.UtcNow));
+            () => PendingOperation<VmOperationKind>.Of(Guid.Empty, VmOperationKind.Stop, DateTimeOffset.UtcNow));
     }
 }

@@ -21,8 +21,8 @@ public class LoadBalancerRequestLifecycleTests
     private static Vm VmOnIncus()
     {
         Vm vm = Vm.Create(Tenant, NetworkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-a", 20);
-        vm.EndRequest(vm.Pending!.Id,
-            VmRequestEnd.Done($"vm{Guid.NewGuid():N}"[..28], new VmObservation(VmState.Running, "10.0.0.5", null)));
+        vm.EndOperation(vm.Pending!.Id,
+            VmOperationEnd.Done($"vm{Guid.NewGuid():N}"[..28], new VmObservation(VmState.Running, "10.0.0.5", null)));
         return vm;
     }
 
@@ -33,12 +33,12 @@ public class LoadBalancerRequestLifecycleTests
     private static LoadBalancer OnIncus(params Vm[] backends)
     {
         LoadBalancer lb = Creating(backends);
-        lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
+        lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
         return lb;
     }
 
-    private static LoadBalancerRequestEnd Failed(string? externalId = null) =>
-        LoadBalancerRequestEnd.Failed(externalId, "The load balancer request could not be completed.", "raw");
+    private static LoadBalancerOperationEnd Failed(string? externalId = null) =>
+        LoadBalancerOperationEnd.Failed(externalId, "The load balancer request could not be completed.", "raw");
 
     private static string Shape(LoadBalancer lb) =>
         $"{lb.CurrentExistence}/{lb.DesiredExistence}/{(lb.Transition == null ? "-" : lb.Transition.Value.ToString())}";
@@ -53,7 +53,7 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = Creating();
 
-        Assert.Equal(LoadBalancerRequestKind.Create, lb.Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Create, lb.Pending!.Kind);
         Assert.NotEqual(Guid.Empty, lb.Pending.Id);
         Assert.True(lb.Pending.AskedAt <= DateTimeOffset.UtcNow);
         Assert.Equal(LoadBalancerTransition.Creating, lb.Transition);
@@ -65,16 +65,16 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer lb = Creating();
         Guid create = lb.Pending!.Id;
 
-        PendingRequest<LoadBalancerRequestKind>? ended = lb.EndRequest(create, LoadBalancerRequestEnd.Done(lb.Vip));
-        PendingRequest<LoadBalancerRequestKind>? again = lb.EndRequest(create, LoadBalancerRequestEnd.Done("another"));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(create, LoadBalancerOperationEnd.Done(lb.Vip));
+        PendingOperation<LoadBalancerOperationKind>? again = lb.EndOperation(create, LoadBalancerOperationEnd.Done("another"));
 
-        Assert.Equal((LoadBalancerRequestKind.Create, create), (ended!.Kind, ended.Id));
+        Assert.Equal((LoadBalancerOperationKind.Create, create), (ended!.Kind, ended.Id));
         Assert.Null(again);
         Assert.Equal(lb.Vip, lb.ExternalId);
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["TCP 80"], Ports(lb.AppliedListeners));
         Assert.Single(lb.AppliedBackends);
-        Assert.Null(lb.RequestFailureReason);
+        Assert.Null(lb.OperationFailureReason);
     }
 
     [Fact]
@@ -82,16 +82,16 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = Creating();
 
-        lb.EndRequest(lb.Pending!.Id, Failed());
+        lb.EndOperation(lb.Pending!.Id, Failed());
 
         Assert.Equal("NotCreated/Exists/-", Shape(lb));
         Assert.Null(lb.ExternalId);
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
-        Assert.Equal("raw", lb.RequestFailureDetail);
-        Assert.NotNull(lb.RequestFailedAt);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
+        Assert.Equal("raw", lb.OperationFailureDetail);
+        Assert.NotNull(lb.OperationFailedAt);
         Assert.Empty(lb.AppliedListeners);
         // Never reached Incus: it is deleted here, not through Incus.
-        Assert.Null(lb.RequestDelete());
+        Assert.Null(lb.Delete());
         Assert.True(lb.IsTerminal);
     }
 
@@ -103,14 +103,14 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = Creating();
 
-        lb.EndRequest(lb.Pending!.Id, Failed(lb.Vip));
+        lb.EndOperation(lb.Pending!.Id, Failed(lb.Vip));
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(lb.Vip, lb.ExternalId);
-        Assert.NotNull(lb.RequestFailureReason);
+        Assert.NotNull(lb.OperationFailureReason);
         Assert.Equal(["TCP 80"], Ports(lb.AppliedListeners));
         Assert.Single(lb.AppliedBackends);
-        Assert.Equal(lb.Vip, lb.RequestDelete()!.ProviderId);
+        Assert.Equal(lb.Vip, lb.Delete()!.ProviderId);
     }
 
     // ---------- the update ----------
@@ -121,13 +121,13 @@ public class LoadBalancerRequestLifecycleTests
         Vm a = VmOnIncus();
         Vm b = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        RequestTicket update = lb.RequestUpdate([Dns], [b]);
-        Assert.Equal((LoadBalancerRequestKind.Update, update.RequestId), (lb.Pending!.Kind, lb.Pending.Id));
+        OperationTicket update = lb.Update([Dns], [b]);
+        Assert.Equal((LoadBalancerOperationKind.Update, update.OperationId), (lb.Pending!.Kind, lb.Pending.Id));
         Assert.Equal(lb.Vip, update.ProviderId);
 
-        PendingRequest<LoadBalancerRequestKind>? ended = lb.EndRequest(update.RequestId, LoadBalancerRequestEnd.Done(null));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(update.OperationId, LoadBalancerOperationEnd.Done(null));
 
-        Assert.Equal(LoadBalancerRequestKind.Update, ended!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Update, ended!.Kind);
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["UDP 53"], Ports(lb.Listeners));
         Assert.Equal([b.Id], lb.Backends.Select(x => x.VmId));
@@ -139,15 +139,15 @@ public class LoadBalancerRequestLifecycleTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        RequestTicket update = lb.RequestUpdate([Dns], [VmOnIncus()]);
+        OperationTicket update = lb.Update([Dns], [VmOnIncus()]);
 
-        lb.EndRequest(update.RequestId, Failed());
+        lb.EndOperation(update.OperationId, Failed());
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["TCP 80"], Ports(lb.DesiredListeners));
         Assert.Equal(["TCP 80"], Ports(lb.Listeners));
         Assert.Equal([a.Id], lb.DesiredBackends.Select(x => x.VmId));
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
         Assert.True(lb.HasDesiredSpec([Http], [a.Id]));
     }
 
@@ -157,13 +157,13 @@ public class LoadBalancerRequestLifecycleTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        lb.EndRequest(lb.RequestUpdate([Dns], [a]).RequestId, Failed());
+        lb.EndOperation(lb.Update([Dns], [a]).OperationId, Failed());
 
-        lb.EndRequest(lb.RequestUpdate([Dns], [a]).RequestId, LoadBalancerRequestEnd.Done(null));
+        lb.EndOperation(lb.Update([Dns], [a]).OperationId, LoadBalancerOperationEnd.Done(null));
 
-        Assert.Null(lb.RequestFailureReason);
-        Assert.Null(lb.RequestFailureDetail);
-        Assert.Null(lb.RequestFailedAt);
+        Assert.Null(lb.OperationFailureReason);
+        Assert.Null(lb.OperationFailureDetail);
+        Assert.Null(lb.OperationFailedAt);
     }
 
     // ---------- the delete ----------
@@ -172,29 +172,29 @@ public class LoadBalancerRequestLifecycleTests
     public void Done_OfTheDelete_EndsTheLoadBalancer()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket delete = lb.RequestDelete()!;
+        OperationTicket delete = lb.Delete()!;
         Assert.Equal(lb.Vip, delete.ProviderId);
 
-        PendingRequest<LoadBalancerRequestKind>? ended = lb.EndRequest(delete.RequestId, LoadBalancerRequestEnd.Done(null));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null));
 
-        Assert.Equal(LoadBalancerRequestKind.Delete, ended!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Delete, ended!.Kind);
         Assert.Equal("Deleted/Deleted/-", Shape(lb));
         Assert.True(lb.IsTerminal);
-        Assert.Null(lb.EndRequest(delete.RequestId, LoadBalancerRequestEnd.Done(null)));
+        Assert.Null(lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null)));
     }
 
     [Fact]
     public void Failed_OfTheDelete_GivesTheLoadBalancerBack_WithWhy_AndTheNextDeleteIsANewRequest()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket first = lb.RequestDelete()!;
+        OperationTicket first = lb.Delete()!;
 
-        lb.EndRequest(first.RequestId, Failed());
+        lb.EndOperation(first.OperationId, Failed());
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
-        RequestTicket second = lb.RequestDelete()!;
-        Assert.NotEqual(first.RequestId, second.RequestId);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
+        OperationTicket second = lb.Delete()!;
+        Assert.NotEqual(first.OperationId, second.OperationId);
     }
 
     // A delete that replaced a waiting update gives back what Incus took, not the replaced update's spec: desired and
@@ -204,17 +204,17 @@ public class LoadBalancerRequestLifecycleTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        RequestTicket update = lb.RequestUpdate([Dns], [a]);
-        RequestTicket delete = lb.RequestDelete()!;
+        OperationTicket update = lb.Update([Dns], [a]);
+        OperationTicket delete = lb.Delete()!;
 
-        lb.EndRequest(delete.RequestId, Failed());
+        lb.EndOperation(delete.OperationId, Failed());
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["TCP 80"], Ports(lb.DesiredListeners));
         Assert.Equal(["TCP 80"], Ports(lb.Listeners));
         Assert.False(lb.HasDesiredSpec([Dns], [a.Id]));
-        RequestTicket again = lb.RequestUpdate([Dns], [a]);
-        Assert.NotEqual(update.RequestId, again.RequestId);
+        OperationTicket again = lb.Update([Dns], [a]);
+        Assert.NotEqual(update.OperationId, again.OperationId);
         Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
     }
 
@@ -225,18 +225,18 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer creating = Creating();
         LoadBalancer updating = OnIncus();
-        updating.RequestUpdate([Dns], [VmOnIncus()]);
+        updating.Update([Dns], [VmOnIncus()]);
 
-        Assert.Null(creating.EndRequest(Guid.NewGuid(), LoadBalancerRequestEnd.Done(creating.Vip)));
-        Assert.Null(updating.EndRequest(Guid.NewGuid(), Failed()));
+        Assert.Null(creating.EndOperation(Guid.NewGuid(), LoadBalancerOperationEnd.Done(creating.Vip)));
+        Assert.Null(updating.EndOperation(Guid.NewGuid(), Failed()));
         // Another load balancer's request id is not this one's.
-        Assert.Null(creating.EndRequest(updating.Pending!.Id, LoadBalancerRequestEnd.Done(creating.Vip)));
+        Assert.Null(creating.EndOperation(updating.Pending!.Id, LoadBalancerOperationEnd.Done(creating.Vip)));
 
         Assert.Equal("NotCreated/Exists/Creating", Shape(creating));
         Assert.Null(creating.ExternalId);
         Assert.Equal("Exists/Exists/Updating", Shape(updating));
         Assert.Equal(["UDP 53"], Ports(updating.DesiredListeners));
-        Assert.Null(updating.RequestFailureReason);
+        Assert.Null(updating.OperationFailureReason);
     }
 
     // The delete replaced the update: the update's report names a request no longer waiting.
@@ -244,14 +244,14 @@ public class LoadBalancerRequestLifecycleTests
     public void TheReportOfAnUpdateADeleteReplaced_EndsNothing()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket update = lb.RequestUpdate([Dns], [VmOnIncus()]);
-        lb.RequestDelete();
+        OperationTicket update = lb.Update([Dns], [VmOnIncus()]);
+        lb.Delete();
 
-        Assert.Null(lb.EndRequest(update.RequestId, LoadBalancerRequestEnd.Done(null)));
-        Assert.Null(lb.EndRequest(update.RequestId, Failed()));
+        Assert.Null(lb.EndOperation(update.OperationId, LoadBalancerOperationEnd.Done(null)));
+        Assert.Null(lb.EndOperation(update.OperationId, Failed()));
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(lb));
-        Assert.Null(lb.RequestFailureReason);
+        Assert.Null(lb.OperationFailureReason);
     }
 
     // ---------- observations end nothing ----------
@@ -261,9 +261,9 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer creating = Creating();
         LoadBalancer updating = OnIncus();
-        updating.RequestUpdate([Dns], [VmOnIncus()]);
+        updating.Update([Dns], [VmOnIncus()]);
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
 
         creating.MarkNotFound();
         updating.MarkObserved();
@@ -279,15 +279,15 @@ public class LoadBalancerRequestLifecycleTests
     public void ADeletedLoadBalancer_AbsorbsEveryReportAndObservation()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket delete = lb.RequestDelete()!;
-        lb.EndRequest(delete.RequestId, LoadBalancerRequestEnd.Done(null));
+        OperationTicket delete = lb.Delete()!;
+        lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null));
 
         lb.MarkObserved();
         lb.MarkNotFound();
-        Assert.Null(lb.EndRequest(delete.RequestId, Failed()));
+        Assert.Null(lb.EndOperation(delete.OperationId, Failed()));
 
         Assert.Equal("Deleted/Deleted/-", Shape(lb));
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => lb.RequestDelete()).Code);
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => lb.Delete()).Code);
     }
 
     [Fact]

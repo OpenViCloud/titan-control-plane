@@ -30,7 +30,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
-        vm.RequestStop();
+        vm.Stop();
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
@@ -88,7 +88,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Vm stored = await ReloadAsync(vm.Id);
         Assert.Null(stored.Pending);
         Assert.Equal(VmDesiredState.Running, stored.DesiredState);
-        Assert.Equal(("The stop could not be completed.", "incus: timeout"), (stored.RequestFailureReason, stored.RequestFailureDetail));
+        Assert.Equal(("The stop could not be completed.", "incus: timeout"), (stored.OperationFailureReason, stored.OperationFailureDetail));
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
         Assert.Equal((VmState.Frozen, "10.0.0.9", "2001:db8::9"), (stored.CurrentState, stored.IpAddress, stored.PublicIpv6Address));
-        Assert.Equal(VmRequestKind.Stop, stored.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Stop, stored.Pending!.Kind);
     }
 
     [Theory]
@@ -117,7 +117,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("INVALID_STATUS", envelope.RootElement.GetProperty("code").GetString());
-        Assert.Equal(VmRequestKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
+        Assert.Equal(VmOperationKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
     }
 
     [Fact]
@@ -143,7 +143,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             """{"outcome":"Done","observed":{"status":"Stopped"}}""", token);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal(VmRequestKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
+        Assert.Equal(VmOperationKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
     }
 
     // ---------- the volume's and its snapshots' routes ----------
@@ -153,11 +153,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     private async Task<Volume> StoredVolumeWaitingOnADeleteAsync()
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done($"vol-{volume.Id:N}", null));
+        volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done($"vol-{volume.Id:N}", null));
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
-        volume.EndSnapshotRequest(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotRequestEnd.Done($"vol-{volume.Id:N}/s1"));
-        volume.RequestSnapshotDelete(snapshot.Id);
-        volume.RequestDelete();
+        volume.EndSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotOperationEnd.Done($"vol-{volume.Id:N}/s1"));
+        volume.DeleteSnapshot(snapshot.Id);
+        volume.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
@@ -186,7 +186,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Volume stored = await ReloadVolumeAsync(volume.Id);
         Assert.Null(stored.Pending);
         Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The volume could not be deleted.", stored.RequestFailureReason);
+        Assert.Equal("The volume could not be deleted.", stored.OperationFailureReason);
     }
 
     [Fact]
@@ -200,7 +200,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Volume stored = await ReloadVolumeAsync(volume.Id);
         Assert.True(stored.CurrentAttachedElsewhere);
-        Assert.Equal(VolumeRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Fact]
@@ -228,7 +228,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VolumeSnapshot stored = (await ReloadVolumeAsync(volume.Id)).Snapshots.Single();
         Assert.Equal(CurrentExistence.NotFound, stored.CurrentExistence);
-        Assert.Equal(VolumeSnapshotRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Theory]
@@ -241,7 +241,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/{string.Format(route, volume.Pending!.Id)}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(VolumeRequestKind.Delete, (await ReloadVolumeAsync(volume.Id)).Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, (await ReloadVolumeAsync(volume.Id)).Pending!.Kind);
     }
 
     [Theory]
@@ -259,7 +259,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Volume stored = await ReloadVolumeAsync(volume.Id);
-        Assert.Equal((CurrentExistence.Exists, VolumeRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, VolumeOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
         Assert.Equal(CurrentExistence.Exists, stored.Snapshots.Single().CurrentExistence);
     }
 
@@ -269,12 +269,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]),
             "cluster-a", null, wantsPublicIpv6: false);
-        network.EndRequest(network.Pending!.Id,
-            NetworkRequestEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+        network.EndOperation(network.Pending!.Id,
+            NetworkOperationEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
         FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
-        network.EndFirewallRuleRequest(rule.Id, rule.Pending!.Id, FirewallRuleRequestEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
-        network.RequestFirewallRuleDelete(rule.Id);
-        network.RequestDelete();
+        network.EndFirewallRuleOperation(rule.Id, rule.Pending!.Id, FirewallRuleOperationEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
+        network.DeleteFirewallRule(rule.Id);
+        network.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         db.Networks.Add(network);
@@ -301,7 +301,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Network stored = await ReloadNetworkAsync(network.Id);
         Assert.Null(stored.Pending);
         Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal(("The network could not be deleted.", "incus: in use"), (stored.RequestFailureReason, stored.RequestFailureDetail));
+        Assert.Equal(("The network could not be deleted.", "incus: in use"), (stored.OperationFailureReason, stored.OperationFailureDetail));
     }
 
     [Fact]
@@ -330,7 +330,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
         Assert.Equal(NetworkStatus.Errored, stored.CurrentState);
-        Assert.Equal(NetworkRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Fact]
@@ -345,7 +345,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
         Assert.Equal(CurrentExistence.Deleted, stored.FirewallRules.Single().CurrentExistence);
-        Assert.Equal(NetworkRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Fact]
@@ -360,7 +360,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         FirewallRule stored = (await ReloadNetworkAsync(network.Id)).FirewallRules.Single();
         Assert.Equal(FirewallRuleState.disabled, stored.CurrentState);
-        Assert.Equal(FirewallRuleRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Theory]
@@ -380,8 +380,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Equal((NetworkStatus.Created, NetworkRequestKind.Delete), (stored.CurrentState!.Value, stored.Pending!.Kind));
-        Assert.Equal((FirewallRuleState.enabled, FirewallRuleRequestKind.Delete),
+        Assert.Equal((NetworkStatus.Created, NetworkOperationKind.Delete), (stored.CurrentState!.Value, stored.Pending!.Kind));
+        Assert.Equal((FirewallRuleState.enabled, FirewallRuleOperationKind.Delete),
             (stored.FirewallRules.Single().CurrentState!.Value, stored.FirewallRules.Single().Pending!.Kind));
     }
 
@@ -400,8 +400,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Equal((CurrentExistence.Exists, NetworkRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
-        Assert.Equal((CurrentExistence.Exists, FirewallRuleRequestKind.Delete),
+        Assert.Equal((CurrentExistence.Exists, NetworkOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, FirewallRuleOperationKind.Delete),
             (stored.FirewallRules.Single().CurrentExistence, stored.FirewallRules.Single().Pending!.Kind));
     }
 
@@ -413,11 +413,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         VmSnapshot reverting = vm.AddSnapshot("reverting").Snapshot;
-        vm.EndSnapshotRequest(reverting.Id, reverting.Pending!.Id, VmSnapshotRequestEnd.Done($"ext-{vm.Id:N}/s1"));
+        vm.EndSnapshotOperation(reverting.Id, reverting.Pending!.Id, VmSnapshotOperationEnd.Done($"ext-{vm.Id:N}/s1"));
         vm.RevertSnapshot(reverting.Id);
         VmSnapshot deleting = vm.AddSnapshot("deleting").Snapshot;
-        vm.EndSnapshotRequest(deleting.Id, deleting.Pending!.Id, VmSnapshotRequestEnd.Done($"ext-{vm.Id:N}/s2"));
-        vm.RequestSnapshotDelete(deleting.Id);
+        vm.EndSnapshotOperation(deleting.Id, deleting.Pending!.Id, VmSnapshotOperationEnd.Done($"ext-{vm.Id:N}/s2"));
+        vm.DeleteSnapshot(deleting.Id);
         vm.AddSnapshot("creating");
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
@@ -450,7 +450,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
         Assert.Null(stored.Pending);
         Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The snapshot could not be deleted.", stored.RequestFailureReason);
+        Assert.Equal("The snapshot could not be deleted.", stored.OperationFailureReason);
     }
 
     [Fact]
@@ -479,7 +479,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(VmSnapshotRequestKind.Revert, (await ReloadSnapshotAsync(vm.Id, "reverting")).Pending!.Kind);
+        Assert.Equal(VmSnapshotOperationKind.Revert, (await ReloadSnapshotAsync(vm.Id, "reverting")).Pending!.Kind);
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
         Assert.Equal(CurrentExistence.NotFound, stored.CurrentExistence);
-        Assert.Equal(VmSnapshotRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotOperationKind.Delete, stored.Pending!.Kind);
     }
 
     [Theory]
@@ -510,7 +510,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "reverting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotRequestKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // A create's Done must name the snapshot, or it would be left with nothing to revert or delete through.
@@ -524,7 +524,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/vms/{vm.Id}/snapshots/{creating.Id}/requests/{creating.Pending!.Id}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal(VmSnapshotRequestKind.Create, (await ReloadSnapshotAsync(vm.Id, "creating")).Pending!.Kind);
+        Assert.Equal(VmSnapshotOperationKind.Create, (await ReloadSnapshotAsync(vm.Id, "creating")).Pending!.Kind);
     }
 
     [Theory]
@@ -542,7 +542,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(other.Id, "reverting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotRequestKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     [Theory]
@@ -558,7 +558,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // ---------- the load balancer's routes ----------
@@ -577,8 +577,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             [backend]);
         if (deleting)
         {
-            lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
-            lb.RequestDelete();
+            lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
+            lb.Delete();
         }
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
@@ -622,7 +622,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
         Assert.Null(stored.Pending);
         Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The load balancer could not be deleted.", stored.RequestFailureReason);
+        Assert.Equal("The load balancer could not be deleted.", stored.OperationFailureReason);
     }
 
     // A report naming a request the load balancer does not wait on is ignored, and still 204: the worker has nothing to retry.
@@ -635,7 +635,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/load-balancers/{lb.Id}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(LoadBalancerRequestKind.Delete, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Delete, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
     }
 
     [Fact]
@@ -647,7 +647,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.NotFound, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.NotFound, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     [Theory]
@@ -663,7 +663,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.Exists, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // A create's Done must name the VIP, or the load balancer would be left with nothing to delete through.
@@ -676,7 +676,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal(LoadBalancerRequestKind.Create, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Create, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
     }
 
     [Theory]
@@ -702,7 +702,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.Exists, LoadBalancerRequestKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // ---------- a template's routes, under its cluster ----------
@@ -716,10 +716,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmTemplate template = VmTemplate.Create($"tpl-{Guid.NewGuid():N}"[..14], null, "ubuntu/22.04", 10, Offering);
         if (resync)
         {
-            template.EndSyncRequest(TemplateCluster, template.RequestSyncIn(TemplateCluster).Id, VmTemplateRequestEnd.Done(TemplateAlias));
+            template.EndSyncOperation(TemplateCluster, template.SyncIn(TemplateCluster).Id, VmTemplateOperationEnd.Done(TemplateAlias));
             template.MarkNotFoundIn(TemplateCluster);
         }
-        template.RequestSyncIn(TemplateCluster);
+        template.SyncIn(TemplateCluster);
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
@@ -766,7 +766,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
         Assert.Null(stored.Pending);
-        Assert.Equal(("Template sync failed due to a system error.", "incus: timeout"), (stored.RequestFailureReason, stored.RequestFailureDetail));
+        Assert.Equal(("Template sync failed due to a system error.", "incus: timeout"), (stored.OperationFailureReason, stored.OperationFailureDetail));
     }
 
     // A report naming a request the cluster does not wait on is ignored, and still 204: the worker has nothing to retry.
@@ -780,7 +780,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $$"""{"outcome":"Done","externalId":"{{TemplateAlias}}"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(VmTemplateRequestKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+        Assert.Equal(VmTemplateOperationKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
     }
 
     [Fact]
@@ -792,7 +792,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.Exists, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     [Theory]
@@ -807,7 +807,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // A sync's Done must name the alias while the cluster has none: a VM is created from it.
@@ -820,7 +820,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     [Theory]
@@ -850,7 +850,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("CLUSTER_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
-        Assert.Equal(VmTemplateRequestKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+        Assert.Equal(VmTemplateOperationKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
     }
 
     [Theory]
@@ -864,7 +864,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
     }
 
     // What the control plane's environment sets on dev and prd, and one cluster for the template routes, which refuse a

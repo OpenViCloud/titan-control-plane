@@ -49,7 +49,7 @@ public class DeleteAdminVmCommandHandler(
         // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), or while a
         // load balancer still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
         // (titan-ops architecture/code-structure.md#child-entity · titan-ops architecture/domain-services.md#cross-aggregate-lock).
-        RequestTicket? ticket = await deletion.RequestAsync(vm, ct);
+        OperationTicket? ticket = await deletion.DeleteAsync(vm, ct);
 
         // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.
@@ -81,7 +81,7 @@ public class DeleteAdminVmCommandHandler(
         // the worker never deletes a VM the audit log does not show
         // (titan-ops architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket!.RequestId, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
+        await commands.EnqueueVmDeleteAsync(vm.Id, ticket!.OperationId, ticket.ProviderId, TenantAggregate.ProjectNameFor(vm.TenantId),
             vm.ClusterId, ct);
         await vms.SaveAsync(ct);
     }

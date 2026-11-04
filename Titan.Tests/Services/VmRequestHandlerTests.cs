@@ -51,7 +51,7 @@ public class VmRequestHandlerTests
 
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
-    // ---------- EndRequest: the report names the request ----------
+    // ---------- EndOperation: the report names the request ----------
 
     [Fact]
     public async Task Done_OfTheCreate_StoresTheId_RecordsVmCreatedOnce_AndSaves()
@@ -89,10 +89,10 @@ public class VmRequestHandlerTests
     {
         Vm vm = Given(RunningVm());
         if (kind == "Start") vm.MarkStopped();
-        RequestTicket ticket = kind == "Stop" ? vm.RequestStop() : vm.RequestStart();
+        OperationTicket ticket = kind == "Stop" ? vm.Stop() : vm.Start();
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.RequestId, "Done", null, Seen(seen)));
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.RequestId, "Done", null, Seen(seen)));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.OperationId, "Done", null, Seen(seen)));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.OperationId, "Done", null, Seen(seen)));
 
         Assert.Null(vm.Pending);
         Assert.Equal(seen, vm.CurrentState.ToString());
@@ -106,16 +106,16 @@ public class VmRequestHandlerTests
         Vm vm = Given(RunningVm());
         VmSnapshot leaving = vm.WithSnapshot("leaving");
         leaving.MarkCreated("42/s1");
-        vm.RequestSnapshotDelete(leaving.Id);
+        vm.DeleteSnapshot(leaving.Id);
         vm.WithSnapshot("resting").MarkCreated("42/s2");
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
         volume.MarkAttached(vm.Id);
         _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, "Done"));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.OperationId, "Done"));
 
         Assert.True(vm.IsTerminal);
         Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
@@ -135,15 +135,15 @@ public class VmRequestHandlerTests
         volume.Attach(vm);
         volume.MarkAttached(vm.Id);
         _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
         volume.ReleaseFromVmDelete(vm.Id);
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, "Failed", Reason: "It failed."));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.OperationId, "Failed", Reason: "It failed."));
 
         Assert.Null(volume.Pending);
         Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
-        Assert.NotNull(vm.RequestDelete());
+        Assert.NotNull(vm.Delete());
         volume.ReleaseFromVmDelete(vm.Id);
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.Null(volume.Pending);
@@ -160,15 +160,15 @@ public class VmRequestHandlerTests
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
-        RequestTicket detach = volume.Detach();
+        volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        OperationTicket detach = volume.Detach();
         _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
         volume.ReleaseFromVmDelete(vm.Id);
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.RequestId, outcome, Reason: "It failed."));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete.OperationId, outcome, Reason: "It failed."));
 
-        Assert.Equal((VolumeRequestKind.Detach, detach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Detach, detach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.DoesNotContain(_activity.Events, e => e.Action.StartsWith("volume.", StringComparison.Ordinal));
     }
@@ -179,15 +179,15 @@ public class VmRequestHandlerTests
     public async Task Failed_OfADeleteOrStop_PutsDesiredBack_RecordsTheReason_AndTheFailedOutcomeOnce(string kind, string outcome)
     {
         Vm vm = Given(RunningVm());
-        RequestTicket ticket = kind == "Delete" ? vm.RequestDelete()! : vm.RequestStop();
+        OperationTicket ticket = kind == "Delete" ? vm.Delete()! : vm.Stop();
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.RequestId, "Failed", Reason: "The VM could not be changed.", Detail: "raw"));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, ticket.OperationId, "Failed", Reason: "The VM could not be changed.", Detail: "raw"));
 
         Assert.Null(vm.Pending);
         Assert.Equal(DesiredExistence.Exists, vm.DesiredExistence);
         Assert.Equal(VmDesiredState.Running, vm.DesiredState);
-        Assert.Equal("The VM could not be changed.", vm.RequestFailureReason);
-        Assert.Equal("raw", vm.RequestFailureDetail);
+        Assert.Equal("The VM could not be changed.", vm.OperationFailureReason);
+        Assert.Equal("raw", vm.OperationFailureDetail);
         Assert.Equal([outcome], Outcomes());
     }
 
@@ -201,7 +201,7 @@ public class VmRequestHandlerTests
         Assert.Null(vm.Pending);
         Assert.Equal("45", vm.ExternalId);
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
-        Assert.Equal("VM provisioning failed.", vm.RequestFailureReason);
+        Assert.Equal("VM provisioning failed.", vm.OperationFailureReason);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -210,14 +210,14 @@ public class VmRequestHandlerTests
     public async Task AReport_NamingAnotherRequest_IsIgnored_RecordsNothing_AndSavesNothing()
     {
         Vm vm = Given(RunningVm());
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, Guid.NewGuid(), "Done", null, Seen("Stopped")));
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
-        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal(stop.OperationId, vm.Pending!.Id);
         Assert.Equal(VmState.Running, vm.CurrentState);
-        Assert.Null(vm.RequestFailureReason);
+        Assert.Null(vm.OperationFailureReason);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -230,9 +230,9 @@ public class VmRequestHandlerTests
         Assert.Equal(VmState.Running, resting.CurrentState);
 
         Vm deleted = Given(RunningVm());
-        RequestTicket delete = deleted.RequestDelete()!;
+        OperationTicket delete = deleted.Delete()!;
         deleted.MarkDeleted();
-        await EndHandler().HandleAsync(new EndVmRequestCommand(deleted.Id, delete.RequestId, "Done", null, Seen("Running")));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(deleted.Id, delete.OperationId, "Done", null, Seen("Running")));
         Assert.True(deleted.IsTerminal);
         Assert.Null(deleted.CurrentState);
 
@@ -285,11 +285,11 @@ public class VmRequestHandlerTests
     public async Task NotFound_LeavesAWaitingDeleteWaiting()
     {
         Vm vm = Given(RunningVm());
-        RequestTicket delete = vm.RequestDelete()!;
+        OperationTicket delete = vm.Delete()!;
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, false));
 
-        Assert.Equal(delete.RequestId, vm.Pending!.Id);
+        Assert.Equal(delete.OperationId, vm.Pending!.Id);
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.Empty(_activity.Events);
     }
@@ -299,10 +299,10 @@ public class VmRequestHandlerTests
     public async Task AnObservation_ReachingAWaitingStop_EndsIt_AndTheLaterDone_IsIgnored()
     {
         Vm vm = Given(RunningVm());
-        RequestTicket stop = vm.RequestStop();
+        OperationTicket stop = vm.Stop();
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, true, Seen("Stopped")));
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, stop.RequestId, "Done", null, Seen("Stopped")));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, stop.OperationId, "Done", null, Seen("Stopped")));
 
         Assert.Null(vm.Pending);
         Assert.Equal(["vm.stopped"], Outcomes());

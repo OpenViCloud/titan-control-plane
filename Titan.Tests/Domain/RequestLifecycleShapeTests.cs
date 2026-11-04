@@ -15,7 +15,7 @@ namespace Titan.Tests.Domain;
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
-// semantics of EndRequest beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
+// semantics of EndOperation beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root.
@@ -38,13 +38,13 @@ public class RequestLifecycleShapeTests
         [typeof(VolumeSnapshot)] = () =>
         {
             Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
-            volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done("vol-shape", null));
+            volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done("vol-shape", null));
             return volume.AddSnapshot("shape").Snapshot;
         },
         [typeof(VmSnapshot)] = () =>
         {
             Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
-            vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
+            vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
             return vm.AddSnapshot("shape").Snapshot;
         },
         [typeof(Network)] = () => ANetwork(),
@@ -54,30 +54,33 @@ public class RequestLifecycleShapeTests
             Guid tenantId = TestTenant.WithRoomToSpare().Id;
             Guid networkId = Guid.NewGuid();
             Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
-            backend.EndRequest(backend.Pending!.Id, VmRequestEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
+            backend.EndOperation(backend.Pending!.Id, VmOperationEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
-            lb.EndRequest(lb.Pending!.Id, LoadBalancerRequestEnd.Done(lb.Vip));
-            lb.RequestUpdate([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
+            lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
+            lb.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
             return lb;
         },
         [typeof(FirewallRule)] = () =>
         {
             Network network = ANetwork();
-            network.EndRequest(network.Pending!.Id,
-                NetworkRequestEnd.Done("net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1")));
+            network.EndOperation(network.Pending!.Id,
+                NetworkOperationEnd.Done("net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1")));
             return network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
         },
         [typeof(VmTemplateCluster)] = () =>
         {
             VmTemplate template = VmTemplate.Create("shape", null, "ubuntu/22.04", 10, "m");
-            template.RequestSyncIn("cluster-a");
+            template.SyncIn("cluster-a");
             return template.Clusters.Single();
         },
     };
 
     private static Network ANetwork() =>
         Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("shape"), "cluster-a", null, wantsPublicIpv6: false);
+
+    // The intent methods are plain verbs (titan-ops architecture/resource-lifecycle.md#shape).
+    private static readonly HashSet<string> IntentVerbs = ["Start", "Stop", "Delete", "Update", "Sync", "SyncIn"];
 
     [Fact]
     public void EveryAggregateOnTheShape_HasTheFourMethods_AndIsKnownHere()
@@ -90,11 +93,11 @@ public class RequestLifecycleShapeTests
         foreach (Type type in shaped)
         {
             string[] names = type.GetMethods(Declared).Select(m => m.Name).Distinct().ToArray();
-            foreach (string required in new[] { "EndRequest", "MarkObserved", "MarkNotFound" })
+            foreach (string required in new[] { "EndOperation", "MarkObserved", "MarkNotFound" })
             {
                 if (!names.Contains(required)) missing.Add($"{type.Name}.{required}");
             }
-            if (!names.Any(n => n.StartsWith("Request", StringComparison.Ordinal))) missing.Add($"{type.Name}.Request*");
+            if (!names.Any(n => IntentVerbs.Contains(n))) missing.Add($"{type.Name}.<intent verb>");
         }
         Assert.True(missing.Count == 0, "Aggregates on the request shape without the four methods: " + string.Join(", ", missing));
     }
@@ -116,7 +119,7 @@ public class RequestLifecycleShapeTests
         foreach ((Type type, Func<object> build) in WaitingOnARequest)
         {
             object aggregate = build();
-            MethodInfo endRequest = type.GetMethod("EndRequest", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
+            MethodInfo endRequest = type.GetMethod("EndOperation", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
             object end = ADoneReportFor(type);
             Dictionary<string, object?> before = PublicProperties(aggregate);
 
@@ -129,14 +132,14 @@ public class RequestLifecycleShapeTests
 
     private static object ADoneReportFor(Type type)
     {
-        if (type == typeof(Vm)) return VmRequestEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null));
-        if (type == typeof(Volume)) return VolumeRequestEnd.Done("foreign", new VolumeObservation(Guid.NewGuid(), true));
-        if (type == typeof(VolumeSnapshot)) return VolumeSnapshotRequestEnd.Done("foreign");
-        if (type == typeof(VmSnapshot)) return VmSnapshotRequestEnd.Done("foreign");
-        if (type == typeof(Network)) return NetworkRequestEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
-        if (type == typeof(FirewallRule)) return FirewallRuleRequestEnd.Done("foreign", FirewallRuleState.enabled);
-        if (type == typeof(LoadBalancer)) return LoadBalancerRequestEnd.Done("foreign");
-        if (type == typeof(VmTemplateCluster)) return VmTemplateRequestEnd.Done("foreign");
+        if (type == typeof(Vm)) return VmOperationEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null));
+        if (type == typeof(Volume)) return VolumeOperationEnd.Done("foreign", new VolumeObservation(Guid.NewGuid(), true));
+        if (type == typeof(VolumeSnapshot)) return VolumeSnapshotOperationEnd.Done("foreign");
+        if (type == typeof(VmSnapshot)) return VmSnapshotOperationEnd.Done("foreign");
+        if (type == typeof(Network)) return NetworkOperationEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
+        if (type == typeof(FirewallRule)) return FirewallRuleOperationEnd.Done("foreign", FirewallRuleState.enabled);
+        if (type == typeof(LoadBalancer)) return LoadBalancerOperationEnd.Done("foreign");
+        if (type == typeof(VmTemplateCluster)) return VmTemplateOperationEnd.Done("foreign");
         throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
     }
 

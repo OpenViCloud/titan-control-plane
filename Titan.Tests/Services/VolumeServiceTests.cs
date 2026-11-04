@@ -646,7 +646,7 @@ public class VolumeServiceTests
             new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: [], Reason: "Attaching failed.", Detail: "raw"));
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
-        Assert.Equal("Attaching failed.", volume.RequestFailureReason);
+        Assert.Equal("Attaching failed.", volume.OperationFailureReason);
         var e = Assert.Single(_activity.Events);
         Assert.Equal("volume.attach_failed", e.Action);
         Assert.Equal(TenantId, e.OutcomeTenantId);
@@ -665,7 +665,7 @@ public class VolumeServiceTests
             new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: ["vm-attached"], Reason: "Attaching failed."));
 
         Assert.Equal("Exists/Exists/vm/vm/-", Shape(volume));
-        Assert.Null(volume.RequestFailureReason);
+        Assert.Null(volume.OperationFailureReason);
         Assert.Equal("volume.attached", Assert.Single(_activity.Events).Action);
     }
 
@@ -681,7 +681,7 @@ public class VolumeServiceTests
             new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: ["vm-attached"], Reason: "Detaching failed."));
 
         Assert.Equal("Exists/Exists/vm/vm/-", Shape(volume));
-        Assert.Equal("Detaching failed.", volume.RequestFailureReason);
+        Assert.Equal("Detaching failed.", volume.OperationFailureReason);
         Assert.Equal("volume.detach_failed", Assert.Single(_activity.Events).Action);
     }
 
@@ -695,8 +695,8 @@ public class VolumeServiceTests
             new UpdateVolumeStatusBody("RequestFailed", Reason: "Volume creation failed.", Detail: "raw"));
 
         Assert.Equal("NotCreated/Exists/-/-/-", Shape(volume));
-        Assert.Equal("Volume creation failed.", volume.RequestFailureReason);
-        Assert.Equal("raw", volume.RequestFailureDetail);
+        Assert.Equal("Volume creation failed.", volume.OperationFailureReason);
+        Assert.Equal("raw", volume.OperationFailureDetail);
         Assert.Empty(_activity.Events);
     }
 
@@ -713,7 +713,7 @@ public class VolumeServiceTests
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("vol9", volume.ExternalId);
-        Assert.Equal("Volume creation failed.", volume.RequestFailureReason);
+        Assert.Equal("Volume creation failed.", volume.OperationFailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -727,7 +727,7 @@ public class VolumeServiceTests
         await CreateService().UpdateStatusAsync(volume.Id,
             new UpdateVolumeStatusBody("RequestFailed", Reason: "Volume deletion failed.", Detail: "refused"));
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
-        Assert.Equal("Volume deletion failed.", volume.RequestFailureReason);
+        Assert.Equal("Volume deletion failed.", volume.OperationFailureReason);
         Assert.Equal("volume.delete_failed", Assert.Single(_activity.Events).Action);
 
         await CreateService().DeleteAsync(volume.Id, default);
@@ -777,8 +777,8 @@ public class VolumeServiceTests
         lost.MarkNotFound();
         var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol/s2");
-        leaving.RequestDelete();
-        volume.RequestDelete();
+        leaving.Delete();
+        volume.Delete();
 
         await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Deleted"));
 
@@ -963,11 +963,11 @@ public class VolumeServiceTests
                 break;
             case VolumeSeed.Deleting:
                 vol.MarkCreated(externalId);
-                vol.RequestDelete();
+                vol.Delete();
                 break;
             case VolumeSeed.Deleted:
                 vol.MarkCreated(externalId);
-                vol.RequestDelete();
+                vol.Delete();
                 vol.MarkDeleted();
                 break;
         }
@@ -978,7 +978,7 @@ public class VolumeServiceTests
     private static void EndAttachDone(Volume vol, Vm target)
     {
         VolumeAttachProviderIds attach = vol.Attach(target);
-        vol.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(target.Id, false)));
+        vol.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(target.Id, false)));
     }
 
     private static Vm MakeVm(

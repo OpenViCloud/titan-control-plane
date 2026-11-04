@@ -84,12 +84,12 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         await MigrateToLatestAsync();
 
         LoadBalancer delete = await LoadBalancerAsync(deleting.Id);
-        Assert.Equal((LoadBalancerRequestKind.Delete, deleting.Intent!.Value), (delete.Pending!.Kind, delete.Pending.Id));
+        Assert.Equal((LoadBalancerOperationKind.Delete, deleting.Intent!.Value), (delete.Pending!.Kind, delete.Pending.Id));
         Assert.True(delete.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(LoadBalancerRequestKind.Delete, (await LoadBalancerAsync(deletingLost.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerRequestKind.Create, (await LoadBalancerAsync(creating.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerRequestKind.Update, (await LoadBalancerAsync(updating.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerRequestKind.Update, (await LoadBalancerAsync(updatingLost.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Delete, (await LoadBalancerAsync(deletingLost.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Create, (await LoadBalancerAsync(creating.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Update, (await LoadBalancerAsync(updating.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Update, (await LoadBalancerAsync(updatingLost.Id)).Pending!.Kind);
         Assert.Null((await LoadBalancerAsync(resting.Id)).Pending);
     }
 
@@ -146,14 +146,14 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         Guid tenantId = Guid.NewGuid();
         Guid networkId = Guid.NewGuid();
         Vm backend = Vm.Create(tenantId, networkId, "vm-after", "m", "tpl", "cluster-a", 20);
-        backend.EndRequest(backend.Pending!.Id, VmRequestEnd.Done("vm-after", new VmObservation(VmState.Running, "10.0.0.5", null)));
+        backend.EndOperation(backend.Pending!.Id, VmOperationEnd.Done("vm-after", new VmObservation(VmState.Running, "10.0.0.5", null)));
         LoadBalancerListenerSpec http = new(LoadBalancerProtocol.TCP, 80, 8080);
         LoadBalancer creating = LoadBalancer.Create(tenantId, "creating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 1), [http], [backend]);
         LoadBalancer updating = LoadBalancer.Create(tenantId, "updating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 2), [http], [backend]);
-        updating.EndRequest(updating.Pending!.Id, LoadBalancerRequestEnd.Done(updating.Vip));
-        RequestTicket update = updating.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
+        updating.EndOperation(updating.Pending!.Id, LoadBalancerOperationEnd.Done(updating.Vip));
+        OperationTicket update = updating.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
         await using (TitanDbContext db = NewDbContext())
         {
             db.LoadBalancers.AddRange(creating, updating);
@@ -164,7 +164,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         List<string> rows = await read.Database
             .SqlQuery<string>($"SELECT resource || '|' || kind || '|' || request_id::text AS \"Value\" FROM core.pending_requests WHERE tenant_id = {tenantId} ORDER BY kind")
             .ToListAsync();
-        Assert.Equal([$"load-balancer|Create|{creating.Pending!.Id}", $"load-balancer|Update|{update.RequestId}"], rows);
+        Assert.Equal([$"load-balancer|Create|{creating.Pending!.Id}", $"load-balancer|Update|{update.OperationId}"], rows);
     }
 
     // Down puts the view of the earlier phases back before the kind column goes, and the old column name.

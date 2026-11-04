@@ -58,7 +58,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Vm lost = SeenVm(offering, "lost", VmState.Running);
         lost.MarkNotFound();
         Vm deleting = SeenVm(offering, "deleting", VmState.Running);
-        deleting.RequestDelete();
+        deleting.Delete();
         await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmState.Stopped), failed, lost, deleting);
 
         await using TitanDbContext db = pg.NewDbContext();
@@ -92,13 +92,13 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Guid deletingNetwork = Guid.NewGuid(), creatingNetwork = Guid.NewGuid(), failedNetwork = Guid.NewGuid(),
             lostNetwork = Guid.NewGuid(), deletedNetwork = Guid.NewGuid();
         Vm deleting = SeenVm(offering, "deleting", VmState.Running, deletingNetwork);
-        deleting.RequestDelete();
+        deleting.Delete();
         Vm failed = NewVm(offering, "failed", failedNetwork);
         failed.MarkRequestFailed("refused", null);
         Vm lost = SeenVm(offering, "lost", VmState.Running, lostNetwork);
         lost.MarkNotFound();
         Vm deleted = SeenVm(offering, "deleted", VmState.Running, deletedNetwork);
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
         await SaveAsync(deleting, NewVm(offering, "creating", creatingNetwork), failed, lost, deleted);
 
@@ -126,7 +126,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Volume creating = NewVolume("creating");
         Volume available = OnIncus("available");
         Volume deleting = OnIncus("deleting");
-        deleting.RequestDelete();
+        deleting.Delete();
         Volume failed = NewVolume("failed");
         failed.MarkRequestFailed("could not create", "raw");
         Volume lost = OnIncus("lost");
@@ -182,7 +182,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     public async Task NetworkAndPublicIpv6Quota_CountWhatIncusHoldsOrIsAboutTo_TheIpv6OneOnlyWithASubnet()
     {
         Network leaving = ActiveNetwork("leaving", publicIpv6: true);
-        leaving.RequestDelete();
+        leaving.Delete();
         Network failed = NewNetwork("failed", publicIpv6: false);
         failed.MarkRequestFailed("reason", "detail");
         Network lost = ActiveNetwork("lost", publicIpv6: true);
@@ -213,7 +213,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
         created.MarkCreated(created.Vip);
         LoadBalancer leaving = NewLoadBalancer(networkId, 2, backend);
         leaving.MarkCreated(leaving.Vip);
-        leaving.RequestDelete();
+        leaving.Delete();
         LoadBalancer failed = NewLoadBalancer(networkId, 3, backend);
         failed.MarkRequestFailed("refused", null);
         await SaveAsync(NewLoadBalancer(networkId, 4, backend), created, leaving, failed);

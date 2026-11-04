@@ -99,13 +99,13 @@ public class VmTemplateClusterConfiguration : IEntityTypeConfiguration<VmTemplat
         builder.Property(z => z.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(z => z.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<VmTemplateRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<VmTemplateOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(z => z.Pending);
-        builder.Property(z => z.RequestFailureReason).HasColumnName("request_failure_reason").HasColumnType("text");
-        builder.Property(z => z.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(z => z.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(z => z.OperationFailureReason).HasColumnName("request_failure_reason").HasColumnType("text");
+        builder.Property(z => z.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(z => z.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(z => z.ExternalTemplateId).HasColumnName("external_template_id").HasColumnType("text");
         builder.Property(z => z.UpdatedAt).HasColumnName("updated_at");
         builder.Ignore(z => z.Transition);

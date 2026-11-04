@@ -199,7 +199,7 @@ public class AdminResourceServiceTests
             e.Action == "vm.delete.cross_tenant" && e.ActorKeycloakUserId == "admin-1"
             && e.ResourceType == "vm" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);
         Assert.True(repo.SaveCalled);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
     }
 
     // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path releases the VM's volumes like the
@@ -244,7 +244,7 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_AlreadyDeleted_IsANoOp()
     {
         var vm = RunningVm(TenantBOwner, "gone");
-        vm.RequestDelete();
+        vm.Delete();
         vm.MarkDeleted();
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);

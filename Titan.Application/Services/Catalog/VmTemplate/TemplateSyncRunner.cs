@@ -60,7 +60,7 @@ public class TemplateSyncRunner(
                         continue;
                     }
                     bool aliasIsThere = row.CurrentExistence == CurrentExistence.Exists;
-                    bool syncGaveUp = row.RequestFailureReason != null && row.Pending == null;
+                    bool syncGaveUp = row.OperationFailureReason != null && row.Pending == null;
                     if (aliasIsThere)
                     {
                         synced++;

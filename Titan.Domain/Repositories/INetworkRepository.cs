@@ -8,7 +8,7 @@ public interface INetworkRepository
     /// The aggregate whole: the network with its firewall rules, tracked (titan-ops architecture/code-structure.md#child-entity).
     Task<Network?> FindByIdAsync(Guid id, CancellationToken ct = default);
     /// The same, with the network's row locked until this context's next save commits: the per-network rule cap is
-    /// counted on the loaded rules, so two requests adding a rule at the cap take turns (titan-ops architecture/code-structure.md#child-entity).
+    /// counted on the loaded rules, so two operations adding a rule at the cap take turns (titan-ops architecture/code-structure.md#child-entity).
     Task<Network?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
     /// The network a rule belongs to, with its rules, tracked; null when no network has the rule. For the worker's
     /// callbacks, which name the rule.

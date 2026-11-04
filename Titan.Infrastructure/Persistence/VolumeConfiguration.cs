@@ -28,9 +28,9 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
         // Volume.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<VolumeRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<VolumeOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(v => v.Pending);
         builder.Ignore(v => v.Transition);
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
@@ -38,9 +38,9 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.CurrentAttachedVmId).HasColumnName("current_attached_vm_id");
         builder.Property(v => v.CurrentAttachedElsewhere).HasColumnName("current_attached_elsewhere");
         builder.Property(v => v.DesiredAttachedVmId).HasColumnName("desired_attached_vm_id");
-        builder.Property(v => v.RequestFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(v => v.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(v => v.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(v => v.OperationFailureReason).HasColumnName("request_failure_reason");
+        builder.Property(v => v.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(v => v.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(v => v.TenantId);

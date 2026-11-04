@@ -15,25 +15,25 @@ public class DomainBaseClassTests
     // input or result. Each row says which call. A type that gains a role, or leaves the code, fails the test.
     private static readonly Dictionary<string, string> NoRole = new(StringComparer.Ordinal)
     {
-        ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, RequestUpdate and HasDesiredSpec; the listener it becomes is the child entity",
+        ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, Update and HasDesiredSpec; the listener it becomes is the child entity",
         ["VmObservation"] = "input of Vm.MarkObserved and of a request's report: what the worker read of the instance",
-        ["VmRequestEnd"] = "input of Vm.EndRequest: how the request's command ended and what the worker saw",
-        ["VmRequestEnded"] = "result of Vm.EndRequest: the request it ended and the snapshots whose delete went with the VM",
+        ["VmOperationEnd"] = "input of Vm.EndOperation: how the request's command ended and what the worker saw",
+        ["VmOperationEnded"] = "result of Vm.EndOperation: the request it ended and the snapshots whose delete went with the VM",
         ["VmSnapshotTicket"] = "result of Vm.AddSnapshot, read by the handler that enqueues the command",
         ["VolumeSnapshotTicket"] = "result of Volume.AddSnapshot, read by the handler that enqueues the command",
         ["FirewallRuleTicket"] = "result of Network.AddFirewallRule, read by the handler that enqueues the command",
         ["VolumeAttachProviderIds"] = "result of Volume.Attach: the request id and the provider ids the attach command carries",
         ["VolumeObservation"] = "input of a volume request's report: the Titan VM and the instances outside Titan using the volume",
-        ["VolumeRequestEnd"] = "input of Volume.EndRequest: how the request's command ended and what the worker saw",
-        ["VolumeRequestEnded"] = "result of Volume.EndRequest: the request it ended and the snapshots whose delete went with the volume",
-        ["VolumeSnapshotRequestEnd"] = "input of Volume.EndSnapshotRequest: how the snapshot request's command ended",
+        ["VolumeOperationEnd"] = "input of Volume.EndOperation: how the request's command ended and what the worker saw",
+        ["VolumeOperationEnded"] = "result of Volume.EndOperation: the request it ended and the snapshots whose delete went with the volume",
+        ["VolumeSnapshotOperationEnd"] = "input of Volume.EndSnapshotOperation: how the snapshot request's command ended",
         ["NetworkObservation"] = "input of a network request's report: the status, range and gateway the worker read",
-        ["NetworkRequestEnd"] = "input of Network.EndRequest: how the request's command ended and what the worker saw",
-        ["NetworkRequestEnded"] = "result of Network.EndRequest: the request it ended, the rules whose delete went with the network, and whether it let go of its /64",
-        ["FirewallRuleRequestEnd"] = "input of Network.EndFirewallRuleRequest: how the rule's command ended and the state it read",
-        ["VmSnapshotRequestEnd"] = "input of Vm.EndSnapshotRequest: how the snapshot request's command ended",
-        ["VmTemplateRequestEnd"] = "input of VmTemplate.EndSyncRequest: how a cluster's sync command ended and the alias it found",
-        ["LoadBalancerRequestEnd"] = "input of LoadBalancer.EndRequest: how the load balancer request's command ended and the VIP it found",
+        ["NetworkOperationEnd"] = "input of Network.EndOperation: how the request's command ended and what the worker saw",
+        ["NetworkOperationEnded"] = "result of Network.EndOperation: the request it ended, the rules whose delete went with the network, and whether it let go of its /64",
+        ["FirewallRuleOperationEnd"] = "input of Network.EndFirewallRuleOperation: how the rule's command ended and the state it read",
+        ["VmSnapshotOperationEnd"] = "input of Vm.EndSnapshotOperation: how the snapshot request's command ended",
+        ["VmTemplateOperationEnd"] = "input of VmTemplate.EndSyncOperation: how a cluster's sync command ended and the alias it found",
+        ["LoadBalancerOperationEnd"] = "input of LoadBalancer.EndOperation: how the load balancer request's command ended and the VIP it found",
     };
 
     [Fact]
@@ -49,7 +49,7 @@ public class DomainBaseClassTests
             .ToList();
 
         Assert.True(offenders.Count == 0,
-            "Domain type(s) without a role. Derive from AggregateRoot, ChildEntity or ValueObject, or add a "
+            "Domain type(s) without a role. Derive from IAggregateRoot, IEntity or ValueObject, or add a "
             + "row to NoRole saying which call the record carries: " + string.Join(", ", offenders));
     }
 
@@ -80,11 +80,11 @@ public class DomainBaseClassTests
         foreach (var type in types)
         {
             var namedLikeFolder = type.Name == type.Namespace!.Split('.')[^1];
-            var isRoot = typeof(AggregateRoot).IsAssignableFrom(type);
+            var isRoot = typeof(IAggregateRoot).IsAssignableFrom(type);
             if (namedLikeFolder && !isRoot)
-                offenders.Add($"{type.Name} is named like its folder but is not an AggregateRoot");
+                offenders.Add($"{type.Name} is named like its folder but is not an IAggregateRoot");
             if (isRoot && !namedLikeFolder)
-                offenders.Add($"{type.Name} is an AggregateRoot inside {type.Namespace}, whose root it is not");
+                offenders.Add($"{type.Name} is an IAggregateRoot inside {type.Namespace}, whose root it is not");
         }
 
         Assert.True(offenders.Count == 0,
@@ -125,7 +125,7 @@ public class DomainBaseClassTests
 
     private static Type? RoleOf(Type type)
     {
-        foreach (var role in new[] { typeof(AggregateRoot), typeof(ChildEntity), typeof(ValueObject) })
+        foreach (var role in new[] { typeof(IAggregateRoot), typeof(IEntity), typeof(ValueObject) })
             if (role.IsAssignableFrom(type))
                 return role;
         return null;

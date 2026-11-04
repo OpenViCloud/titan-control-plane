@@ -84,7 +84,7 @@ public class ScheduleBackupsCommandTests
     {
         Vm creating = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-2", "m", "tpl-1", "mock", 20);
         Vm gone = RunningVm("vm-gone");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         Holds([creating, gone], []);
 

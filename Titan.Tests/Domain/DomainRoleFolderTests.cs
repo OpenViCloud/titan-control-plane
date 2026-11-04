@@ -12,13 +12,13 @@ public class DomainRoleFolderTests
 {
     private const string Aggregates = "Titan.Domain.Aggregates";
     private const string Values = "Titan.Domain.Values";
-    private const string ChildEntities = "ChildEntities";
+    private const string Entities = "Entities";
     private const string ValueObjects = "ValueObjects";
     private const string Enums = "Enums";
     private const string Inputs = "Inputs";
     private const string Results = "Results";
 
-    private static readonly string[] RoleFolders = [ChildEntities, ValueObjects, Enums, Inputs, Results];
+    private static readonly string[] RoleFolders = [Entities, ValueObjects, Enums, Inputs, Results];
 
     [Fact]
     public void AggregateRoot_IsTheOnlyFileAtTheTopOfItsFolder()
@@ -107,7 +107,7 @@ public class DomainRoleFolderTests
         var offenders = new List<string>();
         foreach (var type in values)
         {
-            // A generic's reflection name carries its arity (PendingRequest`1); the source says PendingRequest<VmRequestKind>.
+            // A generic's reflection name carries its arity (PendingOperation`1); the source says PendingOperation<VmOperationKind>.
             string name = type.Name.Split('`')[0];
             var users = sources.Where(s => Regex.IsMatch(s.Code, $@"\b{name}\b")).Select(s => s.Aggregate).ToList();
             if (users.Count < 2 && !SharedByTheRollout.ContainsKey(name))
@@ -124,16 +124,16 @@ public class DomainRoleFolderTests
 
     private static string RoleFolderOf(Type type)
     {
-        if (typeof(AggregateRoot).IsAssignableFrom(type)) return "";
-        if (typeof(ChildEntity).IsAssignableFrom(type)) return ChildEntities;
+        if (typeof(IAggregateRoot).IsAssignableFrom(type)) return "";
+        if (typeof(IEntity).IsAssignableFrom(type)) return Entities;
         if (typeof(ValueObject).IsAssignableFrom(type)) return ValueObjects;
         // Static classes here are closed sets of constants, or extensions of an enum: the kinds, the stored tokens.
         if (type.IsEnum || (type.IsAbstract && type.IsSealed)) return Enums;
         return ReturnedByAnAggregateMethod(type) ? Results : Inputs;
     }
 
-    // Internal counts: a method a domain service calls (Network.EndRequest) still hands its result out of the aggregate.
-    // Property getters do not: an input record's part (VmRequestEnd.Observed) is read back, not handed out.
+    // Internal counts: a method a domain service calls (Network.EndOperation) still hands its result out of the aggregate.
+    // Property getters do not: an input record's part (VmOperationEnd.Observed) is read back, not handed out.
     private static bool ReturnedByAnAggregateMethod(Type type) =>
         typeof(NotFoundException).Assembly.GetExportedTypes()
             // Skip the type's own methods: a record's compiler-generated Clone returns the record, whatever its role.

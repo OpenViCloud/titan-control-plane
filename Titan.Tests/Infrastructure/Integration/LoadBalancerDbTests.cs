@@ -60,7 +60,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
         Vm vm = VmOnIncus(tenant, networkId);
         LoadBalancer gone = NewLoadBalancer(tenant, networkId, 1, vm);
         gone.MarkCreated(gone.Vip);
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         await SaveAsync(gone);
         await SaveAsync(NewLoadBalancer(tenant, networkId, 2, vm));
@@ -89,7 +89,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             LoadBalancer loaded = (await new LoadBalancerRepository(db).FindByIdAsync(lb.Id))!;
-            intent = loaded.RequestUpdate([Dns], [b]).RequestId;
+            intent = loaded.Update([Dns], [b]).OperationId;
             await db.SaveChangesAsync();
         }
         await using (TitanDbContext db = pg.NewDbContext())
@@ -126,7 +126,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
             Assert.True(await new NetworkRepository(db).HasLiveLoadBalancersAsync(networkId));
             LoadBalancer loaded = (await new LoadBalancerRepository(db).FindByIdAsync(lb.Id))!;
             loaded.MarkCreated(loaded.Vip);
-            loaded.RequestDelete();
+            loaded.Delete();
             loaded.MarkDeleted();
             await db.SaveChangesAsync();
         }

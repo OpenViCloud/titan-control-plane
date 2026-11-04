@@ -128,7 +128,7 @@ public class NetworkPublicIpv6Tests
     public void DeleteConfirmed_KeepsTheSubnet()
     {
         Network network = Existing(HoldingASubnet());
-        network.RequestDelete();
+        network.Delete();
 
         network.MarkDeleted();
 
@@ -143,7 +143,7 @@ public class NetworkPublicIpv6Tests
         Network network = HoldingASubnet();
         Assert.True(network.MarkRequestFailed("Network creation failed.", null));
 
-        Assert.Null(network.RequestDelete());
+        Assert.Null(network.Delete());
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.False(network.HasPublicIpv6);

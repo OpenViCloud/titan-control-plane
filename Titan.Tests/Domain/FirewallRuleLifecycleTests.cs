@@ -52,7 +52,7 @@ public class FirewallRuleLifecycleTests
     public void Observation_WhileADeleteWaits_DoesNotUndoTheDelete()
     {
         var rule = ActiveRule();
-        rule.RequestDelete();
+        rule.Delete();
 
         rule.MarkObserved(FirewallRuleState.enabled);
 
@@ -78,7 +78,7 @@ public class FirewallRuleLifecycleTests
     public void NotFound_KeepsAWaitingDelete_OnlyTheDeleteCommandEndsIt()
     {
         var rule = ActiveRule();
-        rule.RequestDelete();
+        rule.Delete();
 
         rule.MarkNotFound();
 
@@ -106,9 +106,9 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkRequestFailed("Firewall rule creation failed.", "raw");
 
-        Assert.Equal("Firewall rule creation failed.", rule.RequestFailureReason);
-        Assert.Equal("raw", rule.RequestFailureDetail);
-        Assert.NotNull(rule.RequestFailedAt);
+        Assert.Equal("Firewall rule creation failed.", rule.OperationFailureReason);
+        Assert.Equal("raw", rule.OperationFailureDetail);
+        Assert.NotNull(rule.OperationFailedAt);
         Assert.Null(rule.Transition);
         Assert.Equal(CurrentExistence.NotCreated, rule.CurrentExistence);
     }
@@ -120,17 +120,17 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkRequestFailed("late", "late");
 
-        Assert.Null(rule.RequestFailureReason);
+        Assert.Null(rule.OperationFailureReason);
     }
 
-    // ── RequestDelete ──
+    // ── Delete ──
 
     [Fact]
     public void RequestDelete_WritesDesiredExistence_AndYieldsTheId()
     {
         var rule = ActiveRule();
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete()!.ProviderId);
+        Assert.Equal("acl-n/rule-1", rule.Delete()!.ProviderId);
         Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
@@ -144,7 +144,7 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.MarkObserved(state);
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete()!.ProviderId);
+        Assert.Equal("acl-n/rule-1", rule.Delete()!.ProviderId);
     }
 
     [Fact]
@@ -153,7 +153,7 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.MarkNotFound();
 
-        Assert.Equal("acl-n/rule-1", rule.RequestDelete()!.ProviderId);
+        Assert.Equal("acl-n/rule-1", rule.Delete()!.ProviderId);
     }
 
     [Fact]
@@ -161,20 +161,20 @@ public class FirewallRuleLifecycleTests
     {
         var rule = NewRule();
 
-        Assert.Equal("FIREWALL_RULE_NOT_READY", Assert.Throws<BusinessException>(() => rule.RequestDelete()).Code);
+        Assert.Equal("FIREWALL_RULE_NOT_READY", Assert.Throws<BusinessException>(() => rule.Delete()).Code);
     }
 
     [Fact]
     public void RequestDelete_Repeated_OrOfADeletedRule_IsRefused()
     {
         var waiting = ActiveRule();
-        waiting.RequestDelete();
-        Assert.Equal("FIREWALL_RULE_INVALID_STATE", Assert.Throws<BusinessException>(() => waiting.RequestDelete()).Code);
+        waiting.Delete();
+        Assert.Equal("FIREWALL_RULE_INVALID_STATE", Assert.Throws<BusinessException>(() => waiting.Delete()).Code);
 
         var deleted = ActiveRule();
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
-        Assert.Equal("FIREWALL_RULE_INVALID_STATE", Assert.Throws<BusinessException>(() => deleted.RequestDelete()).Code);
+        Assert.Equal("FIREWALL_RULE_INVALID_STATE", Assert.Throws<BusinessException>(() => deleted.Delete()).Code);
     }
 
     // ── Deleted ──
@@ -183,7 +183,7 @@ public class FirewallRuleLifecycleTests
     public void MarkDeleted_OnAWaitingDelete_EndsIt_Once_AndIsTerminal()
     {
         var rule = ActiveRule();
-        rule.RequestDelete();
+        rule.Delete();
 
         Assert.True(rule.MarkDeleted());
         Assert.False(rule.MarkDeleted());
@@ -208,7 +208,7 @@ public class FirewallRuleLifecycleTests
     public void EndWithItsNetwork_WhileItsOwnDeleteWaits_SaysSo_Once()
     {
         var rule = ActiveRule();
-        rule.RequestDelete();
+        rule.Delete();
 
         Assert.True(rule.EndWithItsNetwork());
         Assert.False(rule.EndWithItsNetwork());
@@ -230,7 +230,7 @@ public class FirewallRuleLifecycleTests
     public void Deleted_AbsorbsLaterObservations()
     {
         var rule = ActiveRule();
-        rule.RequestDelete();
+        rule.Delete();
         rule.MarkDeleted();
 
         rule.MarkObserved(FirewallRuleState.enabled);
@@ -251,7 +251,7 @@ public class FirewallRuleLifecycleTests
         var rule = NewRule();
         rule.MarkRequestFailed("r", "d");
 
-        Assert.Null(rule.RequestDelete());
+        Assert.Null(rule.Delete());
 
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
@@ -261,11 +261,11 @@ public class FirewallRuleLifecycleTests
     public void RequestDelete_OfAFailedCreateThatSawAState_WithNoId_LeavesNoStateBehind()
     {
         var rule = NewRule();
-        rule.EndRequest(rule.Pending!.Id,
-            new FirewallRuleRequestEnd(RequestOutcome.Failed, null, FirewallRuleState.enabled, "r", "d"));
+        rule.EndOperation(rule.Pending!.Id,
+            new FirewallRuleOperationEnd(OperationOutcome.Failed, null, FirewallRuleState.enabled, "r", "d"));
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
 
-        Assert.Null(rule.RequestDelete());
+        Assert.Null(rule.Delete());
 
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
         Assert.Null(rule.CurrentState);
@@ -276,8 +276,8 @@ public class FirewallRuleLifecycleTests
     {
         FirewallRule active = ActiveRule();
         FirewallRule creating = NewRule();
-        Assert.False(LocalDelete.DeletedHere(() => active.RequestDelete()));
-        Assert.False(LocalDelete.DeletedHere(() => creating.RequestDelete()));
+        Assert.False(LocalDelete.DeletedHere(() => active.Delete()));
+        Assert.False(LocalDelete.DeletedHere(() => creating.Delete()));
     }
 
     private static FirewallRule NewRule() =>

@@ -10,7 +10,7 @@ namespace Titan.Domain.Aggregates.VmOffering;
 //
 // The price is a NOT NULL column on the tier (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering):
 // a tier with no price would bill VMs zero, silently.
-public class VmOffering : AggregateRoot
+public class VmOffering : IAggregateRoot
 {
     public string Id { get; private set; } = default!;
     public string Name { get; private set; } = default!;

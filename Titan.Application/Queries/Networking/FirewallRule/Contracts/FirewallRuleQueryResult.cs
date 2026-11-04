@@ -28,5 +28,5 @@ public record FirewallRuleQueryResult(
         new(r.Id, r.Direction.ToString(), r.Protocol.ToString(),
             r.StartPort, r.EndPort, r.Cidr.Value, r.ExternalId,
             r.CurrentState, r.CurrentExistence, r.DesiredExistence,
-            r.Transition, r.RequestFailureReason, r.RequestFailedAt, r.CreatedAt);
+            r.Transition, r.OperationFailureReason, r.OperationFailedAt, r.CreatedAt);
 }

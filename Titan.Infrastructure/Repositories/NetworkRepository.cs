@@ -42,7 +42,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             n => n.TenantId == tenantId
                  && n.DesiredExistence == DesiredExistence.Exists
                  && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null)), ct);
+                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)), ct);
 
     // Network.OccupiesPublicIpv6Quota
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
@@ -51,7 +51,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                  && n.PublicIpv6Subnet != null
                  && n.DesiredExistence == DesiredExistence.Exists
                  && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null)), ct);
+                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)), ct);
 
     // Network.IsNotDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
@@ -63,7 +63,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
             v => v.NetworkId == networkId &&
                  (v.CurrentExistence == CurrentExistence.Exists
-                  || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null)), ct);
+                  || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
 
     // LoadBalancer.IsNotDeleted. Read here, not through a Compute repository: Networking -> Compute in Titan.Application
     // would close a module cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above
@@ -79,7 +79,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         List<Network> holding = await db.Networks
             .Where(n => n.TenantId == tenantId
                         && (n.CurrentExistence == CurrentExistence.Exists
-                            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null)))
+                            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)))
             .AsNoTracking()
             .ToListAsync(ct);
 

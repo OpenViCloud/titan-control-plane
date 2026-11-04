@@ -21,14 +21,14 @@ public class EndVmRequestCommandHandler(
     public async Task HandleAsync(EndVmRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the VM is loaded: a malformed report is the worker's bug, whatever the VM.
-        RequestOutcome outcome = VmReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = VmReports.ParseOutcome(command.Outcome);
         VmObservation? observed = VmReports.ParseObservation(command.Observed);
 
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        VmRequestEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
-        VmRequestEnded? ended = vm.EndRequest(command.RequestId, end);
+        VmOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
+        VmOperationEnded? ended = vm.EndOperation(command.RequestId, end);
         if (ended == null)
         {
             return;

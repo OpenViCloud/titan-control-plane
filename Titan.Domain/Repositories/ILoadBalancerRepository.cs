@@ -6,9 +6,9 @@ public interface ILoadBalancerRepository
 {
     /// With its listeners and backends.
     Task<LoadBalancer?> FindByIdAsync(Guid id, CancellationToken ct = default);
-    /// The same, with the load balancer's row locked until this context's next save commits: two requests, or a request
+    /// The same, with the load balancer's row locked until this context's next save commits: two operations, or an operation
     /// and a report, take turns, and the second sees what the first left waiting
-    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-operation).
     Task<LoadBalancer?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
     /// Not Deleted, newest first, with listeners and backends.
     Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);

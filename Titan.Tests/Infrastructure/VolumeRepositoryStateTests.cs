@@ -60,7 +60,7 @@ public class VolumeRepositoryStateTests
     private static Volume DeleteRequested(string name)
     {
         var volume = Available(name);
-        volume.RequestDelete();
+        volume.Delete();
         return volume;
     }
 
@@ -155,9 +155,9 @@ public class VolumeRepositoryStateTests
         using var db = NewDb();
         var volume = Available("vol");
         var leaving = SnapshotOf(volume, "leaving");
-        leaving.RequestDelete();
+        leaving.Delete();
         var gone = SnapshotOf(volume, "gone");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         var lost = SnapshotOf(volume, "lost");
         lost.MarkNotFound();
@@ -179,7 +179,7 @@ public class VolumeRepositoryStateTests
         var there = Volume.Create(TenantOwner.Id, "there", "vn-han-1", "vo-std", 20);
         there.MarkCreated("ext-there");
         var gone = SnapshotOf(here, "gone");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         SnapshotOf(here, "mine");
         SnapshotOf(here, "creating", created: false);
@@ -202,7 +202,7 @@ public class VolumeRepositoryStateTests
         var lost = SnapshotOf(volume, "lost");
         lost.MarkNotFound();
         var gone = SnapshotOf(volume, "gone");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         var failed = SnapshotOf(volume, "failed", created: false);
         failed.MarkRequestFailed("could not create", "raw");
@@ -230,7 +230,7 @@ public class VolumeRepositoryStateTests
         attachedOutsideTitan.MarkObserved(vm.Id, false);
         Volume otherVms = AttachRequested("other", otherVm);
         Volume deleted = Available("deleted");
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkObserved(vm.Id, false);
         deleted.MarkDeleted();
         Volume loose = Available("loose");

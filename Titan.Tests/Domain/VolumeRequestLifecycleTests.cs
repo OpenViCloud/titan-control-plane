@@ -17,7 +17,7 @@ public class VolumeRequestLifecycleTests
     private static Volume RestingVolume()
     {
         Volume volume = NewVolume();
-        volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done("vol-ext", null));
+        volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done("vol-ext", null));
         return volume;
     }
 
@@ -33,12 +33,12 @@ public class VolumeRequestLifecycleTests
         Volume volume = RestingVolume();
         Vm vm = RunningVm();
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
         return (volume, vm);
     }
 
-    private static VolumeRequestEnd Failed(VolumeObservation? observed = null, string? externalId = null) =>
-        VolumeRequestEnd.Failed(externalId, observed, "The volume request could not be completed.", "raw");
+    private static VolumeOperationEnd Failed(VolumeObservation? observed = null, string? externalId = null) =>
+        VolumeOperationEnd.Failed(externalId, observed, "The volume request could not be completed.", "raw");
 
     // ---------- the create ----------
 
@@ -47,7 +47,7 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = NewVolume();
 
-        Assert.Equal(VolumeRequestKind.Create, volume.Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Create, volume.Pending!.Kind);
         Assert.NotEqual(Guid.Empty, volume.Pending.Id);
         Assert.True(volume.Pending.AskedAt <= DateTimeOffset.UtcNow);
         Assert.Equal(VolumeTransition.Creating, volume.Transition);
@@ -59,9 +59,9 @@ public class VolumeRequestLifecycleTests
         Volume volume = NewVolume();
         Guid createId = volume.Pending!.Id;
 
-        VolumeRequestEnded? ended = volume.EndRequest(createId, VolumeRequestEnd.Done("vol-ext", null));
+        VolumeOperationEnded? ended = volume.EndOperation(createId, VolumeOperationEnd.Done("vol-ext", null));
 
-        Assert.Equal((VolumeRequestKind.Create, createId), (ended!.Request.Kind, ended.Request.Id));
+        Assert.Equal((VolumeOperationKind.Create, createId), (ended!.Operation.Kind, ended.Operation.Id));
         Assert.Null(volume.Pending);
         Assert.Equal(("vol-ext", CurrentExistence.Exists), (volume.ExternalId, volume.CurrentExistence));
     }
@@ -71,12 +71,12 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = NewVolume();
 
-        volume.EndRequest(volume.Pending!.Id, Failed(externalId: "vol-ext"));
+        volume.EndOperation(volume.Pending!.Id, Failed(externalId: "vol-ext"));
 
         Assert.Null(volume.Pending);
         Assert.Equal(("vol-ext", CurrentExistence.Exists), (volume.ExternalId, volume.CurrentExistence));
         Assert.Equal(DesiredExistence.Exists, volume.DesiredExistence);
-        Assert.Equal("The volume request could not be completed.", volume.RequestFailureReason);
+        Assert.Equal("The volume request could not be completed.", volume.OperationFailureReason);
     }
 
     [Fact]
@@ -84,12 +84,12 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = NewVolume();
 
-        volume.EndRequest(volume.Pending!.Id, Failed());
+        volume.EndOperation(volume.Pending!.Id, Failed());
 
         Assert.Null(volume.Pending);
         Assert.Null(volume.ExternalId);
         Assert.Equal(CurrentExistence.NotCreated, volume.CurrentExistence);
-        Assert.NotNull(volume.RequestFailedAt);
+        Assert.NotNull(volume.OperationFailedAt);
     }
 
     // ---------- only the report with the id ----------
@@ -100,7 +100,7 @@ public class VolumeRequestLifecycleTests
         Volume volume = NewVolume();
         Guid createId = volume.Pending!.Id;
 
-        VolumeRequestEnded? ended = volume.EndRequest(Guid.NewGuid(), VolumeRequestEnd.Done("vol-ext", null));
+        VolumeOperationEnded? ended = volume.EndOperation(Guid.NewGuid(), VolumeOperationEnd.Done("vol-ext", null));
 
         Assert.Null(ended);
         Assert.Equal(createId, volume.Pending!.Id);
@@ -113,8 +113,8 @@ public class VolumeRequestLifecycleTests
         Volume volume = NewVolume();
         Guid createId = volume.Pending!.Id;
 
-        Assert.NotNull(volume.EndRequest(createId, VolumeRequestEnd.Done("vol-ext", null)));
-        Assert.Null(volume.EndRequest(createId, VolumeRequestEnd.Done("other", null)));
+        Assert.NotNull(volume.EndOperation(createId, VolumeOperationEnd.Done("vol-ext", null)));
+        Assert.Null(volume.EndOperation(createId, VolumeOperationEnd.Done("other", null)));
 
         Assert.Equal("vol-ext", volume.ExternalId);
     }
@@ -123,14 +123,14 @@ public class VolumeRequestLifecycleTests
     public void AStaleGiveUp_AfterANewRequest_IsIgnored()
     {
         (Volume volume, _) = AttachedVolume();
-        RequestTicket firstDetach = volume.Detach();
-        volume.EndRequest(firstDetach.RequestId, Failed(new VolumeObservation(volume.CurrentAttachedVmId, false)));
-        RequestTicket secondDetach = volume.Detach();
+        OperationTicket firstDetach = volume.Detach();
+        volume.EndOperation(firstDetach.OperationId, Failed(new VolumeObservation(volume.CurrentAttachedVmId, false)));
+        OperationTicket secondDetach = volume.Detach();
 
-        VolumeRequestEnded? stale = volume.EndRequest(firstDetach.RequestId, Failed());
+        VolumeOperationEnded? stale = volume.EndOperation(firstDetach.OperationId, Failed());
 
         Assert.Null(stale);
-        Assert.Equal((VolumeRequestKind.Detach, secondDetach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Detach, secondDetach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
     }
 
     // ---------- attach and detach ----------
@@ -142,10 +142,10 @@ public class VolumeRequestLifecycleTests
         Vm vm = RunningVm();
         VolumeAttachProviderIds attach = volume.Attach(vm);
 
-        VolumeRequestEnded? ended = volume.EndRequest(attach.RequestId,
-            VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        VolumeOperationEnded? ended = volume.EndOperation(attach.OperationId,
+            VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
 
-        Assert.Equal(VolumeRequestKind.Attach, ended!.Request.Kind);
+        Assert.Equal(VolumeOperationKind.Attach, ended!.Operation.Kind);
         Assert.Null(volume.Pending);
         Assert.Equal((vm.Id, vm.Id), (volume.CurrentAttachedVmId, volume.DesiredAttachedVmId));
         Assert.Equal((volume.ExternalId, vm.ExternalId), (attach.ExternalVolumeId, attach.ExternalVmId));
@@ -157,38 +157,38 @@ public class VolumeRequestLifecycleTests
         Volume volume = RestingVolume();
         VolumeAttachProviderIds attach = volume.Attach(RunningVm());
 
-        volume.EndRequest(attach.RequestId, Failed(new VolumeObservation(null, false)));
+        volume.EndOperation(attach.OperationId, Failed(new VolumeObservation(null, false)));
 
         Assert.Null(volume.Pending);
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.Null(volume.CurrentAttachedVmId);
-        Assert.Equal("The volume request could not be completed.", volume.RequestFailureReason);
+        Assert.Equal("The volume request could not be completed.", volume.OperationFailureReason);
     }
 
     [Fact]
     public void Failed_OfADetach_LeavesItAttached_WithTheReason()
     {
         (Volume volume, Vm vm) = AttachedVolume();
-        RequestTicket detach = volume.Detach();
+        OperationTicket detach = volume.Detach();
 
-        volume.EndRequest(detach.RequestId, Failed(new VolumeObservation(vm.Id, false)));
+        volume.EndOperation(detach.OperationId, Failed(new VolumeObservation(vm.Id, false)));
 
         Assert.Null(volume.Pending);
         Assert.Equal((vm.Id, vm.Id), (volume.CurrentAttachedVmId, volume.DesiredAttachedVmId));
-        Assert.NotNull(volume.RequestFailureReason);
+        Assert.NotNull(volume.OperationFailureReason);
     }
 
     [Fact]
     public void Done_ClearsTheReasonAnEarlierRequestLeft()
     {
         (Volume volume, Vm vm) = AttachedVolume();
-        RequestTicket failedDetach = volume.Detach();
-        volume.EndRequest(failedDetach.RequestId, Failed(new VolumeObservation(vm.Id, false)));
-        RequestTicket detach = volume.Detach();
+        OperationTicket failedDetach = volume.Detach();
+        volume.EndOperation(failedDetach.OperationId, Failed(new VolumeObservation(vm.Id, false)));
+        OperationTicket detach = volume.Detach();
 
-        volume.EndRequest(detach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(null, false)));
+        volume.EndOperation(detach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(null, false)));
 
-        Assert.Null(volume.RequestFailureReason);
+        Assert.Null(volume.OperationFailureReason);
         Assert.Null(volume.CurrentAttachedVmId);
     }
 
@@ -201,7 +201,7 @@ public class VolumeRequestLifecycleTests
 
         volume.MarkObserved(vm.Id, false);
 
-        Assert.Equal((VolumeRequestKind.Attach, attach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Attach, attach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
         Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
     }
 
@@ -209,12 +209,12 @@ public class VolumeRequestLifecycleTests
     public void NotFound_WhileADeleteWaits_KeepsTheDeleteWaiting()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete()!;
+        OperationTicket delete = volume.Delete()!;
 
         volume.MarkNotFound();
 
         Assert.Equal(CurrentExistence.NotFound, volume.CurrentExistence);
-        Assert.Equal(delete.RequestId, volume.Pending!.Id);
+        Assert.Equal(delete.OperationId, volume.Pending!.Id);
     }
 
     // ---------- the delete ----------
@@ -225,14 +225,14 @@ public class VolumeRequestLifecycleTests
         Volume volume = RestingVolume();
         VolumeSnapshot waitingDelete = AddRestingSnapshot(volume);
         VolumeSnapshot failedCreate = volume.AddSnapshot("never").Snapshot;
-        volume.EndSnapshotRequest(failedCreate.Id, failedCreate.Pending!.Id, VolumeSnapshotRequestEnd.Failed(null, "r", "d"));
-        volume.RequestSnapshotDelete(waitingDelete.Id);
+        volume.EndSnapshotOperation(failedCreate.Id, failedCreate.Pending!.Id, VolumeSnapshotOperationEnd.Failed(null, "r", "d"));
+        volume.DeleteSnapshot(waitingDelete.Id);
         // A volume with a live snapshot refuses its delete; this one's snapshots no longer count.
-        RequestTicket delete = volume.RequestDelete()!;
+        OperationTicket delete = volume.Delete()!;
 
-        VolumeRequestEnded? ended = volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        VolumeOperationEnded? ended = volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
-        Assert.Equal(VolumeRequestKind.Delete, ended!.Request.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, ended!.Operation.Kind);
         Assert.Equal(CurrentExistence.Deleted, volume.CurrentExistence);
         Assert.All(volume.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.Equal([waitingDelete.Id], ended.SnapshotsWhoseDeleteEnded.Select(s => s.Id));
@@ -242,23 +242,23 @@ public class VolumeRequestLifecycleTests
     public void Failed_OfTheDelete_GivesTheVolumeBack_WithTheReason_AndAnotherPressIsANewRequest()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete()!;
+        OperationTicket delete = volume.Delete()!;
 
-        volume.EndRequest(delete.RequestId, Failed());
+        volume.EndOperation(delete.OperationId, Failed());
 
         Assert.Null(volume.Pending);
         Assert.Equal(DesiredExistence.Exists, volume.DesiredExistence);
-        Assert.NotEqual(delete.RequestId, volume.RequestDelete()!.RequestId);
+        Assert.NotEqual(delete.OperationId, volume.Delete()!.OperationId);
     }
 
     [Fact]
     public void ADeletedVolume_AbsorbsEveryReportAndObservation()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete()!;
-        volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
+        OperationTicket delete = volume.Delete()!;
+        volume.EndOperation(delete.OperationId, VolumeOperationEnd.Done(null, null));
 
-        Assert.Null(volume.EndRequest(delete.RequestId, Failed()));
+        Assert.Null(volume.EndOperation(delete.OperationId, Failed()));
         volume.MarkObserved(Guid.NewGuid(), true);
         volume.MarkNotFound();
 
@@ -271,7 +271,7 @@ public class VolumeRequestLifecycleTests
     private static VolumeSnapshot AddRestingSnapshot(Volume volume)
     {
         VolumeSnapshot snapshot = volume.AddSnapshot($"snap-{Guid.NewGuid():N}"[..10]).Snapshot;
-        volume.EndSnapshotRequest(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotRequestEnd.Done($"vol-ext/{snapshot.Id:N}"));
+        volume.EndSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotOperationEnd.Done($"vol-ext/{snapshot.Id:N}"));
         return snapshot;
     }
 
@@ -282,7 +282,7 @@ public class VolumeRequestLifecycleTests
 
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
 
-        Assert.Equal(VolumeSnapshotRequestKind.Create, snapshot.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Create, snapshot.Pending!.Kind);
         Assert.Equal(VolumeSnapshotTransition.Creating, snapshot.Transition);
         Assert.Null(volume.Pending);
     }
@@ -294,9 +294,9 @@ public class VolumeRequestLifecycleTests
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
         Guid createId = snapshot.Pending!.Id;
 
-        Assert.Null(volume.EndSnapshotRequest(snapshot.Id, Guid.NewGuid(), VolumeSnapshotRequestEnd.Done("vol-ext/s1")));
-        PendingRequest<VolumeSnapshotRequestKind>? ended =
-            volume.EndSnapshotRequest(snapshot.Id, createId, VolumeSnapshotRequestEnd.Done("vol-ext/s1"));
+        Assert.Null(volume.EndSnapshotOperation(snapshot.Id, Guid.NewGuid(), VolumeSnapshotOperationEnd.Done("vol-ext/s1")));
+        PendingOperation<VolumeSnapshotOperationKind>? ended =
+            volume.EndSnapshotOperation(snapshot.Id, createId, VolumeSnapshotOperationEnd.Done("vol-ext/s1"));
 
         Assert.Equal(createId, ended!.Id);
         Assert.Null(snapshot.Pending);
@@ -310,9 +310,9 @@ public class VolumeRequestLifecycleTests
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
 
         volume.MarkSnapshotObserved(snapshot.Id);
-        Assert.Equal(VolumeSnapshotRequestKind.Create, snapshot.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Create, snapshot.Pending!.Kind);
         volume.MarkSnapshotNotFound(snapshot.Id);
-        Assert.Equal(VolumeSnapshotRequestKind.Create, snapshot.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Create, snapshot.Pending!.Kind);
     }
 
     [Fact]
@@ -320,13 +320,13 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = RestingVolume();
         VolumeSnapshot snapshot = AddRestingSnapshot(volume);
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
+        OperationTicket delete = volume.DeleteSnapshot(snapshot.Id)!;
 
-        volume.EndSnapshotRequest(snapshot.Id, delete.RequestId, VolumeSnapshotRequestEnd.Failed(null, "could not", "raw"));
+        volume.EndSnapshotOperation(snapshot.Id, delete.OperationId, VolumeSnapshotOperationEnd.Failed(null, "could not", "raw"));
 
         Assert.Null(snapshot.Pending);
         Assert.Equal(DesiredExistence.Exists, snapshot.DesiredExistence);
-        Assert.Equal("could not", snapshot.RequestFailureReason);
+        Assert.Equal("could not", snapshot.OperationFailureReason);
     }
 
     [Fact]
@@ -334,9 +334,9 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = RestingVolume();
         VolumeSnapshot snapshot = AddRestingSnapshot(volume);
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
+        OperationTicket delete = volume.DeleteSnapshot(snapshot.Id)!;
 
-        volume.EndSnapshotRequest(snapshot.Id, delete.RequestId, VolumeSnapshotRequestEnd.Done(null));
+        volume.EndSnapshotOperation(snapshot.Id, delete.OperationId, VolumeSnapshotOperationEnd.Done(null));
 
         Assert.Equal(CurrentExistence.Deleted, snapshot.CurrentExistence);
         Assert.Null(volume.Pending);
@@ -366,7 +366,7 @@ public class VolumeRequestLifecycleTests
         volume.ReleaseFromVmDelete(vm.Id);
         volume.MarkDetachedByVmDelete(vm.Id);
 
-        Assert.Equal((VolumeRequestKind.Attach, attach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Attach, attach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
     }
 
@@ -382,8 +382,8 @@ public class VolumeRequestLifecycleTests
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.Null(volume.Pending);
-        volume.RequestDelete();
-        Assert.Equal(VolumeRequestKind.Delete, volume.Pending!.Kind);
+        volume.Delete();
+        Assert.Equal(VolumeOperationKind.Delete, volume.Pending!.Kind);
     }
 
     [Fact]
@@ -402,11 +402,11 @@ public class VolumeRequestLifecycleTests
     public void TheVmsDeleteFailed_LeavesAVolumesOwnWaitingDetach_AsItWas()
     {
         (Volume volume, Vm vm) = AttachedVolume();
-        RequestTicket detach = volume.Detach();
+        OperationTicket detach = volume.Detach();
 
         volume.KeepAttachmentAfterVmDeleteFailed(vm.Id);
 
-        Assert.Equal((VolumeRequestKind.Detach, detach.RequestId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Detach, detach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
         Assert.Null(volume.DesiredAttachedVmId);
     }
 }

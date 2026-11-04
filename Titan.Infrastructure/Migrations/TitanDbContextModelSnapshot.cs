@@ -45,18 +45,18 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("document_version");
 
-                    b.Property<string>("SourceIp")
-                        .HasColumnType("text")
-                        .HasColumnName("source_ip");
-
-                    b.Property<string>("SubjectId")
+                    b.Property<string>("KeycloakUserId")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("subject_id");
 
+                    b.Property<string>("SourceIp")
+                        .HasColumnType("text")
+                        .HasColumnName("source_ip");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("SubjectId", "DocumentKey", "DocumentVersion")
+                    b.HasIndex("KeycloakUserId", "DocumentKey", "DocumentVersion")
                         .IsUnique();
 
                     b.ToTable("legal_acceptances", "core");
@@ -491,29 +491,29 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("network_subnet");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingRequestKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
 
-                    b.Property<string>("RequestFailureDetail")
+                    b.Property<string>("OperationFailureDetail")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_detail");
 
-                    b.Property<string>("RequestFailureReason")
+                    b.Property<string>("OperationFailureReason")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingOperationKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -662,15 +662,27 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("OperationFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("OperationFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("pending_request_asked_at");
 
-                    b.Property<Guid?>("PendingRequestId")
+                    b.Property<Guid?>("PendingOperationId")
                         .HasColumnType("uuid")
                         .HasColumnName("pending_request_id");
 
-                    b.Property<string>("PendingRequestKind")
+                    b.Property<string>("PendingOperationKind")
                         .HasColumnType("text")
                         .HasColumnName("pending_request_kind");
 
@@ -678,18 +690,6 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("protocol");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
 
                     b.Property<int?>("StartPort")
                         .HasColumnType("integer")
@@ -712,6 +712,10 @@ namespace Titan.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<string>("ChosenCidr")
+                        .HasColumnType("text")
+                        .HasColumnName("requested_cidr");
 
                     b.Property<string>("Cidr")
                         .HasColumnType("text")
@@ -767,15 +771,27 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("OperationFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("OperationFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("pending_request_asked_at");
 
-                    b.Property<Guid?>("PendingRequestId")
+                    b.Property<Guid?>("PendingOperationId")
                         .HasColumnType("uuid")
                         .HasColumnName("pending_request_id");
 
-                    b.Property<string>("PendingRequestKind")
+                    b.Property<string>("PendingOperationKind")
                         .HasColumnType("text")
                         .HasColumnName("pending_request_kind");
 
@@ -794,22 +810,6 @@ namespace Titan.Infrastructure.Migrations
                     b.Property<string>("PublicIpv6Subnet")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_subnet");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<string>("RequestedCidr")
-                        .HasColumnType("text")
-                        .HasColumnName("requested_cidr");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1344,33 +1344,33 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("OperationFailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("OperationFailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("pending_request_asked_at");
 
-                    b.Property<Guid?>("PendingRequestId")
+                    b.Property<Guid?>("PendingOperationId")
                         .HasColumnType("uuid")
                         .HasColumnName("pending_request_id");
 
-                    b.Property<string>("PendingRequestKind")
+                    b.Property<string>("PendingOperationKind")
                         .HasColumnType("text")
                         .HasColumnName("pending_request_kind");
 
                     b.Property<string>("PublicIpv6Address")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_address");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("RequestFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("RequestFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
 
                     b.Property<string>("TemplateId")
                         .IsRequired()
@@ -1431,29 +1431,29 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingRequestKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
 
-                    b.Property<string>("RequestFailureDetail")
+                    b.Property<string>("OperationFailureDetail")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_detail");
 
-                    b.Property<string>("RequestFailureReason")
+                    b.Property<string>("OperationFailureReason")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingOperationKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1662,29 +1662,29 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("external_template_id");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingRequestKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
 
-                    b.Property<string>("RequestFailureDetail")
+                    b.Property<string>("OperationFailureDetail")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_detail");
 
-                    b.Property<string>("RequestFailureReason")
+                    b.Property<string>("OperationFailureReason")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingOperationKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1743,29 +1743,29 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingRequestKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
 
-                    b.Property<string>("RequestFailureDetail")
+                    b.Property<string>("OperationFailureDetail")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_detail");
 
-                    b.Property<string>("RequestFailureReason")
+                    b.Property<string>("OperationFailureReason")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingOperationKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<int>("SizeGb")
                         .HasColumnType("integer")
@@ -1819,29 +1819,29 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("PendingRequestAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingRequestKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
-                    b.Property<DateTimeOffset?>("RequestFailedAt")
+                    b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
 
-                    b.Property<string>("RequestFailureDetail")
+                    b.Property<string>("OperationFailureDetail")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_detail");
 
-                    b.Property<string>("RequestFailureReason")
+                    b.Property<string>("OperationFailureReason")
                         .HasColumnType("text")
                         .HasColumnName("request_failure_reason");
+
+                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<Guid?>("PendingOperationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<string>("PendingOperationKind")
+                        .HasColumnType("text")
+                        .HasColumnName("pending_request_kind");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")

@@ -43,9 +43,9 @@ public class VmSnapshotFirewallRepositoryStateTests
         vm.WithSnapshot("creating");
         Ready(vm, "ready");
         Ready(vm, "reverting").Revert();
-        Ready(vm, "deleting").RequestDelete();
+        Ready(vm, "deleting").Delete();
         var deleted = Ready(vm, "deleted");
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
         Ready(vm, "lost").MarkNotFound();
         vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
@@ -115,10 +115,10 @@ public class VmSnapshotFirewallRepositoryStateTests
         active.MarkActive("sg-2");
         var deleting = Rule(network, "10.0.0.3/32");
         deleting.MarkActive("sg-3");
-        deleting.RequestDelete();
+        deleting.Delete();
         var deleted = Rule(network, "10.0.0.4/32");
         deleted.MarkActive("sg-4");
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
         var failedCreate = Rule(network, "10.0.0.5/32");
         failedCreate.MarkRequestFailed("reason", "detail");
@@ -162,7 +162,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         using var db = NewDb();
         var leaving = UsableNetwork("leaving", "vn-hcm-1");
         Rule(leaving, "10.0.0.9/32").MarkActive("sg-9");
-        leaving.RequestDelete();
+        leaving.Delete();
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
 

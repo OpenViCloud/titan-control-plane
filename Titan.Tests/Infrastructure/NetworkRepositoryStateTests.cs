@@ -37,7 +37,7 @@ public class NetworkRepositoryStateTests
     private static Network DeleteRequested(string name, string cidr)
     {
         var network = Active(name, cidr);
-        network.RequestDelete();
+        network.Delete();
         return network;
     }
 

@@ -44,7 +44,7 @@ public class VmStateMachineTests
         }
         if (seed == Seed.CreateFailed)
         {
-            vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Failed(null, null, "VM provisioning failed due to a system error.", "raw error"));
+            vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Failed(null, null, "VM provisioning failed due to a system error.", "raw error"));
             return vm;
         }
 
@@ -58,8 +58,8 @@ public class VmStateMachineTests
             case Seed.Error: vm.MarkObserved(Seen(VmState.Error, null)); break;
             case Seed.NotFound: vm.MarkNotFound(); break;
             case Seed.Deleted:
-                RequestTicket delete = vm.RequestDelete()!;
-                vm.EndRequest(delete.RequestId, VmRequestEnd.Done(null, null));
+                OperationTicket delete = vm.Delete()!;
+                vm.EndOperation(delete.OperationId, VmOperationEnd.Done(null, null));
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
@@ -78,7 +78,7 @@ public class VmStateMachineTests
         Assert.Equal(CurrentExistence.NotCreated, vm.CurrentExistence);
         Assert.Equal(VmDesiredState.Running, vm.DesiredState);
         Assert.Equal(DesiredExistence.Exists, vm.DesiredExistence);
-        Assert.Equal(VmRequestKind.Create, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Create, vm.Pending!.Kind);
         Assert.Equal(VmTransition.Creating, vm.Transition);
     }
 
@@ -89,15 +89,15 @@ public class VmStateMachineTests
     public void Start_OfAVmThatNeverRan_AfterItsCreateEnded_IsAStart_NotACreate()
     {
         var vm = NewVm();
-        vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Done("42", Seen(VmState.Error, null)));
-        RequestTicket stop = vm.RequestStop();
-        vm.EndRequest(stop.RequestId, VmRequestEnd.Done(null, Seen(VmState.Stopped, null)));
+        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("42", Seen(VmState.Error, null)));
+        OperationTicket stop = vm.Stop();
+        vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Seen(VmState.Stopped, null)));
 
-        RequestTicket start = vm.RequestStart();
+        OperationTicket start = vm.Start();
 
-        Assert.Equal(VmRequestKind.Start, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Start, vm.Pending!.Kind);
         Assert.Equal(VmTransition.Starting, vm.Transition);
-        Assert.Equal(start.RequestId, vm.Pending.Id);
+        Assert.Equal(start.OperationId, vm.Pending.Id);
     }
 
     // ---------- Observation: the Incus status, verbatim ----------
@@ -189,15 +189,15 @@ public class VmStateMachineTests
             v => v.MarkObserved(Seen(VmState.Running, "10.0.0.9")),
             v => v.MarkObserved(Seen(VmState.Error, null)),
             v => v.MarkNotFound(),
-            v => v.EndRequest(Guid.NewGuid(), VmRequestEnd.Done("9", Seen(VmState.Running))),
-            v => v.EndRequest(Guid.NewGuid(), VmRequestEnd.Failed(null, null, "late", "late detail")),
+            v => v.EndOperation(Guid.NewGuid(), VmOperationEnd.Done("9", Seen(VmState.Running))),
+            v => v.EndOperation(Guid.NewGuid(), VmOperationEnd.Failed(null, null, "late", "late detail")),
         })
         {
             var vm = VmIn(Seed.Deleted);
             mutate(vm);
             Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
             Assert.Null(vm.CurrentState);
-            Assert.Null(vm.RequestFailureReason);
+            Assert.Null(vm.OperationFailureReason);
         }
     }
 
@@ -241,7 +241,7 @@ public class VmStateMachineTests
     public void ShellInstanceName_WhileAStopIsWaiting_IsRefused()
     {
         var vm = VmIn(Seed.Running);
-        vm.RequestStop();
+        vm.Stop();
 
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.ShellInstanceName()).Code);
     }
@@ -250,7 +250,7 @@ public class VmStateMachineTests
     public void ShellInstanceName_WhileADeleteIsWaiting_IsRefused()
     {
         var vm = VmIn(Seed.Running);
-        vm.RequestDelete();
+        vm.Delete();
 
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.ShellInstanceName()).Code);
     }
@@ -267,12 +267,12 @@ public class VmStateMachineTests
         var vm = VmIn(from);
         VmState? before = vm.CurrentState;
 
-        RequestTicket ticket = vm.RequestStop();
+        OperationTicket ticket = vm.Stop();
 
         Assert.Equal("42", ticket.ProviderId);
-        Assert.Equal(VmRequestKind.Stop, vm.Pending!.Kind);
-        Assert.Equal(vm.Pending.Id, ticket.RequestId);
-        Assert.Equal(before, vm.CurrentState); // RequestStop does not write CurrentState
+        Assert.Equal(VmOperationKind.Stop, vm.Pending!.Kind);
+        Assert.Equal(vm.Pending.Id, ticket.OperationId);
+        Assert.Equal(before, vm.CurrentState); // Stop does not write CurrentState
         Assert.Equal(VmDesiredState.Stopped, vm.DesiredState);
         Assert.Equal(VmTransition.Stopping, vm.Transition);
     }
@@ -282,7 +282,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Stopped);
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStop()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Stop()).Code);
         Assert.Null(vm.Pending);
     }
 
@@ -296,7 +296,7 @@ public class VmStateMachineTests
         var vm = VmIn(from);
         var before = vm.Pending;
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStop()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Stop()).Code);
         Assert.Equal(before, vm.Pending);
         Assert.Equal(VmDesiredState.Running, vm.DesiredState);
     }
@@ -305,10 +305,10 @@ public class VmStateMachineTests
     public void RequestStop_Twice_IsRefused_AndKeepsTheFirstRequest()
     {
         var vm = VmIn(Seed.Running);
-        var first = vm.RequestStop();
+        var first = vm.Stop();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStop()).Code);
-        Assert.Equal(first.RequestId, vm.Pending!.Id);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Stop()).Code);
+        Assert.Equal(first.OperationId, vm.Pending!.Id);
     }
 
     [Theory] // Start on a Frozen instance is a resume (titan-ops features/vm/design.md#requests-follow-incus)
@@ -319,10 +319,10 @@ public class VmStateMachineTests
         var vm = VmIn(from);
         VmState? before = vm.CurrentState;
 
-        RequestTicket ticket = vm.RequestStart();
+        OperationTicket ticket = vm.Start();
 
         Assert.Equal("42", ticket.ProviderId);
-        Assert.Equal(VmRequestKind.Start, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Start, vm.Pending!.Kind);
         Assert.Equal(before, vm.CurrentState);
     }
 
@@ -333,7 +333,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(from);
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStart()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Start()).Code);
         Assert.Null(vm.Pending);
     }
 
@@ -348,7 +348,7 @@ public class VmStateMachineTests
         var vm = VmIn(from);
         VmState? before = vm.CurrentState;
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStart()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Start()).Code);
         Assert.Equal(before, vm.CurrentState);
     }
 
@@ -356,40 +356,40 @@ public class VmStateMachineTests
     public void RequestStart_Twice_IsRefused_AndKeepsTheFirstRequest()
     {
         var vm = VmIn(Seed.Stopped);
-        var first = vm.RequestStart();
+        var first = vm.Start();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStart()).Code);
-        Assert.Equal(first.RequestId, vm.Pending!.Id);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Start()).Code);
+        Assert.Equal(first.OperationId, vm.Pending!.Id);
     }
 
     [Fact]
     public void RequestStart_WhileAStopIsWaiting_Throws()
     {
         var vm = VmIn(Seed.Running);
-        var stop = vm.RequestStop();
+        var stop = vm.Stop();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStart()).Code);
-        Assert.Equal(stop.RequestId, vm.Pending!.Id);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Start()).Code);
+        Assert.Equal(stop.OperationId, vm.Pending!.Id);
     }
 
     [Fact] // the VM reads Stopped, so a stop would be "already done" — but a start waits
     public void RequestStop_WhileAStartIsWaiting_Throws()
     {
         var vm = VmIn(Seed.Stopped);
-        vm.RequestStart();
+        vm.Start();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStop()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Stop()).Code);
     }
 
     [Fact]
     public void StopOrStart_WhileADeleteIsWaiting_Throws()
     {
         var vm = VmIn(Seed.Running);
-        vm.RequestDelete();
+        vm.Delete();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStop()).Code);
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestStart()).Code);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending!.Kind);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Stop()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Start()).Code);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending!.Kind);
     }
 
     [Fact] // a guest-OS shutdown leaves nothing waiting, so a real start is not mistaken for a repeat
@@ -398,10 +398,10 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.Running);
         vm.MarkObserved(Seen(VmState.Stopped, null));
 
-        RequestTicket ticket = vm.RequestStart();
+        OperationTicket ticket = vm.Start();
 
         Assert.Equal(VmTransition.Starting, vm.Transition);
-        Assert.Equal(ticket.RequestId, vm.Pending!.Id);
+        Assert.Equal(ticket.OperationId, vm.Pending!.Id);
     }
 
     // ---------- Intent: delete ----------
@@ -419,11 +419,11 @@ public class VmStateMachineTests
         VmState? beforeState = vm.CurrentState;
         CurrentExistence beforeExistence = vm.CurrentExistence;
 
-        RequestTicket? ticket = vm.RequestDelete();
+        OperationTicket? ticket = vm.Delete();
 
         Assert.NotNull(ticket);
         Assert.Equal("42", ticket!.ProviderId);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending!.Kind);
         Assert.Equal(DesiredExistence.Deleted, vm.DesiredExistence);
         Assert.Equal(beforeState, vm.CurrentState);
         Assert.Equal(beforeExistence, vm.CurrentExistence);
@@ -434,13 +434,13 @@ public class VmStateMachineTests
     public void RequestDelete_OfACreateThatFailedWithAnId_HandsOutATicket()
     {
         var vm = NewVm();
-        vm.EndRequest(vm.Pending!.Id, VmRequestEnd.Failed("42", null, "VM provisioning failed.", "raw"));
+        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Failed("42", null, "VM provisioning failed.", "raw"));
 
-        RequestTicket? ticket = vm.RequestDelete();
+        OperationTicket? ticket = vm.Delete();
 
         Assert.NotNull(ticket);
         Assert.Equal("42", ticket!.ProviderId);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending!.Kind);
     }
 
     [Fact] // without an id the create may still instantiate: nothing is safe to forget
@@ -448,8 +448,8 @@ public class VmStateMachineTests
     {
         var vm = NewVm();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestDelete()).Code);
-        Assert.Equal(VmRequestKind.Create, vm.Pending!.Kind);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete()).Code);
+        Assert.Equal(VmOperationKind.Create, vm.Pending!.Kind);
     }
 
     [Fact] // a create that gave up before Incus held anything: no ticket, the caller finishes it locally
@@ -457,7 +457,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.CreateFailed);
 
-        RequestTicket? ticket = vm.RequestDelete();
+        OperationTicket? ticket = vm.Delete();
 
         Assert.Null(ticket);
         Assert.Equal(CurrentExistence.NotCreated, vm.CurrentExistence); // nothing mutated until the caller says so
@@ -467,7 +467,7 @@ public class VmStateMachineTests
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, vm.DesiredExistence);
         Assert.Null(vm.Transition);
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestDelete()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete()).Code);
     }
 
     [Fact] // a VM with a provider id still exists there; deleting it here would stop billing a running machine
@@ -497,10 +497,10 @@ public class VmStateMachineTests
     public void RequestDelete_Twice_IsRefused_AndKeepsTheFirstRequest()
     {
         var vm = VmIn(Seed.Running);
-        var first = vm.RequestDelete()!;
+        var first = vm.Delete()!;
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestDelete()).Code);
-        Assert.Equal(first.RequestId, vm.Pending!.Id);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete()).Code);
+        Assert.Equal(first.OperationId, vm.Pending!.Id);
     }
 
     [Fact]
@@ -508,19 +508,19 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Deleted);
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RequestDelete()).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete()).Code);
     }
 
     [Fact] // a delete overrides a waiting stop, as a new request (delete wins)
     public void RequestDelete_WhileAStopIsWaiting_ReplacesIt()
     {
         var vm = VmIn(Seed.Running);
-        var stop = vm.RequestStop();
+        var stop = vm.Stop();
 
-        var delete = vm.RequestDelete()!;
+        var delete = vm.Delete()!;
 
-        Assert.NotEqual(stop.RequestId, delete.RequestId);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending!.Kind);
+        Assert.NotEqual(stop.OperationId, delete.OperationId);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending!.Kind);
     }
 
     // ---------- snapshot and attach follow what Incus allows ----------
@@ -549,12 +549,12 @@ public class VmStateMachineTests
     }
 
     [Theory] // a stop or delete waiting races any other command against this VM
-    [InlineData(VmRequestKind.Stop)]
-    [InlineData(VmRequestKind.Delete)]
-    public void SnapshotAndAttach_WhileAStopOrDeleteIsWaiting_Throw(VmRequestKind waiting)
+    [InlineData(VmOperationKind.Stop)]
+    [InlineData(VmOperationKind.Delete)]
+    public void SnapshotAndAttach_WhileAStopOrDeleteIsWaiting_Throw(VmOperationKind waiting)
     {
         var vm = VmIn(Seed.Running);
-        if (waiting == VmRequestKind.Stop) vm.RequestStop(); else vm.RequestDelete();
+        if (waiting == VmOperationKind.Stop) vm.Stop(); else vm.Delete();
 
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.AddSnapshot("s")).Code);
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.ProviderIdForVolumeAttach()).Code);
@@ -564,7 +564,7 @@ public class VmStateMachineTests
     public void ProviderIdForVolumeAttach_WhileAStartIsWaiting_IsAllowed()
     {
         var vm = VmIn(Seed.Stopped);
-        vm.RequestStart();
+        vm.Start();
 
         Assert.Equal("42", vm.ProviderIdForVolumeAttach());
     }

@@ -34,7 +34,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             v => v.TenantId == tenantId
                  && v.DesiredExistence == DesiredExistence.Exists
                  && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null)), ct);
+                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
 
     // Vm.IsNotDeleted — the same condition as the unique index's filter (VmConfiguration): a narrower check would let
     // the index 500.

@@ -14,7 +14,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.TenantId).HasColumnName("tenant_id");
         builder.Property(n => n.Name).HasColumnName("name").IsRequired();
         builder.Property(n => n.ClusterId).HasColumnName("cluster_id").IsRequired();
-        builder.Property(n => n.RequestedCidr).HasColumnName("requested_cidr");
+        builder.Property(n => n.ChosenCidr).HasColumnName("requested_cidr");
         builder.Property(n => n.Cidr).HasColumnName("cidr");
 
         builder.Property(n => n.ExternalId).HasColumnName("external_id");
@@ -24,14 +24,14 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(n => n.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(n => n.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(n => n.RequestFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(n => n.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(n => n.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(n => n.OperationFailureReason).HasColumnName("request_failure_reason");
+        builder.Property(n => n.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(n => n.OperationFailedAt).HasColumnName("request_failed_at");
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
         // Network.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<NetworkRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<NetworkOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(n => n.Pending);
         builder.Ignore(n => n.Transition);
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");

@@ -30,7 +30,7 @@ public record AdminVmQueryResult(
         new(v.Id, v.TenantId, v.Name, StateName(v.CurrentState), v.DesiredState.ToString(),
             v.CurrentExistence.ToString(), v.DesiredExistence.ToString(), TransitionName(v.Transition),
             v.IpAddress, v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.CreatedAt,
-            v.RequestFailureReason, v.RequestFailureDetail, v.RequestFailedAt);
+            v.OperationFailureReason, v.OperationFailureDetail, v.OperationFailedAt);
 
     private static string? StateName(VmState? state)
     {

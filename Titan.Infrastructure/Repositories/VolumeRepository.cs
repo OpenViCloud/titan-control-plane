@@ -48,7 +48,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             v => v.TenantId == tenantId
                  && v.DesiredExistence == DesiredExistence.Exists
                  && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null)), ct);
+                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
 
     // Volume.IsBilled
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>

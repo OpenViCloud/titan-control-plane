@@ -46,7 +46,7 @@ public class WalletMutationApply(IWalletRepository wallets, IInvoiceRepository i
                 {
                     mutation.MarkFailed(
                         $"Wallet {wallet.Id} holds {wallet.AvailableAmount}; this debit needs {mutation.Amount}. " +
-                        "The balance was sufficient when the payment was requested and was spent before it " +
+                        "The balance was sufficient when the payment was asked for and was spent before it " +
                         "was applied.");
                     break;      // no debit, no ledger row, no invoice flip — only the verdict is saved
                 }
@@ -77,7 +77,7 @@ public class WalletMutationApply(IWalletRepository wallets, IInvoiceRepository i
                 if (invoice != null)
                 {
                     // The invoice reaches SettledByWallet in the debit's transaction, not at the button:
-                    // flipping it at request time would let it read "paid" before the money moved.
+                    // flipping it at operation time would let it read "paid" before the money moved.
                     invoice.SettleFromWallet(DateTimeOffset.UtcNow);
                 }
                 mutation.MarkApplied();

@@ -26,10 +26,10 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
     {
         string offeringId = await SeedOfferingAsync();
         Vm vm = Vm.Create(Tenant, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-a", 20);
-        vm.EndRequest(vm.Pending!.Id,
-            VmRequestEnd.Done($"vm{Guid.NewGuid():N}"[..20], new VmObservation(VmState.Running, "10.0.0.5", null)));
+        vm.EndOperation(vm.Pending!.Id,
+            VmOperationEnd.Done($"vm{Guid.NewGuid():N}"[..20], new VmObservation(VmState.Running, "10.0.0.5", null)));
         VmSnapshot snapshot = vm.AddSnapshot("nightly").Snapshot;
-        vm.EndSnapshotRequest(snapshot.Id, snapshot.Pending!.Id, VmSnapshotRequestEnd.Done($"{vm.ExternalId}/s1"));
+        vm.EndSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, VmSnapshotOperationEnd.Done($"{vm.ExternalId}/s1"));
         await using TitanDbContext db = pg.NewDbContext();
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
@@ -80,7 +80,7 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(RevertThroughTheHandlerAsync(vm.Id, snapshot.Id), RevertThroughTheHandlerAsync(vm.Id, snapshot.Id));
 
         VmSnapshot stored = await StoredSnapshotAsync(vm.Id);
-        Assert.Equal(VmSnapshotRequestKind.Revert, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotOperationKind.Revert, stored.Pending!.Kind);
         await using TitanDbContext db = pg.NewDbContext();
         List<string> keys = await db.Set<ProviderCommand>()
             .Where(c => c.Key.StartsWith($"vm-snapshot-revert-{snapshot.Id}-")).Select(c => c.Key).ToListAsync();
@@ -95,7 +95,7 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(DeleteThroughTheHandlerAsync(vm.Id, snapshot.Id), DeleteThroughTheHandlerAsync(vm.Id, snapshot.Id));
 
         VmSnapshot stored = await StoredSnapshotAsync(vm.Id);
-        Assert.Equal(VmSnapshotRequestKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotOperationKind.Delete, stored.Pending!.Kind);
         await using TitanDbContext db = pg.NewDbContext();
         List<string> keys = await db.Set<ProviderCommand>()
             .Where(c => c.Key.StartsWith($"vm-snapshot-delete-{snapshot.Id}-")).Select(c => c.Key).ToListAsync();

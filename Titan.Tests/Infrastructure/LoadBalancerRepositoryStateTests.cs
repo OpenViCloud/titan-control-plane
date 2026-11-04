@@ -55,9 +55,9 @@ public class LoadBalancerRepositoryStateTests
         }
 
         LoadBalancer deleting = Shape("deleting", 3, Created);
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer deleted = Shape("deleted", 4, Created);
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
         LoadBalancer notFound = Shape("not-found", 5, Created);
         notFound.MarkNotFound();

@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.Invoice;
 
 /// A frozen snapshot of one month's UsageRecords (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot):
 /// after Generate only the single payment transition changes it; Total and every item Amount are fixed.
-public class Invoice : AggregateRoot
+public class Invoice : IAggregateRoot
 {
     /// DueAt = IssuedAt + PaymentTermDays (titan-ops features/billing/invoice/design.md#invoice-generation).
     public const int PaymentTermDays = 7;

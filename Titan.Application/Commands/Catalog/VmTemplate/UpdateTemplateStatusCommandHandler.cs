@@ -50,7 +50,7 @@ public class UpdateTemplateStatusCommandHandler(
         var template = await repo.FindByIdForUpdateAsync(req.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
-        PendingRequest<VmTemplateRequestKind>? waiting =
+        PendingOperation<VmTemplateOperationKind>? waiting =
             template.Clusters.FirstOrDefault(candidate => candidate.ClusterId == req.ClusterId)?.Pending;
         switch (req.Report)
         {
@@ -70,7 +70,7 @@ public class UpdateTemplateStatusCommandHandler(
                 // With nothing waiting, the alias the command saw is recorded as an observation would.
                 if (waiting != null)
                 {
-                    template.EndSyncRequest(req.ClusterId, waiting.Id, VmTemplateRequestEnd.Done(req.ExternalId));
+                    template.EndSyncOperation(req.ClusterId, waiting.Id, VmTemplateOperationEnd.Done(req.ExternalId));
                 }
                 else
                 {
@@ -81,8 +81,8 @@ public class UpdateTemplateStatusCommandHandler(
                 // With nothing waiting the give-up is the stale report of a sync already over, and records nothing.
                 if (waiting != null)
                 {
-                    template.EndSyncRequest(req.ClusterId, waiting.Id,
-                        VmTemplateRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    template.EndSyncOperation(req.ClusterId, waiting.Id,
+                        VmTemplateOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
                 }
                 break;
         }

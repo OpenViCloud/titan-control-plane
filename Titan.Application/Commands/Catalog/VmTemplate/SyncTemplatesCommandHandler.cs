@@ -51,7 +51,7 @@ public class SyncTemplatesCommandHandler(
                 {
                     continue;
                 }
-                PendingRequest<VmTemplateRequestKind> request = locked.RequestSyncIn(cluster.Id);
+                PendingOperation<VmTemplateOperationKind> request = locked.SyncIn(cluster.Id);
                 await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, request.Id, locked.Name, locked.Description,
                     locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
                 enqueued++;

@@ -6,7 +6,7 @@ using Titan.Domain.Model;
 namespace Titan.Domain.Aggregates.ApiToken;
 
 /// The rules of the secret itself: what one looks like and what is kept of it. A token is created with them and a
-/// request is authenticated with them, so neither side owns them. Titan never stores a secret, so no instance exists.
+/// call is authenticated with them, so neither side owns them. Titan never stores a secret, so no instance exists.
 public sealed partial record ApiTokenSecret : ValueObject
 {
     private ApiTokenSecret() { }

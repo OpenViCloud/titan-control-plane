@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.Acceptance;
 
 /// Click-wrap consent proof (titan-ops features/legal/design.md#consent-gate-per-user). Append-only: a new document
 /// version produces a new row. Per user, not per tenant: every member accepts individually.
-public class Acceptance : AggregateRoot
+public class Acceptance : IAggregateRoot
 {
     public Guid Id { get; private set; }
 
@@ -18,7 +18,7 @@ public class Acceptance : AggregateRoot
 
     public DateTimeOffset AcceptedAt { get; private set; }
 
-    /// Nullable: a request behind a proxy without a forwarded address may not carry one, and that must not
+    /// Nullable: an operation behind a proxy without a forwarded address may not carry one, and that must not
     /// block recording the consent.
     public string? SourceIp { get; private set; }
 

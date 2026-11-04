@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.ProviderCommand;
 
 /// One row of the provider command table (titan-ops architecture/provider-and-worker.md#provider-command-table): a handler
 /// writes it in the same SaveChanges as the aggregate it changed, and a worker leases it over /internal.
-public class ProviderCommand : AggregateRoot
+public class ProviderCommand : IAggregateRoot
 {
     public const int MaxAttempts = 5;
     public static readonly TimeSpan LeaseLength = TimeSpan.FromSeconds(60);
@@ -14,8 +14,8 @@ public class ProviderCommand : AggregateRoot
 
     public Guid Id { get; private set; }
 
-    /// UNIQUE: `vm-backup-{vmId}-{yyyyMMdd}`, `vm-stop-{vmId}-{requestId}`, … One key, one row; a repeat of the key meets
-    /// that row (Reopen, titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    /// UNIQUE: `vm-backup-{vmId}-{yyyyMMdd}`, `vm-stop-{vmId}-{operationId}`, … One key, one row; a repeat of the key meets
+    /// that row (Reopen, titan-ops architecture/resource-lifecycle.md#one-key-per-operation).
     public string Key { get; private set; } = default!;
 
     /// What the worker does: `vm.create`, `vm.delete`, … (ProviderCommandKinds).
@@ -77,7 +77,7 @@ public class ProviderCommand : AggregateRoot
     public bool IsOpen => Status is ProviderCommandStatus.Pending or ProviderCommandStatus.Leased;
 
     /// The rows the retention job deletes: finished and created before the cutoff. An open row is never one, however old:
-    /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-operation).
     /// ProviderCommandRepository.DeleteFinishedCreatedBeforeAsync writes the same test in SQL
     /// (titan-ops architecture/domain-methods.md#plain-code).
     public bool IsFinishedAndCreatedBefore(DateTimeOffset cutoff)
@@ -88,7 +88,7 @@ public class ProviderCommand : AggregateRoot
 
     /// A handler enqueued this key again. Returns true when the row runs again (with the new payload), false when the
     /// repeat is absorbed: an open or Done row absorbs it, a Failed one runs again
-    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-request). Not an intent of the aggregate: one rule,
+    /// (titan-ops architecture/resource-lifecycle.md#one-key-per-operation). Not an intent of the aggregate: one rule,
     /// applied the same every time.
     public bool Reopen(string payload, DateTimeOffset now)
     {

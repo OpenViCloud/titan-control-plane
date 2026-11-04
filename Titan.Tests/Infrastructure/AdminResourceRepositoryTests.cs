@@ -86,7 +86,7 @@ public class AdminResourceRepositoryTests
         using var db = NewDb();
         db.Vms.AddRange(
             Vm(TenantAOwner, "live"),
-            Vm(TenantBOwner, "gone", v => { v.MarkCreated("gone-1"); v.RequestDelete(); v.MarkDeleted(); })); // expunged — must not surface to admin
+            Vm(TenantBOwner, "gone", v => { v.MarkCreated("gone-1"); v.Delete(); v.MarkDeleted(); })); // expunged — must not surface to admin
         await db.SaveChangesAsync();
         var repo = new VmRepository(db);
 
@@ -133,7 +133,7 @@ public class AdminResourceRepositoryTests
         using var db = NewDb();
         db.Networks.AddRange(
             Net(TenantAOwner, "live", n => { n.MarkActive("e", "10.0.0.0/24", "10.0.0.1"); }),
-            Net(TenantBOwner, "gone", n => { n.MarkActive("e", "10.0.1.0/24", "10.0.1.1"); n.RequestDelete(); n.MarkDeleted(); }));
+            Net(TenantBOwner, "gone", n => { n.MarkActive("e", "10.0.1.0/24", "10.0.1.1"); n.Delete(); n.MarkDeleted(); }));
         await db.SaveChangesAsync();
         var repo = new NetworkRepository(db);
 

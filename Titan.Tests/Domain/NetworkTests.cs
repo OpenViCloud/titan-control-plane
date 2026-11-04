@@ -13,7 +13,7 @@ public class NetworkTests
     public void RequestDelete_YieldsTheProviderId()
     {
         var network = MakeActiveNetwork();
-        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
+        Assert.Equal("cs-net-id", network.Delete()!.ProviderId);
     }
 
     [Fact]
@@ -89,8 +89,8 @@ public class NetworkTests
         {
             case Seed.Creating: break;
             case Seed.Active: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); break;
-            case Seed.DeleteRequested: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.RequestDelete(); break;
-            case Seed.Deleted: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.RequestDelete(); network.MarkDeleted(); break;
+            case Seed.DeleteRequested: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.Delete(); break;
+            case Seed.Deleted: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.Delete(); network.MarkDeleted(); break;
             case Seed.CreateFailed: network.MarkRequestFailed("reason", "detail"); break;
             case Seed.Errored: network.MarkActive("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.MarkObserved(NetworkStatus.Errored); break;
             case Seed.Pending: network.MarkCreated("cs-net-id", "10.0.0.0/24", "10.0.0.1"); network.MarkObserved(NetworkStatus.Pending); break;
@@ -155,7 +155,7 @@ public class NetworkTests
     public void NoObservation_WithdrawsAWaitingDelete(NetworkStatus status)
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
 
         network.MarkObserved(status);
 
@@ -182,7 +182,7 @@ public class NetworkTests
     public void NotFound_KeepsAWaitingDelete_OnlyTheDeleteCommandEndsIt()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
 
         network.MarkNotFound();
 
@@ -212,9 +212,9 @@ public class NetworkTests
 
         network.MarkRequestFailed("Network creation failed.", "raw incus error");
 
-        Assert.Equal("Network creation failed.", network.RequestFailureReason);
-        Assert.Equal("raw incus error", network.RequestFailureDetail);
-        Assert.NotNull(network.RequestFailedAt);
+        Assert.Equal("Network creation failed.", network.OperationFailureReason);
+        Assert.Equal("raw incus error", network.OperationFailureDetail);
+        Assert.NotNull(network.OperationFailedAt);
         Assert.Null(network.Transition);
         Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
         Assert.Null(network.CurrentState);
@@ -227,18 +227,18 @@ public class NetworkTests
 
         network.MarkRequestFailed("late", "late");
 
-        Assert.Null(network.RequestFailureReason);
+        Assert.Null(network.OperationFailureReason);
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
     }
 
-    // ── RequestDelete: follows Incus — whatever its word, a network Incus may hold is deleted through Incus ──
+    // ── Delete: follows Incus — whatever its word, a network Incus may hold is deleted through Incus ──
 
     [Fact]
     public void RequestDelete_WritesDesiredExistence_AndLeavesTheObservationAlone()
     {
         var network = MakeActiveNetwork();
 
-        network.RequestDelete();
+        network.Delete();
 
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
@@ -256,7 +256,7 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.MarkObserved(status);
 
-        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
+        Assert.Equal("cs-net-id", network.Delete()!.ProviderId);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -265,7 +265,7 @@ public class NetworkTests
     {
         var network = NetworkIn(Seed.NotFound);
 
-        Assert.Equal("cs-net-id", network.RequestDelete()!.ProviderId);
+        Assert.Equal("cs-net-id", network.Delete()!.ProviderId);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -274,7 +274,7 @@ public class NetworkTests
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
-        var ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
+        var ex = Assert.Throws<BusinessException>(() => network.Delete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
     }
@@ -283,12 +283,12 @@ public class NetworkTests
     public void RequestDelete_Twice_IsRefused_AndKeepsTheFirstRequest()
     {
         var network = MakeActiveNetwork();
-        Guid first = network.RequestDelete()!.RequestId;
+        Guid first = network.Delete()!.OperationId;
 
-        var ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
+        var ex = Assert.Throws<BusinessException>(() => network.Delete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
-        Assert.Equal((NetworkRequestKind.Delete, first), (network.Pending!.Kind, network.Pending.Id));
+        Assert.Equal((NetworkOperationKind.Delete, first), (network.Pending!.Kind, network.Pending.Id));
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public class NetworkTests
     {
         var network = NetworkIn(Seed.Deleted);
 
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.RequestDelete()).Code);
+        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.Delete()).Code);
     }
 
     // ── Delete outcome ─────────────────────────────────────
@@ -305,12 +305,12 @@ public class NetworkTests
     public void MarkDeleted_EndsTheWaitingDelete_Once_AndClearsTheStatus()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
 
-        NetworkRequestEnded? first = network.MarkDeleted();
-        NetworkRequestEnded? repeat = network.MarkDeleted();
+        NetworkOperationEnded? first = network.MarkDeleted();
+        NetworkOperationEnded? repeat = network.MarkDeleted();
 
-        Assert.Equal(NetworkRequestKind.Delete, first!.Request.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, first!.Operation.Kind);
         Assert.Null(repeat);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);
@@ -333,7 +333,7 @@ public class NetworkTests
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);
         Assert.Equal("cs-net-id", network.ExternalId);
-        Assert.Null(network.RequestFailureReason);
+        Assert.Null(network.OperationFailureReason);
     }
 
     // ── Rename ─────────────────────────────────────────────────────────────
@@ -372,7 +372,7 @@ public class NetworkTests
             TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "singapore01", Ipv4Cidr.Parse(cidr), true);
 
         Assert.Equal("net-1", network.Name.Value);
-        Assert.Equal(Ipv4Cidr.Parse(cidr), network.RequestedCidr);
+        Assert.Equal(Ipv4Cidr.Parse(cidr), network.ChosenCidr);
     }
 
     [Fact]
@@ -398,7 +398,7 @@ public class NetworkTests
     {
         var network = NetworkIn(Seed.CreateFailed);
 
-        Assert.Null(network.RequestDelete());
+        Assert.Null(network.Delete());
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
@@ -413,7 +413,7 @@ public class NetworkTests
     {
         var network = NetworkIn(seed);
 
-        Assert.False(LocalDelete.DeletedHere(() => network.RequestDelete()));
+        Assert.False(LocalDelete.DeletedHere(() => network.Delete()));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -433,7 +433,7 @@ public class NetworkTests
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "singapore01",
             Ipv4Cidr.Parse("10.1.0.0/24"), false);
 
-        Assert.Equal(Ipv4Cidr.Parse("10.1.0.0/24"), network.RequestedCidr);
+        Assert.Equal(Ipv4Cidr.Parse("10.1.0.0/24"), network.ChosenCidr);
         Assert.Null(network.Cidr); // Incus has not answered yet
     }
 
@@ -442,7 +442,7 @@ public class NetworkTests
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse("net-1"), "singapore01", null, false);
 
-        Assert.Null(network.RequestedCidr);
+        Assert.Null(network.ChosenCidr);
     }
 
     // ---- The range a network holds, for the overlap check (titan-ops features/network/design.md#network-lifecycle).
@@ -484,7 +484,7 @@ public class NetworkTests
     public void HeldRange_OfANetworkBeingDeleted_IsStillItsAddress()
     {
         Network network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
 
         Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), network.HeldRange);
     }
@@ -497,7 +497,7 @@ public class NetworkTests
         Network notFound = MakeActiveNetwork();
         notFound.MarkNotFound();
         Network deleted = MakeActiveNetwork();
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
 
         Assert.Null(gaveUp.HeldRange);

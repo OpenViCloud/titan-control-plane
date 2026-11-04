@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.ClusterIpv6Route;
 
 /// One of the 255 static OVH routes of a cluster's /56 (titan-ops infra/incus/design.md#ipv6-address-plan), and the
 /// network it belongs to now. Every route exists before any network; a free route has no network.
-public class ClusterIpv6Route : AggregateRoot
+public class ClusterIpv6Route : IAggregateRoot
 {
     public const int FirstNumber = 1;
     public const int LastNumber = 255;

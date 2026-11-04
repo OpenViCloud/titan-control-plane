@@ -99,16 +99,16 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
 
         await MigrateToLatestAsync();
 
-        Assert.Equal(VolumeRequestKind.Delete, (await VolumeAsync(deleting)).Pending!.Kind);
-        Assert.Equal(VolumeRequestKind.Create, (await VolumeAsync(creating)).Pending!.Kind);
-        Assert.Equal(VolumeRequestKind.Attach, (await VolumeAsync(attaching)).Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, (await VolumeAsync(deleting)).Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Create, (await VolumeAsync(creating)).Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Attach, (await VolumeAsync(attaching)).Pending!.Kind);
         Volume detach = await VolumeAsync(detaching);
-        Assert.Equal(VolumeRequestKind.Detach, detach.Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Detach, detach.Pending!.Kind);
         Assert.True(detach.Pending.AskedAt > DateTimeOffset.UnixEpoch);
         Volume rest = await VolumeAsync(resting);
         Assert.Null(rest.Pending);
-        Assert.Equal(VolumeSnapshotRequestKind.Delete, rest.Snapshots.Single(s => s.Id == snapshotDeleting).Pending!.Kind);
-        Assert.Equal(VolumeSnapshotRequestKind.Create, rest.Snapshots.Single(s => s.Id == snapshotCreating).Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Delete, rest.Snapshots.Single(s => s.Id == snapshotDeleting).Pending!.Kind);
+        Assert.Equal(VolumeSnapshotOperationKind.Create, rest.Snapshots.Single(s => s.Id == snapshotCreating).Pending!.Kind);
     }
 
     // A detach waiting with no open command — the one Volume.DetachWithDeletedVm left — has no report coming, so it ends;
@@ -128,7 +128,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         Assert.Null(ended.Pending);
         Assert.Null(ended.DesiredAttachedVmId);
         Assert.Equal(vm, ended.CurrentAttachedVmId);
-        Assert.Equal(VolumeRequestKind.Detach, (await VolumeAsync(askedByTheCustomer)).Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Detach, (await VolumeAsync(askedByTheCustomer)).Pending!.Kind);
     }
 
     [Fact]
@@ -171,7 +171,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         {
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('vol-mig', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
-            volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done("vol-after", null));
+            volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done("vol-after", null));
             volume.AddSnapshot("s");
             db.Volumes.Add(volume);
             await db.SaveChangesAsync();

@@ -11,7 +11,7 @@ namespace Titan.Application.Queries.Compute.Vm.Contracts;
 // CurrentState is the Incus instance status word for word, null while Incus has no instance; CurrentExistence
 // says whether it does. The desired pair is what the customer asked for, and Transition the request still
 // waiting (null = none; null with the pairs differing is drift)
-// (titan-ops architecture/desired-and-current.md#desired-and-current). RequestFailureReason is the fixed text of a
+// (titan-ops architecture/desired-and-current.md#desired-and-current). OperationFailureReason is the fixed text of a
 // create the provider refused; the raw error is admin-only.
 public record VmQueryResult(
     Guid Id,
@@ -37,5 +37,5 @@ public record VmQueryResult(
         new(v.Id, v.Name, v.CurrentState, v.DesiredState, v.CurrentExistence,
             v.DesiredExistence, v.Transition, v.IpAddress,
             v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.DiskSizeGb, v.UserData, v.CreatedAt,
-            v.PublicIpv6Address, v.RequestFailureReason, v.RequestFailedAt);
+            v.PublicIpv6Address, v.OperationFailureReason, v.OperationFailedAt);
 }

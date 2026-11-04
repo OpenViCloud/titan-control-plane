@@ -25,7 +25,7 @@ public class TemplateRequestHandlerTests
     private static VmTemplate Waiting(out Guid requestId)
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        requestId = t.RequestSyncIn(Mock).Id;
+        requestId = t.SyncIn(Mock).Id;
         return t;
     }
 
@@ -70,7 +70,7 @@ public class TemplateRequestHandlerTests
         await End(repo, t.Id, requestId, "Failed", reason: Reason);
 
         Assert.Equal("NotCreated/-", Shape(t, Mock));
-        Assert.Equal((Reason, "raw"), (Row(t, Mock).RequestFailureReason, Row(t, Mock).RequestFailureDetail));
+        Assert.Equal((Reason, "raw"), (Row(t, Mock).OperationFailureReason, Row(t, Mock).OperationFailureDetail));
         Assert.True(repo.Saved);
     }
 
@@ -83,7 +83,7 @@ public class TemplateRequestHandlerTests
         await End(repo, t.Id, requestId, "Failed", Alias, Reason);
 
         Assert.Equal("Exists/-", Shape(t, Mock));
-        Assert.Equal((Alias, Reason), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).RequestFailureReason));
+        Assert.Equal((Alias, Reason), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).OperationFailureReason));
     }
 
     [Fact] // 204 at the endpoint: the worker has nothing to retry
@@ -102,7 +102,7 @@ public class TemplateRequestHandlerTests
     public async Task AReportOfOneCluster_LeavesTheOtherClusterAlone()
     {
         VmTemplate t = Waiting(out Guid inMock);
-        Guid inSingapore = t.RequestSyncIn(Singapore).Id;
+        Guid inSingapore = t.SyncIn(Singapore).Id;
         var repo = new FakeVmTemplateRepository(t);
 
         await End(repo, t.Id, inSingapore, "Done", Alias, clusterId: Singapore);
@@ -130,9 +130,9 @@ public class TemplateRequestHandlerTests
     public async Task Done_WithoutTheAlias_OfAReSync_EndsIt()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Done(Alias));
+        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
         t.MarkNotFoundIn(Mock);
-        Guid resync = t.RequestSyncIn(Mock).Id;
+        Guid resync = t.SyncIn(Mock).Id;
         var repo = new FakeVmTemplateRepository(t);
 
         await End(repo, t.Id, resync, "Done");
@@ -183,9 +183,9 @@ public class TemplateRequestHandlerTests
     public async Task SeeingTheAlias_WritesExists_AndLeavesTheSyncWaiting()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Done(Alias));
+        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
         t.MarkNotFoundIn(Mock);
-        Guid resync = t.RequestSyncIn(Mock).Id;
+        Guid resync = t.SyncIn(Mock).Id;
         var repo = new FakeVmTemplateRepository(t);
 
         await Observe(repo, t.Id, exists: true);
@@ -200,7 +200,7 @@ public class TemplateRequestHandlerTests
     public async Task NotSeeingTheAlias_WritesNotFound_AndHidesItFromCustomers()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Done(Alias));
+        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
         var repo = new FakeVmTemplateRepository(t);
 
         await Observe(repo, t.Id, exists: false);

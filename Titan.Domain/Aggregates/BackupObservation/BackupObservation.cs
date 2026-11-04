@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.BackupObservation;
 
 // What the last pass over the bucket saw for one protected resource, and whether the pass could read it at all
 // (titan-ops features/backup/design.md#backup-status-reads-the-bucket). "Could not read" is its own outcome so the page never turns it into "no backup".
-public class BackupObservation : AggregateRoot
+public class BackupObservation : IAggregateRoot
 {
     public const int MaxErrorLength = 200;
 

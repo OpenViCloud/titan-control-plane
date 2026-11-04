@@ -49,7 +49,7 @@ public class TemplateReconcilerTests
     private static VmTemplate SyncedIn(string name, string clusterId, string externalTemplateId)
     {
         var t = VmTemplate.Create(name, null, "img", 10, "m");
-        t.RequestSyncIn(clusterId);
+        t.SyncIn(clusterId);
         t.MarkCreatedIn(clusterId, externalTemplateId);
         return t;
     }
@@ -59,12 +59,12 @@ public class TemplateReconcilerTests
     {
         using var db = NewDb();
         var synced = SyncedIn("synced", "mock", "205");
-        synced.RequestSyncIn("singapore01");
+        synced.SyncIn("singapore01");
         synced.MarkCreatedIn("singapore01", "3");
         var lost = SyncedIn("lost", "mock", "206");
         lost.MarkNotFoundIn("mock");
         var failedFirstSync = VmTemplate.Create("never", null, "img", 10, "m");
-        failedFirstSync.RequestSyncIn("mock");
+        failedFirstSync.SyncIn("mock");
         failedFirstSync.MarkRequestFailedIn("mock", "image not found", null);
         var otherClusterOnly = SyncedIn("singapore-only", "singapore01", "4");
         db.VmTemplates.AddRange(synced, lost, failedFirstSync, otherClusterOnly, VmTemplate.Create("pending", null, "img", 10, "m"));
@@ -119,7 +119,7 @@ public class TemplateReconcilerTests
         {
             var repo = new VmTemplateRepository(db);
             var tracked = (await repo.FindByIdAsync((await db.VmTemplates.SingleAsync()).Id))!;
-            tracked.RequestSyncIn("singapore01");
+            tracked.SyncIn("singapore01");
             await repo.SaveAsync();
         }
         using (var db = NewDb("cluster-added"))

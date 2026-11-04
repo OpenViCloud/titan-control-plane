@@ -25,7 +25,7 @@ public class VmRequestEndpointTests
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        requestId = vm.RequestStop().RequestId;
+        requestId = vm.Stop().OperationId;
         return vm;
     }
 
@@ -79,7 +79,7 @@ public class VmRequestEndpointTests
         await ep.HandleAsync(new EndVmRequestBody("Failed", Reason: "stale"), CancellationToken.None);
 
         Assert.Equal(requestId, vm.Pending!.Id);
-        Assert.Null(vm.RequestFailureReason);
+        Assert.Null(vm.OperationFailureReason);
         Assert.Equal(StatusCodes.Status204NoContent, ep.HttpContext.Response.StatusCode);
     }
 

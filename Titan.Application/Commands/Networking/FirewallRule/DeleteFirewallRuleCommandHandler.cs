@@ -44,7 +44,7 @@ public class DeleteFirewallRuleCommandHandler(
         // enforced that Titan no longer lists.
         // A rule that never reached the provider is deleted here and gets no ticket: nothing to send and nothing to
         // wait for, so the request and its outcome happen at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
-        RequestTicket? ticket = network.RequestFirewallRuleDelete(ruleId);
+        OperationTicket? ticket = network.DeleteFirewallRule(ruleId);
         activity.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, label);
         if (ticket == null)
         {
@@ -52,7 +52,7 @@ public class DeleteFirewallRuleCommandHandler(
             await networkRepo.SaveAsync(ct);
             return;
         }
-        await commands.EnqueueFirewallRuleDeleteAsync(rule.Id, ticket.RequestId, networkId, ticket.ProviderId,
+        await commands.EnqueueFirewallRuleDeleteAsync(rule.Id, ticket.OperationId, networkId, ticket.ProviderId,
             TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await networkRepo.SaveAsync(ct);
     }

@@ -490,7 +490,7 @@ public class NetworkServiceTests
         // WHY: a network being torn down or already gone has no meaningful name to change.
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("x"), default)).ReturnsAsync(false);
 
@@ -571,7 +571,7 @@ public class NetworkServiceTests
     public async Task UpdateStatus_Deleted_MarksTheNetworkDeleted()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
@@ -589,8 +589,8 @@ public class NetworkServiceTests
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var enabled = Rule(network);
         var deleting = Rule(network);
-        deleting.RequestDelete();
-        network.RequestDelete();
+        deleting.Delete();
+        network.Delete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -609,8 +609,8 @@ public class NetworkServiceTests
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         var enabled = Rule(network);
         var deleting = Rule(network);
-        deleting.RequestDelete();
-        network.RequestDelete();
+        deleting.Delete();
+        network.Delete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport, default);
 
@@ -642,7 +642,7 @@ public class NetworkServiceTests
     public async Task UpdateStatus_NotFound_WhenADeleteWasAsked_IsNotFound_AndTheDeleteKeepsWaiting()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, NotFoundReport);
@@ -701,7 +701,7 @@ public class NetworkServiceTests
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", "10.0.0.0/24"), default);
 
         Assert.NotNull(added);
-        Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.RequestedCidr);
+        Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.ChosenCidr);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
             added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -812,7 +812,7 @@ public class NetworkServiceTests
     public async Task UpdateStatus_DeletingToDeleted_RecordsNetworkDeleted()
     {
         var network = MakeActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
@@ -840,7 +840,7 @@ public class NetworkServiceTests
 
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
         Assert.Null(network.Transition);
-        Assert.Equal("Network deletion failed.", network.RequestFailureReason);
+        Assert.Equal("Network deletion failed.", network.OperationFailureReason);
     }
 
     // An observation ends no request (titan-ops architecture/resource-lifecycle.md#invariants): Incus showing the network
@@ -908,8 +908,8 @@ public class NetworkServiceTests
 
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal("Network deletion failed.", network.RequestFailureReason);
-        Assert.Equal("raw incus error", network.RequestFailureDetail);
+        Assert.Equal("Network deletion failed.", network.OperationFailureReason);
+        Assert.Equal("raw incus error", network.OperationFailureDetail);
         Assert.Null(network.Transition);
         var outcome = Assert.Single(_activity.Events);
         Assert.Equal(("network.delete_failed", TenantId), (outcome.Action, outcome.OutcomeTenantId));
@@ -926,7 +926,7 @@ public class NetworkServiceTests
         Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Equal("10.0.0.0/24", network.Cidr);
-        Assert.Equal("Network creation failed.", network.RequestFailureReason);
+        Assert.Equal("Network creation failed.", network.OperationFailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -965,7 +965,7 @@ public class NetworkServiceTests
     {
         SetupCurrentUser(TenantId);
         var network = MakeActiveNetwork();
-        network.RequestDelete(); // already Deleting
+        network.Delete(); // already Deleting
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
         _repo.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(false);
 
@@ -1193,7 +1193,7 @@ public class NetworkServiceTests
         Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
-        network.RequestDelete();
+        network.Delete();
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
 
@@ -1208,7 +1208,7 @@ public class NetworkServiceTests
         Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
-        network.RequestDelete();
+        network.Delete();
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
         DateTimeOffset? releasedAt = RouteRow(1).ReleasedAt;
 
@@ -1226,7 +1226,7 @@ public class NetworkServiceTests
         network.ReceivePublicIpv6("2001:41d0:d00:d405::/64");
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
-        network.RequestDelete();
+        network.Delete();
         _repo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
 
         await CreateService().UpdateStatusAsync(network.Id, DeletedReport);
@@ -1241,7 +1241,7 @@ public class NetworkServiceTests
         Network network = CreatingNetworkHoldingARoute();
         network.MarkCreated("net-x", "10.0.0.0/24", "10.0.0.1");
         network.MarkObserved(NetworkStatus.Created);
-        network.RequestDelete();
+        network.Delete();
 
         await CreateService().UpdateStatusAsync(network.Id, GaveUp("Network deletion failed."));
 

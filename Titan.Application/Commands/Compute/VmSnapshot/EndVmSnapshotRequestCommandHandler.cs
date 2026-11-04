@@ -20,14 +20,14 @@ public class EndVmSnapshotRequestCommandHandler(IVmRepository repo, IActivityRec
     public async Task HandleAsync(EndVmSnapshotRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the snapshot is loaded: a malformed report is the worker's bug, whatever the snapshot.
-        RequestOutcome outcome = VmReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = VmReports.ParseOutcome(command.Outcome);
 
         VmAggregate vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
-        VmSnapshotRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingRequest<VmSnapshotRequestKind>? ended = vm.EndSnapshotRequest(snapshot.Id, command.RequestId, end);
+        VmSnapshotOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
+        PendingOperation<VmSnapshotOperationKind>? ended = vm.EndSnapshotOperation(snapshot.Id, command.RequestId, end);
         if (ended == null)
         {
             return;

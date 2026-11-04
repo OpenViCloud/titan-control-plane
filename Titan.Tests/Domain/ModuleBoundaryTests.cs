@@ -108,7 +108,7 @@ public class ModuleBoundaryTests
         // A rule that spans two aggregates is checked by the one being changed, on the other's state.
         ["LoadBalancer.Create(backends) -> Vm"] =
             "each backend must be the tenant's VM and accept the network (Vm.ProviderIdForLoadBalancerBackend), checked in the factory",
-        ["LoadBalancer.RequestUpdate(backends) -> Vm"] = "the same backend rule, on an update",
+        ["LoadBalancer.Update(backends) -> Vm"] = "the same backend rule, on an update",
         ["Volume.Attach(vm) -> Vm"] =
             "the VM's side of an attach (Vm.ProviderIdForVolumeAttach) is checked before the provider ids are handed out",
 

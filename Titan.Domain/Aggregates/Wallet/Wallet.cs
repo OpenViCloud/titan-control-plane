@@ -8,7 +8,7 @@ namespace Titan.Domain.Aggregates.Wallet;
 /// Credit and Debit are the only ways it changes (titan-ops architecture/money-and-wallet.md#wallet-invariant-in-aggregate),
 /// internal so that WalletLedger, which adds the row, is the only caller. The aggregate owns the non-negative rule,
 /// Version owns the race.
-public class Wallet : AggregateRoot
+public class Wallet : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }

@@ -53,9 +53,9 @@ public class UpdateVmStatusCommandHandler(
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        PendingRequest<VmRequestKind>? waiting = vm.Pending;
-        VmRequestEnded? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        PendingOperation<VmOperationKind>? waiting = vm.Pending;
+        VmOperationEnded? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -73,26 +73,26 @@ public class UpdateVmStatusCommandHandler(
             case "Created":
                 // The old create command reports the instance name as soon as Incus holds it: that is the create's Done
                 // (titan-ops architecture/resource-lifecycle.md#kinds). Running comes later as an observation.
-                if (waiting is { Kind: VmRequestKind.Create })
+                if (waiting is { Kind: VmOperationKind.Create })
                 {
-                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Done(req.ExternalId, null));
+                    ended = vm.EndOperation(waiting.Id, VmOperationEnd.Done(req.ExternalId, null));
                 }
                 break;
             case "RequestFailed":
                 // The give-up carries the provider id when Incus had created the instance and the Created report never
                 // arrived; without it the delete would forget a VM that still runs.
-                outcome = RequestOutcome.Failed;
-                if (waiting is { Kind: VmRequestKind.Create })
+                outcome = OperationOutcome.Failed;
+                if (waiting is { Kind: VmOperationKind.Create })
                 {
-                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Failed(req.ExternalId, null, req.Reason, req.Detail));
+                    ended = vm.EndOperation(waiting.Id, VmOperationEnd.Failed(req.ExternalId, null, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
                 // The delete command saw the instance gone after Titan's own delete. With no delete waiting the VM is
                 // still gone from Incus, which is what NotFound records; only a delete's own report ends a VM.
-                if (waiting is { Kind: VmRequestKind.Delete })
+                if (waiting is { Kind: VmOperationKind.Delete })
                 {
-                    ended = vm.EndRequest(waiting.Id, VmRequestEnd.Done(null, null));
+                    ended = vm.EndOperation(waiting.Id, VmOperationEnd.Done(null, null));
                 }
                 else
                 {
