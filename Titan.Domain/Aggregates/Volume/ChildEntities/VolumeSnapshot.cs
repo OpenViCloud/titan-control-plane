@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -29,8 +28,12 @@ public class VolumeSnapshot : RequestingChild<VolumeSnapshotRequestKind>
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
-    /// The repository lists with it in SQL.
-    public static Expression<Func<VolumeSnapshot, bool>> IsBilled { get; } = s => s.CurrentExistence == CurrentExistence.Exists;
+    /// VolumeSnapshotRepository.ListBillableAsync writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsBilled => CurrentExistence == CurrentExistence.Exists;
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed under its volume, still
+    /// observed. The repository's list and reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
 
     private VolumeSnapshot() { }
 

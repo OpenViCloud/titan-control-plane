@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -29,8 +28,13 @@ public class VmSnapshot : RequestingChild<VmSnapshotRequestKind>
     public DateTime CreatedAt { get; private set; }
 
     /// Billed while Incus holds it, a revert or a delete in flight included (titan-ops
-    /// features/vm/design.md#vm-snapshot-counting). The repository lists with it in SQL.
-    public static Expression<Func<VmSnapshot, bool>> IsBilled { get; } = s => s.CurrentExistence == CurrentExistence.Exists;
+    /// features/vm/design.md#vm-snapshot-counting). VmSnapshotRepository.ListBillableAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsBilled => CurrentExistence == CurrentExistence.Exists;
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed under its VM, still
+    /// observed. The repository's list and reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
 
     private VmSnapshot() { }
 

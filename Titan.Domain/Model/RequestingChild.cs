@@ -18,7 +18,8 @@ public abstract class RequestingChild<TKind> : ChildEntity where TKind : struct,
 
     // The one waiting request, the child's own and independent of its parent's, as three columns; all null or all
     // set, written only through SetPending. EF maps them by name. Pending is the shape callers see.
-    protected Guid? PendingRequestId { get; private set; }
+    // Readable so a repository can write "a request is waiting" in its own query (titan-ops architecture/domain-methods.md#plain-code).
+    public Guid? PendingRequestId { get; private set; }
     protected TKind? PendingRequestKind { get; private set; }
     protected DateTimeOffset? PendingRequestAskedAt { get; private set; }
 

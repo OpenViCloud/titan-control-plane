@@ -40,8 +40,12 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
 
     public void Add(ProviderCommand command) => db.ProviderCommands.Add(command);
 
+    // ProviderCommand.IsFinishedAndCreatedBefore, written in SQL (titan-ops architecture/domain-methods.md#plain-code):
+    // an open row is never deleted, however old.
     public Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct) =>
-        db.ProviderCommands.Where(ProviderCommand.FinishedAndCreatedBefore(cutoff)).ExecuteDeleteAsync(ct);
+        db.ProviderCommands
+            .Where(c => (c.Status == ProviderCommandStatus.Done || c.Status == ProviderCommandStatus.Failed) && c.CreatedAt < cutoff)
+            .ExecuteDeleteAsync(ct);
 
     public async Task SaveChangesAsync(CancellationToken ct)
     {

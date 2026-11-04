@@ -162,4 +162,38 @@ public class VmRepositoryStateTests
         Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
             watched.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
+
+    // The repository writes each condition in LINQ; the rule is the plain bool on Vm
+    // (titan-ops architecture/domain-methods.md#plain-code). Every shape through both, so the two cannot drift apart.
+    [Fact]
+    public async Task EveryQuery_AgreesWithTheBoolOnTheVm_ForEveryShape()
+    {
+        using var db = NewDb();
+        VmRepository repo = await SeededAsync(db);
+        List<Vm> shapes = EveryShape();
+        string[] ByName(IEnumerable<Vm> vms) => vms.Select(v => v.Name).OrderBy(n => n).ToArray();
+
+        Assert.Equal(shapes.Count(v => v.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
+        Assert.Equal(ByName(shapes.Where(v => v.IsBilled)), ByName(await repo.ListBillableAsync()));
+        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListAllAsync(null)));
+        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("cluster-a")));
+        foreach (Vm vm in shapes)
+        {
+            Assert.True(vm.IsNotDeleted == await repo.ExistsByNameAsync(Tenant, vm.Name), vm.Name);
+        }
+    }
+
+    [Fact]
+    public async Task NetworkIsHeld_AgreesWithHoldsItsNetwork_ForEveryShape()
+    {
+        foreach (Vm vm in EveryShape())
+        {
+            using var db = NewDb();
+            db.Vms.Add(vm);
+            await db.SaveChangesAsync();
+
+            Assert.True(vm.HoldsItsNetwork == await new NetworkRepository(db).HasActiveVmsAsync(NetworkId), vm.Name);
+        }
+    }
 }

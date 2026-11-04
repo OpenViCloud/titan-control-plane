@@ -111,7 +111,7 @@ public class ComputeMeterServiceTests
     }
 
     // Which VMs are billable (a qemu process alive: every Incus status but Stopped) is the rule Vm.IsBilled, which
-    // VmRepository.ListBillableAsync applies, measured in VmRepositoryStateTests.Billable_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent;
+    // VmRepository.ListBillableAsync writes in SQL, measured in VmRepositoryStateTests.Billable_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent;
     // this meter bills exactly what that query returns.
 
     // titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — a VM pointing at a tier that is not

@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
@@ -78,10 +77,14 @@ public class ProviderCommand : AggregateRoot
     public bool IsOpen => Status is ProviderCommandStatus.Pending or ProviderCommandStatus.Leased;
 
     /// The rows the retention job deletes: finished and created before the cutoff. An open row is never one, however old:
-    /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-request). An expression, so
-    /// the database runs the same rule the tests do.
-    public static Expression<Func<ProviderCommand, bool>> FinishedAndCreatedBefore(DateTimeOffset cutoff) =>
-        c => (c.Status == ProviderCommandStatus.Done || c.Status == ProviderCommandStatus.Failed) && c.CreatedAt < cutoff;
+    /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    /// ProviderCommandRepository.DeleteFinishedCreatedBeforeAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsFinishedAndCreatedBefore(DateTimeOffset cutoff)
+    {
+        bool finished = Status == ProviderCommandStatus.Done || Status == ProviderCommandStatus.Failed;
+        return finished && CreatedAt < cutoff;
+    }
 
     /// A handler enqueued this key again. Returns true when the row runs again (with the new payload), false when the
     /// repeat is absorbed: an open or Done row absorbs it, a Failed one runs again

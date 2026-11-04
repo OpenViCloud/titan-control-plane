@@ -138,7 +138,7 @@ public class NetworkValueObjectTests
         Assert.Equal(end, range.End);
     }
 
-    // ---- Ipv4Cidr.Overlaps: the range arithmetic behind NetworkRepository.HasCidrOverlapAsync.
+    // ---- Ipv4Cidr.Overlaps: the range arithmetic NetworkRepository.HasCidrOverlapAsync asks of each Network.HeldRange.
 
     [Theory]
     [InlineData("10.1.0.0/24", "10.1.0.0/25", true)]

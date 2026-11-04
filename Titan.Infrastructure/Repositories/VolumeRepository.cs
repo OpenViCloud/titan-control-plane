@@ -6,6 +6,9 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
 
+// Every state condition below is the SQL twin of a plain bool on Volume (titan-ops architecture/domain-methods.md#plain-code);
+// VolumeRepositoryStateTests runs every shape through both, and QueryRuleDbTests pins each side of the quota and billing
+// conditions on Postgres.
 public class VolumeRepository(TitanDbContext db) : IVolumeRepository
 {
     public async Task<Volume?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
@@ -18,7 +21,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
         return await FindByIdAsync(id, ct);
     }
 
-    // Lock first, load second, as FindByIdForUpdateAsync; the lock statement filters as the load does.
+    // Volume.IsNotDeleted. Lock first, load second, as FindByIdForUpdateAsync; the lock statement filters as the load does.
     public async Task<List<Volume>> ListAttachedToVmLockedAsync(Guid vmId, CancellationToken ct = default)
     {
         await db.LockRowAsync(
@@ -31,6 +34,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .ToListAsync(ct);
     }
 
+    // Volume.IsNotDeleted
     public async Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)
@@ -38,15 +42,22 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .OrderByDescending(v => v.CreatedAt)
             .ToListAsync(ct);
 
+    // Volume.OccupiesQuota
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        await db.Volumes.Where(v => v.TenantId == tenantId).CountAsync(Volume.OccupiesQuota, ct);
+        await db.Volumes.CountAsync(
+            v => v.TenantId == tenantId
+                 && v.DesiredExistence == DesiredExistence.Exists
+                 && (v.CurrentExistence == CurrentExistence.Exists
+                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null)), ct);
 
+    // Volume.IsBilled
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Volumes
-            .Where(Volume.IsBilled)
+            .Where(v => v.CurrentExistence == CurrentExistence.Exists)
             .AsNoTracking()
             .ToListAsync(ct);
 
+    // Volume.IsNotDeleted with a provider id.
     public async Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => v.ClusterId == clusterId && v.ExternalId != null && v.CurrentExistence != CurrentExistence.Deleted)

@@ -41,7 +41,8 @@ public sealed record Ipv4Cidr : ValueObject
         return new Ipv4Cidr { Value = value, Address = IPAddress.Parse(addressAndPrefix[0]), PrefixLength = int.Parse(addressAndPrefix[1]) };
     }
 
-    /// `internal` for FirewallCidr, whose IPv4 half is this rule.
+    /// `internal` for FirewallCidr, whose IPv4 half is this rule, and for Network.HeldRange, which asks it of an address
+    /// stored verbatim before parsing.
     internal static bool IsValid([NotNullWhen(true)] string? value)
     {
         if (value == null)

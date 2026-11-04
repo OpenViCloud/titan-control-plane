@@ -170,4 +170,26 @@ public class VmSnapshotFirewallRepositoryStateTests
 
         Assert.Equal(new[] { "sg-9" }, ids);
     }
+
+    // The repositories write each condition in LINQ; the rule is the plain bool on the child
+    // (titan-ops architecture/domain-methods.md#plain-code). Every snapshot and rule situation through both.
+    [Fact]
+    public async Task EveryChildQuery_AgreesWithTheBoolOnTheChild_ForEverySituation()
+    {
+        using var db = NewDb();
+        Vm vm = VmWithEverySnapshotSituation();
+        Network network = NetworkWithEveryRuleSituation();
+        db.Vms.Add(vm);
+        db.Networks.Add(network);
+        await db.SaveChangesAsync();
+        var snapshots = new VmSnapshotRepository(db);
+        var rules = new FirewallRuleRepository(db);
+        Guid[] Ids<T>(IEnumerable<T> rows, Func<T, Guid> id) => rows.Select(id).OrderBy(i => i).ToArray();
+
+        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsBilled), s => s.Id), Ids(await snapshots.ListBillableAsync(), s => s.Id));
+        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsNotDeleted), s => s.Id), Ids(await snapshots.FindByVmIdAsync(vm.Id), s => s.Id));
+        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsNotDeleted && s.ExternalId != null), s => s.Id), Ids(await snapshots.ListReconcilableAsync("vn-hcm-1"), s => s.Id));
+        Assert.Equal(Ids(network.FirewallRules.Where(r => r.IsNotDeleted), r => r.Id), Ids(await rules.ListByNetworkAsync(network.Id), r => r.Id));
+        Assert.Equal(Ids(network.FirewallRules.Where(r => r.IsNotDeleted && r.ExternalId != null), r => r.Id), Ids(await rules.ListReconcilableAsync("vn-hcm-1"), r => r.Id));
+    }
 }
