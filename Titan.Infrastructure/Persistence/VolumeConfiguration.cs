@@ -27,7 +27,7 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Volume.Pending is built from them on read. Private properties, mapped by name.
+        // Volume.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
         builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
         builder.Property<VolumeRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
         builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");

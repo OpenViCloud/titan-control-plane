@@ -10,7 +10,7 @@ namespace Titan.Domain.Aggregates.Volume;
 /// "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
 /// are the volume's invariants, so only the root reaches the methods below, and handlers go through
 /// Volume.AddSnapshot, RequestSnapshotDelete, ProviderIdForSnapshotRestore, EndSnapshotRequest and MarkSnapshot*.
-public class VolumeSnapshot : ChildEntity
+public class VolumeSnapshot : RequestingChild<VolumeSnapshotRequestKind>
 {
     /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
     /// has no public field.
@@ -26,25 +26,7 @@ public class VolumeSnapshot : ChildEntity
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
     public string? ExternalId { get; private set; }
-    // titan-ops architecture/desired-and-current.md#request-failure
-    public string? RequestFailureReason { get; private set; }
-    public string? RequestFailureDetail { get; private set; }
-    public DateTimeOffset? RequestFailedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
-
-    // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
-    // set, written by the factory and SetPending. Its own, independent of the volume's request.
-    private Guid? PendingRequestId { get; set; }
-    private VolumeSnapshotRequestKind? PendingRequestKind { get; set; }
-    private DateTimeOffset? PendingRequestAskedAt { get; set; }
-
-    /// The request this snapshot is waiting on, or null. Only the report carrying its id ends it
-    /// (titan-ops architecture/resource-lifecycle.md#invariants).
-    public PendingRequest<VolumeSnapshotRequestKind>? Pending =>
-        PendingRequestId == null
-            ? null
-            : PendingRequest<VolumeSnapshotRequestKind>.Of(
-                PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
 
     /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
     /// The repository lists with it in SQL.
@@ -71,6 +53,9 @@ public class VolumeSnapshot : ChildEntity
 
     private bool CreateIsWaiting => PendingRequestKind == VolumeSnapshotRequestKind.Create;
     private bool DeleteIsWaiting => PendingRequestKind == VolumeSnapshotRequestKind.Delete;
+    /// A delete was asked and still waits, or the snapshot is gone: a later delete is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
 
     /// Counted by occupancy toward MaxVolumeSnapshotsPerVolume, and the same count says whether the volume may be
     /// deleted (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to hold. A delete
@@ -110,16 +95,6 @@ public class VolumeSnapshot : ChildEntity
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    private static PendingRequest<VolumeSnapshotRequestKind> NewRequest(VolumeSnapshotRequestKind kind) =>
-        PendingRequest<VolumeSnapshotRequestKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
-
-    private void SetPending(PendingRequest<VolumeSnapshotRequestKind>? request)
-    {
-        PendingRequestId = request?.Id;
-        PendingRequestKind = request?.Kind;
-        PendingRequestAskedAt = request?.AskedAt;
-    }
-
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Restore creates a new volume and leaves this snapshot alone, so the check is called from
@@ -133,33 +108,29 @@ public class VolumeSnapshot : ChildEntity
     /// Follows Incus: a snapshot with a provider id is deleted through Incus, even one Incus no longer has; the
     /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    internal RequestTicket RequestDelete()
+    /// A snapshot that never reached Incus is deleted here, at once, and gets no ticket
+    /// (titan-ops architecture/desired-and-current.md#delete-locally).
+    internal RequestTicket? RequestDelete()
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "A delete is already in progress for this snapshot.");
         if (IsTerminal)
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "The snapshot is already deleted.");
+        // Never reached Incus: no command to send and no report coming.
+        bool neverReachedIncus = ExternalId is null && PendingRequestId == null;
+        if (neverReachedIncus)
+        {
+            DesiredExistence = DesiredExistence.Deleted;
+            CurrentExistence = CurrentExistence.Deleted;
+            SetPending(null);
+            return null;
+        }
         if (CreateIsWaiting || ExternalId is null)
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot is not yet on Incus.");
         PendingRequest<VolumeSnapshotRequestKind> request = NewRequest(VolumeSnapshotRequestKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
         SetPending(request);
         return RequestTicket.Of(request.Id, ExternalId);
-    }
-
-    /// Intent: a snapshot that never reached Incus has no command and no observation coming, so this writes the
-    /// existence itself (titan-ops architecture/desired-and-current.md#delete-locally).
-    internal void DeleteLocally()
-    {
-        bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
-        if (!neverReachedIncus)
-        {
-            throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE",
-                "Only a snapshot whose create failed before Incus had it can be deleted locally.");
-        }
-        DesiredExistence = DesiredExistence.Deleted;
-        CurrentExistence = CurrentExistence.Deleted;
-        SetPending(null);
     }
 
     /// Volume.Create checks the same rule; this hands out the id, and the caller needs both,
@@ -191,6 +162,7 @@ public class VolumeSnapshot : ChildEntity
         {
             return null;
         }
+        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
 
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
         if (bringsTheProviderId)
@@ -201,9 +173,7 @@ public class VolumeSnapshot : ChildEntity
 
         if (end.Outcome == RequestOutcome.Done)
         {
-            RequestFailureReason = null;
-            RequestFailureDetail = null;
-            RequestFailedAt = null;
+            ClearFailure();
             if (waiting!.Kind == VolumeSnapshotRequestKind.Delete)
             {
                 CurrentExistence = CurrentExistence.Deleted;
@@ -211,9 +181,7 @@ public class VolumeSnapshot : ChildEntity
         }
         else
         {
-            RequestFailureReason = end.Reason;
-            RequestFailureDetail = end.Detail;
-            RequestFailedAt = DateTimeOffset.UtcNow;
+            RecordFailure(end.Reason, end.Detail);
             if (waiting!.Kind == VolumeSnapshotRequestKind.Delete)
             {
                 DesiredExistence = DesiredExistence.Exists;

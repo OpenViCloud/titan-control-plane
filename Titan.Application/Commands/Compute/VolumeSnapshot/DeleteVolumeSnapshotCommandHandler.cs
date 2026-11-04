@@ -24,31 +24,24 @@ public class DeleteVolumeSnapshotCommandHandler(
         // A snapshot of another volume answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        // The aggregate refuses a repeat, so the handler recognises it first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-        // This delete is still waiting, or the snapshot is already deleted. A delete that failed is not a repeat:
-        // it falls through and the aggregate decides. Answer like the first request: nothing recorded, nothing sent.
-        bool deleteIsWaiting = snapshot.Transition == VolumeSnapshotTransition.Deleting;
-        bool alreadyRequestedOrDone = deleteIsWaiting || snapshot.IsTerminal;
-        if (alreadyRequestedOrDone)
+        // A repeat is answered like the first request: nothing recorded, nothing sent
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A delete that failed is not a
+        // repeat: it falls through and the aggregate decides.
+        if (snapshot.IsDeletedOrDeleting)
         {
             return;
         }
 
-        // The create failed before Incus had it: nothing to delete on Incus
-        // (titan-ops architecture/desired-and-current.md#delete-locally). The request and its outcome happen here at once.
-        bool neverReachedIncus = snapshot.ExternalId is null && snapshot.Transition == null;
-        if (neverReachedIncus)
+        // A snapshot that never reached Incus is deleted here and gets no ticket
+        // (titan-ops architecture/desired-and-current.md#delete-locally): the request and its outcome at once.
+        RequestTicket? ticket = volume.RequestSnapshotDelete(snapshot.Id);
+        activity.Stage("volume_snapshot.delete_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with RequestDelete
+        if (ticket == null)
         {
-            volume.DeleteSnapshotLocally(snapshot.Id);
-            activity.Stage("volume_snapshot.delete_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with DeleteLocally
             activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot", snapshot.Id, snapshot.Name);
             await volumeRepo.SaveAsync(ct);
             return;
         }
-
-        RequestTicket ticket = volume.RequestSnapshotDelete(snapshot.Id);
-        activity.Stage("volume_snapshot.delete_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with RequestDelete
 
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeSnapshotDeleteAsync(snapshot.Id, ticket.RequestId, volumeId, ticket.ProviderId, projectName,

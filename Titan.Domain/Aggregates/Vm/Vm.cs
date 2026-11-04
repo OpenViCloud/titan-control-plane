@@ -5,7 +5,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Vm;
 
-public class Vm : AggregateRoot
+public class Vm : RequestingRoot<VmRequestKind>
 {
     /// A VM's name: 1 to 64 letters, digits or hyphens, starting with a letter or digit (RFC 952 host name). The
     /// validators read these two, so the /v1 spec carries the same pattern (titan-ops features/vm/design.md#vm-name-limit).
@@ -33,31 +33,12 @@ public class Vm : AggregateRoot
     public string? ExternalId { get; private set; }
     public string? IpAddress { get; private set; }
     public string? PublicIpv6Address { get; private set; }
-    // A request that failed (titan-ops architecture/desired-and-current.md#request-failure). The reason is a fixed text the
-    // tenant reads; the detail is the raw error, admin-only, never on the /v1/tenant path
-    // (titan-ops features/public-api/design.md#status-reason). Cleared when a later request ends Done.
-    public string? RequestFailureReason { get; private set; }
-    public string? RequestFailureDetail { get; private set; }
-    public DateTimeOffset? RequestFailedAt { get; private set; }
     public string VmOfferingId { get; private set; } = default!;
     public string TemplateId { get; private set; } = default!;
     public string ClusterId { get; private set; } = default!;
     public int DiskSizeGb { get; private set; }
     public string? UserData { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
-
-    // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
-    // set, written by the factory and SetPending. Pending is the shape callers see.
-    private Guid? PendingRequestId { get; set; }
-    private VmRequestKind? PendingRequestKind { get; set; }
-    private DateTimeOffset? PendingRequestAskedAt { get; set; }
-
-    /// The request this VM is waiting on, or null. Only the report carrying its id ends it
-    /// (titan-ops architecture/resource-lifecycle.md#invariants).
-    public PendingRequest<VmRequestKind>? Pending =>
-        PendingRequestId == null
-            ? null
-            : PendingRequest<VmRequestKind>.Of(PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
 
     /// The VM's snapshots, each an instance snapshot on Incus named under the instance; rows are kept after Deleted
     /// (titan-ops features/vm/design.md#vm-snapshot). The repository loads them with the VM.
@@ -129,7 +110,7 @@ public class Vm : AggregateRoot
                 $"A VM disk is {ImageDiskSize} (the image's own size) or a positive number of GB.");
         }
         DateTimeOffset now = DateTimeOffset.UtcNow;
-        return new Vm
+        var vm = new Vm
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
@@ -145,17 +126,20 @@ public class Vm : AggregateRoot
             DiskSizeGb = diskSizeGb,
             UserData = userData,
             CreatedAt = now,
-            // The create is a request like the others: the create command's Done ends it.
-            PendingRequestId = Guid.NewGuid(),
-            PendingRequestKind = VmRequestKind.Create,
-            PendingRequestAskedAt = now
         };
+        // The create is a request like the others: the create command's Done ends it.
+        vm.SetPending(PendingRequest<VmRequestKind>.Of(Guid.NewGuid(), VmRequestKind.Create, now));
+        return vm;
     }
 
     /// Deleted absorbs every later report and observation (titan-ops architecture/resource-lifecycle.md#invariants).
     /// ComputeMeterService bills a VM whose instance exists and runs, so a late poll that revived a deleted VM
     /// would charge for a machine that no longer exists.
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
+
+    /// A delete was asked and still waits, or the VM is gone: a later delete is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsDeletedOrDeleting => PendingRequestKind == VmRequestKind.Delete || IsTerminal;
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): a request from a person, refused when illegal.
     // What a request may do in each Incus status is what Incus itself allows there
@@ -252,13 +236,6 @@ public class Vm : AggregateRoot
         DesiredExistence = desiredExistence;
         SetPending(request);
         return RequestTicket.Of(request.Id, providerId);
-    }
-
-    private void SetPending(PendingRequest<VmRequestKind>? request)
-    {
-        PendingRequestId = request?.Id;
-        PendingRequestKind = request?.Kind;
-        PendingRequestAskedAt = request?.AskedAt;
     }
 
     /// A create still waiting without a provider id may yet instantiate on the provider, so there is nothing safe
@@ -389,11 +366,8 @@ public class Vm : AggregateRoot
     }
 
     /// Intent on one snapshot: its delete goes through Incus; returns the request and the snapshot's provider id for
-    /// the command.
-    public RequestTicket RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
-
-    /// Intent on one snapshot whose create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteSnapshotLocally(Guid snapshotId) => RequireSnapshot(snapshotId).DeleteLocally();
+    /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
+    public RequestTicket? RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
 
     /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
     /// another request than the one the snapshot waits on.
@@ -460,6 +434,7 @@ public class Vm : AggregateRoot
         {
             return null;
         }
+        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
 
         // What the worker saw, whatever the outcome: a create that failed after Incus made the instance leaves a VM
         // whose delete still reaches the provider.
@@ -480,9 +455,7 @@ public class Vm : AggregateRoot
         var snapshotsWhoseDeleteEnded = new List<VmSnapshot>();
         if (end.Outcome == RequestOutcome.Done)
         {
-            RequestFailureReason = null;
-            RequestFailureDetail = null;
-            RequestFailedAt = null;
+            ClearFailure();
             if (waiting!.Kind == VmRequestKind.Delete)
             {
                 // Incus deletes an instance's snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every
@@ -504,9 +477,7 @@ public class Vm : AggregateRoot
         }
         else
         {
-            RequestFailureReason = end.Reason;
-            RequestFailureDetail = end.Detail;
-            RequestFailedAt = DateTimeOffset.UtcNow;
+            RecordFailure(end.Reason, end.Detail);
             switch (waiting!.Kind)
             {
                 case VmRequestKind.Delete:

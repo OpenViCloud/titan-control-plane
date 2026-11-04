@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.VmTemplate;
 /// One template in ONE cluster (titan-ops features/catalog/design.md#template-per-cluster): whether that cluster holds
 /// the image alias. Incus has no status word for an alias (titan-ops features/catalog/design.md#template-state-is-existence).
 /// A child of VmTemplate: "one provider id per cluster" is the template's invariant, so only the root reaches these methods.
-public class VmTemplateCluster : ChildEntity
+public class VmTemplateCluster : RequestingChild<VmTemplateRequestKind>
 {
     public Guid TemplateId { get; private set; }
     public string ClusterId { get; private set; } = default!;
@@ -18,25 +18,7 @@ public class VmTemplateCluster : ChildEntity
     public DesiredExistence DesiredExistence { get; private set; }
     /// The image alias tpl-<templateId> on this cluster.
     public string? ExternalTemplateId { get; private set; }
-    /// Why the last sync gave up (titan-ops architecture/desired-and-current.md#request-failure); Detail is the operator's.
-    public string? RequestFailureReason { get; private set; }
-    public string? RequestFailureDetail { get; private set; }
-    public DateTimeOffset? RequestFailedAt { get; private set; }
     public DateTimeOffset UpdatedAt { get; private set; }
-
-    // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
-    // set, written by RequestSync and EndRequest only.
-    private Guid? PendingRequestId { get; set; }
-    private VmTemplateRequestKind? PendingRequestKind { get; set; }
-    private DateTimeOffset? PendingRequestAskedAt { get; set; }
-
-    /// The sync this cluster is waiting on, or null. Only the report carrying its id ends it
-    /// (titan-ops architecture/resource-lifecycle.md#invariants).
-    public PendingRequest<VmTemplateRequestKind>? Pending =>
-        PendingRequestId == null
-            ? null
-            : PendingRequest<VmTemplateRequestKind>.Of(
-                PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
 
     public VmTemplateTransition? Transition
     {
@@ -64,13 +46,6 @@ public class VmTemplateCluster : ChildEntity
         UpdatedAt = DateTimeOffset.UtcNow,
     };
 
-    private void SetPending(PendingRequest<VmTemplateRequestKind>? request)
-    {
-        PendingRequestId = request?.Id;
-        PendingRequestKind = request?.Kind;
-        PendingRequestAskedAt = request?.AskedAt;
-    }
-
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Refused when the alias is there or a sync is waiting: the handler recognises the repeat first and sends nothing
@@ -88,8 +63,7 @@ public class VmTemplateCluster : ChildEntity
             throw new BusinessException("INVALID_STATUS", $"The template is already on cluster '{ClusterId}'.");
         }
 
-        PendingRequest<VmTemplateRequestKind> request =
-            PendingRequest<VmTemplateRequestKind>.Of(Guid.NewGuid(), VmTemplateRequestKind.Sync, DateTimeOffset.UtcNow);
+        PendingRequest<VmTemplateRequestKind> request = NewRequest(VmTemplateRequestKind.Sync);
         DesiredExistence = DesiredExistence.Exists;
         SetPending(request);
         UpdatedAt = DateTimeOffset.UtcNow;
@@ -112,6 +86,7 @@ public class VmTemplateCluster : ChildEntity
         {
             return null;
         }
+        RequireProviderIdOnDone(end.Outcome, ExternalTemplateId, end.ExternalId);
 
         // Incus names the alias after the template, so every report names the same one; the first recorded stays.
         bool bringsTheAlias = !string.IsNullOrEmpty(end.ExternalId);
@@ -124,13 +99,11 @@ public class VmTemplateCluster : ChildEntity
         if (end.Outcome == RequestOutcome.Done)
         {
             CurrentExistence = CurrentExistence.Exists;
-            ClearRequestFailure();
+            ClearFailure();
         }
         else
         {
-            RequestFailureReason = end.Reason;
-            RequestFailureDetail = end.Detail;
-            RequestFailedAt = DateTimeOffset.UtcNow;
+            RecordFailure(end.Reason, end.Detail);
         }
 
         SetPending(null);
@@ -168,12 +141,5 @@ public class VmTemplateCluster : ChildEntity
     {
         CurrentExistence = CurrentExistence.NotFound;
         UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
-    private void ClearRequestFailure()
-    {
-        RequestFailureReason = null;
-        RequestFailureDetail = null;
-        RequestFailedAt = null;
     }
 }

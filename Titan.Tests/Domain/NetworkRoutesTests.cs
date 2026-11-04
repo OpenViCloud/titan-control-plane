@@ -130,7 +130,7 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete().RequestId;
+        Guid deleteId = network.RequestDelete()!.RequestId;
 
         NetworkRequestEnded? first = await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
         DateTimeOffset? releasedAt = route.ReleasedAt;
@@ -150,7 +150,7 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete().RequestId;
+        Guid deleteId = network.RequestDelete()!.RequestId;
 
         await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Failed(null, null, "Network deletion failed.", "raw"));
 
@@ -164,7 +164,7 @@ public class NetworkRoutesTests
     {
         Network network = WithoutPublicIpv6();
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
-        Guid deleteId = network.RequestDelete().RequestId;
+        Guid deleteId = network.RequestDelete()!.RequestId;
 
         await Routes().RecordEndedAsync(network, deleteId, NetworkRequestEnd.Done(null, null));
 
@@ -176,13 +176,13 @@ public class NetworkRoutesTests
     // a create that fails before Incus lets go of the /64. A local delete then would keep the route, since no delete
     // report follows.
     [Fact]
-    public async Task DeleteLocally_ANetworkStillHoldingItsSubnet_IsRefused()
+    public async Task RequestDelete_OfANetworkStillHoldingItsSubnet_WithNoId_IsRefused()
     {
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
         network.MarkNotFound();
 
-        BusinessException ex = Assert.Throws<BusinessException>(() => network.DeleteLocally());
+        BusinessException ex = Assert.Throws<BusinessException>(() => network.RequestDelete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
         Assert.False(network.IsTerminal);

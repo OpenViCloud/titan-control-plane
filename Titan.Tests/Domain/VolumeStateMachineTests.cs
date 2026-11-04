@@ -418,14 +418,13 @@ public class VolumeStateMachineTests
     public void RequestDelete_WithAnId_NotAttached_IsAccepted_AndYieldsTheId(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Equal("vol11", v.RequestDelete().ProviderId);
+        Assert.Equal("vol11", v.RequestDelete()!.ProviderId);
         Assert.Equal(DesiredExistence.Deleted, v.DesiredExistence);
         Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
 
     [Theory]
     [InlineData(Seed.Creating)]
-    [InlineData(Seed.CreateFailed)]
     [InlineData(Seed.AttachRequested)]
     [InlineData(Seed.Attached)]
     [InlineData(Seed.AttachedElsewhere)]
@@ -465,7 +464,7 @@ public class VolumeStateMachineTests
         lost.MarkNotFound();
         v.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
 
-        Assert.Equal("vol11", v.RequestDelete().ProviderId);
+        Assert.Equal("vol11", v.RequestDelete()!.ProviderId);
         Assert.Equal(VolumeTransition.Deleting, v.Transition);
     }
 
@@ -474,7 +473,7 @@ public class VolumeStateMachineTests
     public void MarkDeleted_FulfilsTheDeleteOnce()
     {
         var v = VolumeIn(Seed.Available);
-        RequestTicket delete = v.RequestDelete();
+        RequestTicket delete = v.RequestDelete()!;
 
         Assert.NotNull(v.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null)));
         Assert.Null(v.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null)));
@@ -497,14 +496,14 @@ public class VolumeStateMachineTests
     public void AFailedDelete_GivesTheVolumeBack_WithTheReason_AndAnotherPressIsANewRequest()
     {
         var v = VolumeIn(Seed.Available);
-        RequestTicket first = v.RequestDelete();
+        RequestTicket first = v.RequestDelete()!;
 
         v.EndRequest(first.RequestId, GaveUp("delete failed"));
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(v));
         Assert.Equal("delete failed", v.RequestFailureReason);
 
-        RequestTicket second = v.RequestDelete();
+        RequestTicket second = v.RequestDelete()!;
         Assert.NotEqual(first.RequestId, second.RequestId);
     }
 
@@ -526,10 +525,10 @@ public class VolumeStateMachineTests
     }
 
     [Fact]
-    public void DeleteLocally_OfACreateThatFailedBeforeIncusHadIt_DeletesAtOnce()
+    public void RequestDelete_OfACreateThatFailedBeforeIncusHadIt_DeletesAtOnce_WithNoTicket()
     {
         var v = VolumeIn(Seed.CreateFailed);
-        v.DeleteLocally();
+        Assert.Null(v.RequestDelete());
         Assert.Equal("Deleted/Deleted/-/-/-", Shape(v));
     }
 
@@ -538,10 +537,10 @@ public class VolumeStateMachineTests
     [InlineData(Seed.Available)]
     [InlineData(Seed.NotFound)]
     [InlineData(Seed.Deleted)]
-    public void DeleteLocally_OfAVolumeThatMayBeOnIncus_Throws(Seed seed)
+    public void RequestDelete_OfAVolumeThatMayBeOnIncus_DoesNotDeleteHere(Seed seed)
     {
         var v = VolumeIn(seed);
-        Assert.Throws<BusinessException>(() => v.DeleteLocally());
+        Assert.False(LocalDelete.DeletedHere(() => v.RequestDelete()));
     }
 
     // ---------- snapshot precondition ----------
@@ -615,7 +614,7 @@ public class VolumeStateMachineTests
             case SnapSeed.NotFound: s.MarkCreated("vol11/s5"); s.MarkNotFound(); break;
             case SnapSeed.Deleted:
                 s.MarkCreated("vol11/s5");
-                s.EndRequest(s.RequestDelete().RequestId, VolumeSnapshotRequestEnd.Done(null));
+                s.EndRequest(s.RequestDelete()!.RequestId, VolumeSnapshotRequestEnd.Done(null));
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
@@ -672,13 +671,12 @@ public class VolumeStateMachineTests
     public void Snapshot_RequestDelete_WithAnId_IsAccepted(SnapSeed seed)
     {
         var s = SnapshotIn(seed);
-        Assert.Equal("vol11/s5", s.RequestDelete().ProviderId);
+        Assert.Equal("vol11/s5", s.RequestDelete()!.ProviderId);
         Assert.Equal(VolumeSnapshotTransition.Deleting, s.Transition);
     }
 
     [Theory]
     [InlineData(SnapSeed.Creating)]
-    [InlineData(SnapSeed.CreateFailed)]
     [InlineData(SnapSeed.DeleteRequested)]
     [InlineData(SnapSeed.Deleted)]
     public void Snapshot_RequestDelete_FromEveryOtherSituation_Throws_AndMutatesNothing(SnapSeed seed)
@@ -705,7 +703,7 @@ public class VolumeStateMachineTests
     public void Snapshot_NotFound_KeepsAWaitingDelete_OnlyTheDeleteCommandEndsIt()
     {
         var s = SnapshotIn(SnapSeed.Exists);
-        RequestTicket delete = s.RequestDelete();
+        RequestTicket delete = s.RequestDelete()!;
         s.MarkNotFound();
         Assert.Equal(VolumeSnapshotTransition.Deleting, s.Transition);
         Assert.NotNull(s.EndRequest(delete.RequestId, VolumeSnapshotRequestEnd.Done(null)));
@@ -717,11 +715,11 @@ public class VolumeStateMachineTests
     public void Snapshot_AFailedDelete_GivesItBack_WithTheReason()
     {
         var s = SnapshotIn(SnapSeed.Exists);
-        RequestTicket delete = s.RequestDelete();
+        RequestTicket delete = s.RequestDelete()!;
         s.EndRequest(delete.RequestId, VolumeSnapshotRequestEnd.Failed(null, "delete failed", "raw"));
         Assert.Equal("Exists/Exists/-", SnapShape(s));
         Assert.Equal("delete failed", s.RequestFailureReason);
-        Assert.Equal("vol11/s5", s.RequestDelete().ProviderId);
+        Assert.Equal("vol11/s5", s.RequestDelete()!.ProviderId);
     }
 
     // A give-up names its request; one the snapshot is not waiting on (another request's, or none) is ignored.
@@ -741,15 +739,16 @@ public class VolumeStateMachineTests
     }
 
     [Fact]
-    public void Snapshot_DeleteLocally_OnlyForACreateThatFailedBeforeIncusHadIt()
+    public void Snapshot_RequestDelete_DeletesHere_OnlyForACreateThatFailedBeforeIncusHadIt()
     {
         var failed = SnapshotIn(SnapSeed.CreateFailed);
-        failed.DeleteLocally();
+        Assert.Null(failed.RequestDelete());
         Assert.Equal("Deleted/Deleted/-", SnapShape(failed));
 
         foreach (SnapSeed seed in new[] { SnapSeed.Creating, SnapSeed.Exists, SnapSeed.NotFound, SnapSeed.Deleted })
         {
-            Assert.Throws<BusinessException>(() => SnapshotIn(seed).DeleteLocally());
+            VolumeSnapshot snapshot = SnapshotIn(seed);
+            Assert.False(LocalDelete.DeletedHere(() => snapshot.RequestDelete()));
         }
     }
 

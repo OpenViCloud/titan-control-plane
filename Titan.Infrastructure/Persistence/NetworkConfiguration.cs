@@ -28,7 +28,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(n => n.RequestFailedAt).HasColumnName("request_failed_at");
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Network.Pending is built from them on read. Private properties, mapped by name.
+        // Network.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
         builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
         builder.Property<NetworkRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
         builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");

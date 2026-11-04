@@ -91,7 +91,7 @@ public class LoadBalancerRequestLifecycleTests
         Assert.NotNull(lb.RequestFailedAt);
         Assert.Empty(lb.AppliedListeners);
         // Never reached Incus: it is deleted here, not through Incus.
-        lb.DeleteLocally();
+        Assert.Null(lb.RequestDelete());
         Assert.True(lb.IsTerminal);
     }
 
@@ -110,7 +110,7 @@ public class LoadBalancerRequestLifecycleTests
         Assert.NotNull(lb.RequestFailureReason);
         Assert.Equal(["TCP 80"], Ports(lb.AppliedListeners));
         Assert.Single(lb.AppliedBackends);
-        Assert.Equal(lb.Vip, lb.RequestDelete().ProviderId);
+        Assert.Equal(lb.Vip, lb.RequestDelete()!.ProviderId);
     }
 
     // ---------- the update ----------
@@ -172,7 +172,7 @@ public class LoadBalancerRequestLifecycleTests
     public void Done_OfTheDelete_EndsTheLoadBalancer()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket delete = lb.RequestDelete();
+        RequestTicket delete = lb.RequestDelete()!;
         Assert.Equal(lb.Vip, delete.ProviderId);
 
         PendingRequest<LoadBalancerRequestKind>? ended = lb.EndRequest(delete.RequestId, LoadBalancerRequestEnd.Done(null));
@@ -187,13 +187,13 @@ public class LoadBalancerRequestLifecycleTests
     public void Failed_OfTheDelete_GivesTheLoadBalancerBack_WithWhy_AndTheNextDeleteIsANewRequest()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket first = lb.RequestDelete();
+        RequestTicket first = lb.RequestDelete()!;
 
         lb.EndRequest(first.RequestId, Failed());
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
-        RequestTicket second = lb.RequestDelete();
+        RequestTicket second = lb.RequestDelete()!;
         Assert.NotEqual(first.RequestId, second.RequestId);
     }
 
@@ -205,7 +205,7 @@ public class LoadBalancerRequestLifecycleTests
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
         RequestTicket update = lb.RequestUpdate([Dns], [a]);
-        RequestTicket delete = lb.RequestDelete();
+        RequestTicket delete = lb.RequestDelete()!;
 
         lb.EndRequest(delete.RequestId, Failed());
 
@@ -279,7 +279,7 @@ public class LoadBalancerRequestLifecycleTests
     public void ADeletedLoadBalancer_AbsorbsEveryReportAndObservation()
     {
         LoadBalancer lb = OnIncus();
-        RequestTicket delete = lb.RequestDelete();
+        RequestTicket delete = lb.RequestDelete()!;
         lb.EndRequest(delete.RequestId, LoadBalancerRequestEnd.Done(null));
 
         lb.MarkObserved();

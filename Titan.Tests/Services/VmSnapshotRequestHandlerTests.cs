@@ -91,12 +91,12 @@ public class VmSnapshotRequestHandlerTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public async Task Done_OfTheCreate_WithoutTheSnapshotId_Is400_AndSavesNothing(string? externalId)
+    public async Task Done_OfTheCreate_WithoutTheSnapshotId_Is422_AndSavesNothing(string? externalId)
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Creating(vm);
 
-        BadRequestException refused = await Assert.ThrowsAsync<BadRequestException>(
+        BusinessException refused = await Assert.ThrowsAsync<BusinessException>(
             () => End(vm, snapshot, Waiting(snapshot), "Done", externalId));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
@@ -154,7 +154,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.RequestSnapshotDelete(snapshot.Id).RequestId;
+        Guid delete = vm.RequestSnapshotDelete(snapshot.Id)!.RequestId;
 
         await End(vm, snapshot, delete, "Done");
         await End(vm, snapshot, delete, "Done");
@@ -168,7 +168,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.RequestSnapshotDelete(snapshot.Id).RequestId;
+        Guid delete = vm.RequestSnapshotDelete(snapshot.Id)!.RequestId;
 
         await End(vm, snapshot, delete, "Failed");
 

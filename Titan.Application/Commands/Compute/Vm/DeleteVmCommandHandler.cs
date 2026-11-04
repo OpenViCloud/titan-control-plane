@@ -36,8 +36,7 @@ public class DeleteVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Already deleted, or a delete still
         // waiting: answer like the first request — nothing recorded, nothing sent
         // (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool deleteIsWaiting = vm.Pending?.Kind == VmRequestKind.Delete;
-        if (vm.IsTerminal || deleteIsWaiting)
+        if (vm.IsDeletedOrDeleting)
         {
             return;
         }

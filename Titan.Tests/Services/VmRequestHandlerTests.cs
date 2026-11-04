@@ -70,11 +70,11 @@ public class VmRequestHandlerTests
     }
 
     [Fact]
-    public async Task Done_OfTheCreate_WithoutTheInstanceName_Is400_AndChangesNothing()
+    public async Task Done_OfTheCreate_WithoutTheInstanceName_Is422_AndChangesNothing()
     {
         Vm vm = Given(NewVm());
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+        var ex = await Assert.ThrowsAsync<BusinessException>(() =>
             EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.Pending!.Id, "Done")));
 
         Assert.Equal("INVALID_STATUS", ex.Code);

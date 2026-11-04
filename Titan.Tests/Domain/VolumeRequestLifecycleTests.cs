@@ -209,7 +209,7 @@ public class VolumeRequestLifecycleTests
     public void NotFound_WhileADeleteWaits_KeepsTheDeleteWaiting()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         volume.MarkNotFound();
 
@@ -228,7 +228,7 @@ public class VolumeRequestLifecycleTests
         volume.EndSnapshotRequest(failedCreate.Id, failedCreate.Pending!.Id, VolumeSnapshotRequestEnd.Failed(null, "r", "d"));
         volume.RequestSnapshotDelete(waitingDelete.Id);
         // A volume with a live snapshot refuses its delete; this one's snapshots no longer count.
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         VolumeRequestEnded? ended = volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
 
@@ -242,20 +242,20 @@ public class VolumeRequestLifecycleTests
     public void Failed_OfTheDelete_GivesTheVolumeBack_WithTheReason_AndAnotherPressIsANewRequest()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
 
         volume.EndRequest(delete.RequestId, Failed());
 
         Assert.Null(volume.Pending);
         Assert.Equal(DesiredExistence.Exists, volume.DesiredExistence);
-        Assert.NotEqual(delete.RequestId, volume.RequestDelete().RequestId);
+        Assert.NotEqual(delete.RequestId, volume.RequestDelete()!.RequestId);
     }
 
     [Fact]
     public void ADeletedVolume_AbsorbsEveryReportAndObservation()
     {
         Volume volume = RestingVolume();
-        RequestTicket delete = volume.RequestDelete();
+        RequestTicket delete = volume.RequestDelete()!;
         volume.EndRequest(delete.RequestId, VolumeRequestEnd.Done(null, null));
 
         Assert.Null(volume.EndRequest(delete.RequestId, Failed()));
@@ -320,7 +320,7 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = RestingVolume();
         VolumeSnapshot snapshot = AddRestingSnapshot(volume);
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
 
         volume.EndSnapshotRequest(snapshot.Id, delete.RequestId, VolumeSnapshotRequestEnd.Failed(null, "could not", "raw"));
 
@@ -334,7 +334,7 @@ public class VolumeRequestLifecycleTests
     {
         Volume volume = RestingVolume();
         VolumeSnapshot snapshot = AddRestingSnapshot(volume);
-        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id);
+        RequestTicket delete = volume.RequestSnapshotDelete(snapshot.Id)!;
 
         volume.EndSnapshotRequest(snapshot.Id, delete.RequestId, VolumeSnapshotRequestEnd.Done(null));
 

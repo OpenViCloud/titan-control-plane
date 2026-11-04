@@ -5,7 +5,6 @@ using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.Volume;
 
@@ -26,17 +25,6 @@ public class EndVolumeRequestCommandHandler(
 
         Domain.Aggregates.Volume.Volume volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
-
-        // A create that ends Done must name the volume, or it would be left with nothing to delete through.
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && volume.Pending is { Kind: VolumeRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && volume.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         VolumeObservation? observed = command.AttachedTo == null
             ? null

@@ -5,7 +5,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Network;
 
-public class Network : AggregateRoot
+public class Network : RequestingRoot<NetworkRequestKind>
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
@@ -27,10 +27,6 @@ public class Network : AggregateRoot
     public NetworkStatus? CurrentState { get; private set; }
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
-    // titan-ops architecture/desired-and-current.md#request-failure
-    public string? RequestFailureReason { get; private set; }
-    public string? RequestFailureDetail { get; private set; }
-    public DateTimeOffset? RequestFailedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
@@ -39,19 +35,6 @@ public class Network : AggregateRoot
     public string? PublicIpv6Subnet { get; private set; }
 
     public bool HasPublicIpv6 => PublicIpv6Subnet != null;
-
-    // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape); all null or all
-    // set, written by the factory and SetPending. Pending is the shape callers see.
-    private Guid? PendingRequestId { get; set; }
-    private NetworkRequestKind? PendingRequestKind { get; set; }
-    private DateTimeOffset? PendingRequestAskedAt { get; set; }
-
-    /// The request this network is waiting on, or null. Only the report carrying its id ends it
-    /// (titan-ops architecture/resource-lifecycle.md#invariants).
-    public PendingRequest<NetworkRequestKind>? Pending =>
-        PendingRequestId == null
-            ? null
-            : PendingRequest<NetworkRequestKind>.Of(PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
 
     /// The network's rules, each a line in its ACL on Incus; rows are kept after Deleted
     /// (titan-ops features/network/design.md#firewall-rule-soft-delete). The repository loads them with the network.
@@ -100,16 +83,9 @@ public class Network : AggregateRoot
 
     private bool CreateIsWaiting => PendingRequestKind == NetworkRequestKind.Create;
     private bool DeleteIsWaiting => PendingRequestKind == NetworkRequestKind.Delete;
-
-    private static PendingRequest<NetworkRequestKind> NewRequest(NetworkRequestKind kind) =>
-        PendingRequest<NetworkRequestKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
-
-    private void SetPending(PendingRequest<NetworkRequestKind>? request)
-    {
-        PendingRequestId = request?.Id;
-        PendingRequestKind = request?.Kind;
-        PendingRequestAskedAt = request?.AskedAt;
-    }
+    /// A delete was asked and still waits, or the network is gone: a later delete is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
 
     /// The range the customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
     /// attributes (titan-ops architecture/code-structure.md#logic-placement): the uplink of a network with public IPv6
@@ -211,6 +187,7 @@ public class Network : AggregateRoot
         {
             return null;
         }
+        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
 
         // What the worker saw, whatever the outcome: a create that failed after Incus made the network leaves a network
         // whose delete still reaches Incus. The addresses come with the name: the ones the create asked for or Incus
@@ -233,9 +210,7 @@ public class Network : AggregateRoot
         bool letGoOfPublicIpv6 = false;
         if (end.Outcome == RequestOutcome.Done)
         {
-            RequestFailureReason = null;
-            RequestFailureDetail = null;
-            RequestFailedAt = null;
+            ClearFailure();
             if (waiting!.Kind == NetworkRequestKind.Delete)
             {
                 // The delete removed the network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle):
@@ -255,9 +230,7 @@ public class Network : AggregateRoot
         }
         else
         {
-            RequestFailureReason = end.Reason;
-            RequestFailureDetail = end.Detail;
-            RequestFailedAt = DateTimeOffset.UtcNow;
+            RecordFailure(end.Reason, end.Detail);
             if (waiting!.Kind == NetworkRequestKind.Delete)
             {
                 DesiredExistence = DesiredExistence.Exists;
@@ -284,11 +257,13 @@ public class Network : AggregateRoot
     // (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
 
     /// Intent. Follows Incus: whatever its word, even not found, a network with a provider id is deleted through
-    /// Incus, which answers. The current pair waits for the delete command
+    /// Incus, which answers. With a provider id, the current pair waits for the delete command
     /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a repeat
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). Internal: NetworkDeletion is the only way in
     /// (titan-ops architecture/domain-services.md#cross-aggregate-lock).
-    internal RequestTicket RequestDelete()
+    /// A network that never reached Incus is deleted here, at once, and gets no ticket
+    /// (titan-ops architecture/desired-and-current.md#delete-locally).
+    internal RequestTicket? RequestDelete()
     {
         if (DeleteIsWaiting)
         {
@@ -298,6 +273,14 @@ public class Network : AggregateRoot
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "The network is already deleted.");
         }
+        // Never reached Incus: no command to send and no report coming.
+        bool neverReachedIncus = ExternalId is null && PendingRequestId == null;
+        if (neverReachedIncus)
+        {
+            DeleteLocally();
+            return null;
+        }
+
         if (CreateIsWaiting || ExternalId is null)
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
@@ -359,11 +342,9 @@ public class Network : AggregateRoot
         throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
     }
 
-    /// Intent on one rule: its delete goes through Incus; returns the request and the rule's provider id for the command.
-    public RequestTicket RequestFirewallRuleDelete(Guid ruleId) => RequireFirewallRule(ruleId).RequestDelete();
-
-    /// Intent on one rule whose create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
-    public void DeleteFirewallRuleLocally(Guid ruleId) => RequireFirewallRule(ruleId).DeleteLocally();
+    /// Intent on one rule: its delete goes through Incus; returns the request and the rule's provider id for the command,
+    /// or no ticket when the rule never reached Incus and is deleted here.
+    public RequestTicket? RequestFirewallRuleDelete(Guid ruleId) => RequireFirewallRule(ruleId).RequestDelete();
 
     /// The report of the rule's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
     /// another request than the one the rule waits on.
@@ -413,16 +394,10 @@ public class Network : AggregateRoot
         Name = name;
     }
 
-    /// Intent: a network that never reached Incus has no command and no observation coming, so this writes the
-    /// current pair itself (titan-ops architecture/desired-and-current.md#delete-locally).
-    internal void DeleteLocally()
+    /// A network that never reached Incus has no command and no observation coming, so RequestDelete writes the
+    /// current pair here.
+    private void DeleteLocally()
     {
-        bool neverReachedIncus = ExternalId is null && !CreateIsWaiting && !IsTerminal;
-        if (!neverReachedIncus)
-        {
-            throw new BusinessException("NETWORK_INVALID_STATE",
-                "Only a network whose create failed before Incus had it can be deleted locally.");
-        }
         // A create that gave up before Incus let go of the /64 (EndRequest). A network still holding one would keep
         // its route once Deleted here: no delete report follows a local delete, so nothing takes the route back.
         if (HasPublicIpv6)

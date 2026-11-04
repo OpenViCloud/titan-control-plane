@@ -281,7 +281,7 @@ public class LoadBalancerStateMachineTests
     {
         LoadBalancer lb = OnIncus();
 
-        string vip = lb.RequestDelete().ProviderId;
+        string vip = lb.RequestDelete()!.ProviderId;
 
         Assert.Equal(lb.Vip, vip);
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
@@ -338,7 +338,7 @@ public class LoadBalancerStateMachineTests
     public void DeleteGivesUp_PutsTheDesiredExistenceBack()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete().RequestId;
+        Guid delete = lb.RequestDelete()!.RequestId;
 
         lb.EndRequest(delete, LoadBalancerRequestEnd.Failed(null, "Load balancer deletion failed.", "detail"));
 
@@ -348,19 +348,18 @@ public class LoadBalancerStateMachineTests
     }
 
     [Fact]
-    public void DeleteLocally_OnlyForACreateThatGaveUpBeforeIncus()
+    public void RequestDelete_DeletesHere_OnlyForACreateThatGaveUpBeforeIncus()
     {
         LoadBalancer failed = NewLoadBalancer();
         failed.MarkRequestFailed("Load balancer creation failed.", null);
 
-        failed.DeleteLocally();
+        Assert.Null(failed.RequestDelete());
 
         Assert.True(failed.IsTerminal);
         Assert.Equal(DesiredExistence.Deleted, failed.DesiredExistence);
+        Assert.NotNull(OnIncus().RequestDelete());
         Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => OnIncus().DeleteLocally()).Code);
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => NewLoadBalancer().DeleteLocally()).Code);
+            Assert.Throws<BusinessException>(() => NewLoadBalancer().RequestDelete()).Code);
     }
 
     // ---- reconciler

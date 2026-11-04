@@ -6,7 +6,6 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
@@ -24,17 +23,6 @@ public class EndLoadBalancerRequestCommandHandler(ILoadBalancerRepository repo, 
 
         LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
-
-        // A create that ends Done must name the VIP, or it would be left with nothing to delete through.
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && loadBalancer.Pending is { Kind: LoadBalancerRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && loadBalancer.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         LoadBalancerRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
         PendingRequest<LoadBalancerRequestKind>? ended = loadBalancer.EndRequest(command.RequestId, end);

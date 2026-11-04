@@ -114,12 +114,12 @@ public class TemplateRequestHandlerTests
     // The alias is what a VM is created from: a Done that does not name it, on a cluster that has none, would leave the
     // template Exists and unusable.
     [Fact]
-    public async Task Done_WithoutTheAlias_WhenTheClusterHasNone_Is400_AndTheSyncKeepsWaiting()
+    public async Task Done_WithoutTheAlias_WhenTheClusterHasNone_Is422_AndTheSyncKeepsWaiting()
     {
         VmTemplate t = Waiting(out Guid requestId);
         var repo = new FakeVmTemplateRepository(t);
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() => End(repo, t.Id, requestId, "Done"));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => End(repo, t.Id, requestId, "Done"));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         Assert.Equal(requestId, Row(t, Mock).Pending!.Id);

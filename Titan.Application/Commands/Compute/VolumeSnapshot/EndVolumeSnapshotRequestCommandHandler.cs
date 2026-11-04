@@ -7,7 +7,6 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
-using Titan.Application.Exceptions;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
@@ -24,16 +23,6 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
         VolumeAggregate volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
-
-        bool endsTheCreateWithoutAnId = outcome == RequestOutcome.Done
-                                        && snapshot.Pending is { Kind: VolumeSnapshotRequestKind.Create } waiting
-                                        && waiting.Id == command.RequestId
-                                        && snapshot.ExternalId == null
-                                        && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheCreateWithoutAnId)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
-        }
 
         VolumeSnapshotRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
         PendingRequest<VolumeSnapshotRequestKind>? ended = volume.EndSnapshotRequest(snapshot.Id, command.RequestId, end);

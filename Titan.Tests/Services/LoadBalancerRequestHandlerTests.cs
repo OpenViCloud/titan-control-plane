@@ -107,11 +107,11 @@ public class LoadBalancerRequestHandlerTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public async Task Done_OfTheCreate_WithoutTheVip_Is400_AndSavesNothing(string? externalId)
+    public async Task Done_OfTheCreate_WithoutTheVip_Is422_AndSavesNothing(string? externalId)
     {
         LoadBalancer lb = Creating();
 
-        BadRequestException refused = await Assert.ThrowsAsync<BadRequestException>(() => End(lb, Waiting(lb), "Done", externalId));
+        BusinessException refused = await Assert.ThrowsAsync<BusinessException>(() => End(lb, Waiting(lb), "Done", externalId));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
         Assert.Equal(LoadBalancerTransition.Creating, lb.Transition);
@@ -168,7 +168,7 @@ public class LoadBalancerRequestHandlerTests
     public async Task Done_OfTheDelete_EndsTheLoadBalancer_AndRecordsLoadBalancerDeletedOnce()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete().RequestId;
+        Guid delete = lb.RequestDelete()!.RequestId;
 
         await End(lb, delete, "Done");
         await End(lb, delete, "Done");
@@ -181,7 +181,7 @@ public class LoadBalancerRequestHandlerTests
     public async Task Failed_OfTheDelete_GivesTheLoadBalancerBack_AndRecordsDeleteFailedOnce()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete().RequestId;
+        Guid delete = lb.RequestDelete()!.RequestId;
 
         await End(lb, delete, "Failed");
         await End(lb, delete, "Failed");

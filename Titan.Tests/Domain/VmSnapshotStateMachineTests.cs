@@ -216,14 +216,13 @@ public class VmSnapshotStateMachineTests
     public void RequestDelete_WithAnId_IsAccepted(Seed seed)
     {
         var s = SnapshotIn(seed);
-        Assert.Equal("vm42/s7", s.RequestDelete().ProviderId);
+        Assert.Equal("vm42/s7", s.RequestDelete()!.ProviderId);
         Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
         Assert.Equal(DesiredExistence.Deleted, s.DesiredExistence);
     }
 
     [Theory]
     [InlineData(Seed.Creating)]
-    [InlineData(Seed.CreateFailed)]
     [InlineData(Seed.RevertRequested)]
     [InlineData(Seed.DeleteRequested)]
     [InlineData(Seed.Deleted)]
@@ -254,19 +253,20 @@ public class VmSnapshotStateMachineTests
         s.EndRequest(s.Pending!.Id, VmSnapshotRequestEnd.Failed(null, "delete failed", "raw"));
         Assert.Equal("Exists/Exists/-", Shape(s));
         Assert.Equal("delete failed", s.RequestFailureReason);
-        Assert.Equal("vm42/s7", s.RequestDelete().ProviderId);
+        Assert.Equal("vm42/s7", s.RequestDelete()!.ProviderId);
     }
 
     [Fact]
-    public void DeleteLocally_OnlyForACreateThatFailedBeforeIncusHadIt()
+    public void RequestDelete_DeletesHere_OnlyForACreateThatFailedBeforeIncusHadIt()
     {
         var failed = SnapshotIn(Seed.CreateFailed);
-        failed.DeleteLocally();
+        Assert.Null(failed.RequestDelete());
         Assert.Equal("Deleted/Deleted/-", Shape(failed));
 
         foreach (Seed seed in new[] { Seed.Creating, Seed.Exists, Seed.NotFound, Seed.Deleted })
         {
-            Assert.Throws<BusinessException>(() => SnapshotIn(seed).DeleteLocally());
+            VmSnapshot snapshot = SnapshotIn(seed);
+            Assert.False(LocalDelete.DeletedHere(() => snapshot.RequestDelete()));
         }
     }
 

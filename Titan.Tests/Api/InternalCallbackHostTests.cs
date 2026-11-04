@@ -515,7 +515,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
     // A create's Done must name the snapshot, or it would be left with nothing to revert or delete through.
     [Fact]
-    public async Task AVmSnapshotCreateDone_WithoutTheSnapshotId_Is400_AndTheCreateKeepsWaiting()
+    public async Task AVmSnapshotCreateDone_WithoutTheSnapshotId_Is422_AndTheCreateKeepsWaiting()
     {
         Vm vm = await StoredVmWithSnapshotsWaitingAsync();
         VmSnapshot creating = vm.Snapshots.Single(s => s.Name == "creating");
@@ -523,7 +523,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         HttpResponseMessage response = await PatchAsync(
             $"/internal/vms/{vm.Id}/snapshots/{creating.Id}/requests/{creating.Pending!.Id}", """{"outcome":"Done"}""");
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal(VmSnapshotRequestKind.Create, (await ReloadSnapshotAsync(vm.Id, "creating")).Pending!.Kind);
     }
 
@@ -668,14 +668,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
     // A create's Done must name the VIP, or the load balancer would be left with nothing to delete through.
     [Fact]
-    public async Task ALoadBalancerCreateDone_WithoutTheVip_Is400_AndTheCreateKeepsWaiting()
+    public async Task ALoadBalancerCreateDone_WithoutTheVip_Is422_AndTheCreateKeepsWaiting()
     {
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: false);
 
         HttpResponseMessage response = await PatchAsync(
             $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", """{"outcome":"Done"}""");
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         Assert.Equal(LoadBalancerRequestKind.Create, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
     }
 
@@ -798,7 +798,6 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     [Theory]
     [InlineData("requests/{0}", """{"outcome":"Maybe","externalId":"tpl-callback"}""")]
     [InlineData("requests/{0}", """{"reason":"no outcome"}""")]
-    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
     [InlineData("observation", """{"exists":"yes"}""")]
     public async Task ATemplateReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
     {
@@ -807,6 +806,19 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         HttpResponseMessage response = await PatchAsync(TemplateRoute(template, route), json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
+        Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+    }
+
+    // A sync's Done must name the alias while the cluster has none: a VM is created from it.
+    [Fact]
+    public async Task ATemplateSyncDone_WithoutTheAlias_Is422_AndTheSyncKeepsWaiting()
+    {
+        VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(TemplateRoute(template, "requests/{0}"), """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
         Assert.Equal((CurrentExistence.NotCreated, VmTemplateRequestKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
     }

@@ -27,19 +27,6 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
         VmTemplateAggregate template = await repo.FindByIdForUpdateAsync(command.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
-        // A VM is created from the alias: a Done that does not name it, in a cluster that has none, would leave the
-        // template there and unusable.
-        VmTemplateCluster? cluster = template.Clusters.FirstOrDefault(candidate => candidate.ClusterId == command.ClusterId);
-        bool endsTheSyncWithoutAnAlias = outcome == RequestOutcome.Done
-                                         && cluster?.Pending is { } waiting
-                                         && waiting.Id == command.RequestId
-                                         && cluster.ExternalTemplateId == null
-                                         && string.IsNullOrEmpty(command.ExternalId);
-        if (endsTheSyncWithoutAnAlias)
-        {
-            throw new BadRequestException("INVALID_STATUS", "ExternalId is required when a sync ends Done.");
-        }
-
         VmTemplateRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
         PendingRequest<VmTemplateRequestKind>? ended = template.EndSyncRequest(command.ClusterId, command.RequestId, end);
         if (ended == null)

@@ -21,30 +21,24 @@ public class DeleteLoadBalancerCommandHandler(
         // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
         var loadBalancer = await ComputeOwnership.RequireLoadBalancerForUpdateAsync(repo, callerId, command.LoadBalancerId, ct);
 
-        // The aggregate refuses a repeat, so the handler recognises it first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this delete still waits, or the load
-        // balancer is already deleted. A delete that failed is not a repeat: it falls through and the aggregate decides.
-        // Answer like the first request: nothing recorded, nothing sent.
-        bool deleteIsWaiting = loadBalancer.Transition == LoadBalancerTransition.Deleting;
-        bool alreadyRequestedOrDone = deleteIsWaiting || loadBalancer.IsTerminal;
-        if (alreadyRequestedOrDone)
+        // A repeat is answered like the first request: nothing recorded, nothing sent
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A delete that failed is not a
+        // repeat: it falls through and the aggregate decides.
+        if (loadBalancer.IsDeletedOrDeleting)
         {
             return;
         }
 
-        // The create failed before Incus had it (titan-ops architecture/desired-and-current.md#delete-locally).
-        bool neverReachedIncus = loadBalancer.ExternalId is null && loadBalancer.Transition == null;
-        if (neverReachedIncus)
+        // A load balancer that never reached Incus is deleted here and gets no ticket
+        // (titan-ops architecture/desired-and-current.md#delete-locally): the request and its outcome at once.
+        RequestTicket? ticket = loadBalancer.RequestDelete();
+        activity.Stage("load_balancer.delete_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
+        if (ticket == null)
         {
-            loadBalancer.DeleteLocally();
-            activity.Stage("load_balancer.delete_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
             activity.StageOutcome(loadBalancer.TenantId, "load_balancer.deleted", "load_balancer", loadBalancer.Id, loadBalancer.Name);
             await repo.SaveAsync(ct);
             return;
         }
-
-        RequestTicket ticket = loadBalancer.RequestDelete();
-        activity.Stage("load_balancer.delete_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
         await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer.Id, ticket.RequestId, loadBalancer.ExternalNetworkId, ticket.ProviderId,
             TenantAggregate.ProjectNameFor(loadBalancer.TenantId), loadBalancer.ClusterId, ct);
         await repo.SaveAsync(ct);
