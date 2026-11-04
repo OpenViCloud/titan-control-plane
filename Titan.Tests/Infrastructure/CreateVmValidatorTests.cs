@@ -13,6 +13,16 @@ public class CreateVmValidatorTests
 
     private static List<Guid> Ids(int count) => Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToList();
 
+    // The name rule is Vm's (Vm.NameMaxLength, Vm.NamePattern); the validator answers 400 from the same constants.
+    [Fact]
+    public void AName_Of64Characters_IsAccepted_And65_IsRejected()
+    {
+        CreateVmCommand Named(string name) => Request(null) with { Name = name };
+        _validator.TestValidate(Named(new string('a', 64))).ShouldNotHaveValidationErrorFor(r => r.Name);
+        _validator.TestValidate(Named(new string('a', 65))).ShouldHaveValidationErrorFor(r => r.Name);
+        _validator.TestValidate(Named("a_b")).ShouldHaveValidationErrorFor(r => r.Name);
+    }
+
     [Fact]
     public void ElevenSshKeys_AreRejected()
     {

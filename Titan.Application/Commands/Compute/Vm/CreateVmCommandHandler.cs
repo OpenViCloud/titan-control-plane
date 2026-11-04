@@ -87,7 +87,7 @@ public class CreateVmCommandHandler(
             req.VmOfferingId,
             req.TemplateId,
             req.ClusterId,
-            req.DiskSizeGb ?? 0,
+            req.DiskSizeGb ?? VmAggregate.ImageDiskSize,
             req.UserData);
         repo.Add(vm);
         activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (titan-ops architecture/intent-and-observation.md#intent-has-identity)

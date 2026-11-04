@@ -12,6 +12,10 @@ namespace Titan.Domain.Aggregates.Vm;
 /// RevertSnapshot, RequestSnapshotDelete, DeleteSnapshotLocally, EndSnapshotRequest and MarkSnapshot*.
 public class VmSnapshot : ChildEntity
 {
+    /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
+    /// has no public field.
+    public static int NameMaxLength { get; } = 100;
+
     public Guid Id { get; private set; }
     public Guid VmId { get; private set; }
     public Guid TenantId { get; private set; }
@@ -87,6 +91,10 @@ public class VmSnapshot : ChildEntity
     /// Called by Vm.AddSnapshot after the VM checked itself.
     internal static VmSnapshot Create(Guid vmId, Guid tenantId, string name)
     {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > NameMaxLength)
+        {
+            throw new BusinessException("INVALID_SNAPSHOT_NAME", $"A snapshot name is 1 to {NameMaxLength} characters, not blank.");
+        }
         var snapshot = new VmSnapshot
         {
             Id = Guid.NewGuid(),

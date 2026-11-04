@@ -11,6 +11,11 @@ namespace Titan.Domain.Aggregates.LoadBalancer;
 /// gives up can go back (titan-ops architecture/desired-and-current.md#abandoned-request).
 public class LoadBalancer : AggregateRoot
 {
+    /// A load balancer's name: 1 to 100 letters, digits, hyphens or underscores, starting with a letter or digit. The
+    /// validators read these two, so the /v1 spec carries the same pattern.
+    public const int NameMaxLength = 100;
+    public const string NamePattern = "^[a-zA-Z0-9][a-zA-Z0-9_-]*$";
+
     public const int MaxListeners = 10;
     public const int MaxBackends = 20;
 
@@ -116,6 +121,7 @@ public class LoadBalancer : AggregateRoot
         string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
         IReadOnlyList<Vm.Vm> backends)
     {
+        RequireName(name);
         var loadBalancer = new LoadBalancer
         {
             Id = Guid.NewGuid(),
@@ -182,7 +188,19 @@ public class LoadBalancer : AggregateRoot
         bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsTerminal;
         if (beingOrBeenDeleted)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "Cannot rename a load balancer that is being or has been deleted.");
+        RequireName(name);
         Name = name;
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex NameShape = new(NamePattern, System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static void RequireName(string? name)
+    {
+        if (name == null || name.Length == 0 || name.Length > NameMaxLength || !NameShape.IsMatch(name))
+        {
+            throw new BusinessException("INVALID_LOAD_BALANCER_NAME",
+                $"A load balancer name is 1 to {NameMaxLength} letters, digits, hyphens or underscores, starting with a letter or digit.");
+        }
     }
 
     /// A delete replaces a waiting update: the update's report then names a request no longer waiting, and is ignored.

@@ -2,16 +2,19 @@ using FastEndpoints;
 using FluentValidation;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+
 namespace Titan.Infrastructure.Endpoints.Vm;
 
+// The rule is the Domain's (titan-ops architecture/code-structure.md#logic-placement); this answers 400 in the API's words.
 public class CreateVmValidator : Validator<CreateVmCommand>
 {
     private static readonly System.Text.RegularExpressions.Regex NameRegex =
-        new(@"^[a-zA-Z0-9][a-zA-Z0-9-]*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(VmAggregate.NamePattern, System.Text.RegularExpressions.RegexOptions.Compiled);
 
     public CreateVmValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(64)
+        RuleFor(x => x.Name).NotEmpty().MaximumLength(VmAggregate.NameMaxLength)
             .Matches(NameRegex).WithMessage("'Name' may only contain letters, digits, and hyphens, and must start with a letter or digit.");
         RuleFor(x => x.NetworkId).NotEmpty();
         RuleFor(x => x.VmOfferingId).NotEmpty();
