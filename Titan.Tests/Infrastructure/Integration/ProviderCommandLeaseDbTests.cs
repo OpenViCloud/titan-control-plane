@@ -115,11 +115,11 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == key));
     }
 
-    // Two identical repeats at the same instant both reopen one finished row (a failed backup of the day, asked twice at
+    // Two identical repeats at the same instant both reopen one Failed row (a failed backup of the day, asked twice at
     // once): the version token lets one commit; the other reaches the caller as 409, not 500. A backup, not a resource's
     // request: those keys are never reused (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
-    public async Task TwoConcurrentReopens_OfOneFinishedRow_TheSecondIs409()
+    public async Task TwoConcurrentReopens_OfOneFailedRow_TheSecondIs409()
     {
         Guid vmId = Guid.NewGuid();
         Guid leaseId = Guid.NewGuid();

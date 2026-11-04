@@ -10,8 +10,8 @@ namespace Titan.Infrastructure.Migrations
     /// this migration's Down first. The index (status, created_at) serves the retention pass that deletes old finished rows.
     public partial class ProviderCommandOneRule : Migration
     {
-        /// What each row had before: the two backups, keyed by their day, reran only after a failure; every other key ran
-        /// again after any finish.
+        /// The mode the image just before this migration writes for each key: the two backups, keyed by their day, rerun
+        /// only after a failure; every other key after any finish. Older rows written with another mode get that one.
         private const string RestoreTheRerunOfEachRowSql = @"
 UPDATE core.provider_commands SET rerun = 'AfterFailureOnly'
 WHERE key LIKE 'vm-backup-%' OR key LIKE 'volume-backup-%';";
