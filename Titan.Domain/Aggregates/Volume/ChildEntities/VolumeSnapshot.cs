@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -40,6 +41,10 @@ public class VolumeSnapshot : ChildEntity
             ? null
             : PendingRequest<VolumeSnapshotRequestKind>.Of(
                 PendingRequestId.Value, PendingRequestKind!.Value, PendingRequestAskedAt!.Value);
+
+    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
+    /// The repository lists with it in SQL.
+    public static Expression<Func<VolumeSnapshot, bool>> IsBilled { get; } = s => s.CurrentExistence == CurrentExistence.Exists;
 
     private VolumeSnapshot() { }
 

@@ -5,8 +5,8 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Fakes;
 
 // In-memory ILoadBalancerRepository for unit tests (titan-ops architecture/testing.md#doubles-only-in-unit-tests). The
-// queries mirror LoadBalancerRepository's conditions; Postgres-only behaviour (unique indexes) is
-// LoadBalancerDbTests'.
+// quota count applies LoadBalancer.OccupiesQuota, as LoadBalancerRepository does; the other queries mirror its
+// conditions. Postgres-only behaviour (unique indexes) is LoadBalancerDbTests'.
 public class FakeLoadBalancerRepository : ILoadBalancerRepository
 {
     public List<LoadBalancer> Rows { get; } = new();
@@ -29,10 +29,7 @@ public class FakeLoadBalancerRepository : ILoadBalancerRepository
             .OrderByDescending(lb => lb.CreatedAt).ToList());
 
     public Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        Task.FromResult(Rows.Count(lb => lb.TenantId == tenantId
-                                         && lb.DesiredExistence == DesiredExistence.Exists
-                                         && (lb.CurrentExistence == CurrentExistence.Exists
-                                             || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.Pending != null))));
+        Task.FromResult(Rows.AsQueryable().Where(lb => lb.TenantId == tenantId).Count(LoadBalancer.OccupiesQuota));
 
     public Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         Task.FromResult(Rows.Any(lb => lb.TenantId == tenantId && lb.Name == name && lb.CurrentExistence != CurrentExistence.Deleted));

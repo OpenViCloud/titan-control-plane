@@ -18,7 +18,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
 
     public async Task<List<VmSnapshot>> ListBillableAsync(CancellationToken ct = default) =>
         await db.VmSnapshots
-            .Where(s => s.CurrentExistence == CurrentExistence.Exists)
+            .Where(VmSnapshot.IsBilled)
             .AsNoTracking()
             .ToListAsync(ct);
 

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -60,6 +61,23 @@ public class Network : AggregateRoot
     /// What counts toward MaxFirewallRulesPerNetwork: the rules Incus holds or is about to hold
     /// (titan-ops features/network/design.md#firewall-rule-quota-counting).
     public int FirewallRuleQuotaUsage => _firewallRules.Count(r => r.CountsTowardQuota);
+
+    /// Counts toward MaxNetworks (titan-ops features/network/design.md#network-lifecycle): what Incus holds, whatever its
+    /// word, or is about to hold. A delete in flight, a network Incus no longer has and a create that gave up before
+    /// Incus had it do not count. Written here, and again in OccupiesPublicIpv6Quota; the repository counts with it in SQL.
+    public static Expression<Func<Network, bool>> OccupiesQuota { get; } = n =>
+        n.DesiredExistence == DesiredExistence.Exists
+        && (n.CurrentExistence == CurrentExistence.Exists
+            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null));
+
+    /// Counts toward MaxPublicIpv6 (titan-ops features/network/design.md#ipv6-quota): a network that counts toward
+    /// MaxNetworks and holds a /64. The condition of OccupiesQuota is written out again, not composed with
+    /// Expression.Invoke, so that each rule stays one plain lambda.
+    public static Expression<Func<Network, bool>> OccupiesPublicIpv6Quota { get; } = n =>
+        n.PublicIpv6Subnet != null
+        && n.DesiredExistence == DesiredExistence.Exists
+        && (n.CurrentExistence == CurrentExistence.Exists
+            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null));
 
     private Network() { }
 

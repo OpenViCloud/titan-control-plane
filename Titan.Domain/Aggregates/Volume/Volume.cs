@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -52,6 +53,17 @@ public class Volume : AggregateRoot
     /// What counts toward MaxVolumeSnapshotsPerVolume, and what refuses the volume's delete
     /// (titan-ops features/volume/design.md#counting-and-billing).
     public int SnapshotQuotaUsage => _snapshots.Count(s => s.CountsTowardQuota);
+
+    /// Counts toward MaxVolumes (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about
+    /// to, unless its delete was pressed. A create that failed before Incus had it, or a volume Incus no longer has, does
+    /// not count. Written once here; the repository counts with it in SQL.
+    public static Expression<Func<Volume, bool>> OccupiesQuota { get; } = v =>
+        v.DesiredExistence == DesiredExistence.Exists
+        && (v.CurrentExistence == CurrentExistence.Exists
+            || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null));
+
+    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
+    public static Expression<Func<Volume, bool>> IsBilled { get; } = v => v.CurrentExistence == CurrentExistence.Exists;
 
     private Volume() { }
 

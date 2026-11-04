@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -56,6 +57,24 @@ public class Vm : AggregateRoot
 
     /// What counts toward MaxVmSnapshotsPerVm (titan-ops features/vm/design.md#vm-snapshot-counting).
     public int SnapshotQuotaUsage => _snapshots.Count(s => s.CountsTowardQuota);
+
+    /// Counts toward MaxVms (titan-ops features/vm/design.md#counting-and-billing): the instance exists, or its create is
+    /// still waiting. A create that failed before Incus had the instance, an instance not found, and a VM whose delete
+    /// was asked do not count; a create that failed after Incus made the instance is Exists and counts. Written once
+    /// here; the repository counts with it in SQL.
+    public static Expression<Func<Vm, bool>> OccupiesQuota { get; } = v =>
+        v.DesiredExistence == DesiredExistence.Exists
+        && (v.CurrentExistence == CurrentExistence.Exists
+            || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null));
+
+    /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
+    /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A delete in flight still bills.
+    public static Expression<Func<Vm, bool>> IsBilled { get; } = v =>
+        v.CurrentExistence == CurrentExistence.Exists
+        && (v.CurrentState == VmState.Running
+            || v.CurrentState == VmState.Ready
+            || v.CurrentState == VmState.Frozen
+            || v.CurrentState == VmState.Error);
 
     /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
     private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);

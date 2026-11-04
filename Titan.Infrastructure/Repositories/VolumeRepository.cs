@@ -38,18 +38,12 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .OrderByDescending(v => v.CreatedAt)
             .ToListAsync(ct);
 
-    // Occupancy (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to, unless its
-    // delete was pressed. A create that failed before Incus had it, or a volume Incus no longer has, does not count.
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        await db.Volumes.CountAsync(
-            v => v.TenantId == tenantId
-                 && v.DesiredExistence == DesiredExistence.Exists
-                 && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(v, "PendingRequestId") != null)), ct);
+        await db.Volumes.Where(v => v.TenantId == tenantId).CountAsync(Volume.OccupiesQuota, ct);
 
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Volumes
-            .Where(v => v.CurrentExistence == CurrentExistence.Exists)
+            .Where(Volume.IsBilled)
             .AsNoTracking()
             .ToListAsync(ct);
 

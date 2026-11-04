@@ -24,15 +24,8 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Quota counts what occupies the provider or is about to (titan-ops features/vm/design.md#counting-and-billing):
-    // the instance exists, or its create is still waiting. A failed create, an instance not found, and a VM
-    // whose delete was asked do not count.
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
-        await db.Vms.CountAsync(
-            v => v.TenantId == tenantId &&
-                 v.DesiredExistence == DesiredExistence.Exists &&
-                 (v.CurrentExistence == CurrentExistence.Exists
-                  || (v.CurrentExistence == CurrentExistence.NotCreated && EF.Property<Guid?>(v, "PendingRequestId") != null)), ct);
+        await db.Vms.Where(v => v.TenantId == tenantId).CountAsync(Vm.OccupiesQuota, ct);
 
     // The same condition as the unique index's filter (VmConfiguration): a narrower check would let the index 500.
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
@@ -51,15 +44,9 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // A VM is billed while its instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every
-    // Incus status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode).
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.CurrentExistence == CurrentExistence.Exists
-                        && (v.CurrentState == VmState.Running
-                            || v.CurrentState == VmState.Ready
-                            || v.CurrentState == VmState.Frozen
-                            || v.CurrentState == VmState.Error))
+            .Where(Vm.IsBilled)
             .AsNoTracking()
             .ToListAsync(ct);
 
