@@ -31,6 +31,11 @@ public class FirewallRule : RequestingChild<FirewallRuleRequestKind>
     /// a late observation must not bring back a rule Incus has already removed.
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed under its network,
+    /// still observed; a rule whose delete is waiting is still in force on Incus. FirewallRuleRepository's list and
+    /// reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+
     private FirewallRule() { }
 
     /// The ports as one value; null for ICMP and All. The two columns stay the storage: EF Core 9 has no nullable

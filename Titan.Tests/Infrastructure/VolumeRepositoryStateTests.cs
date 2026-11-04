@@ -241,4 +241,30 @@ public class VolumeRepositoryStateTests
 
         Assert.Equal(new[] { "attached", "attaching", "outside" }, found.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
+
+    // The repository writes each condition in LINQ; the rule is the plain bool on Volume
+    // (titan-ops architecture/domain-methods.md#plain-code). Every shape through both.
+    [Fact]
+    public async Task EveryQuery_AgreesWithTheBoolOnTheVolume_ForEveryShape()
+    {
+        using var db = NewDb();
+        Vm vm = RunningVm();
+        List<Volume> shapes =
+        [
+            Creating("creating"), Available("available"), AttachRequested("attaching", vm), Attached("attached", vm),
+            DetachRequested("detaching"), DeleteRequested("deleting"), NotFound("lost"), CreateFailed("failed"), Deleted("deleted"),
+        ];
+        db.Volumes.AddRange(shapes);
+        await db.SaveChangesAsync();
+        var repo = new VolumeRepository(db);
+        string[] ByName(IEnumerable<Volume> rows) => rows.Select(v => v.Name).OrderBy(n => n).ToArray();
+
+        Assert.Equal(shapes.Count(v => v.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
+        Assert.Equal(ByName(shapes.Where(v => v.IsBilled)), ByName(await repo.ListBillableAsync()));
+        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
+        Assert.Equal(
+            ByName(shapes.Where(v => v.IsNotDeleted && (v.CurrentAttachedVmId == vm.Id || v.DesiredAttachedVmId == vm.Id))),
+            ByName(await repo.ListAttachedToVmLockedAsync(vm.Id)));
+    }
 }

@@ -30,8 +30,7 @@ public class FakeProviderCommandRepository : IProviderCommandRepository
 
     public Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct)
     {
-        Func<ProviderCommand, bool> retired = ProviderCommand.FinishedAndCreatedBefore(cutoff).Compile();
-        return Task.FromResult(Rows.RemoveAll(c => retired(c)));
+        return Task.FromResult(Rows.RemoveAll(c => c.IsFinishedAndCreatedBefore(cutoff)));
     }
 
     public Task SaveChangesAsync(CancellationToken ct)

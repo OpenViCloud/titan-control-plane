@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -47,20 +46,52 @@ public class Network : RequestingRoot<NetworkRequestKind>
 
     /// Counts toward MaxNetworks (titan-ops features/network/design.md#network-lifecycle): what Incus holds, whatever its
     /// word, or is about to hold. A delete in flight, a network Incus no longer has and a create that gave up before
-    /// Incus had it do not count. Written here, and again in OccupiesPublicIpv6Quota; the repository counts with it in SQL.
-    public static Expression<Func<Network, bool>> OccupiesQuota { get; } = n =>
-        n.DesiredExistence == DesiredExistence.Exists
-        && (n.CurrentExistence == CurrentExistence.Exists
-            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null));
+    /// Incus had it do not count. NetworkRepository.CountActiveByTenantAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool OccupiesQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
 
     /// Counts toward MaxPublicIpv6 (titan-ops features/network/design.md#ipv6-quota): a network that counts toward
-    /// MaxNetworks and holds a /64. The condition of OccupiesQuota is written out again, not composed with
-    /// Expression.Invoke, so that each rule stays one plain lambda.
-    public static Expression<Func<Network, bool>> OccupiesPublicIpv6Quota { get; } = n =>
-        n.PublicIpv6Subnet != null
-        && n.DesiredExistence == DesiredExistence.Exists
-        && (n.CurrentExistence == CurrentExistence.Exists
-            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingRequestId != null));
+    /// MaxNetworks and holds a /64. NetworkRepository.CountPublicIpv6ActiveByTenantAsync writes the same test in SQL.
+    public bool OccupiesPublicIpv6Quota => PublicIpv6Subnet != null && OccupiesQuota;
+
+    /// Holds a range, whatever was asked of it (titan-ops features/network/design.md#network-lifecycle): Incus has the
+    /// network, a delete in flight included, or is about to. The third rule with this current clause, beside the two
+    /// quota rules, which also read desired: a network being deleted stops counting but keeps its range.
+    /// NetworkRepository.HasCidrOverlapAsync writes the same test in SQL and asks HeldRange of the rows it names.
+    public bool HoldsARange =>
+        CurrentExistence == CurrentExistence.Exists
+        || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null);
+
+    /// The range this network holds, or null (titan-ops features/network/user-stories.md#us-net-intent-02): one Incus
+    /// has keeps the address the worker reported, when that is an IPv4 CIDR (an address kept verbatim that is not one
+    /// holds none); one Incus is about to have keeps the range the customer asked for; any other holds none.
+    public Ipv4Cidr? HeldRange
+    {
+        get
+        {
+            if (CurrentExistence == CurrentExistence.Exists)
+            {
+                if (Ipv4Cidr.IsValid(Cidr))
+                {
+                    return Ipv4Cidr.Parse(Cidr);
+                }
+                return null;
+            }
+            bool aboutToHold = CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null;
+            if (aboutToHold)
+            {
+                return RequestedCidr;
+            }
+            return null;
+        }
+    }
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name,
+    /// still observed. The repository's list, name and reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
 
     private Network() { }
 

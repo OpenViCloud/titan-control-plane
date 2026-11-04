@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -50,21 +49,34 @@ public class Vm : RequestingRoot<VmRequestKind>
 
     /// Counts toward MaxVms (titan-ops features/vm/design.md#counting-and-billing): the instance exists, or its create is
     /// still waiting. A create that failed before Incus had the instance, an instance not found, and a VM whose delete
-    /// was asked do not count; a create that failed after Incus made the instance is Exists and counts. Written once
-    /// here; the repository counts with it in SQL.
-    public static Expression<Func<Vm, bool>> OccupiesQuota { get; } = v =>
-        v.DesiredExistence == DesiredExistence.Exists
-        && (v.CurrentExistence == CurrentExistence.Exists
-            || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingRequestId != null));
+    /// was asked do not count; a create that failed after Incus made the instance is Exists and counts.
+    /// VmRepository.CountActiveByTenantAsync writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool OccupiesQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
 
     /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
     /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A delete in flight still bills.
-    public static Expression<Func<Vm, bool>> IsBilled { get; } = v =>
-        v.CurrentExistence == CurrentExistence.Exists
-        && (v.CurrentState == VmState.Running
-            || v.CurrentState == VmState.Ready
-            || v.CurrentState == VmState.Frozen
-            || v.CurrentState == VmState.Error);
+    /// VmRepository.ListBillableAsync writes the same test in SQL.
+    public bool IsBilled =>
+        CurrentExistence == CurrentExistence.Exists
+        && (CurrentState == VmState.Running
+            || CurrentState == VmState.Ready
+            || CurrentState == VmState.Frozen
+            || CurrentState == VmState.Error);
+
+    /// Holds its network while the instance exists on Incus, whatever its status and a delete in flight included
+    /// (Incus refuses to delete a network an instance still uses), or while its create is still waiting
+    /// (titan-ops features/vm/design.md#counting-and-billing). Unlike OccupiesQuota, a delete that was asked for
+    /// changes nothing here. NetworkRepository.HasActiveVmsAsync writes the same test in SQL.
+    public bool HoldsItsNetwork =>
+        CurrentExistence == CurrentExistence.Exists
+        || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null);
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name,
+    /// still observed. The repository's list, name and reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
 
     /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
     private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);

@@ -196,4 +196,62 @@ public class NetworkRepositoryStateTests
         Assert.True(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("leaving")));
         Assert.False(await repo.ExistsByNameAsync(Tenant, NetworkName.Parse("gone")));
     }
+
+    // Every shape, named; the repository's LINQ and the plain bool on Network must agree on each
+    // (titan-ops architecture/domain-methods.md#plain-code).
+    private static List<Network> EveryShape()
+    {
+        var errored = Active("errored", "10.3.0.0/24");
+        errored.MarkObserved(NetworkStatus.Errored);
+        var lost = Active("lost", "10.4.0.0/24");
+        lost.MarkNotFound();
+        var failed = CreateWaiting("failed", "10.5.0.0/24");
+        failed.MarkRequestFailed("reason", "detail");
+        var gone = DeleteRequested("gone", "10.6.0.0/24");
+        gone.MarkDeleted();
+        var noRange = Active("no-range", null);
+        var oddWord = Active("odd-word", "fd00::/64");
+        return
+        [
+            CreateWaiting("creating", "10.7.0.0/24"), Active("active", "10.1.0.0/24"), DeleteRequested("leaving", "10.2.0.0/24"),
+            errored, lost, failed, gone, noRange, oddWord,
+        ];
+    }
+
+    [Fact]
+    public async Task EveryQuery_AgreesWithTheBoolOnTheNetwork_ForEveryShape()
+    {
+        using var db = NewDb();
+        List<Network> shapes = EveryShape();
+        db.Networks.AddRange(shapes);
+        await db.SaveChangesAsync();
+        var repo = new NetworkRepository(db);
+        string[] ByName(IEnumerable<Network> networks) => networks.Select(n => n.Name.Value).OrderBy(n => n).ToArray();
+
+        Assert.Equal(shapes.Count(n => n.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
+        Assert.Equal(shapes.Count(n => n.OccupiesPublicIpv6Quota), await repo.CountPublicIpv6ActiveByTenantAsync(Tenant));
+        Assert.Equal(ByName(shapes.Where(n => n.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        // ListAllAsync orders by Name, a NetworkName the InMemory provider cannot sort (Postgres sorts the column): not asked here.
+        Assert.Equal(ByName(shapes.Where(n => n.IsNotDeleted && n.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
+        foreach (Network network in shapes)
+        {
+            Assert.True(network.IsNotDeleted == await repo.ExistsByNameAsync(Tenant, network.Name), network.Name.Value);
+        }
+    }
+
+    // One row at a time: the overlap check must say "held" exactly when HeldRange is a range that overlaps.
+    [Fact]
+    public async Task CidrOverlap_AgreesWithHeldRange_ForEveryShape()
+    {
+        foreach (Network network in EveryShape())
+        {
+            using var db = NewDb();
+            db.Networks.Add(network);
+            await db.SaveChangesAsync();
+            Ipv4Cidr probe = Ipv4Cidr.Parse("10.0.0.0/8"); // overlaps every private 10.x range above
+            bool expected = network.HeldRange != null && network.HeldRange.Overlaps(probe);
+
+            Assert.True(expected == await new NetworkRepository(db).HasCidrOverlapAsync(Tenant, probe), network.Name.Value);
+        }
+    }
 }

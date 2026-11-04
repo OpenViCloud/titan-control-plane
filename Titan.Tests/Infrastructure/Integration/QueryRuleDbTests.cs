@@ -10,10 +10,12 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// The quota and billing queries on the SQL EF generates from the Domain rules (titan-ops
+/// The quota and billing queries on Postgres, each the SQL twin of a plain bool on the aggregate (titan-ops
 /// features/vm/design.md#counting-and-billing, features/volume/design.md#counting-and-billing,
 /// features/network/design.md#ipv6-quota, features/load-balancer/design.md#lb-quota-and-billing), one row per side of
-/// each condition. The repository state tests run the same rules on InMemory, which runs the expression, not the SQL.
+/// each condition, as fixed expectations. The repository state tests run the same queries on InMemory, which runs the
+/// LINQ, not the SQL, and there every shape is checked against the plain bool on the aggregate
+/// (titan-ops architecture/domain-methods.md#plain-code).
 /// Category=Integration — its own CI step; needs real Postgres (titan-ops architecture/testing.md#doubles-only-in-unit-tests).
 ///
 /// Rows of other tests share the database, so a billing list is read for this test's rows only.
@@ -79,6 +81,34 @@ public class QueryRuleDbTests(PostgresFixture pg)
         var billed = (await new VmRepository(db).ListBillableAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
 
         Assert.Equal(vms.Take(4).Select(v => v.Id).OrderBy(i => i), billed.OrderBy(i => i));
+    }
+
+    // A VM holds its network while Incus has the instance (a delete in flight included) or its create waits
+    // (titan-ops features/vm/design.md#counting-and-billing); one network per shape, so one holder cannot hide another.
+    [Fact]
+    public async Task NetworkIsHeld_ByAVmIncusHoldsOrIsAboutTo_NotByAFailedCreateNotFoundOrADeletedOne()
+    {
+        string offering = await OfferingAsync();
+        Guid deletingNetwork = Guid.NewGuid(), creatingNetwork = Guid.NewGuid(), failedNetwork = Guid.NewGuid(),
+            lostNetwork = Guid.NewGuid(), deletedNetwork = Guid.NewGuid();
+        Vm deleting = SeenVm(offering, "deleting", VmState.Running, deletingNetwork);
+        deleting.RequestDelete();
+        Vm failed = NewVm(offering, "failed", failedNetwork);
+        failed.MarkRequestFailed("refused", null);
+        Vm lost = SeenVm(offering, "lost", VmState.Running, lostNetwork);
+        lost.MarkNotFound();
+        Vm deleted = SeenVm(offering, "deleted", VmState.Running, deletedNetwork);
+        deleted.RequestDelete();
+        deleted.MarkDeleted();
+        await SaveAsync(deleting, NewVm(offering, "creating", creatingNetwork), failed, lost, deleted);
+
+        await using TitanDbContext db = pg.NewDbContext();
+        var repo = new NetworkRepository(db);
+        Assert.True(await repo.HasActiveVmsAsync(deletingNetwork));
+        Assert.True(await repo.HasActiveVmsAsync(creatingNetwork));
+        Assert.False(await repo.HasActiveVmsAsync(failedNetwork));
+        Assert.False(await repo.HasActiveVmsAsync(lostNetwork));
+        Assert.False(await repo.HasActiveVmsAsync(deletedNetwork));
     }
 
     private Volume NewVolume(string name) => Volume.Create(_tenant.Id, $"{name}-{Guid.NewGuid():N}"[..20], "cluster-a", "standard", 10);

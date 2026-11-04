@@ -17,8 +17,9 @@ public abstract class RequestingRoot<TKind> : AggregateRoot where TKind : struct
     public DateTimeOffset? RequestFailedAt { get; private set; }
 
     // The one waiting request, as three columns; all null or all set, written only through SetPending. EF maps them
-    // by name. Pending is the shape callers see.
-    protected Guid? PendingRequestId { get; private set; }
+    // by name. Pending is the shape callers see; the id is readable so a repository can write "a request is waiting"
+    // in its own query (titan-ops architecture/domain-methods.md#plain-code).
+    public Guid? PendingRequestId { get; private set; }
     protected TKind? PendingRequestKind { get; private set; }
     protected DateTimeOffset? PendingRequestAskedAt { get; private set; }
 

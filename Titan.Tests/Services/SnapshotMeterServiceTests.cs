@@ -108,7 +108,7 @@ public class SnapshotMeterServiceTests
     }
 
     // Which snapshots occupy the datastore is decided by the rules VmSnapshot.IsBilled and VolumeSnapshot.IsBilled, which each
-    // repository's ListBillableAsync applies, pinned per situation in VolumeRepositoryStateTests and
+    // repository's ListBillableAsync writes in SQL, pinned per situation in VolumeRepositoryStateTests and
     // VmSnapshotFirewallRepositoryStateTests (a revert or a delete in flight still bills).
     [Fact]
     public async Task RunTick_AsksBothRepositoriesForTheirBillableSnapshots()

@@ -81,7 +81,7 @@ public class DiskMeterServiceTests
     }
 
     // Which volumes occupy billable storage is the rule Volume.IsBilled, which IVolumeRepository.ListBillableAsync
-    // applies, pinned per situation by VolumeRepositoryStateTests.Billing_IsWhatIncusHolds_ADeleteInFlightIncluded.
+    // writes in SQL, pinned per situation by VolumeRepositoryStateTests.Billing_IsWhatIncusHolds_ADeleteInFlightIncluded.
 
     // Idempotent on (volumeId, bucket), same mechanism as the compute meter.
     [Fact]

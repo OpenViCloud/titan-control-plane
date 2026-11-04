@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -46,11 +45,16 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
 
     /// Counts toward MaxLoadBalancers (titan-ops features/load-balancer/design.md#lb-quota-and-billing): what Incus holds
     /// or is about to, unless its delete was pressed. A create that failed before Incus had it, or one Incus no longer
-    /// has, does not count. Written once here; the repository counts with it in SQL.
-    public static Expression<Func<LoadBalancer, bool>> OccupiesQuota { get; } = lb =>
-        lb.DesiredExistence == DesiredExistence.Exists
-        && (lb.CurrentExistence == CurrentExistence.Exists
-            || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingRequestId != null));
+    /// has, does not count. LoadBalancerRepository.CountActiveByTenantAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool OccupiesQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name
+    /// and its VIP number, still sends to its backends, still observed. The repository's queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
 
     private LoadBalancer() { }
 

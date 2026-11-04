@@ -444,4 +444,64 @@ public class NetworkTests
 
         Assert.Null(network.RequestedCidr);
     }
+
+    // ---- The range a network holds, for the overlap check (titan-ops features/network/design.md#network-lifecycle).
+
+    private static Network Waiting(string requestedCidr) =>
+        TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1", requestedCidr: requestedCidr);
+
+    [Fact]
+    public void HeldRange_OfACreateStillWaiting_IsTheRangeAskedFor()
+    {
+        Assert.Equal(Ipv4Cidr.Parse("10.7.0.0/24"), Waiting("10.7.0.0/24").HeldRange);
+    }
+
+    // Once Incus answered, its word is the range, even when it differs from what was asked for.
+    [Fact]
+    public void HeldRange_OfANetworkIncusHas_IsTheReportedAddress_WhateverWasAsked()
+    {
+        Network network = Waiting("10.7.0.0/24");
+        network.MarkCreated("ext-1", "10.9.0.0/24", "10.9.0.1");
+
+        Assert.Equal(Ipv4Cidr.Parse("10.9.0.0/24"), network.HeldRange);
+    }
+
+    // A report with no address, or an address kept verbatim that is not an IPv4 CIDR, holds no range and throws nothing.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("fd00::/64")]
+    public void HeldRange_OfANetworkIncusHas_IsNull_WhenTheReportedAddressIsNotAnIpv4Cidr(string? reported)
+    {
+        Network network = Waiting("10.7.0.0/24");
+        network.MarkCreated("ext-1", reported, null);
+
+        Assert.Null(network.HeldRange);
+    }
+
+    // A delete in flight keeps the range: the network is still on Incus until the delete confirms.
+    [Fact]
+    public void HeldRange_OfANetworkBeingDeleted_IsStillItsAddress()
+    {
+        Network network = MakeActiveNetwork();
+        network.RequestDelete();
+
+        Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), network.HeldRange);
+    }
+
+    [Fact]
+    public void HeldRange_OfACreateThatGaveUp_OfANetworkNotFound_AndOfADeletedOne_IsNull()
+    {
+        Network gaveUp = Waiting("10.7.0.0/24");
+        gaveUp.MarkRequestFailed("reason", "detail");
+        Network notFound = MakeActiveNetwork();
+        notFound.MarkNotFound();
+        Network deleted = MakeActiveNetwork();
+        deleted.RequestDelete();
+        deleted.MarkDeleted();
+
+        Assert.Null(gaveUp.HeldRange);
+        Assert.Null(notFound.HeldRange);
+        Assert.Null(deleted.HeldRange);
+    }
 }

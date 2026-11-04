@@ -248,7 +248,7 @@ public class ProviderCommandTests
     [InlineData(ProviderCommandStatus.Leased, -31, false)]
     [InlineData(ProviderCommandStatus.Done, -30, false)]
     [InlineData(ProviderCommandStatus.Failed, -29, false)]
-    public void FinishedAndCreatedBefore_TakesOnlyFinishedRowsOlderThanTheCutoff(ProviderCommandStatus status, int ageDays,
+    public void IsFinishedAndCreatedBefore_TakesOnlyFinishedRowsOlderThanTheCutoff(ProviderCommandStatus status, int ageDays,
         bool retired)
     {
         DateTimeOffset createdAt = T0.AddDays(ageDays);
@@ -267,7 +267,7 @@ public class ProviderCommandTests
             }
         }
 
-        bool taken = ProviderCommand.FinishedAndCreatedBefore(T0.AddDays(-30)).Compile()(command);
+        bool taken = command.IsFinishedAndCreatedBefore(T0.AddDays(-30));
 
         Assert.Equal(status, command.Status);
         Assert.Equal(retired, taken);

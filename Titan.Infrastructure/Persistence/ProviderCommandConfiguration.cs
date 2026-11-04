@@ -35,7 +35,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.HasIndex(c => c.LeaseId).IsUnique();
         // The lease scan: open rows of some kinds, oldest first.
         builder.HasIndex(c => new { c.Status, c.Kind, c.AvailableAt });
-        // The retention pass: finished rows by age (ProviderCommand.FinishedAndCreatedBefore).
+        // The retention pass: finished rows by age (ProviderCommand.IsFinishedAndCreatedBefore).
         builder.HasIndex(c => new { c.Status, c.CreatedAt });
     }
 }

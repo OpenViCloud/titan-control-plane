@@ -7,8 +7,10 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Repositories;
 
 /// Read side of the snapshot table (titan-ops architecture/code-structure.md#child-entity); writes go through VmRepository.
+/// Every state condition is the SQL twin of a plain bool on VmSnapshot (titan-ops architecture/domain-methods.md#plain-code).
 public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
 {
+    // VmSnapshot.IsNotDeleted
     public async Task<List<VmSnapshot>> FindByVmIdAsync(Guid vmId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.VmId == vmId && s.CurrentExistence != CurrentExistence.Deleted)
@@ -16,13 +18,14 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
+    // VmSnapshot.IsBilled
     public async Task<List<VmSnapshot>> ListBillableAsync(CancellationToken ct = default) =>
         await db.VmSnapshots
-            .Where(VmSnapshot.IsBilled)
+            .Where(s => s.CurrentExistence == CurrentExistence.Exists)
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // A snapshot has no cluster of its own; it lives where its VM lives.
+    // VmSnapshot.IsNotDeleted with a provider id. A snapshot has no cluster of its own; it lives where its VM lives.
     public async Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.ExternalId != null
