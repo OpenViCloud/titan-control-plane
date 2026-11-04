@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.Volume;
 
@@ -29,14 +30,21 @@ public class EndVolumeRequestCommandHandler(
         VolumeObservation? observed = command.AttachedTo == null
             ? null
             : await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
-        VolumeOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
-        VolumeOperationEnded? ended = volume.EndOperation(command.RequestId, end);
+        PendingOperation<VolumeOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = VolumeReports.FinishOperation(volume, command.RequestId, command.ExternalId, observed, activity);
+        }
+        else
+        {
+            ended = VolumeReports.FailOperation(volume, command.RequestId, command.ExternalId, observed,
+                command.Reason, command.Detail, activity);
+        }
         if (ended == null)
         {
             return;
         }
 
-        VolumeReports.RecordEnded(volume, ended, outcome, activity);
         await repo.SaveAsync(ct);
     }
 }

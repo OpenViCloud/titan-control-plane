@@ -39,12 +39,8 @@ public class ObserveVmCommandHandler(
             vm.MarkNotFound();
         }
 
-        // Temporary allowlist, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached).
-        VmOperationEnded? ended = VmReports.EndStopOrStartTheObservationReached(vm);
-        if (ended != null)
-        {
-            await VmReports.RecordEndedAsync(vm, ended, OperationOutcome.Done, activity, volumeRepo, ct);
-        }
+        // Temporary allowlist, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReachedAsync).
+        await VmReports.EndStopOrStartTheObservationReachedAsync(vm, activity, volumeRepo, ct);
 
         await repo.SaveAsync(ct);
     }

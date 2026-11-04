@@ -1753,7 +1753,7 @@ public class VmServiceTests
         Assert.Empty(_activity.Events);
     }
 
-    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached): a worker from before the request
+    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReachedAsync): a worker from before the request
     // routes reports nothing when a stop or start succeeds, so the observation that reaches what was asked still ends it.
     [Fact]
     public async Task UpdateStatus_FulfillingStopStartDelete_RecordsEachOutcome()

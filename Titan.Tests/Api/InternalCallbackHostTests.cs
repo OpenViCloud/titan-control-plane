@@ -153,9 +153,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     private async Task<Volume> StoredVolumeWaitingOnADeleteAsync()
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done($"vol-{volume.Id:N}", null));
+        volume.FinishOperation(volume.Pending!.Id, $"vol-{volume.Id:N}", null);
         VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
-        volume.EndSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, VolumeSnapshotOperationEnd.Done($"vol-{volume.Id:N}/s1"));
+        volume.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, $"vol-{volume.Id:N}/s1");
         volume.DeleteSnapshot(snapshot.Id);
         volume.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
@@ -269,10 +269,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]),
             "cluster-a", null, wantsPublicIpv6: false);
-        network.EndOperation(network.Pending!.Id,
-            NetworkOperationEnd.Done($"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1")));
+        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1"));
         FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
-        network.EndFirewallRuleOperation(rule.Id, rule.Pending!.Id, FirewallRuleOperationEnd.Done($"acl-{network.Id:N}/1", FirewallRuleState.enabled));
+        network.FinishFirewallRuleOperation(rule.Id, rule.Pending!.Id, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
         network.DeleteFirewallRule(rule.Id);
         network.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
@@ -413,10 +412,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         VmSnapshot reverting = vm.AddSnapshot("reverting").Snapshot;
-        vm.EndSnapshotOperation(reverting.Id, reverting.Pending!.Id, VmSnapshotOperationEnd.Done($"ext-{vm.Id:N}/s1"));
+        vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, $"ext-{vm.Id:N}/s1");
         vm.RevertSnapshot(reverting.Id);
         VmSnapshot deleting = vm.AddSnapshot("deleting").Snapshot;
-        vm.EndSnapshotOperation(deleting.Id, deleting.Pending!.Id, VmSnapshotOperationEnd.Done($"ext-{vm.Id:N}/s2"));
+        vm.FinishSnapshotOperation(deleting.Id, deleting.Pending!.Id, $"ext-{vm.Id:N}/s2");
         vm.DeleteSnapshot(deleting.Id);
         vm.AddSnapshot("creating");
         using IServiceScope scope = factory.Services.CreateScope();
@@ -577,7 +576,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             [backend]);
         if (deleting)
         {
-            lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
+            lb.FinishOperation(lb.Pending!.Id, lb.Vip);
             lb.Delete();
         }
         using IServiceScope scope = factory.Services.CreateScope();
@@ -716,7 +715,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmTemplate template = VmTemplate.Create($"tpl-{Guid.NewGuid():N}"[..14], null, "ubuntu/22.04", 10, Offering);
         if (resync)
         {
-            template.EndSyncOperation(TemplateCluster, template.SyncIn(TemplateCluster).Id, VmTemplateOperationEnd.Done(TemplateAlias));
+            template.FinishSyncOperation(TemplateCluster, template.SyncIn(TemplateCluster).Id, TemplateAlias);
             template.MarkNotFoundIn(TemplateCluster);
         }
         template.SyncIn(TemplateCluster);

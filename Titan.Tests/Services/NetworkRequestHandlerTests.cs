@@ -185,6 +185,8 @@ public class NetworkRequestHandlerTests
         FirewallRule staying = ActiveRule(network);
         FirewallRule leaving = ActiveRule(network);
         network.DeleteFirewallRule(leaving.Id);
+        FirewallRule gone = ActiveRule(network);
+        network.FinishFirewallRuleOperation(gone.Id, network.DeleteFirewallRule(gone.Id)!.OperationId, null, null);
         OperationTicket delete = network.Delete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.OperationId, "Done"));
@@ -593,7 +595,7 @@ public class NetworkRequestHandlerTests
     [Theory]
     [InlineData("EndNetworkRequest")]
     [InlineData("ObserveNetwork")]
-    [InlineData("EndFirewallRuleOperation")]
+    [InlineData("EndFirewallRuleRequest")]
     [InlineData("ObserveFirewallRule")]
     [InlineData("UpdateNetworkStatus")]
     [InlineData("UpdateFirewallRuleStatus")]
@@ -610,7 +612,7 @@ public class NetworkRequestHandlerTests
             case "ObserveNetwork":
                 await ObserveHandler().HandleAsync(new ObserveNetworkCommand(network.Id, true, "Created"));
                 break;
-            case "EndFirewallRuleOperation":
+            case "EndFirewallRuleRequest":
                 await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, Guid.NewGuid(), "Done"));
                 break;
             case "ObserveFirewallRule":

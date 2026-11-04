@@ -238,7 +238,7 @@ public class LoadBalancerStateMachineTests
         LoadBalancer lb = OnIncus(a);
         Guid update = lb.Update([Dns], [VmOnIncus()]).OperationId;
 
-        lb.EndOperation(update, LoadBalancerOperationEnd.Failed(null, "Load balancer update failed.", "detail"));
+        lb.FailOperation(update, null, "Load balancer update failed.", "detail");
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.DesiredListeners));
@@ -340,7 +340,7 @@ public class LoadBalancerStateMachineTests
         LoadBalancer lb = OnIncus();
         Guid delete = lb.Delete()!.OperationId;
 
-        lb.EndOperation(delete, LoadBalancerOperationEnd.Failed(null, "Load balancer deletion failed.", "detail"));
+        lb.FailOperation(delete, null, "Load balancer deletion failed.", "detail");
 
         Assert.Null(lb.Transition);
         Assert.Equal(DesiredExistence.Exists, lb.DesiredExistence);

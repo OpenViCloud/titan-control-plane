@@ -19,7 +19,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     public Guid TenantId { get; private set; }
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
-    // Only an observation (Mark*), an operation's own report (EndOperation) or a delete with nothing on the provider
+    // Only an observation (Mark*), an operation's own report (FinishOperation, FailOperation) or a delete with nothing on the provider
     // (DeleteLocally) writes CurrentState and CurrentExistence; only
     // an operation, or a failed operation's report putting it back, writes DesiredState and DesiredExistence
     // (titan-ops architecture/desired-and-current.md#desired-and-current).
@@ -381,10 +381,16 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
     public OperationTicket? DeleteSnapshot(Guid snapshotId) => RequireSnapshot(snapshotId).Delete();
 
-    /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another operation than the one the snapshot waits on.
-    public PendingOperation<VmSnapshotOperationKind>? EndSnapshotOperation(Guid snapshotId, Guid operationId, VmSnapshotOperationEnd end) =>
-        RequireSnapshot(snapshotId).EndOperation(operationId, end);
+    /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
+    /// when it names another operation than the one the snapshot waits on.
+    public PendingOperation<VmSnapshotOperationKind>? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
+        RequireSnapshot(snapshotId).FinishOperation(operationId, externalId);
+
+    /// The report that the snapshot's own command gave up; null when it names another operation than the one the
+    /// snapshot waits on.
+    public PendingOperation<VmSnapshotOperationKind>? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
+        string? reason, string? detail) =>
+        RequireSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -433,80 +439,100 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     // an operation. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
     // neither an intent nor a Mark*.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
-    /// give-up, a Done that arrived twice, a report for a VM already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
-    /// desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public VmOperationEnded? EndOperation(Guid operationId, VmOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a Done that arrived twice, a report for a VM already Deleted. Records what the worker saw, gives
+    /// the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingOperation<VmOperationKind>? FinishOperation(Guid operationId, string? externalId, VmObservation? observed)
     {
         if (IsTerminal) return null;
+        PendingOperation<VmOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        ClearFailure();
+        if (waiting.Kind == VmOperationKind.Delete)
+        {
+            // Incus deletes an instance's snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every
+            // snapshot not yet Deleted goes with the VM.
+            CurrentExistence = CurrentExistence.Deleted;
+            CurrentState = null;
+            IpAddress = null;
+            PublicIpv6Address = null;
+            foreach (VmSnapshot snapshot in _snapshots)
+            {
+                snapshot.EndWithItsVm();
+            }
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a stale give-up, a report for a VM already Deleted. Records what the worker saw and the reason,
+    /// and puts desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingOperation<VmOperationKind>? FailOperation(Guid operationId, string? externalId, VmObservation? observed,
+        string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<VmOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        RecordFailure(reason, detail);
+        switch (waiting.Kind)
+        {
+            case VmOperationKind.Delete:
+                DesiredExistence = DesiredExistence.Exists;
+                break;
+            case VmOperationKind.Start:
+            case VmOperationKind.Stop:
+                DesiredState = CurrentState == VmState.Stopped ? VmDesiredState.Stopped : VmDesiredState.Running;
+                break;
+            case VmOperationKind.Create:
+                // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
+                break;
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<VmOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
         PendingOperation<VmOperationKind>? waiting = Pending;
         bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
         if (!reportIsForThePendingOperation)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        return waiting;
+    }
 
-        // What the worker saw, whatever the outcome: a create that failed after Incus made the instance leaves a VM
-        // whose delete still reaches the provider.
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+    // What the worker saw, whatever the outcome: a create that failed after Incus made the instance leaves a VM whose
+    // delete still reaches the provider.
+    private void RecordWhatTheWorkerSaw(string? externalId, VmObservation? observed)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
-            ExternalId = end.ExternalId;
+            ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
         }
-        if (end.Observed != null)
+        if (observed != null)
         {
             CurrentExistence = CurrentExistence.Exists;
-            CurrentState = end.Observed.Status;
-            IpAddress = end.Observed.IpAddress;
-            PublicIpv6Address = end.Observed.PublicIpv6Address;
+            CurrentState = observed.Status;
+            IpAddress = observed.IpAddress;
+            PublicIpv6Address = observed.PublicIpv6Address;
         }
-
-        var snapshotsWhoseDeleteEnded = new List<VmSnapshot>();
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == VmOperationKind.Delete)
-            {
-                // Incus deletes an instance's snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every
-                // snapshot not yet Deleted goes with the VM; the ones whose own delete was waiting are named for
-                // their outcome.
-                CurrentExistence = CurrentExistence.Deleted;
-                CurrentState = null;
-                IpAddress = null;
-                PublicIpv6Address = null;
-                foreach (VmSnapshot snapshot in _snapshots)
-                {
-                    bool itsOwnDeleteWasWaiting = snapshot.EndWithItsVm();
-                    if (itsOwnDeleteWasWaiting)
-                    {
-                        snapshotsWhoseDeleteEnded.Add(snapshot);
-                    }
-                }
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            switch (waiting!.Kind)
-            {
-                case VmOperationKind.Delete:
-                    DesiredExistence = DesiredExistence.Exists;
-                    break;
-                case VmOperationKind.Start:
-                case VmOperationKind.Stop:
-                    DesiredState = CurrentState == VmState.Stopped ? VmDesiredState.Stopped : VmDesiredState.Running;
-                    break;
-                case VmOperationKind.Create:
-                    // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
-                    break;
-            }
-        }
-
-        SetPending(null);
-        return new VmOperationEnded(waiting, snapshotsWhoseDeleteEnded);
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what the provider is,

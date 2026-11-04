@@ -978,7 +978,7 @@ public class VolumeServiceTests
     private static void EndAttachDone(Volume vol, Vm target)
     {
         VolumeAttachProviderIds attach = vol.Attach(target);
-        vol.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(target.Id, false)));
+        vol.FinishOperation(attach.OperationId, null, new VolumeObservation(target.Id, false));
     }
 
     private static Vm MakeVm(

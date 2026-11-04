@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
-// (EndOperation), writes CurrentState, apart from the allowlist below. The two
+// (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -27,9 +27,9 @@ public class DesiredCurrentOwnershipTests
         ["VolumeSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.EndOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["FirewallRule.EndWithItsNetwork"] = "part of Network.EndOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["VmSnapshot.EndWithItsVm"] = "part of Vm.EndOperation: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.EndWithItsNetwork"] = "part of Network.FinishOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VmSnapshot.EndWithItsVm"] = "part of Vm.FinishOperation: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -66,19 +66,30 @@ public class DesiredCurrentOwnershipTests
         Assert.True(stale.Count == 0, "IntentWritesCurrentAllowlist rows that no longer write CurrentState:\n  " + string.Join("\n  ", stale));
     }
 
-    // The report of a request's own command (EndOperation, titan-ops architecture/resource-lifecycle.md#shape) is the one
-    // method that may write both: what the worker saw is current, and a failed request puts desired back. It is
-    // neither an intent nor an observation, so both scans skip it; every aggregate on the new shape gets one, and a root
-    // reaches a child's through End<Child>Operation.
+    // The report of a request's own command (FinishOperation for a Done, FailOperation for a give-up,
+    // titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the worker
+    // saw is current, and a failed request puts desired back. They are neither intents nor observations, so both scans
+    // skip them and the private RecordWhatTheWorkerSaw they share; every aggregate on the new shape gets the pair, and a
+    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation.
     [Fact]
-    public void ReportMethods_AreOnlyEndRequest()
+    public void ReportMethods_AreOnlyFinishAndFail()
     {
-        var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k).ToList();
-        Assert.Equal(
-            ["FirewallRule.EndOperation", "LoadBalancer.EndOperation", "Network.EndFirewallRuleOperation", "Network.EndOperation", "Vm.EndOperation",
-                "Vm.EndSnapshotOperation", "VmSnapshot.EndOperation", "VmTemplateCluster.EndOperation", "Volume.EndOperation", "Volume.EndSnapshotOperation",
-                "VolumeSnapshot.EndOperation"],
-            reports);
+        var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
+        string[] expected =
+        [
+            "FirewallRule.FailOperation", "FirewallRule.FinishOperation", "FirewallRule.RecordWhatTheWorkerSaw",
+            "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
+            "Network.FailFirewallRuleOperation", "Network.FailOperation", "Network.FinishFirewallRuleOperation",
+            "Network.FinishOperation", "Network.RecordWhatTheWorkerSaw",
+            "Vm.FailOperation", "Vm.FailSnapshotOperation", "Vm.FinishOperation", "Vm.FinishSnapshotOperation",
+            "Vm.RecordWhatTheWorkerSaw",
+            "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
+            "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
+            "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
+            "Volume.RecordWhatTheWorkerSaw",
+            "VolumeSnapshot.FailOperation", "VolumeSnapshot.FinishOperation", "VolumeSnapshot.RecordWhatTheWorkerSaw",
+        ];
+        Assert.Equal(expected.OrderBy(k => k, StringComparer.Ordinal), reports);
     }
 
     [Fact]
@@ -130,8 +141,9 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        // End<Child>Operation: a root's way in to its child's EndOperation (titan-ops architecture/code-structure.md#child-entity).
-        public bool IsReport => Regex.IsMatch(Key, @"\.End\w*Operation$");
+        // Finish<Child>Operation and Fail<Child>Operation: a root's way in to its child's pair
+        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part both share.
+        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|RecordWhatTheWorkerSaw)$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

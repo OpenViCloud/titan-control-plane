@@ -70,7 +70,7 @@ public class UpdateTemplateStatusCommandHandler(
                 // With nothing waiting, the alias the command saw is recorded as an observation would.
                 if (waiting != null)
                 {
-                    template.EndSyncOperation(req.ClusterId, waiting.Id, VmTemplateOperationEnd.Done(req.ExternalId));
+                    template.FinishSyncOperation(req.ClusterId, waiting.Id, req.ExternalId);
                 }
                 else
                 {
@@ -81,8 +81,7 @@ public class UpdateTemplateStatusCommandHandler(
                 // With nothing waiting the give-up is the stale report of a sync already over, and records nothing.
                 if (waiting != null)
                 {
-                    template.EndSyncOperation(req.ClusterId, waiting.Id,
-                        VmTemplateOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    template.FailSyncOperation(req.ClusterId, waiting.Id, req.ExternalId, req.Reason, req.Detail);
                 }
                 break;
         }

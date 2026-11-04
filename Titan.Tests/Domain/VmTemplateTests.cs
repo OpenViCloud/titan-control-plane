@@ -33,7 +33,7 @@ public class VmTemplateTests
     private static VmTemplate SyncedIn(string clusterId, string externalTemplateId)
     {
         var t = NewTemplate();
-        t.EndSyncOperation(clusterId, t.SyncIn(clusterId).Id, VmTemplateOperationEnd.Done(externalTemplateId));
+        t.FinishSyncOperation(clusterId, t.SyncIn(clusterId).Id, externalTemplateId);
         return t;
     }
 
@@ -94,7 +94,7 @@ public class VmTemplateTests
     public void RequestSyncIn_AfterAFailedSync_WaitsForTheWorker_AndKeepsTheReason()
     {
         var t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Failed(null, "wrong architecture", "raw"));
+        t.FailSyncOperation(Mock, t.SyncIn(Mock).Id, null, "wrong architecture", "raw");
 
         t.SyncIn(Mock);
 
@@ -151,8 +151,8 @@ public class VmTemplateTests
         PendingOperation<VmTemplateOperationKind> inMock = t.SyncIn(Mock);
         PendingOperation<VmTemplateOperationKind> inSingapore = t.SyncIn(Singapore);
 
-        t.EndSyncOperation(Mock, inMock.Id, VmTemplateOperationEnd.Done("tpl-a"));
-        t.EndSyncOperation(Singapore, inSingapore.Id, VmTemplateOperationEnd.Done("tpl-b"));
+        t.FinishSyncOperation(Mock, inMock.Id, "tpl-a");
+        t.FinishSyncOperation(Singapore, inSingapore.Id, "tpl-b");
 
         Assert.Equal("tpl-a", t.ProviderIdIn(Mock));
         Assert.Equal("tpl-b", t.ProviderIdIn(Singapore));
@@ -162,7 +162,7 @@ public class VmTemplateTests
     public void MarkNotFoundIn_OnAClusterThatHadIt_KeepsItsProviderId_AndTheOtherCluster()
     {
         var t = SyncedIn(Mock, "tpl-a");
-        t.EndSyncOperation(Singapore, t.SyncIn(Singapore).Id, VmTemplateOperationEnd.Done("tpl-b"));
+        t.FinishSyncOperation(Singapore, t.SyncIn(Singapore).Id, "tpl-b");
 
         t.MarkNotFoundIn(Mock);
 
@@ -176,7 +176,7 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
         t.MarkNotFoundIn(Mock);
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Failed(null, "image of another architecture", "raw"));
+        t.FailSyncOperation(Mock, t.SyncIn(Mock).Id, null, "image of another architecture", "raw");
 
         t.MarkNotFoundIn(Mock);
 

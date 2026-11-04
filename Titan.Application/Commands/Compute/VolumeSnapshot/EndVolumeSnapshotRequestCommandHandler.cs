@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
@@ -24,8 +25,16 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        VolumeSnapshotOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingOperation<VolumeSnapshotOperationKind>? ended = volume.EndSnapshotOperation(snapshot.Id, command.RequestId, end);
+        PendingOperation<VolumeSnapshotOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = volume.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
+        }
+        else
+        {
+            ended = volume.FailSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId, command.Reason,
+                command.Detail);
+        }
         if (ended == null)
         {
             return;

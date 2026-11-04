@@ -21,8 +21,7 @@ public class LoadBalancerRequestLifecycleTests
     private static Vm VmOnIncus()
     {
         Vm vm = Vm.Create(Tenant, NetworkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-a", 20);
-        vm.EndOperation(vm.Pending!.Id,
-            VmOperationEnd.Done($"vm{Guid.NewGuid():N}"[..28], new VmObservation(VmState.Running, "10.0.0.5", null)));
+        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..28], new VmObservation(VmState.Running, "10.0.0.5", null));
         return vm;
     }
 
@@ -33,12 +32,13 @@ public class LoadBalancerRequestLifecycleTests
     private static LoadBalancer OnIncus(params Vm[] backends)
     {
         LoadBalancer lb = Creating(backends);
-        lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
+        lb.FinishOperation(lb.Pending!.Id, lb.Vip);
         return lb;
     }
 
-    private static LoadBalancerOperationEnd Failed(string? externalId = null) =>
-        LoadBalancerOperationEnd.Failed(externalId, "The load balancer request could not be completed.", "raw");
+    private static PendingOperation<LoadBalancerOperationKind>? Failed(LoadBalancer lb, Guid operationId,
+        string? externalId = null) =>
+        lb.FailOperation(operationId, externalId, "The load balancer request could not be completed.", "raw");
 
     private static string Shape(LoadBalancer lb) =>
         $"{lb.CurrentExistence}/{lb.DesiredExistence}/{(lb.Transition == null ? "-" : lb.Transition.Value.ToString())}";
@@ -65,8 +65,8 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer lb = Creating();
         Guid create = lb.Pending!.Id;
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(create, LoadBalancerOperationEnd.Done(lb.Vip));
-        PendingOperation<LoadBalancerOperationKind>? again = lb.EndOperation(create, LoadBalancerOperationEnd.Done("another"));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(create, lb.Vip);
+        PendingOperation<LoadBalancerOperationKind>? again = lb.FinishOperation(create, "another");
 
         Assert.Equal((LoadBalancerOperationKind.Create, create), (ended!.Kind, ended.Id));
         Assert.Null(again);
@@ -82,7 +82,7 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = Creating();
 
-        lb.EndOperation(lb.Pending!.Id, Failed());
+        Failed(lb, lb.Pending!.Id);
 
         Assert.Equal("NotCreated/Exists/-", Shape(lb));
         Assert.Null(lb.ExternalId);
@@ -103,7 +103,7 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = Creating();
 
-        lb.EndOperation(lb.Pending!.Id, Failed(lb.Vip));
+        Failed(lb, lb.Pending!.Id, lb.Vip);
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(lb.Vip, lb.ExternalId);
@@ -125,7 +125,7 @@ public class LoadBalancerRequestLifecycleTests
         Assert.Equal((LoadBalancerOperationKind.Update, update.OperationId), (lb.Pending!.Kind, lb.Pending.Id));
         Assert.Equal(lb.Vip, update.ProviderId);
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(update.OperationId, LoadBalancerOperationEnd.Done(null));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(update.OperationId, null);
 
         Assert.Equal(LoadBalancerOperationKind.Update, ended!.Kind);
         Assert.Equal("Exists/Exists/-", Shape(lb));
@@ -141,7 +141,7 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer lb = OnIncus(a);
         OperationTicket update = lb.Update([Dns], [VmOnIncus()]);
 
-        lb.EndOperation(update.OperationId, Failed());
+        Failed(lb, update.OperationId);
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["TCP 80"], Ports(lb.DesiredListeners));
@@ -157,9 +157,9 @@ public class LoadBalancerRequestLifecycleTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        lb.EndOperation(lb.Update([Dns], [a]).OperationId, Failed());
+        Failed(lb, lb.Update([Dns], [a]).OperationId);
 
-        lb.EndOperation(lb.Update([Dns], [a]).OperationId, LoadBalancerOperationEnd.Done(null));
+        lb.FinishOperation(lb.Update([Dns], [a]).OperationId, null);
 
         Assert.Null(lb.OperationFailureReason);
         Assert.Null(lb.OperationFailureDetail);
@@ -175,12 +175,12 @@ public class LoadBalancerRequestLifecycleTests
         OperationTicket delete = lb.Delete()!;
         Assert.Equal(lb.Vip, delete.ProviderId);
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null));
+        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(delete.OperationId, null);
 
         Assert.Equal(LoadBalancerOperationKind.Delete, ended!.Kind);
         Assert.Equal("Deleted/Deleted/-", Shape(lb));
         Assert.True(lb.IsTerminal);
-        Assert.Null(lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null)));
+        Assert.Null(lb.FinishOperation(delete.OperationId, null));
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer lb = OnIncus();
         OperationTicket first = lb.Delete()!;
 
-        lb.EndOperation(first.OperationId, Failed());
+        Failed(lb, first.OperationId);
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
@@ -207,7 +207,7 @@ public class LoadBalancerRequestLifecycleTests
         OperationTicket update = lb.Update([Dns], [a]);
         OperationTicket delete = lb.Delete()!;
 
-        lb.EndOperation(delete.OperationId, Failed());
+        Failed(lb, delete.OperationId);
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["TCP 80"], Ports(lb.DesiredListeners));
@@ -227,10 +227,10 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer updating = OnIncus();
         updating.Update([Dns], [VmOnIncus()]);
 
-        Assert.Null(creating.EndOperation(Guid.NewGuid(), LoadBalancerOperationEnd.Done(creating.Vip)));
-        Assert.Null(updating.EndOperation(Guid.NewGuid(), Failed()));
+        Assert.Null(creating.FinishOperation(Guid.NewGuid(), creating.Vip));
+        Assert.Null(Failed(updating, Guid.NewGuid()));
         // Another load balancer's request id is not this one's.
-        Assert.Null(creating.EndOperation(updating.Pending!.Id, LoadBalancerOperationEnd.Done(creating.Vip)));
+        Assert.Null(creating.FinishOperation(updating.Pending!.Id, creating.Vip));
 
         Assert.Equal("NotCreated/Exists/Creating", Shape(creating));
         Assert.Null(creating.ExternalId);
@@ -247,8 +247,8 @@ public class LoadBalancerRequestLifecycleTests
         OperationTicket update = lb.Update([Dns], [VmOnIncus()]);
         lb.Delete();
 
-        Assert.Null(lb.EndOperation(update.OperationId, LoadBalancerOperationEnd.Done(null)));
-        Assert.Null(lb.EndOperation(update.OperationId, Failed()));
+        Assert.Null(lb.FinishOperation(update.OperationId, null));
+        Assert.Null(Failed(lb, update.OperationId));
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(lb));
         Assert.Null(lb.OperationFailureReason);
@@ -280,11 +280,11 @@ public class LoadBalancerRequestLifecycleTests
     {
         LoadBalancer lb = OnIncus();
         OperationTicket delete = lb.Delete()!;
-        lb.EndOperation(delete.OperationId, LoadBalancerOperationEnd.Done(null));
+        lb.FinishOperation(delete.OperationId, null);
 
         lb.MarkObserved();
         lb.MarkNotFound();
-        Assert.Null(lb.EndOperation(delete.OperationId, Failed()));
+        Assert.Null(Failed(lb, delete.OperationId));
 
         Assert.Equal("Deleted/Deleted/-", Shape(lb));
         Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => lb.Delete()).Code);

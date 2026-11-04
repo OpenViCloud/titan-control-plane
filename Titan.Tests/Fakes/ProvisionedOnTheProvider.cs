@@ -4,12 +4,14 @@
 //
 // Each class lives in its aggregate's namespace so a test that uses the aggregate sees the extension without a using.
 
+using Titan.Domain.Values;
+
 namespace Titan.Domain.Aggregates.Network
 {
     /// A network's and a firewall rule's requests end by their own command's report
     /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
-    /// test setups used before, through the real EndOperation and MarkObserved. A replay for a request not waiting does
-    /// nothing, like the report it stands for.
+    /// test setups used before, through the real FinishOperation, FailOperation and MarkObserved. A replay for a request
+    /// not waiting does nothing, like the report it stands for.
     public static class NetworkProvisionedOnTheProvider
     {
         /// The create command's Done with the name and address, reading the network Created. True when it ended the
@@ -18,8 +20,7 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
-                return network.EndOperation(create.Id,
-                    NetworkOperationEnd.Done(externalId, new NetworkObservation(NetworkStatus.Created, cidr, gateway))) != null;
+                return network.FinishOperation(create.Id, externalId, new NetworkObservation(NetworkStatus.Created, cidr, gateway)) != null;
             }
             network.MarkObserved(NetworkStatus.Created);
             return false;
@@ -30,14 +31,14 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
-                network.EndOperation(create.Id, NetworkOperationEnd.Done(externalId, new NetworkObservation(null, cidr, gateway)));
+                network.FinishOperation(create.Id, externalId, new NetworkObservation(null, cidr, gateway));
             }
         }
 
         /// The delete command's Done.
-        public static NetworkOperationEnded? MarkDeleted(this Network network) =>
+        public static PendingOperation<NetworkOperationKind>? MarkDeleted(this Network network) =>
             network.Pending is { Kind: NetworkOperationKind.Delete } delete
-                ? network.EndOperation(delete.Id, NetworkOperationEnd.Done(null, null))
+                ? network.FinishOperation(delete.Id, null, null)
                 : null;
 
         /// The create command's give-up. True when the network let go of its /64.
@@ -45,9 +46,9 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
-                NetworkOperationEnded? ended = network.EndOperation(create.Id,
-                    NetworkOperationEnd.Failed(externalId, null, reason, detail));
-                return ended is { LetGoOfPublicIpv6: true };
+                bool heldAPublicIpv6 = network.HasPublicIpv6;
+                PendingOperation<NetworkOperationKind>? ended = network.FailOperation(create.Id, externalId, null, reason, detail);
+                return ended != null && heldAPublicIpv6 && !network.HasPublicIpv6;
             }
             return false;
         }
@@ -60,7 +61,7 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
             {
-                return rule.EndOperation(create.Id, FirewallRuleOperationEnd.Done(externalId, FirewallRuleState.enabled)) != null;
+                return rule.FinishOperation(create.Id, externalId, FirewallRuleState.enabled) != null;
             }
             rule.MarkObserved(FirewallRuleState.enabled);
             return false;
@@ -71,7 +72,7 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
             {
-                rule.EndOperation(create.Id, FirewallRuleOperationEnd.Done(externalId, null));
+                rule.FinishOperation(create.Id, externalId, null);
             }
         }
 
@@ -80,22 +81,23 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
             {
-                rule.EndOperation(create.Id, FirewallRuleOperationEnd.Failed(externalId, reason, detail));
+                rule.FailOperation(create.Id, externalId, null, reason, detail);
             }
         }
 
         /// The rule's own delete Done. True when its delete was waiting.
         public static bool MarkDeleted(this FirewallRule rule) =>
             rule.Pending is { Kind: FirewallRuleOperationKind.Delete } delete
-            && rule.EndOperation(delete.Id, FirewallRuleOperationEnd.Done(null, null)) != null;
+            && rule.FinishOperation(delete.Id, null, null) != null;
     }
 }
 
 namespace Titan.Domain.Aggregates.Vm
 {
     /// A VM's requests end by their own command's report (titan-ops architecture/resource-lifecycle.md#shape); these replay
-    /// the worker's reports under the one-call names test setups used before, through the real EndOperation and
-    /// MarkObserved. A replay for a request the VM is not waiting on does nothing, like the report it stands for.
+    /// the worker's reports under the one-call names test setups used before, through the real FinishOperation,
+    /// FailOperation and MarkObserved. A replay for a request the VM is not waiting on does nothing, like the report it
+    /// stands for.
     public static class VmProvisionedOnTheProvider
     {
         /// The create command's Done with the instance name, then the reconciler's Running.
@@ -112,7 +114,7 @@ namespace Titan.Domain.Aggregates.Vm
         {
             if (vm.Pending is { Kind: VmOperationKind.Create } create)
             {
-                vm.EndOperation(create.Id, VmOperationEnd.Done(externalId, null));
+                vm.FinishOperation(create.Id, externalId, null);
             }
         }
 
@@ -121,9 +123,9 @@ namespace Titan.Domain.Aggregates.Vm
             vm.MarkObserved(new VmObservation(state, ipAddress, publicIpv6Address));
 
         /// The delete command's Done.
-        public static VmOperationEnded? MarkDeleted(this Vm vm) =>
+        public static PendingOperation<VmOperationKind>? MarkDeleted(this Vm vm) =>
             vm.Pending is { Kind: VmOperationKind.Delete } delete
-                ? vm.EndOperation(delete.Id, VmOperationEnd.Done(null, null))
+                ? vm.FinishOperation(delete.Id, null, null)
                 : null;
 
         /// The create command's give-up.
@@ -131,7 +133,7 @@ namespace Titan.Domain.Aggregates.Vm
         {
             if (vm.Pending is { Kind: VmOperationKind.Create } create)
             {
-                vm.EndOperation(create.Id, VmOperationEnd.Failed(externalId, null, reason, detail));
+                vm.FailOperation(create.Id, externalId, null, reason, detail);
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id.
@@ -140,39 +142,39 @@ namespace Titan.Domain.Aggregates.Vm
             VmSnapshot snapshot = vm.Snapshots.Single(s => s.Id == snapshotId);
             if (snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create)
             {
-                vm.EndSnapshotOperation(snapshotId, create.Id, VmSnapshotOperationEnd.Done(externalId));
+                vm.FinishSnapshotOperation(snapshotId, create.Id, externalId);
             }
         }
     }
 
     /// The same replays on one VM snapshot, for tests that build a snapshot's history directly, through the real
-    /// EndOperation. A replay for a request not waiting does nothing, like the report it stands for.
+    /// FinishOperation and FailOperation. A replay for a request not waiting does nothing, like the report it stands for.
     public static class VmSnapshotProvisionedOnTheProvider
     {
         /// The create command's Done with the snapshot's provider id. True when it ended the create.
         public static bool MarkCreated(this VmSnapshot snapshot, string externalId) =>
             snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create
-            && snapshot.EndOperation(create.Id, VmSnapshotOperationEnd.Done(externalId)) != null;
+            && snapshot.FinishOperation(create.Id, externalId) != null;
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this VmSnapshot snapshot, string? reason, string? detail)
         {
             if (snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create)
             {
-                snapshot.EndOperation(create.Id, VmSnapshotOperationEnd.Failed(null, reason, detail));
+                snapshot.FailOperation(create.Id, null, reason, detail);
             }
         }
 
         /// The revert command's Done. True when a revert was waiting.
         public static bool MarkReverted(this VmSnapshot snapshot) =>
             snapshot.Pending is { Kind: VmSnapshotOperationKind.Revert } revert
-            && snapshot.EndOperation(revert.Id, VmSnapshotOperationEnd.Done(null)) != null;
+            && snapshot.FinishOperation(revert.Id, null) != null;
 
         /// The delete command's Done. True when a delete was waiting. The VM's delete ending its snapshots is
         /// EndWithItsVm.
         public static bool MarkDeleted(this VmSnapshot snapshot) =>
             snapshot.Pending is { Kind: VmSnapshotOperationKind.Delete } delete
-            && snapshot.EndOperation(delete.Id, VmSnapshotOperationEnd.Done(null)) != null;
+            && snapshot.FinishOperation(delete.Id, null) != null;
     }
 }
 
@@ -180,7 +182,8 @@ namespace Titan.Domain.Aggregates.Volume
 {
     /// A volume's and a volume snapshot's requests end by their own command's report
     /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
-    /// test setups used before, through the real EndOperation. A replay for a request not waiting does nothing.
+    /// test setups used before, through the real FinishOperation and FailOperation. A replay for a request not waiting
+    /// does nothing.
     public static class VolumeProvisionedOnTheProvider
     {
         /// The create (or restore) command's Done with the volume name.
@@ -188,7 +191,7 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
             {
-                volume.EndOperation(create.Id, VolumeOperationEnd.Done(externalId, null));
+                volume.FinishOperation(create.Id, externalId, null);
             }
         }
 
@@ -197,14 +200,14 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Attach } attach)
             {
-                volume.EndOperation(attach.Id, VolumeOperationEnd.Done(null, new VolumeObservation(vmId, false)));
+                volume.FinishOperation(attach.Id, null, new VolumeObservation(vmId, false));
             }
         }
 
         /// The delete command's Done.
-        public static VolumeOperationEnded? MarkDeleted(this Volume volume) =>
+        public static PendingOperation<VolumeOperationKind>? MarkDeleted(this Volume volume) =>
             volume.Pending is { Kind: VolumeOperationKind.Delete } delete
-                ? volume.EndOperation(delete.Id, VolumeOperationEnd.Done(null, null))
+                ? volume.FinishOperation(delete.Id, null, null)
                 : null;
 
         /// The create command's give-up.
@@ -212,7 +215,7 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
             {
-                volume.EndOperation(create.Id, VolumeOperationEnd.Failed(externalId, null, reason, detail));
+                volume.FailOperation(create.Id, externalId, null, reason, detail);
             }
         }
 
@@ -222,7 +225,7 @@ namespace Titan.Domain.Aggregates.Volume
             VolumeSnapshot snapshot = volume.Snapshots.Single(s => s.Id == snapshotId);
             if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
             {
-                volume.EndSnapshotOperation(snapshotId, create.Id, VolumeSnapshotOperationEnd.Done(externalId));
+                volume.FinishSnapshotOperation(snapshotId, create.Id, externalId);
             }
         }
     }
@@ -235,7 +238,7 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
             {
-                snapshot.EndOperation(create.Id, VolumeSnapshotOperationEnd.Done(externalId));
+                snapshot.FinishOperation(create.Id, externalId);
             }
         }
 
@@ -244,44 +247,44 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
             {
-                snapshot.EndOperation(create.Id, VolumeSnapshotOperationEnd.Failed(null, reason, detail));
+                snapshot.FailOperation(create.Id, null, reason, detail);
             }
         }
 
         /// Incus no longer has it after Titan's delete: its own delete's Done, or its volume's.
-        public static bool MarkDeleted(this VolumeSnapshot snapshot) => snapshot.EndWithItsVolume();
+        public static void MarkDeleted(this VolumeSnapshot snapshot) => snapshot.EndWithItsVolume();
     }
 }
 
 namespace Titan.Domain.Aggregates.LoadBalancer
 {
     /// A load balancer's request ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
-    /// these replay the worker's reports under the one-call names test setups used before, through the real EndOperation.
-    /// A replay for a request not waiting does nothing, like the report it stands for.
+    /// these replay the worker's reports under the one-call names test setups used before, through the real
+    /// FinishOperation and FailOperation. A replay for a request not waiting does nothing, like the report it stands for.
     public static class LoadBalancerProvisionedOnTheProvider
     {
         /// The create command's Done with the VIP. True when it ended the create.
         public static bool MarkCreated(this LoadBalancer loadBalancer, string externalId) =>
             loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Create } create
-            && loadBalancer.EndOperation(create.Id, LoadBalancerOperationEnd.Done(externalId)) != null;
+            && loadBalancer.FinishOperation(create.Id, externalId) != null;
 
         /// The update command's Done for its request. True when that update was the one waiting.
         public static bool MarkUpdated(this LoadBalancer loadBalancer, Guid requestId) =>
             loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Update } update
             && update.Id == requestId
-            && loadBalancer.EndOperation(requestId, LoadBalancerOperationEnd.Done(null)) != null;
+            && loadBalancer.FinishOperation(requestId, null) != null;
 
         /// The delete command's Done. True when a delete was waiting.
         public static bool MarkDeleted(this LoadBalancer loadBalancer) =>
             loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Delete } delete
-            && loadBalancer.EndOperation(delete.Id, LoadBalancerOperationEnd.Done(null)) != null;
+            && loadBalancer.FinishOperation(delete.Id, null) != null;
 
         /// The create command's give-up, before Incus had the VIP.
         public static void MarkRequestFailed(this LoadBalancer loadBalancer, string? reason, string? detail)
         {
             if (loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Create } create)
             {
-                loadBalancer.EndOperation(create.Id, LoadBalancerOperationEnd.Failed(null, reason, detail));
+                loadBalancer.FailOperation(create.Id, null, reason, detail);
             }
         }
     }
@@ -291,7 +294,8 @@ namespace Titan.Domain.Aggregates.VmTemplate
 {
     /// A template's sync in a cluster ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
     /// these replay the worker's reports under the one-call names test setups used before, through the real
-    /// EndSyncOperation. A replay for a sync not waiting does what the old route does with that report.
+    /// FinishSyncOperation and FailSyncOperation. A replay for a sync not waiting does what the old route does with that
+    /// report.
     public static class VmTemplateProvisionedOnTheProvider
     {
         /// The sync command's Done with the alias. True when it ended a waiting sync; with none waiting it records the
@@ -301,7 +305,7 @@ namespace Titan.Domain.Aggregates.VmTemplate
             Values.PendingOperation<VmTemplateOperationKind>? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Pending;
             if (waiting != null)
             {
-                return template.EndSyncOperation(clusterId, waiting.Id, VmTemplateOperationEnd.Done(externalTemplateId)) != null;
+                return template.FinishSyncOperation(clusterId, waiting.Id, externalTemplateId) != null;
             }
             template.MarkAliasObservedIn(clusterId, externalTemplateId);
             return false;
@@ -312,7 +316,7 @@ namespace Titan.Domain.Aggregates.VmTemplate
         {
             Values.PendingOperation<VmTemplateOperationKind>? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Pending;
             return waiting != null
-                   && template.EndSyncOperation(clusterId, waiting.Id, VmTemplateOperationEnd.Failed(null, reason, detail)) != null;
+                   && template.FailSyncOperation(clusterId, waiting.Id, null, reason, detail) != null;
         }
     }
 }

@@ -88,43 +88,77 @@ public static class VmReports
     public static VmObservation? ParseObservation(VmObservationReport? report) =>
         report == null ? null : new VmObservation(ParseIncusStatus(report.Status), report.IpAddress, report.PublicIpv6Address);
 
-    /// Records the ended request's outcome once, and what a delete took with it: the snapshots whose own delete was
-    /// waiting, and the volumes the provider kept and detached
-    /// (titan-ops features/volume/design.md#vm-delete-releases-volumes), which stay attached if the delete gave up
-    /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    public static async Task RecordEndedAsync(
-        VmAggregate vm, VmOperationEnded ended, OperationOutcome outcome,
-        IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
+    /// Ends the VM's waiting operation with a Done and records its outcome once, with what a delete took along: the
+    /// snapshots whose own delete was waiting, and the volumes the provider kept and detached
+    /// (titan-ops features/volume/design.md#vm-delete-releases-volumes). Null when the report names no waiting
+    /// operation: nothing is recorded.
+    public static async Task<PendingOperation<VmOperationKind>?> FinishOperationAsync(VmAggregate vm, Guid operationId,
+        string? externalId, VmObservation? observed, IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
-        VmOperationKind kind = ended.Operation.Kind;
-        Dictionary<VmOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
-        if (actions.TryGetValue(kind, out string? action))
+        // Read before the VM's delete Done takes every snapshot along: the ones waiting on their own delete get its
+        // outcome here, once, since their command will only find them gone.
+        List<VmSnapshot> snapshotsWaitingOnTheirDelete = new();
+        foreach (VmSnapshot snapshot in vm.Snapshots)
+        {
+            if (snapshot.IsDeletedOrDeleting && !snapshot.IsTerminal)
+            {
+                snapshotsWaitingOnTheirDelete.Add(snapshot);
+            }
+        }
+
+        PendingOperation<VmOperationKind>? ended = vm.FinishOperation(operationId, externalId, observed);
+        if (ended == null)
+        {
+            return null;
+        }
+        if (DoneAction.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(vm.TenantId, action, "vm", vm.Id, vm.Name);
         }
-        foreach (VmSnapshot snapshot in ended.SnapshotsWhoseDeleteEnded)
+        if (ended.Kind != VmOperationKind.Delete)
+        {
+            return ended;
+        }
+        foreach (VmSnapshot snapshot in snapshotsWaitingOnTheirDelete)
         {
             activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
-        }
-
-        if (kind != VmOperationKind.Delete)
-        {
-            return;
         }
         // A volume's own waiting request is not touched: its command reports it.
         List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmLockedAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)
         {
-            if (outcome == OperationOutcome.Done)
-            {
-                volume.MarkDetachedByVmDelete(vm.Id);
-                volume.ReleaseFromVmDelete(vm.Id);
-            }
-            else
-            {
-                volume.KeepAttachmentAfterVmDeleteFailed(vm.Id);
-            }
+            volume.MarkDetachedByVmDelete(vm.Id);
+            volume.ReleaseFromVmDelete(vm.Id);
         }
+        return ended;
+    }
+
+    /// Ends the VM's waiting operation with a give-up and records its outcome once; the volumes of a delete that gave
+    /// up stay attached (titan-ops architecture/resource-lifecycle.md#kinds). Null when the report names no waiting
+    /// operation: nothing is recorded.
+    public static async Task<PendingOperation<VmOperationKind>?> FailOperationAsync(VmAggregate vm, Guid operationId,
+        string? externalId, VmObservation? observed, string? reason, string? detail,
+        IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
+    {
+        PendingOperation<VmOperationKind>? ended = vm.FailOperation(operationId, externalId, observed, reason, detail);
+        if (ended == null)
+        {
+            return null;
+        }
+        if (FailedAction.TryGetValue(ended.Kind, out string? action))
+        {
+            activity.StageOutcome(vm.TenantId, action, "vm", vm.Id, vm.Name);
+        }
+        if (ended.Kind != VmOperationKind.Delete)
+        {
+            return ended;
+        }
+        List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmLockedAsync(vm.Id, ct);
+        foreach (VolumeAggregate volume in attachedVolumes)
+        {
+            volume.KeepAttachmentAfterVmDeleteFailed(vm.Id);
+        }
+        return ended;
     }
 
     public static void RecordSnapshotEnded(VmSnapshot snapshot, PendingOperation<VmSnapshotOperationKind> ended,
@@ -142,7 +176,8 @@ public static class VmReports
     /// reports nothing when a stop or start succeeds may still run, an observation that reaches what a waiting stop or
     /// start asked for ends it, as before this rollout. With the new worker the command's own Done and this race; the
     /// later one finds nothing waiting and is ignored, so the outcome is recorded once. A create is never ended here.
-    public static VmOperationEnded? EndStopOrStartTheObservationReached(VmAggregate vm)
+    public static async Task<PendingOperation<VmOperationKind>?> EndStopOrStartTheObservationReachedAsync(VmAggregate vm,
+        IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
         PendingOperation<VmOperationKind>? waiting = vm.Pending;
         if (waiting == null)
@@ -156,6 +191,6 @@ public static class VmReports
         {
             return null;
         }
-        return vm.EndOperation(waiting.Id, VmOperationEnd.Done(null, null));
+        return await FinishOperationAsync(vm, waiting.Id, null, null, activity, volumes, ct);
     }
 }

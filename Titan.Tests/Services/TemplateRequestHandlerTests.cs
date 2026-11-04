@@ -130,7 +130,7 @@ public class TemplateRequestHandlerTests
     public async Task Done_WithoutTheAlias_OfAReSync_EndsIt()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         Guid resync = t.SyncIn(Mock).Id;
         var repo = new FakeVmTemplateRepository(t);
@@ -183,7 +183,7 @@ public class TemplateRequestHandlerTests
     public async Task SeeingTheAlias_WritesExists_AndLeavesTheSyncWaiting()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         Guid resync = t.SyncIn(Mock).Id;
         var repo = new FakeVmTemplateRepository(t);
@@ -200,7 +200,7 @@ public class TemplateRequestHandlerTests
     public async Task NotSeeingTheAlias_WritesNotFound_AndHidesItFromCustomers()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         var repo = new FakeVmTemplateRepository(t);
 
         await Observe(repo, t.Id, exists: false);

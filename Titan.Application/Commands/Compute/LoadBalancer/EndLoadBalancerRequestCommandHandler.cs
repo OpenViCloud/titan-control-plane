@@ -6,6 +6,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
@@ -24,8 +25,15 @@ public class EndLoadBalancerRequestCommandHandler(ILoadBalancerRepository repo, 
         LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
 
-        LoadBalancerOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingOperation<LoadBalancerOperationKind>? ended = loadBalancer.EndOperation(command.RequestId, end);
+        PendingOperation<LoadBalancerOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = loadBalancer.FinishOperation(command.RequestId, command.ExternalId);
+        }
+        else
+        {
+            ended = loadBalancer.FailOperation(command.RequestId, command.ExternalId, command.Reason, command.Detail);
+        }
         if (ended == null)
         {
             return;

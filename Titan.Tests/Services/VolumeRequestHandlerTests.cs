@@ -120,7 +120,7 @@ public class VolumeRequestHandlerTests
                 break;
             case "Detach":
                 VolumeAttachProviderIds attach = volume.Attach(_vm);
-                volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(_vm.Id, false)));
+                volume.FinishOperation(attach.OperationId, null, new VolumeObservation(_vm.Id, false));
                 requestId = volume.Detach().OperationId;
                 attachedTo = ["vm-ext"];
                 break;
@@ -159,6 +159,12 @@ public class VolumeRequestHandlerTests
         VolumeSnapshot leaving = volume.AddSnapshot("leaving").Snapshot;
         volume.MarkSnapshotCreated(leaving.Id, "vol-ext/s1");
         volume.DeleteSnapshot(leaving.Id);
+        VolumeSnapshot gone = volume.AddSnapshot("gone").Snapshot;
+        volume.MarkSnapshotCreated(gone.Id, "vol-ext/s2");
+        volume.FinishSnapshotOperation(gone.Id, volume.DeleteSnapshot(gone.Id)!.OperationId, null);
+        VolumeSnapshot lost = volume.AddSnapshot("lost").Snapshot;
+        volume.MarkSnapshotCreated(lost.Id, "vol-ext/s3");
+        volume.MarkSnapshotNotFound(lost.Id);
         OperationTicket delete = volume.Delete()!;
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, delete.OperationId, "Done"));

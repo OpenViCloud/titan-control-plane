@@ -8,6 +8,7 @@ using Titan.Domain.Values;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 using Titan.Application.Exceptions;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 
@@ -67,13 +68,13 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
             case "Created":
                 if (waiting is { Kind: VmSnapshotOperationKind.Create })
                 {
-                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(req.ExternalId));
+                    ended = vm.FinishSnapshotOperation(snapshot.Id, waiting.Id, req.ExternalId);
                 }
                 break;
             case "Reverted":
                 if (waiting is { Kind: VmSnapshotOperationKind.Revert })
                 {
-                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(null));
+                    ended = vm.FinishSnapshotOperation(snapshot.Id, waiting.Id, null);
                 }
                 break;
             case "RequestFailed":
@@ -81,8 +82,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
                 if (waiting != null)
                 {
                     outcome = OperationOutcome.Failed;
-                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id,
-                        VmSnapshotOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    ended = vm.FailSnapshotOperation(snapshot.Id, waiting.Id, req.ExternalId, req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
@@ -90,7 +90,7 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
                 // NotFound records.
                 if (waiting is { Kind: VmSnapshotOperationKind.Delete })
                 {
-                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(null));
+                    ended = vm.FinishSnapshotOperation(snapshot.Id, waiting.Id, null);
                 }
                 else
                 {

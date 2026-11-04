@@ -21,28 +21,51 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
         return route.RouterAddressIn(block56);
     }
 
-    /// The report of the network's own command (titan-ops architecture/resource-lifecycle.md#callback-routes), ended here
-    /// so the route follows it: a create that failed before Incus had the network let go of its /64, and a delete done
-    /// means Incus no longer has the network nor its router; either way the route goes back, its number waiting at the
-    /// back of the line. The held route is read without a lock: no create locks a held route. A repeated report
-    /// ends nothing and touches no route, and a network without public IPv6 never held one.
-    public async Task<NetworkOperationEnded?> RecordEndedAsync(Network network, Guid operationId, NetworkOperationEnd end,
-        CancellationToken ct = default)
+    /// The report that the network's own command ended Done (titan-ops architecture/resource-lifecycle.md#callback-routes),
+    /// ended here so the route follows it: a delete done means Incus no longer has the network nor its router, so the
+    /// route goes back, its number waiting at the back of the line. The held route is read without a lock: no create
+    /// locks a held route. A repeated report ends nothing and touches no route, and a network without public IPv6
+    /// never held one.
+    public async Task<PendingOperation<NetworkOperationKind>?> FinishOperationAsync(Network network, Guid operationId,
+        string? externalId, NetworkObservation? observed, CancellationToken ct = default)
     {
-        NetworkOperationEnded? ended = network.EndOperation(operationId, end);
+        PendingOperation<NetworkOperationKind>? ended = network.FinishOperation(operationId, externalId, observed);
         if (ended == null)
         {
             return null;
         }
-        bool deleteDone = ended.Operation.Kind == NetworkOperationKind.Delete && end.Outcome == OperationOutcome.Done;
-        if (ended.LetGoOfPublicIpv6 || deleteDone)
+        if (ended.Kind == NetworkOperationKind.Delete)
         {
-            ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);
-            if (route != null)
-            {
-                route.TakeBack(DateTimeOffset.UtcNow);
-            }
+            await TakeBackTheRouteOfAsync(network, ct);
         }
         return ended;
+    }
+
+    /// The report that the network's own command gave up, ended here so the route follows it: a create that failed
+    /// before Incus had the network lets go of its /64, and the route goes back as for a delete done.
+    public async Task<PendingOperation<NetworkOperationKind>?> FailOperationAsync(Network network, Guid operationId,
+        string? externalId, NetworkObservation? observed, string? reason, string? detail, CancellationToken ct = default)
+    {
+        bool heldAPublicIpv6 = network.HasPublicIpv6;
+        PendingOperation<NetworkOperationKind>? ended = network.FailOperation(operationId, externalId, observed, reason, detail);
+        if (ended == null)
+        {
+            return null;
+        }
+        bool letGoOfItsPublicIpv6 = heldAPublicIpv6 && !network.HasPublicIpv6;
+        if (letGoOfItsPublicIpv6)
+        {
+            await TakeBackTheRouteOfAsync(network, ct);
+        }
+        return ended;
+    }
+
+    private async Task TakeBackTheRouteOfAsync(Network network, CancellationToken ct)
+    {
+        ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);
+        if (route != null)
+        {
+            route.TakeBack(DateTimeOffset.UtcNow);
+        }
     }
 }

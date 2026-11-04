@@ -56,8 +56,6 @@ public class UpdateNetworkStatusCommandHandler(
 
         PendingOperation<NetworkOperationKind>? waiting = network.Pending;
         NetworkObservation addresses = new(null, req.Cidr, req.Gateway);
-        NetworkOperationEnded? ended = null;
-        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -75,17 +73,16 @@ public class UpdateNetworkStatusCommandHandler(
                 // Done. The status is left to the reconciler, as before.
                 if (waiting is { Kind: NetworkOperationKind.Create })
                 {
-                    ended = await routes.RecordEndedAsync(network, waiting.Id,
-                        NetworkOperationEnd.Done(req.ExternalId, addresses), ct);
+                    await NetworkReports.FinishOperationAsync(routes, network, waiting.Id, req.ExternalId, addresses,
+                        activity, ct);
                 }
                 break;
             case "RequestFailed":
                 // The waiting request ends Failed, keeping an id and address the create's give-up found.
                 if (waiting != null)
                 {
-                    outcome = OperationOutcome.Failed;
-                    ended = await routes.RecordEndedAsync(network, waiting.Id,
-                        NetworkOperationEnd.Failed(req.ExternalId, addresses, req.Reason, req.Detail), ct);
+                    await NetworkReports.FailOperationAsync(routes, network, waiting.Id, req.ExternalId, addresses,
+                        req.Reason, req.Detail, activity, ct);
                 }
                 break;
             case "Deleted":
@@ -93,18 +90,13 @@ public class UpdateNetworkStatusCommandHandler(
                 // which is what NotFound records.
                 if (waiting is { Kind: NetworkOperationKind.Delete })
                 {
-                    ended = await routes.RecordEndedAsync(network, waiting.Id, NetworkOperationEnd.Done(null, null), ct);
+                    await NetworkReports.FinishOperationAsync(routes, network, waiting.Id, null, null, activity, ct);
                 }
                 else
                 {
                     network.MarkNotFound();
                 }
                 break;
-        }
-
-        if (ended != null)
-        {
-            NetworkReports.RecordEnded(network, ended, outcome, activity);
         }
 
         // A route given back above commits with the network that let go of it.

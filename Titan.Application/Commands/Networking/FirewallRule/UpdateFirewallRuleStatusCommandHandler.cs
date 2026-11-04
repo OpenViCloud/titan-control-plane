@@ -8,6 +8,7 @@ using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using Titan.Application.Exceptions;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
@@ -69,8 +70,7 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 // The old create command reports the rule's id as soon as it is in the ACL: the create's Done.
                 if (waiting is { Kind: FirewallRuleOperationKind.Create })
                 {
-                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id,
-                        FirewallRuleOperationEnd.Done(command.ExternalRuleId, null));
+                    ended = network.FinishFirewallRuleOperation(rule.Id, waiting.Id, command.ExternalRuleId, null);
                 }
                 break;
             case "RequestFailed":
@@ -78,14 +78,14 @@ public class UpdateFirewallRuleStatusCommandHandler(INetworkRepository networkRe
                 if (waiting != null)
                 {
                     outcome = OperationOutcome.Failed;
-                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id,
-                        FirewallRuleOperationEnd.Failed(command.ExternalRuleId, command.Reason, command.Detail));
+                    ended = network.FailFirewallRuleOperation(rule.Id, waiting.Id, command.ExternalRuleId, null, command.Reason,
+                        command.Detail);
                 }
                 break;
             case "Deleted":
                 if (waiting is { Kind: FirewallRuleOperationKind.Delete })
                 {
-                    ended = network.EndFirewallRuleOperation(rule.Id, waiting.Id, FirewallRuleOperationEnd.Done(null, null));
+                    ended = network.FinishFirewallRuleOperation(rule.Id, waiting.Id, null, null);
                 }
                 else
                 {

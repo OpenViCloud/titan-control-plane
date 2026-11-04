@@ -88,19 +88,56 @@ public static class VolumeReports
         return new VolumeObservation(attachedVmId, elsewhere);
     }
 
-    /// Records the ended request's outcome once, and the snapshots a volume's delete took whose own delete was waiting.
-    public static void RecordEnded(VolumeAggregate volume, VolumeOperationEnded ended, OperationOutcome outcome,
-        IActivityRecorder activity)
+    /// Ends the volume's waiting operation with a Done and records its outcome once, with the snapshots a delete took
+    /// along whose own delete was waiting. Null when the report names no waiting operation: nothing is recorded.
+    public static PendingOperation<VolumeOperationKind>? FinishOperation(VolumeAggregate volume, Guid operationId,
+        string? externalId, VolumeObservation? observed, IActivityRecorder activity)
     {
-        Dictionary<VolumeOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
-        if (actions.TryGetValue(ended.Operation.Kind, out string? action))
+        // Read before the volume's delete Done takes every snapshot along: the ones waiting on their own delete get its
+        // outcome here, once, since their command will only find them gone.
+        List<VolumeSnapshot> snapshotsWaitingOnTheirDelete = new();
+        foreach (VolumeSnapshot snapshot in volume.Snapshots)
+        {
+            if (snapshot.IsDeletedOrDeleting && !snapshot.IsTerminal)
+            {
+                snapshotsWaitingOnTheirDelete.Add(snapshot);
+            }
+        }
+
+        PendingOperation<VolumeOperationKind>? ended = volume.FinishOperation(operationId, externalId, observed);
+        if (ended == null)
+        {
+            return null;
+        }
+        if (DoneAction.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(volume.TenantId, action, "volume", volume.Id, volume.Name);
         }
-        foreach (VolumeSnapshot snapshot in ended.SnapshotsWhoseDeleteEnded)
+        if (ended.Kind == VolumeOperationKind.Delete)
         {
-            activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot", snapshot.Id, snapshot.Name);
+            foreach (VolumeSnapshot snapshot in snapshotsWaitingOnTheirDelete)
+            {
+                activity.StageOutcome(snapshot.TenantId, "volume_snapshot.deleted", "volume_snapshot", snapshot.Id, snapshot.Name);
+            }
         }
+        return ended;
+    }
+
+    /// Ends the volume's waiting operation with a give-up and records its outcome once. Null when the report names no
+    /// waiting operation: nothing is recorded.
+    public static PendingOperation<VolumeOperationKind>? FailOperation(VolumeAggregate volume, Guid operationId,
+        string? externalId, VolumeObservation? observed, string? reason, string? detail, IActivityRecorder activity)
+    {
+        PendingOperation<VolumeOperationKind>? ended = volume.FailOperation(operationId, externalId, observed, reason, detail);
+        if (ended == null)
+        {
+            return null;
+        }
+        if (FailedAction.TryGetValue(ended.Kind, out string? action))
+        {
+            activity.StageOutcome(volume.TenantId, action, "volume", volume.Id, volume.Name);
+        }
+        return ended;
     }
 
     public static void RecordSnapshotEnded(VolumeSnapshot snapshot, PendingOperation<VolumeSnapshotOperationKind> ended,
@@ -119,7 +156,8 @@ public static class VolumeReports
     /// waiting attach or detach asked for ends it, as before this rollout. With the new worker the command's own Done
     /// and this race; the later one finds nothing waiting and is ignored, so the outcome is recorded once. A create or a
     /// delete is never ended here.
-    public static VolumeOperationEnded? EndAttachOrDetachTheObservationReached(VolumeAggregate volume)
+    public static PendingOperation<VolumeOperationKind>? EndAttachOrDetachTheObservationReached(VolumeAggregate volume,
+        IActivityRecorder activity)
     {
         PendingOperation<VolumeOperationKind>? waiting = volume.Pending;
         if (waiting == null)
@@ -133,6 +171,6 @@ public static class VolumeReports
         {
             return null;
         }
-        return volume.EndOperation(waiting.Id, VolumeOperationEnd.Done(null, null));
+        return FinishOperation(volume, waiting.Id, null, null, activity);
     }
 }

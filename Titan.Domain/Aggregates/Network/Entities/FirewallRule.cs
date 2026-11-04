@@ -8,7 +8,7 @@ namespace Titan.Domain.Aggregates.Network;
 /// A child of Network (titan-ops architecture/code-structure.md#child-entity): the network's delete taking
 /// every rule with it is the network's invariant, so only the root reaches the methods below, and
 /// handlers go through Network.AddFirewallRule, DeleteFirewallRule,
-/// EndFirewallRuleOperation and MarkFirewallRule*.
+/// FinishFirewallRuleOperation, FailFirewallRuleOperation and MarkFirewallRule*.
 public class FirewallRule : ProviderResource<FirewallRuleOperationKind>, IEntity
 {
     public Guid Id { get; private set; }
@@ -131,68 +131,93 @@ public class FirewallRule : ProviderResource<FirewallRuleOperationKind>, IEntity
     // ---- The report of the rule's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
     // its operation.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null. Done of the
-    /// create records the id, existence and the state read; Done of the delete ends the rule; Failed records the reason,
-    /// keeps an id the worker found, and gives a delete back (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<FirewallRuleOperationKind>? EndOperation(Guid operationId, FirewallRuleOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. The create records the id, existence and the state read; the delete ends the rule
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<FirewallRuleOperationKind>? FinishOperation(Guid operationId, string? externalId, FirewallRuleState? observedState)
     {
         if (IsTerminal) return null;
-        PendingOperation<FirewallRuleOperationKind>? waiting = Pending;
-        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
-        if (!reportIsForThePendingOperation)
+        PendingOperation<FirewallRuleOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId, observedState);
 
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
-        if (bringsTheProviderId)
+        ClearFailure();
+        if (waiting.Kind == FirewallRuleOperationKind.Delete)
         {
-            ExternalId = end.ExternalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-        if (end.ObservedState != null)
-        {
-            CurrentExistence = CurrentExistence.Exists;
-            CurrentState = end.ObservedState;
-        }
-
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == FirewallRuleOperationKind.Delete)
-            {
-                CurrentExistence = CurrentExistence.Deleted;
-                CurrentState = null;
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == FirewallRuleOperationKind.Delete)
-            {
-                // Still in the ACL and still enforced: it counts against the quota again.
-                DesiredExistence = DesiredExistence.Exists;
-            }
+            CurrentExistence = CurrentExistence.Deleted;
+            CurrentState = null;
         }
 
         SetPending(null);
         return waiting;
     }
 
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. Records the reason, keeps an id and a state the worker found, and gives a delete back
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<FirewallRuleOperationKind>? FailOperation(Guid operationId, string? externalId,
+        FirewallRuleState? observedState, string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<FirewallRuleOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId, observedState);
+
+        RecordFailure(reason, detail);
+        if (waiting.Kind == FirewallRuleOperationKind.Delete)
+        {
+            // Still in the ACL and still enforced: it counts against the quota again.
+            DesiredExistence = DesiredExistence.Exists;
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<FirewallRuleOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
+        PendingOperation<FirewallRuleOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
+        {
+            return null;
+        }
+        return waiting;
+    }
+
+    private void RecordWhatTheWorkerSaw(string? externalId, FirewallRuleState? observedState)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
+        if (bringsTheProviderId)
+        {
+            ExternalId = externalId;
+            CurrentExistence = CurrentExistence.Exists;
+        }
+        if (observedState != null)
+        {
+            CurrentExistence = CurrentExistence.Exists;
+            CurrentState = observedState;
+        }
+    }
+
     /// Incus deleted the network's ACL, and this rule with it: the network's delete Done ends the rule, whatever it waited
-    /// on. Returns true when the rule's own delete was waiting, so the caller records its outcome once.
-    internal bool EndWithItsNetwork()
+    /// on. A rule already Deleted stays as it is.
+    internal void EndWithItsNetwork()
     {
         if (IsTerminal)
         {
-            return false;
+            return;
         }
-        bool itsOwnDeleteWasWaiting = DeleteIsWaiting;
         CurrentExistence = CurrentExistence.Deleted;
         CurrentState = null;
         SetPending(null);
-        return itsOwnDeleteWasWaiting;
     }
 
     /// Intent: remove a rule Incus may hold — whatever its state, even not found; Incus answers. With a provider id,

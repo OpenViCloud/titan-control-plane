@@ -51,7 +51,7 @@ public class VmRequestHandlerTests
 
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
-    // ---------- EndOperation: the report names the request ----------
+    // ---------- FinishOperation and FailOperation: the report names the request ----------
 
     [Fact]
     public async Task Done_OfTheCreate_StoresTheId_RecordsVmCreatedOnce_AndSaves()
@@ -108,6 +108,9 @@ public class VmRequestHandlerTests
         leaving.MarkCreated("42/s1");
         vm.DeleteSnapshot(leaving.Id);
         vm.WithSnapshot("resting").MarkCreated("42/s2");
+        VmSnapshot gone = vm.WithSnapshot("gone");
+        gone.MarkCreated("42/s3");
+        vm.FinishSnapshotOperation(gone.Id, vm.DeleteSnapshot(gone.Id)!.OperationId, null);
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
@@ -160,7 +163,7 @@ public class VmRequestHandlerTests
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        volume.FinishOperation(attach.OperationId, null, new VolumeObservation(vm.Id, false));
         OperationTicket detach = volume.Detach();
         _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
         OperationTicket delete = vm.Delete()!;
@@ -294,7 +297,7 @@ public class VmRequestHandlerTests
         Assert.Empty(_activity.Events);
     }
 
-    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached).
+    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReachedAsync).
     [Fact]
     public async Task AnObservation_ReachingAWaitingStop_EndsIt_AndTheLaterDone_IsIgnored()
     {

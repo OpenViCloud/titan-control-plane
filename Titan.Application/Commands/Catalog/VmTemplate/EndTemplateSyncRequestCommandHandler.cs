@@ -6,6 +6,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 using Titan.Application.Exceptions;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 
@@ -27,8 +28,16 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
         VmTemplateAggregate template = await repo.FindByIdForUpdateAsync(command.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
-        VmTemplateOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingOperation<VmTemplateOperationKind>? ended = template.EndSyncOperation(command.ClusterId, command.RequestId, end);
+        PendingOperation<VmTemplateOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = template.FinishSyncOperation(command.ClusterId, command.RequestId, command.ExternalId);
+        }
+        else
+        {
+            ended = template.FailSyncOperation(command.ClusterId, command.RequestId, command.ExternalId, command.Reason,
+                command.Detail);
+        }
         if (ended == null)
         {
             return;

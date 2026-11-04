@@ -6,6 +6,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -34,15 +35,22 @@ public class EndNetworkRequestCommandHandler(
 
         bool sawTheNetwork = status != null || command.Cidr != null || command.Gateway != null;
         NetworkObservation? observed = sawTheNetwork ? new NetworkObservation(status, command.Cidr, command.Gateway) : null;
-        NetworkOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
-        // NetworkRoutes ends it, so a route the network let go of goes back in the same save.
-        NetworkOperationEnded? ended = await routes.RecordEndedAsync(network, command.RequestId, end, ct);
+        PendingOperation<NetworkOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = await NetworkReports.FinishOperationAsync(routes, network, command.RequestId, command.ExternalId,
+                observed, activity, ct);
+        }
+        else
+        {
+            ended = await NetworkReports.FailOperationAsync(routes, network, command.RequestId, command.ExternalId,
+                observed, command.Reason, command.Detail, activity, ct);
+        }
         if (ended == null)
         {
             return;
         }
 
-        NetworkReports.RecordEnded(network, ended, outcome, activity);
         await repo.SaveAsync(ct);
     }
 }

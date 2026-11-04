@@ -10,12 +10,12 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same four methods, its
+// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods, its
 // Mark* return nothing, a report with a foreign id changes nothing, every lifecycle handler locks the row, and every
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
-// semantics of EndOperation beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
+// semantics of FinishOperation and FailOperation beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root.
@@ -38,13 +38,13 @@ public class RequestLifecycleShapeTests
         [typeof(VolumeSnapshot)] = () =>
         {
             Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
-            volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done("vol-shape", null));
+            volume.FinishOperation(volume.Pending!.Id, "vol-shape", null);
             return volume.AddSnapshot("shape").Snapshot;
         },
         [typeof(VmSnapshot)] = () =>
         {
             Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
-            vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
+            vm.FinishOperation(vm.Pending!.Id, "vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null));
             return vm.AddSnapshot("shape").Snapshot;
         },
         [typeof(Network)] = () => ANetwork(),
@@ -54,18 +54,17 @@ public class RequestLifecycleShapeTests
             Guid tenantId = TestTenant.WithRoomToSpare().Id;
             Guid networkId = Guid.NewGuid();
             Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
-            backend.EndOperation(backend.Pending!.Id, VmOperationEnd.Done("vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null)));
+            backend.FinishOperation(backend.Pending!.Id, "vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null));
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
-            lb.EndOperation(lb.Pending!.Id, LoadBalancerOperationEnd.Done(lb.Vip));
+            lb.FinishOperation(lb.Pending!.Id, lb.Vip);
             lb.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
             return lb;
         },
         [typeof(FirewallRule)] = () =>
         {
             Network network = ANetwork();
-            network.EndOperation(network.Pending!.Id,
-                NetworkOperationEnd.Done("net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1")));
+            network.FinishOperation(network.Pending!.Id, "net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1"));
             return network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
         },
         [typeof(VmTemplateCluster)] = () =>
@@ -83,7 +82,7 @@ public class RequestLifecycleShapeTests
     private static readonly HashSet<string> IntentVerbs = ["Start", "Stop", "Delete", "Update", "Sync", "SyncIn"];
 
     [Fact]
-    public void EveryAggregateOnTheShape_HasTheFourMethods_AndIsKnownHere()
+    public void EveryAggregateOnTheShape_HasTheFiveMethods_AndIsKnownHere()
     {
         List<Type> shaped = OnTheRequestShape();
         Assert.NotEmpty(shaped);
@@ -93,13 +92,13 @@ public class RequestLifecycleShapeTests
         foreach (Type type in shaped)
         {
             string[] names = type.GetMethods(Declared).Select(m => m.Name).Distinct().ToArray();
-            foreach (string required in new[] { "EndOperation", "MarkObserved", "MarkNotFound" })
+            foreach (string required in new[] { "FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound" })
             {
                 if (!names.Contains(required)) missing.Add($"{type.Name}.{required}");
             }
             if (!names.Any(n => IntentVerbs.Contains(n))) missing.Add($"{type.Name}.<intent verb>");
         }
-        Assert.True(missing.Count == 0, "Aggregates on the request shape without the four methods: " + string.Join(", ", missing));
+        Assert.True(missing.Count == 0, "Aggregates on the request shape without the five methods: " + string.Join(", ", missing));
     }
 
     [Fact] // a Mark* that returns something is a Mark* that ends a request somewhere
@@ -113,34 +112,42 @@ public class RequestLifecycleShapeTests
         Assert.True(offenders.Count == 0, "Mark* must return void (titan-ops architecture/resource-lifecycle.md#shape): " + string.Join(", ", offenders));
     }
 
-    [Fact] // run for real, through each type's factory: a report naming another request leaves every public property as it was
-    public void EndRequest_WithAForeignId_ReturnsNull_AndChangesNoPublicProperty()
+    [Fact] // run for real, through each type's factory: a report naming another operation leaves every public property as it was
+    public void FinishOrFail_WithAForeignId_ReturnsNull_AndChangesNoPublicProperty()
     {
         foreach ((Type type, Func<object> build) in WaitingOnARequest)
         {
-            object aggregate = build();
-            MethodInfo endRequest = type.GetMethod("EndOperation", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
-            object end = ADoneReportFor(type);
-            Dictionary<string, object?> before = PublicProperties(aggregate);
+            foreach (string method in new[] { "FinishOperation", "FailOperation" })
+            {
+                object aggregate = build();
+                MethodInfo ending = type.GetMethod(method, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
+                object?[] arguments = [Guid.NewGuid(), .. WhatTheWorkerSawFor(type, method)];
+                Dictionary<string, object?> before = PublicProperties(aggregate);
 
-            object? result = endRequest.Invoke(aggregate, [Guid.NewGuid(), end]);
+                object? result = ending.Invoke(aggregate, arguments);
 
-            Assert.Null(result);
-            Assert.Equal(before, PublicProperties(aggregate));
+                Assert.Null(result);
+                Assert.Equal(before, PublicProperties(aggregate));
+            }
         }
     }
 
-    private static object ADoneReportFor(Type type)
+    // Everything a report brings after the operation id: what the worker saw, and for a give-up the reason and detail.
+    private static object?[] WhatTheWorkerSawFor(Type type, string method)
     {
-        if (type == typeof(Vm)) return VmOperationEnd.Done("foreign", new VmObservation(VmState.Running, "10.0.0.9", null));
-        if (type == typeof(Volume)) return VolumeOperationEnd.Done("foreign", new VolumeObservation(Guid.NewGuid(), true));
-        if (type == typeof(VolumeSnapshot)) return VolumeSnapshotOperationEnd.Done("foreign");
-        if (type == typeof(VmSnapshot)) return VmSnapshotOperationEnd.Done("foreign");
-        if (type == typeof(Network)) return NetworkOperationEnd.Done("foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"));
-        if (type == typeof(FirewallRule)) return FirewallRuleOperationEnd.Done("foreign", FirewallRuleState.enabled);
-        if (type == typeof(LoadBalancer)) return LoadBalancerOperationEnd.Done("foreign");
-        if (type == typeof(VmTemplateCluster)) return VmTemplateOperationEnd.Done("foreign");
-        throw new InvalidOperationException($"no report builder for {type.Name}: add one with its rollout phase");
+        object?[] seen;
+        if (type == typeof(Vm)) seen = ["foreign", new VmObservation(VmState.Running, "10.0.0.9", null)];
+        else if (type == typeof(Volume)) seen = ["foreign", new VolumeObservation(Guid.NewGuid(), true)];
+        else if (type == typeof(Network)) seen = ["foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1")];
+        else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleState.enabled];
+        else if (type == typeof(VolumeSnapshot) || type == typeof(VmSnapshot) || type == typeof(LoadBalancer)
+                 || type == typeof(VmTemplateCluster)) seen = ["foreign"];
+        else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");
+        if (method == "FinishOperation")
+        {
+            return seen;
+        }
+        return [.. seen, "late", "late detail"];
     }
 
     private static Dictionary<string, object?> PublicProperties(object aggregate) =>

@@ -117,13 +117,34 @@ public class VmTemplate : IAggregateRoot
         return operation;
     }
 
-    /// The report of a sync's command in one cluster (titan-ops architecture/resource-lifecycle.md#shape): ends that
-    /// cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with no row
-    /// has nothing waiting, so no row is added for it.
-    public PendingOperation<VmTemplateOperationKind>? EndSyncOperation(string clusterId, Guid operationId, VmTemplateOperationEnd end)
+    /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape):
+    /// ends that cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with
+    /// no row has nothing waiting, so no row is added for it.
+    public PendingOperation<VmTemplateOperationKind>? FinishSyncOperation(string clusterId, Guid operationId, string? externalId)
     {
         VmTemplateCluster? cluster = ClusterOrNull(clusterId);
-        PendingOperation<VmTemplateOperationKind>? ended = cluster?.EndOperation(operationId, end);
+        if (cluster == null)
+        {
+            return null;
+        }
+        PendingOperation<VmTemplateOperationKind>? ended = cluster.FinishOperation(operationId, externalId);
+        if (ended != null)
+        {
+            UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        return ended;
+    }
+
+    /// The report that a sync's command in one cluster gave up: as FinishSyncOperation, the cluster records the reason.
+    public PendingOperation<VmTemplateOperationKind>? FailSyncOperation(string clusterId, Guid operationId, string? externalId,
+        string? reason, string? detail)
+    {
+        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        if (cluster == null)
+        {
+            return null;
+        }
+        PendingOperation<VmTemplateOperationKind>? ended = cluster.FailOperation(operationId, externalId, reason, detail);
         if (ended != null)
         {
             UpdatedAt = DateTimeOffset.UtcNow;

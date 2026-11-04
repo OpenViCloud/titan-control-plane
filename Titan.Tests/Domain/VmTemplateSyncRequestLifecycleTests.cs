@@ -24,8 +24,9 @@ public class VmTemplateSyncRequestLifecycleTests
         return $"{row.CurrentExistence}/{row.DesiredExistence}/{(row.Transition == null ? "-" : row.Transition.Value.ToString())}";
     }
 
-    private static VmTemplateOperationEnd Failed(string? alias = null) =>
-        VmTemplateOperationEnd.Failed(alias, "Template sync failed due to a system error.", "raw");
+    private static PendingOperation<VmTemplateOperationKind>? Failed(VmTemplate t, string clusterId, Guid operationId,
+        string? alias = null) =>
+        t.FailSyncOperation(clusterId, operationId, alias, "Template sync failed due to a system error.", "raw");
 
     // ---------- the request ----------
 
@@ -48,7 +49,7 @@ public class VmTemplateSyncRequestLifecycleTests
     {
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> first = t.SyncIn(Mock);
-        t.EndSyncOperation(Mock, first.Id, Failed());
+        Failed(t, Mock, first.Id);
 
         PendingOperation<VmTemplateOperationKind> second = t.SyncIn(Mock);
 
@@ -61,10 +62,10 @@ public class VmTemplateSyncRequestLifecycleTests
     public void Done_RecordsTheAlias_Exists_AndClearsAnEarlierFailure()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, Failed());
+        Failed(t, Mock, t.SyncIn(Mock).Id);
         PendingOperation<VmTemplateOperationKind> again = t.SyncIn(Mock);
 
-        PendingOperation<VmTemplateOperationKind>? ended = t.EndSyncOperation(Mock, again.Id, VmTemplateOperationEnd.Done(Alias));
+        PendingOperation<VmTemplateOperationKind>? ended = t.FinishSyncOperation(Mock, again.Id, Alias);
 
         Assert.Equal(again, ended);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
@@ -78,11 +79,11 @@ public class VmTemplateSyncRequestLifecycleTests
     public void Done_OfAReSync_KeepsTheFirstAlias()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         PendingOperation<VmTemplateOperationKind> resync = t.SyncIn(Mock);
 
-        t.EndSyncOperation(Mock, resync.Id, VmTemplateOperationEnd.Done("tpl-other"));
+        t.FinishSyncOperation(Mock, resync.Id, "tpl-other");
 
         Assert.Equal(Alias, Row(t, Mock).ExternalTemplateId);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
@@ -93,9 +94,9 @@ public class VmTemplateSyncRequestLifecycleTests
     {
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> sync = t.SyncIn(Mock);
-        t.EndSyncOperation(Mock, sync.Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, sync.Id, Alias);
 
-        Assert.Null(t.EndSyncOperation(Mock, sync.Id, VmTemplateOperationEnd.Done(Alias)));
+        Assert.Null(t.FinishSyncOperation(Mock, sync.Id, Alias));
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
     }
 
@@ -107,7 +108,7 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> sync = t.SyncIn(Mock);
 
-        PendingOperation<VmTemplateOperationKind>? ended = t.EndSyncOperation(Mock, sync.Id, Failed());
+        PendingOperation<VmTemplateOperationKind>? ended = Failed(t, Mock, sync.Id);
 
         Assert.Equal(sync, ended);
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
@@ -125,7 +126,7 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> sync = t.SyncIn(Mock);
 
-        t.EndSyncOperation(Mock, sync.Id, Failed(Alias));
+        Failed(t, Mock, sync.Id, Alias);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Equal((Alias, "Template sync failed due to a system error."), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).OperationFailureReason));
@@ -140,7 +141,7 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> sync = t.SyncIn(Mock);
 
-        Assert.Null(t.EndSyncOperation(Mock, Guid.NewGuid(), Failed()));
+        Assert.Null(Failed(t, Mock, Guid.NewGuid()));
 
         Assert.Equal(sync, Row(t, Mock).Pending);
         Assert.Null(Row(t, Mock).OperationFailureReason);
@@ -150,9 +151,9 @@ public class VmTemplateSyncRequestLifecycleTests
     public void AReportWithNothingWaiting_ChangesNothing()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
 
-        Assert.Null(t.EndSyncOperation(Mock, Guid.NewGuid(), Failed()));
+        Assert.Null(Failed(t, Mock, Guid.NewGuid()));
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Null(Row(t, Mock).OperationFailureReason);
@@ -164,7 +165,7 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         t.SyncIn(Mock);
 
-        Assert.Null(t.EndSyncOperation(Singapore, Guid.NewGuid(), VmTemplateOperationEnd.Done(Alias)));
+        Assert.Null(t.FinishSyncOperation(Singapore, Guid.NewGuid(), Alias));
 
         Assert.Equal([Mock], t.Clusters.Select(c => c.ClusterId));
     }
@@ -176,8 +177,8 @@ public class VmTemplateSyncRequestLifecycleTests
         PendingOperation<VmTemplateOperationKind> inMock = t.SyncIn(Mock);
         PendingOperation<VmTemplateOperationKind> inSingapore = t.SyncIn(Singapore);
 
-        Assert.Null(t.EndSyncOperation(Singapore, inMock.Id, VmTemplateOperationEnd.Done(Alias)));
-        t.EndSyncOperation(Mock, inMock.Id, VmTemplateOperationEnd.Done(Alias));
+        Assert.Null(t.FinishSyncOperation(Singapore, inMock.Id, Alias));
+        t.FinishSyncOperation(Mock, inMock.Id, Alias);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Equal(inSingapore, Row(t, Singapore).Pending);
@@ -189,7 +190,7 @@ public class VmTemplateSyncRequestLifecycleTests
     public void SeeingTheAlias_WritesExists_AndEndsNoSync()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         PendingOperation<VmTemplateOperationKind> resync = t.SyncIn(Mock);
 
@@ -203,14 +204,14 @@ public class VmTemplateSyncRequestLifecycleTests
     public void NotSeeingTheAlias_WritesNotFound_AndEndsNoSync()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         PendingOperation<VmTemplateOperationKind> resync = t.SyncIn(Mock);
 
         t.MarkNotFoundIn(Mock);
 
         Assert.Equal("NotFound/Exists/Syncing", Shape(t, Mock));
-        t.EndSyncOperation(Mock, resync.Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, resync.Id, Alias);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
     }
 
@@ -218,9 +219,9 @@ public class VmTemplateSyncRequestLifecycleTests
     public void SeeingTheAlias_KeepsTheReasonOfTheLastFailedSync()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, Failed());
+        Failed(t, Mock, t.SyncIn(Mock).Id);
 
         t.MarkObservedIn(Mock);
 
@@ -245,7 +246,7 @@ public class VmTemplateSyncRequestLifecycleTests
     public void SeeingTheAliasByItsName_KeepsTheFirstAlias_AndLeavesTheSyncWaiting()
     {
         VmTemplate t = NewTemplate();
-        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Done(Alias));
+        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
         t.MarkNotFoundIn(Mock);
         PendingOperation<VmTemplateOperationKind> resync = t.SyncIn(Mock);
 

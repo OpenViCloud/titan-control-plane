@@ -204,84 +204,111 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
     // an operation. It writes both axes, so it is neither an intent nor a Mark*.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
-    /// give-up, a Done that arrived twice, a report for a network already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
-    /// desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds). Internal: NetworkRoutes
-    /// ends it, so a route the network lets go of goes back with it.
-    internal NetworkOperationEnded? EndOperation(Guid operationId, NetworkOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a Done that arrived twice, a report for a network already Deleted. Records what the worker saw,
+    /// gives the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
+    /// Internal: NetworkRoutes ends it, so a route the network lets go of goes back with it.
+    internal PendingOperation<NetworkOperationKind>? FinishOperation(Guid operationId, string? externalId, NetworkObservation? observed)
     {
         if (IsTerminal) return null;
+        PendingOperation<NetworkOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        ClearFailure();
+        if (waiting.Kind == NetworkOperationKind.Delete)
+        {
+            // The delete removed the network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle):
+            // every rule not yet Deleted goes with the network.
+            CurrentExistence = CurrentExistence.Deleted;
+            CurrentState = null;
+            foreach (FirewallRule rule in _firewallRules)
+            {
+                rule.EndWithItsNetwork();
+            }
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a stale give-up, a report for a network already Deleted. Records what the worker saw and the
+    /// reason, and puts desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
+    /// Internal: NetworkRoutes ends it, so a /64 the network lets go of goes back with its route.
+    internal PendingOperation<NetworkOperationKind>? FailOperation(Guid operationId, string? externalId, NetworkObservation? observed,
+        string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<NetworkOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        RecordFailure(reason, detail);
+        if (waiting.Kind == NetworkOperationKind.Delete)
+        {
+            DesiredExistence = DesiredExistence.Exists;
+        }
+        else
+        {
+            // A failed create may be deleted, not retried: desired stays. Incus never had the network, so nothing
+            // holds the /64 there; keeping it here would hold one of the cluster's 255 for as long as the network
+            // lives.
+            bool incusNeverHadIt = ExternalId is null;
+            if (incusNeverHadIt && HasPublicIpv6)
+            {
+                PublicIpv6Subnet = null;
+            }
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<NetworkOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
         PendingOperation<NetworkOperationKind>? waiting = Pending;
         bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
         if (!reportIsForThePendingOperation)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        return waiting;
+    }
 
-        // What the worker saw, whatever the outcome: a create that failed after Incus made the network leaves a network
-        // whose delete still reaches Incus. The addresses come with the name: the ones the create asked for or Incus
-        // picked; an empty string is the same absence, and neither is stored.
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+    // What the worker saw, whatever the outcome: a create that failed after Incus made the network leaves a network whose
+    // delete still reaches Incus. The addresses come with the name: the ones the create asked for or Incus picked; an
+    // empty string is the same absence, and neither is stored.
+    private void RecordWhatTheWorkerSaw(string? externalId, NetworkObservation? observed)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
-            ExternalId = end.ExternalId;
+            ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
-            Cidr = AddressOrNull(end.Observed?.Cidr);
-            Gateway = AddressOrNull(end.Observed?.Gateway);
-        }
-        if (end.Observed?.Status != null)
-        {
-            CurrentExistence = CurrentExistence.Exists;
-            CurrentState = end.Observed.Status;
-        }
-
-        var rulesWhoseDeleteEnded = new List<FirewallRule>();
-        bool letGoOfPublicIpv6 = false;
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == NetworkOperationKind.Delete)
+            if (observed != null)
             {
-                // The delete removed the network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle):
-                // every rule not yet Deleted goes with the network; the ones whose own delete was waiting are named for
-                // their outcome.
-                CurrentExistence = CurrentExistence.Deleted;
-                CurrentState = null;
-                foreach (FirewallRule rule in _firewallRules)
-                {
-                    bool itsOwnDeleteWasWaiting = rule.EndWithItsNetwork();
-                    if (itsOwnDeleteWasWaiting)
-                    {
-                        rulesWhoseDeleteEnded.Add(rule);
-                    }
-                }
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == NetworkOperationKind.Delete)
-            {
-                DesiredExistence = DesiredExistence.Exists;
+                Cidr = AddressOrNull(observed.Cidr);
+                Gateway = AddressOrNull(observed.Gateway);
             }
             else
             {
-                // A failed create may be deleted, not retried: desired stays. Incus never had the network, so nothing
-                // holds the /64 there; keeping it here would hold one of the cluster's 255 for as long as the network
-                // lives.
-                bool incusNeverHadIt = ExternalId is null;
-                if (incusNeverHadIt && HasPublicIpv6)
-                {
-                    PublicIpv6Subnet = null;
-                    letGoOfPublicIpv6 = true;
-                }
+                Cidr = null;
+                Gateway = null;
             }
         }
-
-        SetPending(null);
-        return new NetworkOperationEnded(waiting, rulesWhoseDeleteEnded, letGoOfPublicIpv6);
+        if (observed != null && observed.Status != null)
+        {
+            CurrentExistence = CurrentExistence.Exists;
+            CurrentState = observed.Status;
+        }
     }
 
     // ---- The provider id is handed out only after validating
@@ -377,10 +404,17 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     /// or no ticket when the rule never reached Incus and is deleted here.
     public OperationTicket? DeleteFirewallRule(Guid ruleId) => RequireFirewallRule(ruleId).Delete();
 
-    /// The report of the rule's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another operation than the one the rule waits on.
-    public PendingOperation<FirewallRuleOperationKind>? EndFirewallRuleOperation(Guid ruleId, Guid operationId, FirewallRuleOperationEnd end) =>
-        RequireFirewallRule(ruleId).EndOperation(operationId, end);
+    /// The report that the rule's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null when
+    /// it names another operation than the one the rule waits on.
+    public PendingOperation<FirewallRuleOperationKind>? FinishFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
+        FirewallRuleState? observedState) =>
+        RequireFirewallRule(ruleId).FinishOperation(operationId, externalId, observedState);
+
+    /// The report that the rule's own command gave up; null when it names another operation than the one the rule
+    /// waits on.
+    public PendingOperation<FirewallRuleOperationKind>? FailFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
+        FirewallRuleState? observedState, string? reason, string? detail) =>
+        RequireFirewallRule(ruleId).FailOperation(operationId, externalId, observedState, reason, detail);
 
     // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -429,7 +463,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     /// current pair here.
     private void DeleteLocally()
     {
-        // A create that gave up before Incus let go of the /64 (EndOperation). A network still holding one would keep
+        // A create that gave up before Incus let go of the /64 (FailOperation). A network still holding one would keep
         // its route once Deleted here: no delete report follows a local delete, so nothing takes the route back.
         if (HasPublicIpv6)
         {

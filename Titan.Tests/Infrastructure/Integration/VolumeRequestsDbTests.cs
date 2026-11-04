@@ -41,9 +41,9 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
         Vm vm = Vm.Create(Tenant, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], VmOffering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         Volume volume = Volume.Create(Tenant, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done($"vol-{volume.Id:N}", null));
+        volume.FinishOperation(volume.Pending!.Id, $"vol-{volume.Id:N}", null);
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        volume.FinishOperation(attach.OperationId, null, new VolumeObservation(vm.Id, false));
         if (vmDeleteWaits)
         {
             vm.Delete();

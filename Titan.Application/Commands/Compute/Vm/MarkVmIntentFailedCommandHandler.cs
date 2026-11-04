@@ -28,14 +28,13 @@ public class MarkVmIntentFailedCommandHandler(
             return;
         }
 
-        VmOperationEnd failed = VmOperationEnd.Failed(null, null, VmReports.ReasonFor(waiting!.Kind), null);
-        VmOperationEnded? ended = vm.EndOperation(command.IntentId, failed);
+        PendingOperation<VmOperationKind>? ended = await VmReports.FailOperationAsync(vm, command.IntentId, null, null,
+            VmReports.ReasonFor(waiting!.Kind), null, activity, volumeRepo, ct);
         if (ended == null)
         {
             return;
         }
 
-        await VmReports.RecordEndedAsync(vm, ended, OperationOutcome.Failed, activity, volumeRepo, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -192,27 +192,29 @@ public class FirewallRuleLifecycleTests
         Assert.Null(rule.CurrentState);
     }
 
-    // The network's delete takes its ACL, and the rule with it, whatever the rule waited on; only the rule's own delete
-    // is named, so its outcome is recorded once.
+    // The network's delete takes its ACL, and the rule with it, whatever the rule waited on.
     [Fact]
-    public void EndWithItsNetwork_WithNoDeleteOfItsOwn_NamesNothing_ButIsTerminal()
+    public void EndWithItsNetwork_WithNoDeleteOfItsOwn_IsTerminal()
     {
         var rule = ActiveRule();
 
-        Assert.False(rule.EndWithItsNetwork());
+        rule.EndWithItsNetwork();
+
         Assert.True(rule.IsTerminal);
         Assert.Null(rule.Pending);
     }
 
     [Fact]
-    public void EndWithItsNetwork_WhileItsOwnDeleteWaits_SaysSo_Once()
+    public void EndWithItsNetwork_WhileItsOwnDeleteWaits_EndsIt_AndARepeatChangesNothing()
     {
         var rule = ActiveRule();
         rule.Delete();
 
-        Assert.True(rule.EndWithItsNetwork());
-        Assert.False(rule.EndWithItsNetwork());
+        rule.EndWithItsNetwork();
+        rule.EndWithItsNetwork();
+
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Null(rule.Pending);
         Assert.Null(rule.Transition);
     }
 
@@ -221,7 +223,8 @@ public class FirewallRuleLifecycleTests
     {
         var rule = NewRule();
 
-        Assert.False(rule.EndWithItsNetwork());
+        rule.EndWithItsNetwork();
+
         Assert.True(rule.IsTerminal);
         Assert.Null(rule.Transition);
     }
@@ -261,8 +264,7 @@ public class FirewallRuleLifecycleTests
     public void RequestDelete_OfAFailedCreateThatSawAState_WithNoId_LeavesNoStateBehind()
     {
         var rule = NewRule();
-        rule.EndOperation(rule.Pending!.Id,
-            new FirewallRuleOperationEnd(OperationOutcome.Failed, null, FirewallRuleState.enabled, "r", "d"));
+        rule.FailOperation(rule.Pending!.Id, null, FirewallRuleState.enabled, "r", "d");
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
 
         Assert.Null(rule.Delete());
