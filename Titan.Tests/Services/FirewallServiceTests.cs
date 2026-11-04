@@ -200,7 +200,7 @@ public class FirewallServiceTests
             network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 1000 + i, 1000 + i, "0.0.0.0/0")
                 .MarkActive($"cs-rule-{i}");
         }
-        network.FirewallRules.First().RequestDelete();
+        network.FirewallRules.First().Delete();
 
         var result = await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Ingress", "TCP", 80, 80, "0.0.0.0/0"), default);
 
@@ -500,11 +500,11 @@ public class FirewallServiceTests
                 break;
             case Seed.DeleteRequested:
                 rule.MarkActive("cs-rule-abc");
-                rule.RequestDelete();
+                rule.Delete();
                 break;
             case Seed.Deleted:
                 rule.MarkActive("cs-rule-abc");
-                rule.RequestDelete();
+                rule.Delete();
                 rule.MarkDeleted();
                 break;
         }

@@ -6,9 +6,9 @@ public interface IVolumeRepository
 {
     /// The aggregate whole: the volume with its snapshots, tracked (titan-ops architecture/code-structure.md#child-entity).
     Task<Volume?> FindByIdAsync(Guid id, CancellationToken ct = default);
-    /// The same, with the volume's row locked until this context's next save commits: every lifecycle request and report
+    /// The same, with the volume's row locked until this context's next save commits: every lifecycle operation and report
     /// of the volume and its snapshots takes it (a volume's create excepted: its row is new), so two of them take turns
-    /// and the second sees the first (titan-ops architecture/resource-lifecycle.md#one-key-per-request); the per-volume
+    /// and the second sees the first (titan-ops architecture/resource-lifecycle.md#one-key-per-operation); the per-volume
     /// snapshot cap is counted on the loaded snapshots under it.
     Task<Volume?> FindByIdForUpdateAsync(Guid id, CancellationToken ct = default);
     Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default);

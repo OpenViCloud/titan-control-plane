@@ -51,9 +51,9 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
         LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
 
-        PendingRequest<LoadBalancerRequestKind>? waiting = loadBalancer.Pending;
-        PendingRequest<LoadBalancerRequestKind>? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        PendingOperation<LoadBalancerOperationKind>? waiting = loadBalancer.Pending;
+        PendingOperation<LoadBalancerOperationKind>? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -68,17 +68,17 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 }
                 break;
             case "Created":
-                if (waiting is { Kind: LoadBalancerRequestKind.Create })
+                if (waiting is { Kind: LoadBalancerOperationKind.Create })
                 {
-                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(req.ExternalId));
+                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(req.ExternalId));
                 }
                 break;
             case "Updated":
                 // The update command reports the intent it carried, which is the request's id; any other is an update a
                 // delete replaced, or one already ended.
-                if (waiting is { Kind: LoadBalancerRequestKind.Update } && waiting.Id == req.IntentId)
+                if (waiting is { Kind: LoadBalancerOperationKind.Update } && waiting.Id == req.IntentId)
                 {
-                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(null));
+                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(null));
                 }
                 break;
             case "RequestFailed":
@@ -87,17 +87,17 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 bool namesAnotherRequest = req.IntentId != null && req.IntentId != waiting?.Id;
                 if (waiting != null && !namesAnotherRequest)
                 {
-                    outcome = RequestOutcome.Failed;
-                    ended = loadBalancer.EndRequest(waiting.Id,
-                        LoadBalancerRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    outcome = OperationOutcome.Failed;
+                    ended = loadBalancer.EndOperation(waiting.Id,
+                        LoadBalancerOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
                 // Only a delete's own report ends a load balancer; with no delete waiting it is gone from Incus, which is
                 // what NotFound records.
-                if (waiting is { Kind: LoadBalancerRequestKind.Delete })
+                if (waiting is { Kind: LoadBalancerOperationKind.Delete })
                 {
-                    ended = loadBalancer.EndRequest(waiting.Id, LoadBalancerRequestEnd.Done(null));
+                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(null));
                 }
                 else
                 {

@@ -93,7 +93,7 @@ public class LoadBalancerStateMachineTests
     public void Create_WithAVmWhoseDeleteWasPressed_IsRefused()
     {
         Vm vm = VmOnIncus();
-        vm.RequestDelete();
+        vm.Delete();
 
         var ex = Assert.Throws<BusinessException>(() => NewLoadBalancer(vm));
 
@@ -167,7 +167,7 @@ public class LoadBalancerStateMachineTests
         lb.MarkRequestFailed("Load balancer creation failed.", "detail");
 
         Assert.Null(lb.Transition);
-        Assert.Equal("Load balancer creation failed.", lb.RequestFailureReason);
+        Assert.Equal("Load balancer creation failed.", lb.OperationFailureReason);
         Assert.Equal(CurrentExistence.NotCreated, lb.CurrentExistence);
     }
 
@@ -180,10 +180,10 @@ public class LoadBalancerStateMachineTests
         Vm b = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
 
-        RequestTicket update = lb.RequestUpdate([Http, Dns], [a, b]);
+        OperationTicket update = lb.Update([Http, Dns], [a, b]);
 
         Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
-        Assert.Equal((LoadBalancerRequestKind.Update, update.RequestId), (lb.Pending!.Kind, lb.Pending.Id));
+        Assert.Equal((LoadBalancerOperationKind.Update, update.OperationId), (lb.Pending!.Kind, lb.Pending.Id));
         Assert.Equal(new[] { "TCP 80->8080", "UDP 53->53" }, Keys(lb.DesiredListeners));
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.AppliedListeners));
         Assert.Equal(2, lb.DesiredBackends.Count());
@@ -197,7 +197,7 @@ public class LoadBalancerStateMachineTests
         LoadBalancer lb = OnIncus();
         Guid httpRow = lb.Listeners.Single().Id;
 
-        lb.RequestUpdate([Http, Dns], [VmOnIncus()]);
+        lb.Update([Http, Dns], [VmOnIncus()]);
 
         Assert.Equal(2, lb.Listeners.Count);
         Assert.Equal(httpRow, lb.Listeners.Single(l => l.Port == 80).Id);
@@ -209,7 +209,7 @@ public class LoadBalancerStateMachineTests
         Vm a = VmOnIncus();
         Vm b = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([Dns], [b]).RequestId;
+        Guid update = lb.Update([Dns], [b]).OperationId;
 
         Assert.True(lb.MarkUpdated(update));
 
@@ -223,7 +223,7 @@ public class LoadBalancerStateMachineTests
     public void Updated_ForAnotherRequest_ChangesNothing()
     {
         LoadBalancer lb = OnIncus();
-        lb.RequestUpdate([Dns], [VmOnIncus()]);
+        lb.Update([Dns], [VmOnIncus()]);
 
         Assert.False(lb.MarkUpdated(Guid.NewGuid()));
 
@@ -236,15 +236,15 @@ public class LoadBalancerStateMachineTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([Dns], [VmOnIncus()]).RequestId;
+        Guid update = lb.Update([Dns], [VmOnIncus()]).OperationId;
 
-        lb.EndRequest(update, LoadBalancerRequestEnd.Failed(null, "Load balancer update failed.", "detail"));
+        lb.EndOperation(update, LoadBalancerOperationEnd.Failed(null, "Load balancer update failed.", "detail"));
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.DesiredListeners));
         Assert.Equal(new[] { a.Id }, lb.DesiredBackends.Select(x => x.VmId));
         Assert.Equal(new[] { "TCP 80->8080" }, Keys(lb.Listeners));
-        Assert.Equal("Load balancer update failed.", lb.RequestFailureReason);
+        Assert.Equal("Load balancer update failed.", lb.OperationFailureReason);
     }
 
     [Fact]
@@ -252,12 +252,12 @@ public class LoadBalancerStateMachineTests
     {
         LoadBalancer creating = NewLoadBalancer();
         LoadBalancer updating = OnIncus();
-        updating.RequestUpdate([Dns], [VmOnIncus()]);
+        updating.Update([Dns], [VmOnIncus()]);
 
         Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => creating.RequestUpdate([Dns], [VmOnIncus()])).Code);
+            Assert.Throws<BusinessException>(() => creating.Update([Dns], [VmOnIncus()])).Code);
         Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => updating.RequestUpdate([Http], [VmOnIncus()])).Code);
+            Assert.Throws<BusinessException>(() => updating.Update([Http], [VmOnIncus()])).Code);
     }
 
     // The handler answers a repeat itself (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -271,7 +271,7 @@ public class LoadBalancerStateMachineTests
         Assert.False(lb.HasDesiredSpec([Http, Dns], [a.Id]));
         Assert.False(lb.HasDesiredSpec([new(LoadBalancerProtocol.TCP, 80, 9090)], [a.Id]));
         Assert.False(lb.HasDesiredSpec([Http], [Guid.NewGuid()]));
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => lb.RequestUpdate([Http], [a])).Code);
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => lb.Update([Http], [a])).Code);
     }
 
     // ---- delete
@@ -281,7 +281,7 @@ public class LoadBalancerStateMachineTests
     {
         LoadBalancer lb = OnIncus();
 
-        string vip = lb.RequestDelete()!.ProviderId;
+        string vip = lb.Delete()!.ProviderId;
 
         Assert.Equal(lb.Vip, vip);
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
@@ -292,9 +292,9 @@ public class LoadBalancerStateMachineTests
     public void Delete_WinsOverAWaitingUpdate()
     {
         LoadBalancer lb = OnIncus();
-        Guid update = lb.RequestUpdate([Dns], [VmOnIncus()]).RequestId;
+        Guid update = lb.Update([Dns], [VmOnIncus()]).OperationId;
 
-        lb.RequestDelete();
+        lb.Delete();
 
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
         Assert.NotEqual(update, lb.Pending!.Id);
@@ -307,21 +307,21 @@ public class LoadBalancerStateMachineTests
     {
         LoadBalancer creating = NewLoadBalancer();
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer gone = OnIncus();
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
 
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.RequestDelete()).Code);
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => deleting.RequestDelete()).Code);
-        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => gone.RequestDelete()).Code);
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.Delete()).Code);
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => deleting.Delete()).Code);
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", Assert.Throws<BusinessException>(() => gone.Delete()).Code);
     }
 
     [Fact]
     public void Deleted_FulfilsTheDelete_AndAbsorbsEverythingAfter()
     {
         LoadBalancer lb = OnIncus();
-        lb.RequestDelete();
+        lb.Delete();
 
         Assert.True(lb.MarkDeleted());
         Assert.False(lb.MarkDeleted());
@@ -338,13 +338,13 @@ public class LoadBalancerStateMachineTests
     public void DeleteGivesUp_PutsTheDesiredExistenceBack()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete()!.RequestId;
+        Guid delete = lb.Delete()!.OperationId;
 
-        lb.EndRequest(delete, LoadBalancerRequestEnd.Failed(null, "Load balancer deletion failed.", "detail"));
+        lb.EndOperation(delete, LoadBalancerOperationEnd.Failed(null, "Load balancer deletion failed.", "detail"));
 
         Assert.Null(lb.Transition);
         Assert.Equal(DesiredExistence.Exists, lb.DesiredExistence);
-        Assert.Equal("Load balancer deletion failed.", lb.RequestFailureReason);
+        Assert.Equal("Load balancer deletion failed.", lb.OperationFailureReason);
     }
 
     [Fact]
@@ -353,13 +353,13 @@ public class LoadBalancerStateMachineTests
         LoadBalancer failed = NewLoadBalancer();
         failed.MarkRequestFailed("Load balancer creation failed.", null);
 
-        Assert.Null(failed.RequestDelete());
+        Assert.Null(failed.Delete());
 
         Assert.True(failed.IsTerminal);
         Assert.Equal(DesiredExistence.Deleted, failed.DesiredExistence);
-        Assert.NotNull(OnIncus().RequestDelete());
+        Assert.NotNull(OnIncus().Delete());
         Assert.Equal("LOAD_BALANCER_INVALID_STATE",
-            Assert.Throws<BusinessException>(() => NewLoadBalancer().RequestDelete()).Code);
+            Assert.Throws<BusinessException>(() => NewLoadBalancer().Delete()).Code);
     }
 
     // ---- reconciler
@@ -382,7 +382,7 @@ public class LoadBalancerStateMachineTests
     public void NotFound_KeepsAWaitingDelete_AndAWaitingCreate()
     {
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer creating = NewLoadBalancer();
 
         deleting.MarkNotFound();
@@ -398,9 +398,9 @@ public class LoadBalancerStateMachineTests
     public void Observation_WhileADeleteOrUpdateWaits_WithdrawsNothing()
     {
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer updating = OnIncus();
-        updating.RequestUpdate([Dns], [VmOnIncus()]);
+        updating.Update([Dns], [VmOnIncus()]);
 
         deleting.MarkObserved();
         updating.MarkObserved();
@@ -417,7 +417,7 @@ public class LoadBalancerStateMachineTests
         LoadBalancer onIncus = OnIncus();
         LoadBalancer creating = NewLoadBalancer();
         LoadBalancer updating = OnIncus();
-        updating.RequestUpdate([Http, Dns], [VmOnIncus()]);
+        updating.Update([Http, Dns], [VmOnIncus()]);
         string vip = onIncus.Vip;
 
         onIncus.Rename("api");
@@ -437,9 +437,9 @@ public class LoadBalancerStateMachineTests
     public void Rename_WhileItsDeleteWaitsOrOnceDeleted_IsInvalidState()
     {
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer deleted = OnIncus();
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
 
         var whileDeleting = Assert.Throws<BusinessException>(() => deleting.Rename("api"));

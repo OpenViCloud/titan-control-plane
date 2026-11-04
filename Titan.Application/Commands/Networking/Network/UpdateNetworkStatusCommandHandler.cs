@@ -54,10 +54,10 @@ public class UpdateNetworkStatusCommandHandler(
         Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(req.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
-        PendingRequest<NetworkRequestKind>? waiting = network.Pending;
+        PendingOperation<NetworkOperationKind>? waiting = network.Pending;
         NetworkObservation addresses = new(null, req.Cidr, req.Gateway);
-        NetworkRequestEnded? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        NetworkOperationEnded? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -73,27 +73,27 @@ public class UpdateNetworkStatusCommandHandler(
             case "Created":
                 // The old create command reports the network name and address as soon as Incus holds it: the create's
                 // Done. The status is left to the reconciler, as before.
-                if (waiting is { Kind: NetworkRequestKind.Create })
+                if (waiting is { Kind: NetworkOperationKind.Create })
                 {
                     ended = await routes.RecordEndedAsync(network, waiting.Id,
-                        NetworkRequestEnd.Done(req.ExternalId, addresses), ct);
+                        NetworkOperationEnd.Done(req.ExternalId, addresses), ct);
                 }
                 break;
             case "RequestFailed":
                 // The waiting request ends Failed, keeping an id and address the create's give-up found.
                 if (waiting != null)
                 {
-                    outcome = RequestOutcome.Failed;
+                    outcome = OperationOutcome.Failed;
                     ended = await routes.RecordEndedAsync(network, waiting.Id,
-                        NetworkRequestEnd.Failed(req.ExternalId, addresses, req.Reason, req.Detail), ct);
+                        NetworkOperationEnd.Failed(req.ExternalId, addresses, req.Reason, req.Detail), ct);
                 }
                 break;
             case "Deleted":
                 // Only a delete's own report ends a network; with no delete waiting the network is gone from Incus,
                 // which is what NotFound records.
-                if (waiting is { Kind: NetworkRequestKind.Delete })
+                if (waiting is { Kind: NetworkOperationKind.Delete })
                 {
-                    ended = await routes.RecordEndedAsync(network, waiting.Id, NetworkRequestEnd.Done(null, null), ct);
+                    ended = await routes.RecordEndedAsync(network, waiting.Id, NetworkOperationEnd.Done(null, null), ct);
                 }
                 else
                 {

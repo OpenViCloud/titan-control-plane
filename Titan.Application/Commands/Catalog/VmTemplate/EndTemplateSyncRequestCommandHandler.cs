@@ -19,7 +19,7 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
     public async Task HandleAsync(EndTemplateSyncRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before anything is loaded: a malformed report is the worker's bug, whatever the template.
-        RequestOutcome outcome = ParseOutcome(command.Outcome);
+        OperationOutcome outcome = ParseOutcome(command.Outcome);
 
         // The aggregate records a report for any cluster it is handed; whether the cluster exists is checked here.
         clusters.ClusterOf(command.ClusterId);
@@ -27,8 +27,8 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
         VmTemplateAggregate template = await repo.FindByIdForUpdateAsync(command.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
-        VmTemplateRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingRequest<VmTemplateRequestKind>? ended = template.EndSyncRequest(command.ClusterId, command.RequestId, end);
+        VmTemplateOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
+        PendingOperation<VmTemplateOperationKind>? ended = template.EndSyncOperation(command.ClusterId, command.RequestId, end);
         if (ended == null)
         {
             return;
@@ -37,14 +37,14 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
         await repo.SaveAsync(ct);
     }
 
-    private static RequestOutcome ParseOutcome(string? outcome)
+    private static OperationOutcome ParseOutcome(string? outcome)
     {
         switch (outcome)
         {
             case "Done":
-                return RequestOutcome.Done;
+                return OperationOutcome.Done;
             case "Failed":
-                return RequestOutcome.Failed;
+                return OperationOutcome.Failed;
             default:
                 throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
         }

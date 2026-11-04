@@ -8,7 +8,7 @@ namespace Titan.Domain.Aggregates.VolumeOffering;
 // (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
 //
 // IsCustomized = true means the customer supplies the size at create time; SizeGb is then unused.
-public class VolumeOffering : AggregateRoot
+public class VolumeOffering : IAggregateRoot
 {
     public string Id { get; private set; } = default!;
     public string Name { get; private set; } = default!;

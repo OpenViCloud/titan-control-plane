@@ -13,39 +13,39 @@ namespace Titan.Application.Services.Compute.LoadBalancer;
 /// </summary>
 public static class LoadBalancerReports
 {
-    private static readonly Dictionary<LoadBalancerRequestKind, string> DoneAction = new()
+    private static readonly Dictionary<LoadBalancerOperationKind, string> DoneAction = new()
     {
-        [LoadBalancerRequestKind.Create] = "load_balancer.created",
-        [LoadBalancerRequestKind.Update] = "load_balancer.updated",
-        [LoadBalancerRequestKind.Delete] = "load_balancer.deleted",
+        [LoadBalancerOperationKind.Create] = "load_balancer.created",
+        [LoadBalancerOperationKind.Update] = "load_balancer.updated",
+        [LoadBalancerOperationKind.Delete] = "load_balancer.deleted",
     };
 
     // A failed create records nothing: the request was the create, and a failure is not its outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
-    private static readonly Dictionary<LoadBalancerRequestKind, string> FailedAction = new()
+    private static readonly Dictionary<LoadBalancerOperationKind, string> FailedAction = new()
     {
-        [LoadBalancerRequestKind.Update] = "load_balancer.update_failed",
-        [LoadBalancerRequestKind.Delete] = "load_balancer.delete_failed",
+        [LoadBalancerOperationKind.Update] = "load_balancer.update_failed",
+        [LoadBalancerOperationKind.Delete] = "load_balancer.delete_failed",
     };
 
-    public static RequestOutcome ParseOutcome(string? outcome)
+    public static OperationOutcome ParseOutcome(string? outcome)
     {
         switch (outcome)
         {
             case "Done":
-                return RequestOutcome.Done;
+                return OperationOutcome.Done;
             case "Failed":
-                return RequestOutcome.Failed;
+                return OperationOutcome.Failed;
             default:
                 throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
         }
     }
 
     /// Records the ended request's outcome once, under the load balancer's tenant.
-    public static void RecordEnded(LoadBalancerAggregate loadBalancer, PendingRequest<LoadBalancerRequestKind> ended,
-        RequestOutcome outcome, IActivityRecorder activity)
+    public static void RecordEnded(LoadBalancerAggregate loadBalancer, PendingOperation<LoadBalancerOperationKind> ended,
+        OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<LoadBalancerRequestKind, string> actions = outcome == RequestOutcome.Done ? DoneAction : FailedAction;
+        Dictionary<LoadBalancerOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
         if (actions.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(loadBalancer.TenantId, action, "load_balancer", loadBalancer.Id, loadBalancer.Name);

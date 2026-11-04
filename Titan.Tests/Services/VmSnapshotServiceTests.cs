@@ -197,7 +197,7 @@ public class VmSnapshotServiceTests
         {
             vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
         }
-        vm.RequestSnapshotDelete(vm.Snapshots.First().Id);
+        vm.DeleteSnapshot(vm.Snapshots.First().Id);
 
         var result = await CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("fourth"), default);
 
@@ -472,8 +472,8 @@ public class VmSnapshotServiceTests
             new UpdateSnapshotStatusBody("RequestFailed", Reason: "Snapshot creation failed.", Detail: "quota exhausted"), default);
 
         Assert.Equal("NotCreated/Exists/-", Shape(snap));
-        Assert.Equal("Snapshot creation failed.", snap.RequestFailureReason);
-        Assert.Equal("quota exhausted", snap.RequestFailureDetail);
+        Assert.Equal("Snapshot creation failed.", snap.OperationFailureReason);
+        Assert.Equal("quota exhausted", snap.OperationFailureDetail);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -490,9 +490,9 @@ public class VmSnapshotServiceTests
             new UpdateSnapshotStatusBody("RequestFailed", ExternalId: "cs-snap-abc", Reason: "Snapshot creation failed."), default);
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
-        Assert.Equal("Snapshot creation failed.", snap.RequestFailureReason);
+        Assert.Equal("Snapshot creation failed.", snap.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
-        Assert.Equal("cs-snap-abc", vm.RequestSnapshotDelete(snap.Id)!.ProviderId);
+        Assert.Equal("cs-snap-abc", vm.DeleteSnapshot(snap.Id)!.ProviderId);
     }
 
     [Fact]
@@ -517,7 +517,7 @@ public class VmSnapshotServiceTests
             new UpdateSnapshotStatusBody("RequestFailed", Reason: "Reverting failed.", Detail: "raw"), default);
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
-        Assert.Equal("Reverting failed.", snap.RequestFailureReason);
+        Assert.Equal("Reverting failed.", snap.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.revert_failed", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
     }
 
@@ -540,8 +540,8 @@ public class VmSnapshotServiceTests
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
-        vm.RequestDelete();
-        VmRequestEnded? deletion = vm.MarkDeleted();
+        vm.Delete();
+        VmOperationEnded? deletion = vm.MarkDeleted();
         Assert.Equal([snap.Id], deletion!.SnapshotsWhoseDeleteEnded.Select(s => s.Id));
 
         await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Deleted"), default);
@@ -723,7 +723,7 @@ public class VmSnapshotServiceTests
         await CreateService().UpdateStatusAsync(vm.Id, snap.Id,
             new UpdateSnapshotStatusBody("RequestFailed", Reason: "Snapshot deletion failed.", Detail: "refused"), default);
         Assert.Equal("Exists/Exists/-", Shape(snap));
-        Assert.Equal("Snapshot deletion failed.", snap.RequestFailureReason);
+        Assert.Equal("Snapshot deletion failed.", snap.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.delete_failed", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
 
         await CreateService().DeleteAsync(vm.Id, snap.Id, default);
@@ -804,8 +804,8 @@ public class VmSnapshotServiceTests
         {
             case Snap.Ready:           snap.MarkCreated("cs-snap-abc"); break;
             case Snap.RevertRequested: snap.MarkCreated("cs-snap-abc"); snap.Revert(); break;
-            case Snap.DeleteRequested: snap.MarkCreated("cs-snap-abc"); snap.RequestDelete(); break;
-            case Snap.Deleted:         snap.MarkCreated("cs-snap-abc"); snap.RequestDelete(); snap.MarkDeleted(); break;
+            case Snap.DeleteRequested: snap.MarkCreated("cs-snap-abc"); snap.Delete(); break;
+            case Snap.Deleted:         snap.MarkCreated("cs-snap-abc"); snap.Delete(); snap.MarkDeleted(); break;
             case Snap.CreateFailed:    snap.MarkRequestFailed("could not create", "raw"); break;
         }
         return snap;

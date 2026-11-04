@@ -50,7 +50,7 @@ public class VmEndpointBindingTests
     private static Titan.Domain.Aggregates.Tenant.Tenant ProvisionedTenant() =>
         TestTenant.Active("acme", "owner-1", "admin@acme.com");
 
-    // A VM owned by TenantId and already Running, so the ownership check passes and RequestStop has a
+    // A VM owned by TenantId and already Running, so the ownership check passes and Stop has a
     // legal state to hand an external id out of.
     private static VmAggregate SampleVm()
     {
@@ -191,7 +191,7 @@ public class VmEndpointBindingTests
     [Fact] // POST /v1/tenant/vms/{vmId}/start
     public async Task StartVmEndpoint_ReachesStartCommand_WithRouteVmId_And202()
     {
-        // A stopped VM, because RequestStart dispatches only from Stopped — the mirror of the Stop test.
+        // A stopped VM, because Start dispatches only from Stopped — the mirror of the Stop test.
         var stopped = SampleVm();
         stopped.MarkStopped();
         _repo.Setup(r => r.FindByIdAsync(VmId, default)).ReturnsAsync(stopped);

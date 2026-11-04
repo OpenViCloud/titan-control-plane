@@ -44,7 +44,7 @@ public class FirewallRuleStatusCallbackTests
     {
         FirewallRule rule = CreatingRule();
         rule.MarkActive("rule-7");
-        _network.RequestFirewallRuleDelete(rule.Id);
+        _network.DeleteFirewallRule(rule.Id);
         return rule;
     }
 
@@ -123,7 +123,7 @@ public class FirewallRuleStatusCallbackTests
         await Handler(activity.Object).HandleAsync(Report(rule, "Observed", exists: true, state: "enabled"));
 
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
-        Assert.Equal(FirewallRuleRequestKind.Create, rule.Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Create, rule.Pending!.Kind);
         activity.VerifyNoOtherCalls();
     }
 
@@ -205,8 +205,8 @@ public class FirewallRuleStatusCallbackTests
 
         Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
         Assert.Null(rule.Transition);
-        Assert.Equal("Firewall rule deletion failed.", rule.RequestFailureReason);
-        Assert.Equal("raw", rule.RequestFailureDetail);
+        Assert.Equal("Firewall rule deletion failed.", rule.OperationFailureReason);
+        Assert.Equal("raw", rule.OperationFailureDetail);
         Assert.Equal("rule-7", rule.ExternalId);
         activity.Verify(a => a.StageOutcome(rule.TenantId, "firewall_rule.delete_failed", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
     }
@@ -221,7 +221,7 @@ public class FirewallRuleStatusCallbackTests
 
         Assert.Equal("rule-9", rule.ExternalId);
         Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
-        Assert.Equal("Firewall rule creation failed.", rule.RequestFailureReason);
+        Assert.Equal("Firewall rule creation failed.", rule.OperationFailureReason);
         Assert.Null(rule.Transition);
         activity.VerifyNoOtherCalls();
     }

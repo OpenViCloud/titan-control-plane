@@ -21,21 +21,21 @@ public class MarkVmIntentFailedCommandHandler(
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        PendingRequest<VmRequestKind>? waiting = vm.Pending;
+        PendingOperation<VmOperationKind>? waiting = vm.Pending;
         bool namesTheWaitingRequest = waiting != null && waiting.Id == command.IntentId;
         if (!namesTheWaitingRequest)
         {
             return;
         }
 
-        VmRequestEnd failed = VmRequestEnd.Failed(null, null, VmReports.ReasonFor(waiting!.Kind), null);
-        VmRequestEnded? ended = vm.EndRequest(command.IntentId, failed);
+        VmOperationEnd failed = VmOperationEnd.Failed(null, null, VmReports.ReasonFor(waiting!.Kind), null);
+        VmOperationEnded? ended = vm.EndOperation(command.IntentId, failed);
         if (ended == null)
         {
             return;
         }
 
-        await VmReports.RecordEndedAsync(vm, ended, RequestOutcome.Failed, activity, volumeRepo, ct);
+        await VmReports.RecordEndedAsync(vm, ended, OperationOutcome.Failed, activity, volumeRepo, ct);
         await repo.SaveAsync(ct);
     }
 }

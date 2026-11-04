@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.UsageRecord;
 
 /// One bucket of one resource, never updated (titan-ops architecture/money-and-wallet.md#append-only-metering). A missed
 /// tick under-bills and never over-bills; that approximation is intended.
-public class UsageRecord : AggregateRoot
+public class UsageRecord : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public UsageResourceType ResourceType { get; private set; }

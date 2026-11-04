@@ -29,7 +29,7 @@ public class NetworkRequestedCidrDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             Network stored = await db.Networks.SingleAsync(n => n.Id == waiting.Id);
-            Assert.Equal(Ipv4Cidr.Parse("10.77.0.0/24"), stored.RequestedCidr);
+            Assert.Equal(Ipv4Cidr.Parse("10.77.0.0/24"), stored.ChosenCidr);
             Assert.Null(stored.Cidr);
 
             NetworkRepository repo = new(db);

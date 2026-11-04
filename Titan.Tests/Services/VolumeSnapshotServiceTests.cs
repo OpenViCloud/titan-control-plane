@@ -197,7 +197,7 @@ public class VolumeSnapshotServiceTests
         {
             volume.WithSnapshot($"snap-{i}").MarkCreated($"cs-vol-1/s{i}");
         }
-        volume.Snapshots.First().RequestDelete();
+        volume.Snapshots.First().Delete();
 
         var result = await CreateService().CreateAsync(volume.Id, new CreateVolumeSnapshotBody("snap-3"), default);
 
@@ -493,8 +493,8 @@ public class VolumeSnapshotServiceTests
             new UpdateVolumeSnapshotStatusBody("RequestFailed", Reason: "Snapshot creation failed.", Detail: "raw"), default);
 
         Assert.Equal("NotCreated/Exists/-", Shape(snapshot));
-        Assert.Equal("Snapshot creation failed.", snapshot.RequestFailureReason);
-        Assert.Equal("raw", snapshot.RequestFailureDetail);
+        Assert.Equal("Snapshot creation failed.", snapshot.OperationFailureReason);
+        Assert.Equal("raw", snapshot.OperationFailureDetail);
     }
 
     // The give-up found the snapshot on Incus: the id and existence are kept, so the delete reaches Incus, but the
@@ -512,7 +512,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vol1/s1", snapshot.ExternalId);
-        Assert.Equal("Snapshot creation failed.", snapshot.RequestFailureReason);
+        Assert.Equal("Snapshot creation failed.", snapshot.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
@@ -533,7 +533,7 @@ public class VolumeSnapshotServiceTests
             new UpdateVolumeSnapshotStatusBody("RequestFailed", Reason: "Snapshot deletion failed.", Detail: "refused"), default);
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("Snapshot deletion failed.", snapshot.RequestFailureReason);
+        Assert.Equal("Snapshot deletion failed.", snapshot.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(TenantId, "volume_snapshot.delete_failed", "volume_snapshot", snapshot.Id, "snap-01"), Times.Once);
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
@@ -770,8 +770,8 @@ public class VolumeSnapshotServiceTests
             case VolSeed.Attaching: vol.MarkCreated(effectiveId); vol.Attach(vm); break;
             case VolSeed.Attached: vol.MarkCreated(effectiveId); EndAttachDone(vol, vm); break;
             case VolSeed.Detaching: vol.MarkCreated(effectiveId); EndAttachDone(vol, vm); vol.Detach(); break;
-            case VolSeed.Deleting: vol.MarkCreated(effectiveId); vol.RequestDelete(); break;
-            case VolSeed.Deleted: vol.MarkCreated(effectiveId); vol.RequestDelete(); vol.MarkDeleted(); break;
+            case VolSeed.Deleting: vol.MarkCreated(effectiveId); vol.Delete(); break;
+            case VolSeed.Deleted: vol.MarkCreated(effectiveId); vol.Delete(); vol.MarkDeleted(); break;
             case VolSeed.NotFound: vol.MarkCreated(effectiveId); vol.MarkNotFound(); break;
         }
         return vol;
@@ -781,7 +781,7 @@ public class VolumeSnapshotServiceTests
     private static void EndAttachDone(Volume vol, Vm vm)
     {
         VolumeAttachProviderIds attach = vol.Attach(vm);
-        vol.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        vol.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
     }
 
     // A snapshot of the volume, in the shape named (titan-ops architecture/code-structure.md#child-entity).
@@ -792,8 +792,8 @@ public class VolumeSnapshotServiceTests
         {
             case SnapSeed.CreateFailed: snap.MarkRequestFailed("could not create", "raw"); break;
             case SnapSeed.Exists: snap.MarkCreated(csSnapId ?? "cs-snap-default"); break;
-            case SnapSeed.Deleting: snap.MarkCreated(csSnapId ?? "cs-snap-default"); snap.RequestDelete(); break;
-            case SnapSeed.Deleted: snap.MarkCreated("x"); snap.RequestDelete(); snap.MarkDeleted(); break;
+            case SnapSeed.Deleting: snap.MarkCreated(csSnapId ?? "cs-snap-default"); snap.Delete(); break;
+            case SnapSeed.Deleted: snap.MarkCreated("x"); snap.Delete(); snap.MarkDeleted(); break;
         }
         return snap;
     }

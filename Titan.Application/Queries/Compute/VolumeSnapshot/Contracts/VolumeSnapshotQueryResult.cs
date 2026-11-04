@@ -21,5 +21,5 @@ public record VolumeSnapshotQueryResult(
 {
     public static VolumeSnapshotQueryResult From(VolumeSnapshotEntity s) =>
         new(s.Id, s.VolumeId, s.Name, s.CurrentExistence, s.DesiredExistence,
-            s.Transition, s.ExternalId, s.CreatedAt, s.RequestFailureReason, s.RequestFailedAt);
+            s.Transition, s.ExternalId, s.CreatedAt, s.OperationFailureReason, s.OperationFailedAt);
 }

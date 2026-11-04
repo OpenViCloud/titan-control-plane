@@ -41,12 +41,12 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
         Vm vm = Vm.Create(Tenant, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], VmOffering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         Volume volume = Volume.Create(Tenant, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.EndRequest(volume.Pending!.Id, VolumeRequestEnd.Done($"vol-{volume.Id:N}", null));
+        volume.EndOperation(volume.Pending!.Id, VolumeOperationEnd.Done($"vol-{volume.Id:N}", null));
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.EndRequest(attach.RequestId, VolumeRequestEnd.Done(null, new VolumeObservation(vm.Id, false)));
+        volume.EndOperation(attach.OperationId, VolumeOperationEnd.Done(null, new VolumeObservation(vm.Id, false)));
         if (vmDeleteWaits)
         {
-            vm.RequestDelete();
+            vm.Delete();
             if (released)
             {
                 volume.ReleaseFromVmDelete(vm.Id);
@@ -81,7 +81,7 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
 
         await using TitanDbContext db = pg.NewDbContext();
         Volume stored = await db.Volumes.SingleAsync(v => v.Id == volume.Id);
-        Assert.Equal(VolumeRequestKind.Detach, stored.Pending!.Kind);
+        Assert.Equal(VolumeOperationKind.Detach, stored.Pending!.Kind);
         int rows = await db.Set<ProviderCommand>().CountAsync(c => c.Key.StartsWith($"volume-detach-{volume.Id}-"));
         Assert.Equal(1, rows);
     }
@@ -152,7 +152,7 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
 
         await using TitanDbContext read = pg.NewDbContext();
         Volume stored = await read.Volumes.SingleAsync(v => v.Id == volume.Id);
-        Assert.Equal((VolumeRequestKind.Attach, attach), (stored.Pending!.Kind, stored.Pending.Id));
+        Assert.Equal((VolumeOperationKind.Attach, attach), (stored.Pending!.Kind, stored.Pending.Id));
         Assert.Equal(vm.Id, stored.DesiredAttachedVmId);
         Assert.Null(stored.CurrentAttachedVmId);
     }

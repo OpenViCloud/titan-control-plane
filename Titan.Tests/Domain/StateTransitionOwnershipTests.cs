@@ -85,7 +85,7 @@ public class StateTransitionOwnershipTests
     private static readonly Dictionary<string, string> NoTerminalGuardAllowlist = new()
     {
         ["Tenant/Tenant"] = "no terminal state exists: a tenant is never deleted, only suspended, " +
-            "and Suspend()/RequestActivation()/Approve() each validate internally",
+            "and Suspend()/Activate()/Approve() each validate internally",
         ["Invoice/Invoice"] = "no story yet (Billing): Paid/Settled are terminal and guarded by the intent methods themselves",
         ["TopUp/TopUp"] = "no story yet (Billing): Confirmed/Failed are terminal and guarded by Confirm()/Fail()",
         // A promo TopUp is BORN Confirmed via GrantPromo() — a factory, not a transition — so it adds no
@@ -101,7 +101,7 @@ public class StateTransitionOwnershipTests
     // ── a caller may not assert a provider id the aggregate owns (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
     //
     // `vm.ExternalId!` is a claim the application layer cannot prove — that a Running VM carries an id is an
-    // invariant of Vm. The id is handed out by the method that validated the state (Vm.RequestStop,
+    // invariant of Vm. The id is handed out by the method that validated the state (Vm.Stop,
     // Volume.Attach, Network.ProviderIdForVm, …), so there is no id to be had without the check.
     //
     // Only `req.X!` passes: worker callback payload, already checked by a FastEndpoints validator, owned by no
@@ -280,13 +280,13 @@ public class StateTransitionOwnershipTests
             "from every existence, carries no required field, and has no terminal state to absorb. " +
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
-        ["VmTemplateCluster.EndRequest"] = "the report of a sync's own command, ignored unless it names the waiting " +
+        ["VmTemplateCluster.EndOperation"] = "the report of a sync's own command, ignored unless it names the waiting " +
             "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
             "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).",
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
             "handler must recognise first.",
-        ["Vm.Accept"] = "private helper, reached only from RequestStop/RequestStart/RequestDelete, each of " +
+        ["Vm.Accept"] = "private helper, reached only from Stop/Start/Delete, each of " +
             "which refuses every state it cannot accept before calling it; it records the request those " +
             "methods already validated. A check here would repeat theirs.",
     };

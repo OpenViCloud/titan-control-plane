@@ -21,7 +21,7 @@ public class EndVolumeRequestCommandHandler(
     public async Task HandleAsync(EndVolumeRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the volume is loaded: a malformed report is the worker's bug, whatever the volume.
-        RequestOutcome outcome = VolumeReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = VolumeReports.ParseOutcome(command.Outcome);
 
         Domain.Aggregates.Volume.Volume volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
@@ -29,8 +29,8 @@ public class EndVolumeRequestCommandHandler(
         VolumeObservation? observed = command.AttachedTo == null
             ? null
             : await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
-        VolumeRequestEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
-        VolumeRequestEnded? ended = volume.EndRequest(command.RequestId, end);
+        VolumeOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
+        VolumeOperationEnded? ended = volume.EndOperation(command.RequestId, end);
         if (ended == null)
         {
             return;

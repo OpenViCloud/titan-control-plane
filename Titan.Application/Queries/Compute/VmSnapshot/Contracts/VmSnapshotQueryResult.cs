@@ -20,5 +20,5 @@ public record VmSnapshotQueryResult(
 {
     public static VmSnapshotQueryResult From(VmSnapshotEntity s) =>
         new(s.Id, s.Name, s.CurrentExistence, s.DesiredExistence, s.Transition,
-            s.CreatedAt, s.RequestFailureReason, s.RequestFailedAt);
+            s.CreatedAt, s.OperationFailureReason, s.OperationFailedAt);
 }

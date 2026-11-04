@@ -3,11 +3,11 @@ using Titan.Domain.Model;
 
 namespace Titan.Domain.Aggregates.WalletMutation;
 
-/// One row of the wallet outbox (titan-ops architecture/money-and-wallet.md#single-writer-outbox): a request
+/// One row of the wallet outbox (titan-ops architecture/money-and-wallet.md#single-writer-outbox): an operation
 /// writes it next to the business fact, and the single-writer consumer applies it to the wallet later.
 /// UNIQUE(ref_type, ref_id) gives one source document exactly one row, whatever its status; paying an invoice
 /// again reopens its failed debit row (titan-ops features/billing/invoice/design.md#retry-after-failed-debit).
-public class WalletMutation : AggregateRoot
+public class WalletMutation : IAggregateRoot
 {
     public const string InvoiceRefType = "Invoice";
     public const string TopUpRefType = "TopUp";
@@ -43,7 +43,7 @@ public class WalletMutation : AggregateRoot
 
     private WalletMutation() { }
 
-    /// The non-negative balance rule stays in Wallet.Debit; this only records the request.
+    /// The non-negative balance rule stays in Wallet.Debit; this only records the operation.
     internal static WalletMutation Create(
         WalletMutationType type, Guid walletId, long amount, string refType, Guid refId)
     {

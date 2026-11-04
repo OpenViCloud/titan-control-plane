@@ -24,7 +24,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     {
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        RequestTicket ticket = vm.RequestStop();
+        OperationTicket ticket = vm.Stop();
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
@@ -40,8 +40,8 @@ public class StateRoundTripDbTests(PostgresFixture pg)
             Assert.Equal("Stopped", stored);
 
             var reloaded = await db.Vms.SingleAsync(v => v.Id == vm.Id);
-            Assert.Equal(VmRequestKind.Stop, reloaded.Pending?.Kind);
-            Assert.Equal(ticket.RequestId, reloaded.Pending!.Id);
+            Assert.Equal(VmOperationKind.Stop, reloaded.Pending?.Kind);
+            Assert.Equal(ticket.OperationId, reloaded.Pending!.Id);
             Assert.Equal(vm.Pending!.AskedAt, reloaded.Pending.AskedAt, TimeSpan.FromMilliseconds(1));
         }
     }
@@ -54,7 +54,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
         var tenant = tenantOwner.Id;
         var leaving = TestAggregates.Network(tenantOwner, "shared-name", "cluster-a");
         leaving.MarkActive("20", "10.0.0.0/24", "10.0.0.1");
-        leaving.RequestDelete();
+        leaving.Delete();
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
@@ -89,10 +89,10 @@ public class StateRoundTripDbTests(PostgresFixture pg)
         FirewallRule creating = NewRule(network);
         FirewallRule deleting = NewRule(network);
         deleting.MarkActive("rule-2");
-        deleting.RequestDelete();
+        deleting.Delete();
         FirewallRule deleted = NewRule(network);
         deleted.MarkActive("rule-3");
-        deleted.RequestDelete();
+        deleted.Delete();
         deleted.MarkDeleted();
 
         await using (TitanDbContext db = pg.NewDbContext())

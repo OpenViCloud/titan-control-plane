@@ -35,9 +35,9 @@ public class GroupBRepeatRefusedTests
     public void NetworkDelete_Repeated_IsRefused_AndKeepsTheDeleteWaiting()
     {
         var network = ActiveNetwork();
-        network.RequestDelete();
+        network.Delete();
 
-        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.RequestDelete()).Code);
+        Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.Delete()).Code);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
 
@@ -45,9 +45,9 @@ public class GroupBRepeatRefusedTests
     public void VolumeDelete_Repeated_IsRefused_AndStaysDeleting()
     {
         var volume = AllocatedVolume();
-        volume.RequestDelete();
+        volume.Delete();
 
-        Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.RequestDelete()).Code);
+        Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.Delete()).Code);
         Assert.Equal(VolumeTransition.Deleting, volume.Transition);
     }
 
@@ -116,9 +116,9 @@ public class GroupBRepeatRefusedTests
     {
         var snapshot = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), "vsnap-1");
         snapshot.MarkCreated("vsnap-ext");
-        snapshot.RequestDelete();
+        snapshot.Delete();
 
-        Assert.Equal("VOLUME_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => snapshot.RequestDelete()).Code);
+        Assert.Equal("VOLUME_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => snapshot.Delete()).Code);
         Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
     }
 }

@@ -3,11 +3,11 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// A delete that never reached the provider happens in RequestDelete itself and returns no ticket
+// A delete that never reached the provider happens in Delete itself and returns no ticket
 // (titan-ops architecture/desired-and-current.md#delete-locally). Anything else either refuses or asks the provider.
 internal static class LocalDelete
 {
-    public static bool DeletedHere(Func<RequestTicket?> requestDelete)
+    public static bool DeletedHere(Func<OperationTicket?> requestDelete)
     {
         try
         {

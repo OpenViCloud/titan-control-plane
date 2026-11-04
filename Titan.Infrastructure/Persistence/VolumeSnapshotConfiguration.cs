@@ -20,15 +20,15 @@ public class VolumeSnapshotConfiguration : IEntityTypeConfiguration<VolumeSnapsh
         builder.Property(s => s.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(s => s.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
         // The snapshot's own waiting request, as the volume's (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<VolumeSnapshotRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<VolumeSnapshotOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(s => s.Pending);
         builder.Ignore(s => s.Transition);
         builder.Property(s => s.ExternalId).HasColumnName("external_id");
-        builder.Property(s => s.RequestFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(s => s.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(s => s.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(s => s.OperationFailureReason).HasColumnName("request_failure_reason");
+        builder.Property(s => s.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(s => s.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(s => s.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(s => s.VolumeId);

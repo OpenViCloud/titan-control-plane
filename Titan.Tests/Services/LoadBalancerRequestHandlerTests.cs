@@ -127,8 +127,8 @@ public class LoadBalancerRequestHandlerTests
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(lb.Vip, lb.ExternalId);
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
-        Assert.Equal("raw", lb.RequestFailureDetail);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
+        Assert.Equal("raw", lb.OperationFailureDetail);
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -138,7 +138,7 @@ public class LoadBalancerRequestHandlerTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).RequestId;
+        Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
 
         await End(lb, update, "Done");
         await End(lb, update, "Done");
@@ -153,14 +153,14 @@ public class LoadBalancerRequestHandlerTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).RequestId;
+        Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
 
         await End(lb, update, "Failed");
         await End(lb, update, "Failed");
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal([80], lb.DesiredListeners.Select(l => l.Port));
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
         Assert.Equal(["load_balancer.update_failed"], Outcomes());
     }
 
@@ -168,7 +168,7 @@ public class LoadBalancerRequestHandlerTests
     public async Task Done_OfTheDelete_EndsTheLoadBalancer_AndRecordsLoadBalancerDeletedOnce()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete()!.RequestId;
+        Guid delete = lb.Delete()!.OperationId;
 
         await End(lb, delete, "Done");
         await End(lb, delete, "Done");
@@ -181,13 +181,13 @@ public class LoadBalancerRequestHandlerTests
     public async Task Failed_OfTheDelete_GivesTheLoadBalancerBack_AndRecordsDeleteFailedOnce()
     {
         LoadBalancer lb = OnIncus();
-        Guid delete = lb.RequestDelete()!.RequestId;
+        Guid delete = lb.Delete()!.OperationId;
 
         await End(lb, delete, "Failed");
         await End(lb, delete, "Failed");
 
         Assert.Equal("Exists/Exists/-", Shape(lb));
-        Assert.Equal("The load balancer request could not be completed.", lb.RequestFailureReason);
+        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
         Assert.Equal(["load_balancer.delete_failed"], Outcomes());
     }
 
@@ -195,7 +195,7 @@ public class LoadBalancerRequestHandlerTests
     public async Task AReport_NamingAnotherRequest_IsIgnored_RecordsNothing_AndSavesNothing()
     {
         LoadBalancer lb = OnIncus();
-        lb.RequestDelete();
+        lb.Delete();
 
         await End(lb, Guid.NewGuid(), "Done");
         await End(lb, Guid.NewGuid(), "Failed");
@@ -236,7 +236,7 @@ public class LoadBalancerRequestHandlerTests
     {
         LoadBalancer creating = Creating();
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
 
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(creating.Id, false));
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(deleting.Id, false));
@@ -282,7 +282,7 @@ public class LoadBalancerRequestHandlerTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).RequestId;
+        Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
 
         await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: Guid.NewGuid()));
         Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
@@ -299,8 +299,8 @@ public class LoadBalancerRequestHandlerTests
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
-        Guid update = lb.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).RequestId;
-        lb.RequestDelete();
+        Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
+        lb.Delete();
 
         await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: update));
 
@@ -314,9 +314,9 @@ public class LoadBalancerRequestHandlerTests
         Vm a = VmOnIncus();
         LoadBalancer creating = Creating(a);
         LoadBalancer updating = OnIncus(a);
-        Guid update = updating.RequestUpdate([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).RequestId;
+        Guid update = updating.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
         LoadBalancer deleting = OnIncus(a);
-        deleting.RequestDelete();
+        deleting.Delete();
 
         await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(updating.Id, "RequestFailed", IntentId: Guid.NewGuid(),
             Reason: "stale"));
@@ -331,7 +331,7 @@ public class LoadBalancerRequestHandlerTests
         await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(deleting.Id, "RequestFailed", Reason: "r", Detail: "raw"));
 
         Assert.All(new[] { creating, updating, deleting }, lb => Assert.Null(lb.Pending));
-        Assert.All(new[] { creating, updating, deleting }, lb => Assert.Equal("raw", lb.RequestFailureDetail));
+        Assert.All(new[] { creating, updating, deleting }, lb => Assert.Equal("raw", lb.OperationFailureDetail));
         Assert.Equal(DesiredExistence.Exists, deleting.DesiredExistence);
         Assert.Equal([80], updating.DesiredListeners.Select(l => l.Port));
         Assert.Equal(["load_balancer.update_failed", "load_balancer.delete_failed"], Outcomes());
@@ -341,7 +341,7 @@ public class LoadBalancerRequestHandlerTests
     public async Task OldRoute_Deleted_WithADeleteWaiting_IsTheDeletesDone_AndWithNothingWaitingIsNotFound()
     {
         LoadBalancer deleting = OnIncus();
-        deleting.RequestDelete();
+        deleting.Delete();
         LoadBalancer resting = OnIncus();
 
         await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(deleting.Id, "Deleted"));

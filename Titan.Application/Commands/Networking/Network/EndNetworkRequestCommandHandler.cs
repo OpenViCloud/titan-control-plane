@@ -22,7 +22,7 @@ public class EndNetworkRequestCommandHandler(
     public async Task HandleAsync(EndNetworkRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the network is loaded: a malformed report is the worker's bug, whatever the network.
-        RequestOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
         NetworkStatus? status = null;
         if (command.Status != null)
         {
@@ -34,9 +34,9 @@ public class EndNetworkRequestCommandHandler(
 
         bool sawTheNetwork = status != null || command.Cidr != null || command.Gateway != null;
         NetworkObservation? observed = sawTheNetwork ? new NetworkObservation(status, command.Cidr, command.Gateway) : null;
-        NetworkRequestEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
+        NetworkOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
         // NetworkRoutes ends it, so a route the network let go of goes back in the same save.
-        NetworkRequestEnded? ended = await routes.RecordEndedAsync(network, command.RequestId, end, ct);
+        NetworkOperationEnded? ended = await routes.RecordEndedAsync(network, command.RequestId, end, ct);
         if (ended == null)
         {
             return;

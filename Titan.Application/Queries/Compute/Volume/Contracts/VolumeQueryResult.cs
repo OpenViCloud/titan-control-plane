@@ -28,5 +28,5 @@ public record VolumeQueryResult(
     public static VolumeQueryResult From(VolumeAggregate v) =>
         new(v.Id, v.Name, v.CurrentExistence, v.DesiredExistence, v.CurrentAttachedVmId,
             v.CurrentAttachedElsewhere, v.DesiredAttachedVmId, v.Transition, v.ClusterId,
-            v.VolumeOfferingId, v.SizeGb, v.CreatedAt, v.RequestFailureReason, v.RequestFailedAt);
+            v.VolumeOfferingId, v.SizeGb, v.CreatedAt, v.OperationFailureReason, v.OperationFailedAt);
 }

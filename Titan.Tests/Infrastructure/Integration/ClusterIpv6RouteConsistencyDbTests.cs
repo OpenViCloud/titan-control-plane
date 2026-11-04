@@ -64,7 +64,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new NetworkRepository(db);
         Network network = (await repo.FindByIdAsync(networkId))!;
-        network.RequestDelete();
+        network.Delete();
         await repo.SaveAsync();
     }
 

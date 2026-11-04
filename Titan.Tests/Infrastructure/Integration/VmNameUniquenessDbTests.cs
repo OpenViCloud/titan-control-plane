@@ -40,7 +40,7 @@ public class VmNameUniquenessDbTests(PostgresFixture pg)
         var tenant = tenantOwner.Id;
         Vm gone = NewVm(tenantOwner, "shared-name");
         gone.MarkRunning("41", "10.0.0.5");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         await SaveAsync(gone);
         bool takenBefore = await NameTakenAsync(tenant, "shared-name");
@@ -73,7 +73,7 @@ public class VmNameUniquenessDbTests(PostgresFixture pg)
         var tenant = tenantOwner.Id;
         Vm gone = NewVm(tenantOwner, "old-name");
         gone.MarkRunning("42", "10.0.0.6");
-        gone.RequestDelete();
+        gone.Delete();
         gone.MarkDeleted();
         Vm live = NewVm(tenantOwner, "live-name");
         await SaveAsync(gone);

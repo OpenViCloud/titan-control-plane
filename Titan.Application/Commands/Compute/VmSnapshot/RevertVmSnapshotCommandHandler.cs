@@ -37,11 +37,11 @@ public class RevertVmSnapshotCommandHandler(
         }
 
         // Checks the VM, then the snapshot, records the request, yields the id.
-        RequestTicket ticket = vm.RevertSnapshot(snapshot.Id);
+        OperationTicket ticket = vm.RevertSnapshot(snapshot.Id);
         activity.Stage("vm_snapshot.revert_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with Revert
 
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotRevertAsync(snapshot.Id, ticket.RequestId, vmId, ticket.ProviderId, projectName,
+        await commands.EnqueueVmSnapshotRevertAsync(snapshot.Id, ticket.OperationId, vmId, ticket.ProviderId, projectName,
             vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
     }

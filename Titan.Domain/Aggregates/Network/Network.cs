@@ -4,23 +4,23 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Network;
 
-public class Network : RequestingRoot<NetworkRequestKind>
+public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public NetworkName Name { get; private set; } = default!;
     public string ClusterId { get; private set; } = default!;
     public string? ExternalId { get; private set; }
-    /// The range the customer asked for, held from the request on so a second create of the tenant meets it while
+    /// The range the customer asked for, held from the operation on so a second create of the tenant meets it while
     /// this one still waits for Incus (titan-ops architecture/code-structure.md#logic-placement); null = Incus picks.
-    public Ipv4Cidr? RequestedCidr { get; private set; }
+    public Ipv4Cidr? ChosenCidr { get; private set; }
     /// The address the worker reported for the create, verbatim: the range the create asked for as the customer typed
     /// it, or the one Incus picked when none was asked for
     /// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim); null until the Created report (or a
     /// give-up report that carried the id), and after one that carried no address.
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
-    // Mark* and a request's report write the current pair; a request, and a report that it failed, write
+    // Mark* and an operation's report write the current pair; an operation, and a report that it failed, write
     // DesiredExistence (titan-ops architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus word,
     // null while Incus has no network (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     public NetworkStatus? CurrentState { get; private set; }
@@ -51,7 +51,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
     public bool OccupiesQuota =>
         DesiredExistence == DesiredExistence.Exists
         && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null));
 
     /// Counts toward MaxPublicIpv6 (titan-ops features/network/design.md#ipv6-quota): a network that counts toward
     /// MaxNetworks and holds a /64. NetworkRepository.CountPublicIpv6ActiveByTenantAsync writes the same test in SQL.
@@ -63,7 +63,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
     /// NetworkRepository.HasCidrOverlapAsync writes the same test in SQL and asks HeldRange of the rows it names.
     public bool HoldsARange =>
         CurrentExistence == CurrentExistence.Exists
-        || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null);
+        || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null);
 
     /// The range this network holds, or null (titan-ops features/network/user-stories.md#us-net-intent-02): one Incus
     /// has keeps the address the worker reported, when that is an IPv4 CIDR (an address kept verbatim that is not one
@@ -80,10 +80,10 @@ public class Network : RequestingRoot<NetworkRequestKind>
                 }
                 return null;
             }
-            bool aboutToHold = CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null;
+            bool aboutToHold = CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null;
             if (aboutToHold)
             {
-                return RequestedCidr;
+                return ChosenCidr;
             }
             return null;
         }
@@ -95,16 +95,16 @@ public class Network : RequestingRoot<NetworkRequestKind>
 
     private Network() { }
 
-    /// The move the waiting request makes, for display.
+    /// The move the waiting operation makes, for display.
     public NetworkTransition? Transition
     {
         get
         {
-            switch (PendingRequestKind)
+            switch (PendingOperationKind)
             {
-                case NetworkRequestKind.Create:
+                case NetworkOperationKind.Create:
                     return NetworkTransition.Creating;
-                case NetworkRequestKind.Delete:
+                case NetworkOperationKind.Delete:
                     return NetworkTransition.Deleting;
                 default:
                     return null;
@@ -112,8 +112,8 @@ public class Network : RequestingRoot<NetworkRequestKind>
         }
     }
 
-    private bool CreateIsWaiting => PendingRequestKind == NetworkRequestKind.Create;
-    private bool DeleteIsWaiting => PendingRequestKind == NetworkRequestKind.Delete;
+    private bool CreateIsWaiting => PendingOperationKind == NetworkOperationKind.Create;
+    private bool DeleteIsWaiting => PendingOperationKind == NetworkOperationKind.Delete;
     /// A delete was asked and still waits, or the network is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
@@ -124,11 +124,11 @@ public class Network : RequestingRoot<NetworkRequestKind>
     /// same case with 400 first, so NETWORK_CIDR_NOT_PRIVATE is not reached over HTTP.
     public static Network Create(
         Guid tenantId, NetworkName name, string clusterId,
-        Ipv4Cidr? requestedCidr, bool wantsPublicIpv6,
+        Ipv4Cidr? chosenCidr, bool wantsPublicIpv6,
         FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
         FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
     {
-        bool cidrOutsideThePrivateRanges = wantsPublicIpv6 && requestedCidr != null && !requestedCidr.IsInsideAPrivateRange;
+        bool cidrOutsideThePrivateRanges = wantsPublicIpv6 && chosenCidr != null && !chosenCidr.IsInsideAPrivateRange;
         if (cidrOutsideThePrivateRanges)
         {
             throw new BusinessException("NETWORK_CIDR_NOT_PRIVATE",
@@ -139,7 +139,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = name,
-            RequestedCidr = requestedCidr,
+            ChosenCidr = chosenCidr,
             ClusterId = clusterId,
             CurrentState = null,
             CurrentExistence = CurrentExistence.NotCreated,
@@ -148,7 +148,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
             DefaultEgressPolicy = defaultEgressPolicy,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        network.SetPending(NewRequest(NetworkRequestKind.Create));
+        network.SetPending(NewOperation(NetworkOperationKind.Create));
         return network;
     }
 
@@ -172,7 +172,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
     public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what Incus has,
-    // so no guard, and no request ends here (titan-ops architecture/resource-lifecycle.md#invariants).
+    // so no guard, and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler read the network on Incus. Created, Errored or Unavailable after a create is the network's state,
     /// not the create's ending: only the create command's own report ends it.
@@ -201,20 +201,20 @@ public class Network : RequestingRoot<NetworkRequestKind>
         return reported;
     }
 
-    // ---- The report of a request's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
-    // a request. It writes both axes, so it is neither an intent nor a Mark*.
+    // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
+    // an operation. It writes both axes, so it is neither an intent nor a Mark*.
 
-    /// Ends the waiting request when the report names it; any other report is ignored and returns null: a stale
+    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
     /// give-up, a Done that arrived twice, a report for a network already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the request its effect and clears an older failure; Failed records the reason and puts
+    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
     /// desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds). Internal: NetworkRoutes
     /// ends it, so a route the network lets go of goes back with it.
-    internal NetworkRequestEnded? EndRequest(Guid requestId, NetworkRequestEnd end)
+    internal NetworkOperationEnded? EndOperation(Guid operationId, NetworkOperationEnd end)
     {
         if (IsTerminal) return null;
-        PendingRequest<NetworkRequestKind>? waiting = Pending;
-        bool reportIsForTheWaitingRequest = waiting != null && waiting.Id == requestId;
-        if (!reportIsForTheWaitingRequest)
+        PendingOperation<NetworkOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
         {
             return null;
         }
@@ -239,10 +239,10 @@ public class Network : RequestingRoot<NetworkRequestKind>
 
         var rulesWhoseDeleteEnded = new List<FirewallRule>();
         bool letGoOfPublicIpv6 = false;
-        if (end.Outcome == RequestOutcome.Done)
+        if (end.Outcome == OperationOutcome.Done)
         {
             ClearFailure();
-            if (waiting!.Kind == NetworkRequestKind.Delete)
+            if (waiting!.Kind == NetworkOperationKind.Delete)
             {
                 // The delete removed the network's ACL, and every rule in it (titan-ops features/network/design.md#network-lifecycle):
                 // every rule not yet Deleted goes with the network; the ones whose own delete was waiting are named for
@@ -262,7 +262,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
         else
         {
             RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == NetworkRequestKind.Delete)
+            if (waiting!.Kind == NetworkOperationKind.Delete)
             {
                 DesiredExistence = DesiredExistence.Exists;
             }
@@ -281,7 +281,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
         }
 
         SetPending(null);
-        return new NetworkRequestEnded(waiting, rulesWhoseDeleteEnded, letGoOfPublicIpv6);
+        return new NetworkOperationEnded(waiting, rulesWhoseDeleteEnded, letGoOfPublicIpv6);
     }
 
     // ---- The provider id is handed out only after validating
@@ -294,7 +294,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
     /// (titan-ops architecture/domain-services.md#cross-aggregate-lock).
     /// A network that never reached Incus is deleted here, at once, and gets no ticket
     /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    internal RequestTicket? RequestDelete()
+    internal OperationTicket? Delete()
     {
         if (DeleteIsWaiting)
         {
@@ -305,7 +305,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
             throw new BusinessException("NETWORK_INVALID_STATE", "The network is already deleted.");
         }
         // Never reached Incus: no command to send and no report coming.
-        bool neverReachedIncus = ExternalId is null && PendingRequestId == null;
+        bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
         if (neverReachedIncus)
         {
             DeleteLocally();
@@ -317,10 +317,10 @@ public class Network : RequestingRoot<NetworkRequestKind>
             throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
         }
 
-        PendingRequest<NetworkRequestKind> request = NewRequest(NetworkRequestKind.Delete);
+        PendingOperation<NetworkOperationKind> operation = NewOperation(NetworkOperationKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
-        SetPending(request);
-        return RequestTicket.Of(request.Id, ExternalId);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, ExternalId);
     }
 
     /// A VM is instantiated on its network's cluster, so it must ask for the network's own cluster
@@ -339,7 +339,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
     // ---- Firewall rules: the network counts its rules and routes each call to the rule it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
 
-    /// Intent: a new rule in this network's ACL. The network must be usable. The create request is the rule's own
+    /// Intent: a new rule in this network's ACL. The network must be usable. The create operation is the rule's own
     /// Pending.
     public FirewallRuleTicket AddFirewallRule(
         FirewallDirection direction, FirewallProtocol protocol,
@@ -373,14 +373,14 @@ public class Network : RequestingRoot<NetworkRequestKind>
         throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
     }
 
-    /// Intent on one rule: its delete goes through Incus; returns the request and the rule's provider id for the command,
+    /// Intent on one rule: its delete goes through Incus; returns the operation and the rule's provider id for the command,
     /// or no ticket when the rule never reached Incus and is deleted here.
-    public RequestTicket? RequestFirewallRuleDelete(Guid ruleId) => RequireFirewallRule(ruleId).RequestDelete();
+    public OperationTicket? DeleteFirewallRule(Guid ruleId) => RequireFirewallRule(ruleId).Delete();
 
     /// The report of the rule's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another request than the one the rule waits on.
-    public PendingRequest<FirewallRuleRequestKind>? EndFirewallRuleRequest(Guid ruleId, Guid requestId, FirewallRuleRequestEnd end) =>
-        RequireFirewallRule(ruleId).EndRequest(requestId, end);
+    /// another operation than the one the rule waits on.
+    public PendingOperation<FirewallRuleOperationKind>? EndFirewallRuleOperation(Guid ruleId, Guid operationId, FirewallRuleOperationEnd end) =>
+        RequireFirewallRule(ruleId).EndOperation(operationId, end);
 
     // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -406,7 +406,7 @@ public class Network : RequestingRoot<NetworkRequestKind>
         CurrentState == NetworkStatus.Created
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists
-        && PendingRequestId == null;
+        && PendingOperationId == null;
 
     /// Created implies the create's report set the id; this throws rather than let a caller assert it.
     private string RequireExternalId() =>
@@ -425,11 +425,11 @@ public class Network : RequestingRoot<NetworkRequestKind>
         Name = name;
     }
 
-    /// A network that never reached Incus has no command and no observation coming, so RequestDelete writes the
+    /// A network that never reached Incus has no command and no observation coming, so Delete writes the
     /// current pair here.
     private void DeleteLocally()
     {
-        // A create that gave up before Incus let go of the /64 (EndRequest). A network still holding one would keep
+        // A create that gave up before Incus let go of the /64 (EndOperation). A network still holding one would keep
         // its route once Deleted here: no delete report follows a local delete, so nothing takes the route back.
         if (HasPublicIpv6)
         {

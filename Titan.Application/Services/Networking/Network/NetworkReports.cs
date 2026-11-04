@@ -16,38 +16,38 @@ namespace Titan.Application.Services.Networking.Network;
 /// </summary>
 public static class NetworkReports
 {
-    private static readonly Dictionary<NetworkRequestKind, string> DoneAction = new()
+    private static readonly Dictionary<NetworkOperationKind, string> DoneAction = new()
     {
-        [NetworkRequestKind.Create] = "network.created",
-        [NetworkRequestKind.Delete] = "network.deleted",
+        [NetworkOperationKind.Create] = "network.created",
+        [NetworkOperationKind.Delete] = "network.deleted",
     };
 
     // A failed create records nothing: the request was the create, and a failure is not its outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
-    private static readonly Dictionary<NetworkRequestKind, string> FailedAction = new()
+    private static readonly Dictionary<NetworkOperationKind, string> FailedAction = new()
     {
-        [NetworkRequestKind.Delete] = "network.delete_failed",
+        [NetworkOperationKind.Delete] = "network.delete_failed",
     };
 
-    private static readonly Dictionary<FirewallRuleRequestKind, string> RuleDoneAction = new()
+    private static readonly Dictionary<FirewallRuleOperationKind, string> RuleDoneAction = new()
     {
-        [FirewallRuleRequestKind.Create] = "firewall_rule.created",
-        [FirewallRuleRequestKind.Delete] = "firewall_rule.deleted",
+        [FirewallRuleOperationKind.Create] = "firewall_rule.created",
+        [FirewallRuleOperationKind.Delete] = "firewall_rule.deleted",
     };
 
-    private static readonly Dictionary<FirewallRuleRequestKind, string> RuleFailedAction = new()
+    private static readonly Dictionary<FirewallRuleOperationKind, string> RuleFailedAction = new()
     {
-        [FirewallRuleRequestKind.Delete] = "firewall_rule.delete_failed",
+        [FirewallRuleOperationKind.Delete] = "firewall_rule.delete_failed",
     };
 
-    public static RequestOutcome ParseOutcome(string outcome)
+    public static OperationOutcome ParseOutcome(string outcome)
     {
         switch (outcome)
         {
             case "Done":
-                return RequestOutcome.Done;
+                return OperationOutcome.Done;
             case "Failed":
-                return RequestOutcome.Failed;
+                return OperationOutcome.Failed;
             default:
                 throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
         }
@@ -81,11 +81,11 @@ public static class NetworkReports
     }
 
     /// Records the ended request's outcome once, and the rules a network's delete took whose own delete was waiting.
-    public static void RecordEnded(NetworkAggregate network, NetworkRequestEnded ended, RequestOutcome outcome,
+    public static void RecordEnded(NetworkAggregate network, NetworkOperationEnded ended, OperationOutcome outcome,
         IActivityRecorder activity)
     {
-        Dictionary<NetworkRequestKind, string> actions = outcome == RequestOutcome.Done ? DoneAction : FailedAction;
-        if (actions.TryGetValue(ended.Request.Kind, out string? action))
+        Dictionary<NetworkOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
+        if (actions.TryGetValue(ended.Operation.Kind, out string? action))
         {
             activity.StageOutcome(network.TenantId, action, "network", network.Id, network.Name.Value);
         }
@@ -96,10 +96,10 @@ public static class NetworkReports
         }
     }
 
-    public static void RecordRuleEnded(FirewallRuleEntity rule, PendingRequest<FirewallRuleRequestKind> ended,
-        RequestOutcome outcome, IActivityRecorder activity)
+    public static void RecordRuleEnded(FirewallRuleEntity rule, PendingOperation<FirewallRuleOperationKind> ended,
+        OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<FirewallRuleRequestKind, string> actions = outcome == RequestOutcome.Done ? RuleDoneAction : RuleFailedAction;
+        Dictionary<FirewallRuleOperationKind, string> actions = outcome == OperationOutcome.Done ? RuleDoneAction : RuleFailedAction;
         if (actions.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(rule.TenantId, action, "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule));

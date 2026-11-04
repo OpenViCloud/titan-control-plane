@@ -48,9 +48,9 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        PendingRequest<VolumeSnapshotRequestKind>? waiting = snapshot.Pending;
-        PendingRequest<VolumeSnapshotRequestKind>? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        PendingOperation<VolumeSnapshotOperationKind>? waiting = snapshot.Pending;
+        PendingOperation<VolumeSnapshotOperationKind>? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -64,23 +64,23 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
                 }
                 break;
             case "Created":
-                if (waiting is { Kind: VolumeSnapshotRequestKind.Create })
+                if (waiting is { Kind: VolumeSnapshotOperationKind.Create })
                 {
-                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id, VolumeSnapshotRequestEnd.Done(req.ExternalId));
+                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id, VolumeSnapshotOperationEnd.Done(req.ExternalId));
                 }
                 break;
             case "RequestFailed":
                 if (waiting != null)
                 {
-                    outcome = RequestOutcome.Failed;
-                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id,
-                        VolumeSnapshotRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    outcome = OperationOutcome.Failed;
+                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id,
+                        VolumeSnapshotOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
-                if (waiting is { Kind: VolumeSnapshotRequestKind.Delete })
+                if (waiting is { Kind: VolumeSnapshotOperationKind.Delete })
                 {
-                    ended = volume.EndSnapshotRequest(snapshot.Id, waiting.Id, VolumeSnapshotRequestEnd.Done(null));
+                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id, VolumeSnapshotOperationEnd.Done(null));
                 }
                 else
                 {

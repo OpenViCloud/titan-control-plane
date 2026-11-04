@@ -22,9 +22,9 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.DesiredState).HasColumnName("desired_state").HasConversion<string>().IsRequired();
         builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(v => v.RequestFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(v => v.RequestFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(v => v.RequestFailedAt).HasColumnName("request_failed_at");
+        builder.Property(v => v.OperationFailureReason).HasColumnName("request_failure_reason");
+        builder.Property(v => v.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+        builder.Property(v => v.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
         // has_been_running and create_finished stay in the table with DEFAULT false until rollout phase 6
         // (titan-ops architecture/resource-lifecycle.md#rollout); the model no longer reads them.
@@ -44,9 +44,9 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
         // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
         // Vm.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingRequestId").HasColumnName("pending_request_id");
-        builder.Property<VmRequestKind?>("PendingRequestKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingRequestAskedAt").HasColumnName("pending_request_asked_at");
+        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
+        builder.Property<VmOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
+        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
         builder.Ignore(v => v.Pending);
         builder.Ignore(v => v.Transition);
 

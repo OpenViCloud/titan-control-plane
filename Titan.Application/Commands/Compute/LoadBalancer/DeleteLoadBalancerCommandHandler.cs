@@ -31,7 +31,7 @@ public class DeleteLoadBalancerCommandHandler(
 
         // A load balancer that never reached Incus is deleted here and gets no ticket
         // (titan-ops architecture/desired-and-current.md#delete-locally): the request and its outcome at once.
-        RequestTicket? ticket = loadBalancer.RequestDelete();
+        OperationTicket? ticket = loadBalancer.Delete();
         activity.Stage("load_balancer.delete_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
         if (ticket == null)
         {
@@ -39,7 +39,7 @@ public class DeleteLoadBalancerCommandHandler(
             await repo.SaveAsync(ct);
             return;
         }
-        await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer.Id, ticket.RequestId, loadBalancer.ExternalNetworkId, ticket.ProviderId,
+        await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer.Id, ticket.OperationId, loadBalancer.ExternalNetworkId, ticket.ProviderId,
             TenantAggregate.ProjectNameFor(loadBalancer.TenantId), loadBalancer.ClusterId, ct);
         await repo.SaveAsync(ct);
     }

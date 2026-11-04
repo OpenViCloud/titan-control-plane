@@ -5,7 +5,7 @@ namespace Titan.Domain.Aggregates.AdminAuditLog;
 
 // Durable, append-only trace of admin writes (titan-ops architecture/tenancy-and-admin.md#admin-audit). Append-only
 // by construction: no mutator, all setters private.
-public class AdminAuditLog : AggregateRoot
+public class AdminAuditLog : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public string Action { get; private set; } = default!;              // e.g. "vm.delete.cross_tenant"

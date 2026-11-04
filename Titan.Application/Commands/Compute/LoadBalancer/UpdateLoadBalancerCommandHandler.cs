@@ -37,9 +37,9 @@ public class UpdateLoadBalancerCommandHandler(
         }
 
         var backends = await LoadBalancerRequest.BackendsAsync(vmRepo, callerId, command.Backends, ct);
-        RequestTicket ticket = loadBalancer.RequestUpdate(listeners, backends);
+        OperationTicket ticket = loadBalancer.Update(listeners, backends);
         activity.Stage("load_balancer.update_requested", "load_balancer", loadBalancer.Id, loadBalancer.Name);
-        await commands.EnqueueLoadBalancerUpdateAsync(loadBalancer, ticket.RequestId,
+        await commands.EnqueueLoadBalancerUpdateAsync(loadBalancer, ticket.OperationId,
             TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);
         await repo.SaveAsync(ct);
     }

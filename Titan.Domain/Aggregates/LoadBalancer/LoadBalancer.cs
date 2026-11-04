@@ -5,10 +5,10 @@ using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.LoadBalancer;
 
 /// A layer 4 load balancer on one network with public IPv6 (titan-ops features/load-balancer/design.md). Incus has no
-/// status word for it: existence only, one request waiting at a time (titan-ops features/load-balancer/design.md#lb-lifecycle).
+/// status word for it: existence only, one operation waiting at a time (titan-ops features/load-balancer/design.md#lb-lifecycle).
 /// Listeners and backends carry both what was asked (IsDesired) and what Incus took (IsApplied), so an update that
-/// gives up can go back (titan-ops architecture/desired-and-current.md#abandoned-request).
-public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
+/// gives up can go back (titan-ops architecture/desired-and-current.md#abandoned-operation).
+public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggregateRoot
 {
     /// A load balancer's name: 1 to 100 letters, digits, hyphens or underscores, starting with a letter or digit. The
     /// validators read these two, so the /v1 spec carries the same pattern.
@@ -50,7 +50,7 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
     public bool OccupiesQuota =>
         DesiredExistence == DesiredExistence.Exists
         && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null));
 
     /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name
     /// and its VIP number, still sends to its backends, still observed. The repository's queries write the same test in SQL.
@@ -58,18 +58,18 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
 
     private LoadBalancer() { }
 
-    /// The move the waiting request makes, for display.
+    /// The move the waiting operation makes, for display.
     public LoadBalancerTransition? Transition
     {
         get
         {
-            switch (PendingRequestKind)
+            switch (PendingOperationKind)
             {
-                case LoadBalancerRequestKind.Create:
+                case LoadBalancerOperationKind.Create:
                     return LoadBalancerTransition.Creating;
-                case LoadBalancerRequestKind.Update:
+                case LoadBalancerOperationKind.Update:
                     return LoadBalancerTransition.Updating;
-                case LoadBalancerRequestKind.Delete:
+                case LoadBalancerOperationKind.Delete:
                     return LoadBalancerTransition.Deleting;
                 default:
                     return null;
@@ -77,15 +77,15 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
         }
     }
 
-    private bool CreateIsWaiting => PendingRequestKind == LoadBalancerRequestKind.Create;
-    private bool DeleteIsWaiting => PendingRequestKind == LoadBalancerRequestKind.Delete;
+    private bool CreateIsWaiting => PendingOperationKind == LoadBalancerOperationKind.Create;
+    private bool DeleteIsWaiting => PendingOperationKind == LoadBalancerOperationKind.Delete;
     /// A delete was asked and still waits, or the load balancer is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
 
     /// Incus holds it and nothing waits: an update starts only from here.
     private bool RestsOnIncus =>
-        PendingRequestId == null
+        PendingOperationId == null
         && ExternalId != null
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
@@ -117,13 +117,13 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
             CreatedAt = DateTimeOffset.UtcNow
         };
         loadBalancer.Ask(listeners, backends);
-        loadBalancer.SetPending(NewRequest(LoadBalancerRequestKind.Create));
+        loadBalancer.SetPending(NewOperation(LoadBalancerOperationKind.Create));
         return loadBalancer;
     }
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
-    /// Whether the last request already asks for exactly this; the handler answers such a PUT itself
+    /// Whether the last operation already asks for exactly this; the handler answers such a PUT itself
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool HasDesiredSpec(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Guid> backendVmIds)
     {
@@ -142,8 +142,8 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
         return desiredVmIds.Count == backendVmIds.Count && backendVmIds.All(desiredVmIds.Contains);
     }
 
-    /// Returns the new request and the VIP: the update command is keyed on the request.
-    public RequestTicket RequestUpdate(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
+    /// Returns the new operation and the VIP: the update command is keyed on the operation.
+    public OperationTicket Update(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
     {
         if (!RestsOnIncus)
         {
@@ -155,9 +155,9 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer already has this configuration.");
         }
         Ask(listeners, backends);
-        PendingRequest<LoadBalancerRequestKind> request = NewRequest(LoadBalancerRequestKind.Update);
-        SetPending(request);
-        return RequestTicket.Of(request.Id, ExternalId!);
+        PendingOperation<LoadBalancerOperationKind> operation = NewOperation(LoadBalancerOperationKind.Update);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, ExternalId!);
     }
 
     /// Titan-side only: Incus knows a load balancer by its VIP, never by its name
@@ -182,19 +182,19 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
         }
     }
 
-    /// A delete replaces a waiting update: the update's report then names a request no longer waiting, and is ignored.
+    /// A delete replaces a waiting update: the update's report then names an operation no longer waiting, and is ignored.
     /// A load balancer with a provider id is deleted through Incus, even one Incus no longer has
-    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Returns the request and the VIP.
+    /// (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Returns the operation and the VIP.
     /// A load balancer that never reached Incus is deleted here, at once, and gets no ticket
     /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    public RequestTicket? RequestDelete()
+    public OperationTicket? Delete()
     {
         if (DeleteIsWaiting)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "A delete is already in progress for this load balancer.");
         if (IsTerminal)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer is already deleted.");
         // Never reached Incus: no command to send and no report coming.
-        bool neverReachedIncus = ExternalId is null && PendingRequestId == null;
+        bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
         if (neverReachedIncus)
         {
             DesiredExistence = DesiredExistence.Deleted;
@@ -204,26 +204,26 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
         }
         if (CreateIsWaiting || ExternalId is null)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "Load balancer is not yet on Incus.");
-        PendingRequest<LoadBalancerRequestKind> request = NewRequest(LoadBalancerRequestKind.Delete);
+        PendingOperation<LoadBalancerOperationKind> operation = NewOperation(LoadBalancerOperationKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
-        SetPending(request);
-        return RequestTicket.Of(request.Id, ExternalId);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, ExternalId);
     }
 
-    // ---- The report of a request's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
-    // ends a request. It writes both axes and the rows, so it is neither an intent nor a Mark*.
+    // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
+    // ends an operation. It writes both axes and the rows, so it is neither an intent nor a Mark*.
 
-    /// Ends the waiting request when the report names it; any other report is ignored and returns null: a stale
+    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
     /// give-up, a Done that arrived twice, the report of an update a delete replaced, a report for a load balancer
-    /// already Deleted. A VIP the worker found is kept whatever the outcome. Done gives the request its effect and
+    /// already Deleted. A VIP the worker found is kept whatever the outcome. Done gives the operation its effect and
     /// clears an older failure; Failed records the reason and puts desired back according to the kind
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingRequest<LoadBalancerRequestKind>? EndRequest(Guid requestId, LoadBalancerRequestEnd end)
+    public PendingOperation<LoadBalancerOperationKind>? EndOperation(Guid operationId, LoadBalancerOperationEnd end)
     {
         if (IsTerminal) return null;
-        PendingRequest<LoadBalancerRequestKind>? waiting = Pending;
-        bool reportIsForTheWaitingRequest = waiting != null && waiting.Id == requestId;
-        if (!reportIsForTheWaitingRequest)
+        PendingOperation<LoadBalancerOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
         {
             return null;
         }
@@ -236,10 +236,10 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
             CurrentExistence = CurrentExistence.Exists;
         }
 
-        if (end.Outcome == RequestOutcome.Done)
+        if (end.Outcome == OperationOutcome.Done)
         {
             ClearFailure();
-            if (waiting!.Kind == LoadBalancerRequestKind.Delete)
+            if (waiting!.Kind == LoadBalancerOperationKind.Delete)
             {
                 CurrentExistence = CurrentExistence.Deleted;
             }
@@ -253,7 +253,7 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
         else
         {
             RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == LoadBalancerRequestKind.Delete)
+            if (waiting!.Kind == LoadBalancerOperationKind.Delete)
             {
                 // A delete may have replaced a waiting update, whose rows are still the ones asked: what Incus took is
                 // asked again, or desired and applied would differ with nothing waiting, and the replaced spec asked
@@ -261,7 +261,7 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
                 DesiredExistence = DesiredExistence.Exists;
                 AskWhatIsApplied();
             }
-            else if (waiting.Kind == LoadBalancerRequestKind.Update)
+            else if (waiting.Kind == LoadBalancerOperationKind.Update)
             {
                 AskWhatIsApplied();
             }
@@ -277,7 +277,7 @@ public class LoadBalancer : RequestingRoot<LoadBalancerRequestKind>
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
-    // ends no request (titan-ops architecture/resource-lifecycle.md#invariants).
+    // ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler saw the VIP on its network.
     public void MarkObserved()

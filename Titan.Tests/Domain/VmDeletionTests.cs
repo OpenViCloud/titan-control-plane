@@ -33,7 +33,7 @@ public class VmDeletionTests
         Vm vm = OnIncus();
         _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(vm));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm));
 
         Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
     }
@@ -43,11 +43,11 @@ public class VmDeletionTests
     {
         Vm vm = OnIncus();
 
-        RequestTicket? ticket = await Deletion().RequestAsync(vm);
+        OperationTicket? ticket = await Deletion().DeleteAsync(vm);
 
         Assert.NotNull(ticket);
         Assert.Equal("vm-ext", ticket!.ProviderId);
-        Assert.Equal(VmRequestKind.Delete, vm.Pending?.Kind);
+        Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
     }
 
     [Fact]
@@ -56,7 +56,7 @@ public class VmDeletionTests
         Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
         vm.MarkRequestFailed("create gave up", null);
 
-        RequestTicket? ticket = await Deletion().RequestAsync(vm);
+        OperationTicket? ticket = await Deletion().DeleteAsync(vm);
 
         Assert.Null(ticket); // nothing on the provider: no command, deleted here
         Assert.True(vm.IsTerminal);
@@ -70,7 +70,7 @@ public class VmDeletionTests
         vm.WithSnapshot("creating");
         _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(vm));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm));
 
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
     }
@@ -82,7 +82,7 @@ public class VmDeletionTests
         const BindingFlags surface = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
         string[] publicMethods = [.. typeof(Vm).GetMethods(surface).Select(m => m.Name)];
         Assert.Contains(nameof(Vm.Rename), publicMethods);
-        Assert.DoesNotContain(nameof(Vm.RequestDelete), publicMethods);
+        Assert.DoesNotContain(nameof(Vm.Delete), publicMethods);
         Assert.DoesNotContain(nameof(Vm.DeleteLocally), publicMethods);
     }
 }

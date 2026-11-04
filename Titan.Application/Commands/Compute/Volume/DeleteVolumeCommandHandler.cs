@@ -30,9 +30,9 @@ public class DeleteVolumeCommandHandler(
         // The volume refuses while a snapshot it holds still counts (titan-ops features/volume/design.md#delete-refused-with-snapshots).
         // A volume that never reached Incus is deleted here and gets no ticket
         // (titan-ops architecture/desired-and-current.md#delete-locally): the request and its outcome at once.
-        RequestTicket? ticket = volume.RequestDelete();
+        OperationTicket? ticket = volume.Delete();
 
-        activity.Stage("volume.delete_requested", "volume", volume.Id, volume.Name); // atomic with RequestDelete
+        activity.Stage("volume.delete_requested", "volume", volume.Id, volume.Name); // atomic with Delete
         if (ticket == null)
         {
             activity.StageOutcome(volume.TenantId, "volume.deleted", "volume", volume.Id, volume.Name);
@@ -40,7 +40,7 @@ public class DeleteVolumeCommandHandler(
             return;
         }
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDeleteAsync(volume.Id, ticket.RequestId, ticket.ProviderId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDeleteAsync(volume.Id, ticket.OperationId, ticket.ProviderId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

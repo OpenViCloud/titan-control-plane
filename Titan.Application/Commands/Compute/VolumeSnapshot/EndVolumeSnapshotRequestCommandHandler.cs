@@ -18,14 +18,14 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
 {
     public async Task HandleAsync(EndVolumeSnapshotRequestCommand command, CancellationToken ct = default)
     {
-        RequestOutcome outcome = VolumeReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = VolumeReports.ParseOutcome(command.Outcome);
 
         VolumeAggregate volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        VolumeSnapshotRequestEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingRequest<VolumeSnapshotRequestKind>? ended = volume.EndSnapshotRequest(snapshot.Id, command.RequestId, end);
+        VolumeSnapshotOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
+        PendingOperation<VolumeSnapshotOperationKind>? ended = volume.EndSnapshotOperation(snapshot.Id, command.RequestId, end);
         if (ended == null)
         {
             return;

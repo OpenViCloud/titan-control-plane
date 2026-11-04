@@ -26,15 +26,15 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
     /// means Incus no longer has the network nor its router; either way the route goes back, its number waiting at the
     /// back of the line. The held route is read without a lock: no create locks a held route. A repeated report
     /// ends nothing and touches no route, and a network without public IPv6 never held one.
-    public async Task<NetworkRequestEnded?> RecordEndedAsync(Network network, Guid requestId, NetworkRequestEnd end,
+    public async Task<NetworkOperationEnded?> RecordEndedAsync(Network network, Guid operationId, NetworkOperationEnd end,
         CancellationToken ct = default)
     {
-        NetworkRequestEnded? ended = network.EndRequest(requestId, end);
+        NetworkOperationEnded? ended = network.EndOperation(operationId, end);
         if (ended == null)
         {
             return null;
         }
-        bool deleteDone = ended.Request.Kind == NetworkRequestKind.Delete && end.Outcome == RequestOutcome.Done;
+        bool deleteDone = ended.Operation.Kind == NetworkOperationKind.Delete && end.Outcome == OperationOutcome.Done;
         if (ended.LetGoOfPublicIpv6 || deleteDone)
         {
             ClusterIpv6Route? route = await routes.FindHeldByAsync(network.Id, ct);

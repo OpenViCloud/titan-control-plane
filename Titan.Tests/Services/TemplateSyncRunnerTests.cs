@@ -185,7 +185,7 @@ public class TemplateSyncRunnerTests
         {
             return;
         }
-        t.RequestSyncIn(clusterId);
+        t.SyncIn(clusterId);
         if (state == "Exists")
         {
             t.MarkCreatedIn(clusterId, $"ext-{t.Name}-{clusterId}");
@@ -197,7 +197,7 @@ public class TemplateSyncRunnerTests
         if (state == "Retrying")
         {
             t.MarkRequestFailedIn(clusterId, "provider unreachable", null);
-            t.RequestSyncIn(clusterId);
+            t.SyncIn(clusterId);
         }
     }
 }

@@ -44,7 +44,7 @@ public static class InvoiceWalletSettlement
         WalletMutation? debit = null;
         try
         {
-            debit = await payment.RequestAsync(invoice, ct);
+            debit = await payment.PayAsync(invoice, ct);
             await walletRepo.SaveChangesAsync(ct);
         }
         catch (ConcurrencyConflictException)

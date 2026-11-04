@@ -33,10 +33,10 @@ public class ObserveVolumeCommandHandler(
         }
 
         // Temporary allowlist, rollout phase 6 removes it (VolumeReports.EndAttachOrDetachTheObservationReached).
-        VolumeRequestEnded? ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
+        VolumeOperationEnded? ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
         if (ended != null)
         {
-            VolumeReports.RecordEnded(volume, ended, RequestOutcome.Done, activity);
+            VolumeReports.RecordEnded(volume, ended, OperationOutcome.Done, activity);
         }
 
         await repo.SaveAsync(ct);

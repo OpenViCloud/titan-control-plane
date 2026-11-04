@@ -15,7 +15,7 @@ namespace Titan.Tests.Domain;
 /// every shape through both, and QueryRuleDbTests pins each side on Postgres.
 public class DomainPlainCodeTests
 {
-    private static readonly Assembly DomainAssembly = typeof(AggregateRoot).Assembly;
+    private static readonly Assembly DomainAssembly = typeof(IAggregateRoot).Assembly;
 
     private static readonly string[] ForbiddenNamespaces =
         ["System.Linq.Expressions", "Microsoft.EntityFrameworkCore"];

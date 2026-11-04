@@ -40,10 +40,10 @@ public class ObserveVmCommandHandler(
         }
 
         // Temporary allowlist, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReached).
-        VmRequestEnded? ended = VmReports.EndStopOrStartTheObservationReached(vm);
+        VmOperationEnded? ended = VmReports.EndStopOrStartTheObservationReached(vm);
         if (ended != null)
         {
-            await VmReports.RecordEndedAsync(vm, ended, RequestOutcome.Done, activity, volumeRepo, ct);
+            await VmReports.RecordEndedAsync(vm, ended, OperationOutcome.Done, activity, volumeRepo, ct);
         }
 
         await repo.SaveAsync(ct);

@@ -4,7 +4,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Vm;
 
-public class Vm : RequestingRoot<VmRequestKind>
+public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
 {
     /// A VM's name: 1 to 64 letters, digits or hyphens, starting with a letter or digit (RFC 952 host name). The
     /// validators read these two, so the /v1 spec carries the same pattern (titan-ops features/vm/design.md#vm-name-limit).
@@ -19,9 +19,9 @@ public class Vm : RequestingRoot<VmRequestKind>
     public Guid TenantId { get; private set; }
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
-    // Only an observation (Mark*), a request's own report (EndRequest) or a delete with nothing on the provider
+    // Only an observation (Mark*), an operation's own report (EndOperation) or a delete with nothing on the provider
     // (DeleteLocally) writes CurrentState and CurrentExistence; only
-    // a request, or a failed request's report putting it back, writes DesiredState and DesiredExistence
+    // an operation, or a failed operation's report putting it back, writes DesiredState and DesiredExistence
     // (titan-ops architecture/desired-and-current.md#desired-and-current).
     // CurrentState is the Incus status word for word, null while Incus has no instance
     // (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
@@ -54,7 +54,7 @@ public class Vm : RequestingRoot<VmRequestKind>
     public bool OccupiesQuota =>
         DesiredExistence == DesiredExistence.Exists
         && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null));
 
     /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
     /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A delete in flight still bills.
@@ -72,7 +72,7 @@ public class Vm : RequestingRoot<VmRequestKind>
     /// changes nothing here. NetworkRepository.HasActiveVmsAsync writes the same test in SQL.
     public bool HoldsItsNetwork =>
         CurrentExistence == CurrentExistence.Exists
-        || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null);
+        || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null);
 
     /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name,
     /// still observed. The repository's list, name and reconciler queries write the same test in SQL.
@@ -81,21 +81,21 @@ public class Vm : RequestingRoot<VmRequestKind>
     /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
     private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);
 
-    /// The move the waiting request makes, for display. Null with the desired fields differing from the current
+    /// The move the waiting operation makes, for display. Null with the desired fields differing from the current
     /// ones is drift.
     public VmTransition? Transition
     {
         get
         {
-            switch (PendingRequestKind)
+            switch (PendingOperationKind)
             {
-                case VmRequestKind.Create:
+                case VmOperationKind.Create:
                     return VmTransition.Creating;
-                case VmRequestKind.Start:
+                case VmOperationKind.Start:
                     return VmTransition.Starting;
-                case VmRequestKind.Stop:
+                case VmOperationKind.Stop:
                     return VmTransition.Stopping;
-                case VmRequestKind.Delete:
+                case VmOperationKind.Delete:
                     return VmTransition.Deleting;
                 default:
                     return null;
@@ -139,8 +139,8 @@ public class Vm : RequestingRoot<VmRequestKind>
             UserData = userData,
             CreatedAt = now,
         };
-        // The create is a request like the others: the create command's Done ends it.
-        vm.SetPending(PendingRequest<VmRequestKind>.Of(Guid.NewGuid(), VmRequestKind.Create, now));
+        // The create is an operation like the others: the create command's Done ends it.
+        vm.SetPending(PendingOperation<VmOperationKind>.Of(Guid.NewGuid(), VmOperationKind.Create, now));
         return vm;
     }
 
@@ -151,24 +151,24 @@ public class Vm : RequestingRoot<VmRequestKind>
 
     /// A delete was asked and still waits, or the VM is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => PendingRequestKind == VmRequestKind.Delete || IsTerminal;
+    public bool IsDeletedOrDeleting => PendingOperationKind == VmOperationKind.Delete || IsTerminal;
 
-    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): a request from a person, refused when illegal.
-    // What a request may do in each Incus status is what Incus itself allows there
-    // (titan-ops features/vm/design.md#requests-follow-incus). The provider carries out stop/start/delete, so the
+    // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): an operation from a person, refused when illegal.
+    // What an operation may do in each Incus status is what Incus itself allows there
+    // (titan-ops features/vm/design.md#operations-follow-incus). The provider carries out stop/start/delete, so the
     // provider id leaves only on the ticket (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
-    // A repeat or an already-done request is refused; the handler recognises it before calling
+    // A repeat or an already-done operation is refused; the handler recognises it before calling
     // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
 
-    public RequestTicket RequestStop()
+    public OperationTicket Stop()
     {
-        if (PendingRequestKind == VmRequestKind.Stop)
+        if (PendingOperationKind == VmOperationKind.Stop)
         {
             throw new BusinessException("VM_INVALID_STATUS", "A stop is already in progress for this VM.");
         }
-        if (PendingRequestKind != null)
+        if (PendingOperationKind != null)
         {
-            throw new BusinessException("VM_INVALID_STATUS", "Another request for this VM is still in progress.");
+            throw new BusinessException("VM_INVALID_STATUS", "Another operation for this VM is still in progress.");
         }
         if (CurrentState == VmState.Stopped)
         {
@@ -182,19 +182,19 @@ public class Vm : RequestingRoot<VmRequestKind>
         {
             throw new BusinessException("VM_INVALID_STATUS", "VM can only be stopped while its instance is Running, Ready, Frozen or Error.");
         }
-        return Accept(VmRequestKind.Stop, VmDesiredState.Stopped, DesiredExistence.Exists);
+        return Accept(VmOperationKind.Stop, VmDesiredState.Stopped, DesiredExistence.Exists);
     }
 
     /// Start on a Frozen instance resumes it: Incus answers `start` from Frozen by thawing the guest.
-    public RequestTicket RequestStart()
+    public OperationTicket Start()
     {
-        if (PendingRequestKind == VmRequestKind.Start)
+        if (PendingOperationKind == VmOperationKind.Start)
         {
             throw new BusinessException("VM_INVALID_STATUS", "A start is already in progress for this VM.");
         }
-        if (PendingRequestKind != null)
+        if (PendingOperationKind != null)
         {
-            throw new BusinessException("VM_INVALID_STATUS", "Another request for this VM is still in progress.");
+            throw new BusinessException("VM_INVALID_STATUS", "Another operation for this VM is still in progress.");
         }
         bool alreadyRunning = CurrentState == VmState.Running || CurrentState == VmState.Ready;
         if (alreadyRunning)
@@ -206,20 +206,20 @@ public class Vm : RequestingRoot<VmRequestKind>
         {
             throw new BusinessException("VM_INVALID_STATUS", "VM can only be started while its instance is Stopped or Frozen.");
         }
-        return Accept(VmRequestKind.Start, VmDesiredState.Running, DesiredExistence.Exists);
+        return Accept(VmOperationKind.Start, VmDesiredState.Running, DesiredExistence.Exists);
     }
 
     /// Any VM with a provider id can be deleted: the worker force-stops whatever status Incus reports and deletes
     /// the instance, and an instance already gone counts as deleted. Without an id there is nothing on the provider
     /// unless the create is still waiting (it may yet instantiate), so there is no ticket and VmDeletion calls
     /// DeleteLocally(). Internal: VmDeletion is the only way in (titan-ops architecture/domain-services.md#cross-aggregate-lock).
-    internal RequestTicket? RequestDelete()
+    internal OperationTicket? Delete()
     {
         if (IsTerminal)
         {
             throw new BusinessException("VM_INVALID_STATUS", "VM is already deleted.");
         }
-        if (PendingRequestKind == VmRequestKind.Delete)
+        if (PendingOperationKind == VmOperationKind.Delete)
         {
             throw new BusinessException("VM_INVALID_STATUS", "A delete is already in progress for this VM.");
         }
@@ -237,24 +237,24 @@ public class Vm : RequestingRoot<VmRequestKind>
             return null;
         }
 
-        return Accept(VmRequestKind.Delete, DesiredState, DesiredExistence.Deleted); // replaces a waiting stop/start (titan-ops features/vm/design.md#conflict-and-delete-wins)
+        return Accept(VmOperationKind.Delete, DesiredState, DesiredExistence.Deleted); // replaces a waiting stop/start (titan-ops features/vm/design.md#conflict-and-delete-wins)
     }
 
-    private RequestTicket Accept(VmRequestKind kind, VmDesiredState desiredState, DesiredExistence desiredExistence)
+    private OperationTicket Accept(VmOperationKind kind, VmDesiredState desiredState, DesiredExistence desiredExistence)
     {
         string providerId = RequireExternalId();
-        PendingRequest<VmRequestKind> request = PendingRequest<VmRequestKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
+        PendingOperation<VmOperationKind> operation = PendingOperation<VmOperationKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
         DesiredState = desiredState;
         DesiredExistence = desiredExistence;
-        SetPending(request);
-        return RequestTicket.Of(request.Id, providerId);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, providerId);
     }
 
     /// A create still waiting without a provider id may yet instantiate on the provider, so there is nothing safe
     /// to forget.
     private void EnsureNoCreateWaiting()
     {
-        if (PendingRequestKind == VmRequestKind.Create)
+        if (PendingOperationKind == VmOperationKind.Create)
         {
             throw new BusinessException("VM_INVALID_STATUS", "VM is still being created; it can be deleted once the provider has it.");
         }
@@ -292,7 +292,7 @@ public class Vm : RequestingRoot<VmRequestKind>
     }
 
     /// Incus attaches a volume to, and snapshots, an instance that is Running, Ready, Stopped or Frozen
-    /// (titan-ops features/vm/design.md#requests-follow-incus); Error is not offered.
+    /// (titan-ops features/vm/design.md#operations-follow-incus); Error is not offered.
     private bool IncusCanAttachOrSnapshot()
     {
         bool instanceExists = CurrentExistence == CurrentExistence.Exists;
@@ -308,7 +308,7 @@ public class Vm : RequestingRoot<VmRequestKind>
     /// (titan-ops features/vm/design.md#conflict-and-delete-wins).
     private void EnsureNoStopOrDeleteWaiting()
     {
-        bool stopOrDeleteWaiting = PendingRequestKind == VmRequestKind.Stop || PendingRequestKind == VmRequestKind.Delete;
+        bool stopOrDeleteWaiting = PendingOperationKind == VmOperationKind.Stop || PendingOperationKind == VmOperationKind.Delete;
         if (stopOrDeleteWaiting)
         {
             throw new BusinessException("VM_INVALID_STATUS", "A stop or delete is in progress for this VM.");
@@ -343,7 +343,7 @@ public class Vm : RequestingRoot<VmRequestKind>
     // call to the snapshot it names (titan-ops architecture/code-structure.md#child-entity). Logic stays on VmSnapshot;
     // this is the way in.
 
-    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable). The create request is the
+    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable). The create operation is the
     /// snapshot's own Pending.
     public VmSnapshotTicket AddSnapshot(string name)
     {
@@ -368,23 +368,23 @@ public class Vm : RequestingRoot<VmRequestKind>
     }
 
     /// Intent on one snapshot: the VM must accept a revert (its own rule first), then the snapshot must rest on
-    /// Incus; returns the request and the snapshot's provider id for the command. Titan does not stop or start the VM
+    /// Incus; returns the operation and the snapshot's provider id for the command. Titan does not stop or start the VM
     /// for it.
-    public RequestTicket RevertSnapshot(Guid snapshotId)
+    public OperationTicket RevertSnapshot(Guid snapshotId)
     {
         VmSnapshot snapshot = RequireSnapshot(snapshotId);
         EnsureSnapshottable();
         return snapshot.Revert();
     }
 
-    /// Intent on one snapshot: its delete goes through Incus; returns the request and the snapshot's provider id for
+    /// Intent on one snapshot: its delete goes through Incus; returns the operation and the snapshot's provider id for
     /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
-    public RequestTicket? RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
+    public OperationTicket? DeleteSnapshot(Guid snapshotId) => RequireSnapshot(snapshotId).Delete();
 
     /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another request than the one the snapshot waits on.
-    public PendingRequest<VmSnapshotRequestKind>? EndSnapshotRequest(Guid snapshotId, Guid requestId, VmSnapshotRequestEnd end) =>
-        RequireSnapshot(snapshotId).EndRequest(requestId, end);
+    /// another operation than the one the snapshot waits on.
+    public PendingOperation<VmSnapshotOperationKind>? EndSnapshotOperation(Guid snapshotId, Guid operationId, VmSnapshotOperationEnd end) =>
+        RequireSnapshot(snapshotId).EndOperation(operationId, end);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -429,20 +429,20 @@ public class Vm : RequestingRoot<VmRequestKind>
         SetPending(null);
     }
 
-    // ---- The report of a request's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
-    // a request. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
+    // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
+    // an operation. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
     // neither an intent nor a Mark*.
 
-    /// Ends the waiting request when the report names it; any other report is ignored and returns null: a stale
+    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
     /// give-up, a Done that arrived twice, a report for a VM already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the request its effect and clears an older failure; Failed records the reason and puts
+    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
     /// desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public VmRequestEnded? EndRequest(Guid requestId, VmRequestEnd end)
+    public VmOperationEnded? EndOperation(Guid operationId, VmOperationEnd end)
     {
         if (IsTerminal) return null;
-        PendingRequest<VmRequestKind>? waiting = Pending;
-        bool reportIsForTheWaitingRequest = waiting != null && waiting.Id == requestId;
-        if (!reportIsForTheWaitingRequest)
+        PendingOperation<VmOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
         {
             return null;
         }
@@ -465,10 +465,10 @@ public class Vm : RequestingRoot<VmRequestKind>
         }
 
         var snapshotsWhoseDeleteEnded = new List<VmSnapshot>();
-        if (end.Outcome == RequestOutcome.Done)
+        if (end.Outcome == OperationOutcome.Done)
         {
             ClearFailure();
-            if (waiting!.Kind == VmRequestKind.Delete)
+            if (waiting!.Kind == VmOperationKind.Delete)
             {
                 // Incus deletes an instance's snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every
                 // snapshot not yet Deleted goes with the VM; the ones whose own delete was waiting are named for
@@ -492,25 +492,25 @@ public class Vm : RequestingRoot<VmRequestKind>
             RecordFailure(end.Reason, end.Detail);
             switch (waiting!.Kind)
             {
-                case VmRequestKind.Delete:
+                case VmOperationKind.Delete:
                     DesiredExistence = DesiredExistence.Exists;
                     break;
-                case VmRequestKind.Start:
-                case VmRequestKind.Stop:
+                case VmOperationKind.Start:
+                case VmOperationKind.Stop:
                     DesiredState = CurrentState == VmState.Stopped ? VmDesiredState.Stopped : VmDesiredState.Running;
                     break;
-                case VmRequestKind.Create:
+                case VmOperationKind.Create:
                     // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
                     break;
             }
         }
 
         SetPending(null);
-        return new VmRequestEnded(waiting, snapshotsWhoseDeleteEnded);
+        return new VmOperationEnded(waiting, snapshotsWhoseDeleteEnded);
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what the provider is,
-    // so no transition guard and no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Running seen
+    // so no transition guard and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants). Running seen
     // before a stop finishes is legitimate; throwing would fail the internal callback and leave the VM stuck.
 
     /// The reconciler saw the instance with this Incus status and these addresses.

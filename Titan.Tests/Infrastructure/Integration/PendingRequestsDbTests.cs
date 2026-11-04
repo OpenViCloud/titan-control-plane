@@ -106,7 +106,7 @@ public class PendingRequestsDbTests(PostgresFixture pg)
 
         await using TitanDbContext db = pg.NewDbContext();
         Vm stored = await db.Vms.SingleAsync(v => v.Id == vm.Id);
-        Assert.Equal(VmRequestKind.Stop, stored.Pending!.Kind);
+        Assert.Equal(VmOperationKind.Stop, stored.Pending!.Kind);
         int rows = await db.Set<ProviderCommand>().CountAsync(c => c.Key.StartsWith($"vm-stop-{vm.Id}-"));
         Assert.Equal(1, rows);
     }

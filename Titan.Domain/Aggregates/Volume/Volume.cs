@@ -4,7 +4,7 @@ using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Volume;
 
-public class Volume : RequestingRoot<VolumeRequestKind>
+public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
 {
     /// A volume's name: 1 to 100 characters, not blank, any characters. The validators read it.
     public const int NameMaxLength = 100;
@@ -16,8 +16,8 @@ public class Volume : RequestingRoot<VolumeRequestKind>
     public string VolumeOfferingId { get; private set; } = default!;
     public int SizeGb { get; private set; }
     // Incus has no status word for a custom volume: it is there or not, and used by instances or not
-    // (titan-ops features/volume/design.md#volume-state-is-existence). Mark* and a request's report write the current pair
-    // (existence and attachment); a request, and a report that it failed, write the desired pair
+    // (titan-ops features/volume/design.md#volume-state-is-existence). Mark* and an operation's report write the current pair
+    // (existence and attachment); an operation, and a report that it failed, write the desired pair
     // (titan-ops architecture/desired-and-current.md#desired-and-current).
     public CurrentExistence CurrentExistence { get; private set; }
     public DesiredExistence DesiredExistence { get; private set; }
@@ -46,7 +46,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
     public bool OccupiesQuota =>
         DesiredExistence == DesiredExistence.Exists
         && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && PendingRequestId != null));
+            || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null));
 
     /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
     /// VolumeRepository.ListBillableAsync writes the same test in SQL.
@@ -59,21 +59,21 @@ public class Volume : RequestingRoot<VolumeRequestKind>
 
     private Volume() { }
 
-    /// The move the waiting request makes, for display. Null with the desired attachment differing from the current one
+    /// The move the waiting operation makes, for display. Null with the desired attachment differing from the current one
     /// is drift.
     public VolumeTransition? Transition
     {
         get
         {
-            switch (PendingRequestKind)
+            switch (PendingOperationKind)
             {
-                case VolumeRequestKind.Create:
+                case VolumeOperationKind.Create:
                     return VolumeTransition.Creating;
-                case VolumeRequestKind.Attach:
+                case VolumeOperationKind.Attach:
                     return VolumeTransition.Attaching;
-                case VolumeRequestKind.Detach:
+                case VolumeOperationKind.Detach:
                     return VolumeTransition.Detaching;
-                case VolumeRequestKind.Delete:
+                case VolumeOperationKind.Delete:
                     return VolumeTransition.Deleting;
                 default:
                     return null;
@@ -81,8 +81,8 @@ public class Volume : RequestingRoot<VolumeRequestKind>
         }
     }
 
-    private bool CreateIsWaiting => PendingRequestKind == VolumeRequestKind.Create;
-    private bool DeleteIsWaiting => PendingRequestKind == VolumeRequestKind.Delete;
+    private bool CreateIsWaiting => PendingOperationKind == VolumeOperationKind.Create;
+    private bool DeleteIsWaiting => PendingOperationKind == VolumeOperationKind.Delete;
     /// A delete was asked and still waits, or the volume is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
@@ -92,7 +92,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
 
     /// Incus holds it and nothing waits. Every intent but delete starts from here.
     private bool RestsOnIncus =>
-        PendingRequestId == null
+        PendingOperationId == null
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
@@ -127,7 +127,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
             DesiredExistence = DesiredExistence.Exists,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        volume.SetPending(NewRequest(VolumeRequestKind.Create));
+        volume.SetPending(NewOperation(VolumeOperationKind.Create));
         return volume;
     }
 
@@ -149,28 +149,28 @@ public class Volume : RequestingRoot<VolumeRequestKind>
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 
         string externalVolumeId = RequireExternalId();
-        PendingRequest<VolumeRequestKind> request = NewRequest(VolumeRequestKind.Attach);
+        PendingOperation<VolumeOperationKind> operation = NewOperation(VolumeOperationKind.Attach);
         DesiredAttachedVmId = vm.Id;
-        SetPending(request);
-        return new VolumeAttachProviderIds(request.Id, externalVolumeId, vmExternalId);
+        SetPending(operation);
+        return new VolumeAttachProviderIds(operation.Id, externalVolumeId, vmExternalId);
     }
 
     /// The detach command removes the disk from every instance using the volume, so a volume an instance outside
     /// Titan also uses is refused: Titan does not edit an instance it does not manage.
-    public RequestTicket Detach()
+    public OperationTicket Detach()
     {
         bool onATitanVmOnly = RestsOnIncus && CurrentAttachedVmId != null && !CurrentAttachedElsewhere;
         if (!onATitanVmOnly)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be attached to a Titan VM only, with nothing waiting, to detach.");
         string externalVolumeId = RequireExternalId();
-        PendingRequest<VolumeRequestKind> request = NewRequest(VolumeRequestKind.Detach);
+        PendingOperation<VolumeOperationKind> operation = NewOperation(VolumeOperationKind.Detach);
         DesiredAttachedVmId = null;
-        SetPending(request);
-        return RequestTicket.Of(request.Id, externalVolumeId);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, externalVolumeId);
     }
 
-    // ---- A VM's delete is not a request of the volume (titan-ops architecture/resource-lifecycle.md#kinds): the volume's
-    // own waiting request, if any, is left to its own command's report.
+    // ---- A VM's delete is not an operation of the volume (titan-ops architecture/resource-lifecycle.md#kinds): the volume's
+    // own waiting operation, if any, is left to its own command's report.
 
     /// The VM this volume is asked to be attached to is being deleted, or its delete was done: Incus keeps the volume
     /// and detaches it when it deletes the VM (titan-ops features/volume/design.md#vm-delete-releases-volumes), so the
@@ -178,7 +178,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
     /// keeps its desired attachment until its command reports.
     public void ReleaseFromVmDelete(Guid vmId)
     {
-        bool askedForThatVmWithNothingWaiting = PendingRequestId == null && DesiredAttachedVmId == vmId && !IsTerminal;
+        bool askedForThatVmWithNothingWaiting = PendingOperationId == null && DesiredAttachedVmId == vmId && !IsTerminal;
         if (askedForThatVmWithNothingWaiting)
         {
             DesiredAttachedVmId = null;
@@ -189,7 +189,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
     /// Only a volume with nothing waiting, released by that delete (nothing asked, Incus still shows that VM).
     public void KeepAttachmentAfterVmDeleteFailed(Guid vmId)
     {
-        bool releasedByThatDelete = PendingRequestId == null && DesiredAttachedVmId == null && CurrentAttachedVmId == vmId
+        bool releasedByThatDelete = PendingOperationId == null && DesiredAttachedVmId == null && CurrentAttachedVmId == vmId
                                     && !IsTerminal;
         if (releasedByThatDelete)
         {
@@ -203,14 +203,14 @@ public class Volume : RequestingRoot<VolumeRequestKind>
     /// snapshot it holds still counts: Incus deletes a volume's snapshots with it.
     /// A volume that never reached Incus is deleted here, at once, and gets no ticket
     /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    public RequestTicket? RequestDelete()
+    public OperationTicket? Delete()
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VOLUME_INVALID_STATE", "A delete is already in progress for this volume.");
         if (IsTerminal)
             throw new BusinessException("VOLUME_INVALID_STATE", "The volume is already deleted.");
         // Never reached Incus: no command to send and no report coming.
-        bool neverReachedIncus = ExternalId is null && PendingRequestId == null;
+        bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
         if (neverReachedIncus)
         {
             DesiredExistence = DesiredExistence.Deleted;
@@ -218,7 +218,7 @@ public class Volume : RequestingRoot<VolumeRequestKind>
             SetPending(null);
             return null;
         }
-        if (PendingRequestId != null || ExternalId is null)
+        if (PendingOperationId != null || ExternalId is null)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, with nothing waiting, to delete.");
         if (IsInUse)
             throw new BusinessException("VOLUME_INVALID_STATE", "Detach the volume before deleting it.");
@@ -226,16 +226,16 @@ public class Volume : RequestingRoot<VolumeRequestKind>
         bool hasLiveSnapshots = SnapshotQuotaUsage > 0;
         if (hasLiveSnapshots)
             throw new BusinessException("VOLUME_HAS_SNAPSHOTS", "Delete the volume's snapshots before the volume.");
-        PendingRequest<VolumeRequestKind> request = NewRequest(VolumeRequestKind.Delete);
+        PendingOperation<VolumeOperationKind> operation = NewOperation(VolumeOperationKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
-        SetPending(request);
-        return RequestTicket.Of(request.Id, ExternalId);
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, ExternalId);
     }
 
     // ---- Snapshots: the volume counts its snapshots and routes each call to the snapshot it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on VolumeSnapshot; this is the way in.
 
-    /// Intent: a new snapshot of this volume. The volume must rest on Incus (EnsureSnapshottable). The create request
+    /// Intent: a new snapshot of this volume. The volume must rest on Incus (EnsureSnapshottable). The create operation
     /// is the snapshot's own Pending.
     public VolumeSnapshotTicket AddSnapshot(string name)
     {
@@ -259,18 +259,18 @@ public class Volume : RequestingRoot<VolumeRequestKind>
         throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
     }
 
-    /// Intent on one snapshot: its delete goes through Incus; returns the request and the snapshot's provider id for
+    /// Intent on one snapshot: its delete goes through Incus; returns the operation and the snapshot's provider id for
     /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
-    public RequestTicket? RequestSnapshotDelete(Guid snapshotId) => RequireSnapshot(snapshotId).RequestDelete();
+    public OperationTicket? DeleteSnapshot(Guid snapshotId) => RequireSnapshot(snapshotId).Delete();
 
     /// A restore starts from a snapshot resting on Incus and hands out its provider id
     /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is Create's.
     public string ProviderIdForSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).ProviderIdForRestore();
 
     /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another request than the one the snapshot waits on.
-    public PendingRequest<VolumeSnapshotRequestKind>? EndSnapshotRequest(Guid snapshotId, Guid requestId, VolumeSnapshotRequestEnd end) =>
-        RequireSnapshot(snapshotId).EndRequest(requestId, end);
+    /// another operation than the one the snapshot waits on.
+    public PendingOperation<VolumeSnapshotOperationKind>? EndSnapshotOperation(Guid snapshotId, Guid operationId, VolumeSnapshotOperationEnd end) =>
+        RequireSnapshot(snapshotId).EndOperation(operationId, end);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -291,20 +291,20 @@ public class Volume : RequestingRoot<VolumeRequestKind>
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, with nothing waiting, to create a snapshot.");
     }
 
-    // ---- The report of a request's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
-    // a request. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
+    // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
+    // an operation. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
     // neither an intent nor a Mark*.
 
-    /// Ends the waiting request when the report names it; any other report is ignored and returns null: a stale
+    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
     /// give-up, a Done that arrived twice, a report for a volume already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the request its effect and clears an older failure; Failed records the reason and puts
+    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
     /// desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public VolumeRequestEnded? EndRequest(Guid requestId, VolumeRequestEnd end)
+    public VolumeOperationEnded? EndOperation(Guid operationId, VolumeOperationEnd end)
     {
         if (IsTerminal) return null;
-        PendingRequest<VolumeRequestKind>? waiting = Pending;
-        bool reportIsForTheWaitingRequest = waiting != null && waiting.Id == requestId;
-        if (!reportIsForTheWaitingRequest)
+        PendingOperation<VolumeOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
         {
             return null;
         }
@@ -326,10 +326,10 @@ public class Volume : RequestingRoot<VolumeRequestKind>
         }
 
         var snapshotsWhoseDeleteEnded = new List<VolumeSnapshot>();
-        if (end.Outcome == RequestOutcome.Done)
+        if (end.Outcome == OperationOutcome.Done)
         {
             ClearFailure();
-            if (waiting!.Kind == VolumeRequestKind.Delete)
+            if (waiting!.Kind == VolumeOperationKind.Delete)
             {
                 // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots):
                 // every snapshot not yet Deleted goes with the volume; the ones whose own delete was waiting are named
@@ -352,25 +352,25 @@ public class Volume : RequestingRoot<VolumeRequestKind>
             RecordFailure(end.Reason, end.Detail);
             switch (waiting!.Kind)
             {
-                case VolumeRequestKind.Delete:
+                case VolumeOperationKind.Delete:
                     DesiredExistence = DesiredExistence.Exists;
                     break;
-                case VolumeRequestKind.Attach:
-                case VolumeRequestKind.Detach:
+                case VolumeOperationKind.Attach:
+                case VolumeOperationKind.Detach:
                     DesiredAttachedVmId = CurrentAttachedVmId;
                     break;
-                case VolumeRequestKind.Create:
+                case VolumeOperationKind.Create:
                     // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
                     break;
             }
         }
 
         SetPending(null);
-        return new VolumeRequestEnded(waiting, snapshotsWhoseDeleteEnded);
+        return new VolumeOperationEnded(waiting, snapshotsWhoseDeleteEnded);
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what Incus has, so
-    // no guard, and no request ends here (titan-ops architecture/resource-lifecycle.md#invariants).
+    // no guard, and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler read the volume on Incus: the Titan VM using it, and whether an instance outside Titan does.
     public void MarkObserved(Guid? attachedVmId, bool attachedElsewhere)

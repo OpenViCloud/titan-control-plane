@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.TopUp;
 
 /// Any credit into the wallet (titan-ops features/billing/topup/design.md#topup-lifecycle). A Confirmed TopUp is the
 /// customer's receipt (titan-ops architecture/money-and-wallet.md#confirmed-topup-is-receipt).
-public class TopUp : AggregateRoot
+public class TopUp : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }

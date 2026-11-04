@@ -33,7 +33,7 @@ public class VmTemplateTests
     private static VmTemplate SyncedIn(string clusterId, string externalTemplateId)
     {
         var t = NewTemplate();
-        t.EndSyncRequest(clusterId, t.RequestSyncIn(clusterId).Id, VmTemplateRequestEnd.Done(externalTemplateId));
+        t.EndSyncOperation(clusterId, t.SyncIn(clusterId).Id, VmTemplateOperationEnd.Done(externalTemplateId));
         return t;
     }
 
@@ -72,10 +72,10 @@ public class VmTemplateTests
     {
         var t = NewTemplate();
 
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.Equal(VmTemplateRequestKind.Sync, t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.Pending!.Kind);
+        Assert.Equal(VmTemplateOperationKind.Sync, t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.Pending!.Kind);
         Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
     }
 
@@ -84,7 +84,7 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
 
-        t.RequestSyncIn(Singapore);
+        t.SyncIn(Singapore);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Singapore));
@@ -94,12 +94,12 @@ public class VmTemplateTests
     public void RequestSyncIn_AfterAFailedSync_WaitsForTheWorker_AndKeepsTheReason()
     {
         var t = NewTemplate();
-        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Failed(null, "wrong architecture", "raw"));
+        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Failed(null, "wrong architecture", "raw"));
 
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
 
         Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.Equal("wrong architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
+        Assert.Equal("wrong architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureReason);
     }
 
     [Fact] // the alias went missing on Incus: sync pulls it again
@@ -108,7 +108,7 @@ public class VmTemplateTests
         var t = SyncedIn(Mock, "tpl-a");
         t.MarkNotFoundIn(Mock);
 
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
 
         Assert.Equal("NotFound/Exists/Syncing", Shape(t, Mock));
     }
@@ -117,9 +117,9 @@ public class VmTemplateTests
     public void RequestSyncIn_WhileASyncWaitsInThatCluster_IsRefused()
     {
         var t = NewTemplate();
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
 
-        Assert.Throws<BusinessException>(() => t.RequestSyncIn(Mock));
+        Assert.Throws<BusinessException>(() => t.SyncIn(Mock));
     }
 
     [Fact] // already there: nothing to ask for
@@ -127,7 +127,7 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
 
-        Assert.Throws<BusinessException>(() => t.RequestSyncIn(Mock));
+        Assert.Throws<BusinessException>(() => t.SyncIn(Mock));
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
     }
 
@@ -138,7 +138,7 @@ public class VmTemplateTests
     {
         var t = NewTemplate();
 
-        Assert.Throws<ArgumentException>(() => t.RequestSyncIn(clusterId));
+        Assert.Throws<ArgumentException>(() => t.SyncIn(clusterId));
         Assert.Empty(t.Clusters);
     }
 
@@ -148,11 +148,11 @@ public class VmTemplateTests
     public void EachCluster_KeepsItsOwnProviderId()
     {
         var t = NewTemplate();
-        PendingRequest<VmTemplateRequestKind> inMock = t.RequestSyncIn(Mock);
-        PendingRequest<VmTemplateRequestKind> inSingapore = t.RequestSyncIn(Singapore);
+        PendingOperation<VmTemplateOperationKind> inMock = t.SyncIn(Mock);
+        PendingOperation<VmTemplateOperationKind> inSingapore = t.SyncIn(Singapore);
 
-        t.EndSyncRequest(Mock, inMock.Id, VmTemplateRequestEnd.Done("tpl-a"));
-        t.EndSyncRequest(Singapore, inSingapore.Id, VmTemplateRequestEnd.Done("tpl-b"));
+        t.EndSyncOperation(Mock, inMock.Id, VmTemplateOperationEnd.Done("tpl-a"));
+        t.EndSyncOperation(Singapore, inSingapore.Id, VmTemplateOperationEnd.Done("tpl-b"));
 
         Assert.Equal("tpl-a", t.ProviderIdIn(Mock));
         Assert.Equal("tpl-b", t.ProviderIdIn(Singapore));
@@ -162,7 +162,7 @@ public class VmTemplateTests
     public void MarkNotFoundIn_OnAClusterThatHadIt_KeepsItsProviderId_AndTheOtherCluster()
     {
         var t = SyncedIn(Mock, "tpl-a");
-        t.EndSyncRequest(Singapore, t.RequestSyncIn(Singapore).Id, VmTemplateRequestEnd.Done("tpl-b"));
+        t.EndSyncOperation(Singapore, t.SyncIn(Singapore).Id, VmTemplateOperationEnd.Done("tpl-b"));
 
         t.MarkNotFoundIn(Mock);
 
@@ -176,11 +176,11 @@ public class VmTemplateTests
     {
         var t = SyncedIn(Mock, "tpl-a");
         t.MarkNotFoundIn(Mock);
-        t.EndSyncRequest(Mock, t.RequestSyncIn(Mock).Id, VmTemplateRequestEnd.Failed(null, "image of another architecture", "raw"));
+        t.EndSyncOperation(Mock, t.SyncIn(Mock).Id, VmTemplateOperationEnd.Failed(null, "image of another architecture", "raw"));
 
         t.MarkNotFoundIn(Mock);
 
-        Assert.Equal("image of another architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
+        Assert.Equal("image of another architecture", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureReason);
     }
 
     [Fact] // the reconciler sees an alias recorded lost: it is back
@@ -201,7 +201,7 @@ public class VmTemplateTests
     public void ProviderIdIn_AClusterNotCreated_IsRefused_AsNotSynced()
     {
         var t = SyncedIn(Mock, "tpl-a");
-        t.RequestSyncIn(Singapore);
+        t.SyncIn(Singapore);
 
         Assert.Equal("TEMPLATE_NOT_SYNCED", Assert.Throws<BusinessException>(() => t.ProviderIdIn(Singapore)).Code);
         Assert.Equal("TEMPLATE_NOT_SYNCED", Assert.Throws<BusinessException>(() => t.ProviderIdIn("never-asked")).Code);
@@ -220,7 +220,7 @@ public class VmTemplateTests
     public void IsSyncedIn_IsTrue_OnlyForAClusterThatHasTheAlias()
     {
         var t = SyncedIn(Mock, "tpl-a");
-        t.RequestSyncIn(Singapore);
+        t.SyncIn(Singapore);
         var lost = SyncedIn(Mock, "tpl-a");
         lost.MarkNotFoundIn(Mock);
 

@@ -52,7 +52,7 @@ public class LoadBalancerTargetTests
     {
         Network creating = TestNetworks.CreatingWithPublicIpv6(Owner, "net-1", "cluster-a");
         Network deleting = UsableNetwork(true);
-        deleting.RequestDelete();
+        deleting.Delete();
 
         Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => creating.ProviderIdForLoadBalancer()).Code);
         Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => deleting.ProviderIdForLoadBalancer()).Code);
@@ -91,7 +91,7 @@ public class LoadBalancerTargetTests
         Vm elsewhere = VmOnIncus(Guid.NewGuid());
         Vm creating = Vm.Create(Owner.Id, networkId, "vm-2", "m", "tpl", "cluster-a", 20);
         Vm deleting = VmOnIncus(networkId);
-        deleting.RequestDelete();
+        deleting.Delete();
 
         foreach (Vm vm in new[] { elsewhere, creating, deleting })
         {

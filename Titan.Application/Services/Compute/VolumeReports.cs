@@ -16,42 +16,42 @@ namespace Titan.Application.Services.Compute;
 /// </summary>
 public static class VolumeReports
 {
-    private static readonly Dictionary<VolumeRequestKind, string> DoneAction = new()
+    private static readonly Dictionary<VolumeOperationKind, string> DoneAction = new()
     {
-        [VolumeRequestKind.Create] = "volume.created",
-        [VolumeRequestKind.Attach] = "volume.attached",
-        [VolumeRequestKind.Detach] = "volume.detached",
-        [VolumeRequestKind.Delete] = "volume.deleted",
+        [VolumeOperationKind.Create] = "volume.created",
+        [VolumeOperationKind.Attach] = "volume.attached",
+        [VolumeOperationKind.Detach] = "volume.detached",
+        [VolumeOperationKind.Delete] = "volume.deleted",
     };
 
     // A failed create records nothing: the request was the create, and a failure is not its outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
-    private static readonly Dictionary<VolumeRequestKind, string> FailedAction = new()
+    private static readonly Dictionary<VolumeOperationKind, string> FailedAction = new()
     {
-        [VolumeRequestKind.Attach] = "volume.attach_failed",
-        [VolumeRequestKind.Detach] = "volume.detach_failed",
-        [VolumeRequestKind.Delete] = "volume.delete_failed",
+        [VolumeOperationKind.Attach] = "volume.attach_failed",
+        [VolumeOperationKind.Detach] = "volume.detach_failed",
+        [VolumeOperationKind.Delete] = "volume.delete_failed",
     };
 
-    private static readonly Dictionary<VolumeSnapshotRequestKind, string> SnapshotDoneAction = new()
+    private static readonly Dictionary<VolumeSnapshotOperationKind, string> SnapshotDoneAction = new()
     {
-        [VolumeSnapshotRequestKind.Create] = "volume_snapshot.created",
-        [VolumeSnapshotRequestKind.Delete] = "volume_snapshot.deleted",
+        [VolumeSnapshotOperationKind.Create] = "volume_snapshot.created",
+        [VolumeSnapshotOperationKind.Delete] = "volume_snapshot.deleted",
     };
 
-    private static readonly Dictionary<VolumeSnapshotRequestKind, string> SnapshotFailedAction = new()
+    private static readonly Dictionary<VolumeSnapshotOperationKind, string> SnapshotFailedAction = new()
     {
-        [VolumeSnapshotRequestKind.Delete] = "volume_snapshot.delete_failed",
+        [VolumeSnapshotOperationKind.Delete] = "volume_snapshot.delete_failed",
     };
 
-    public static RequestOutcome ParseOutcome(string outcome)
+    public static OperationOutcome ParseOutcome(string outcome)
     {
         switch (outcome)
         {
             case "Done":
-                return RequestOutcome.Done;
+                return OperationOutcome.Done;
             case "Failed":
-                return RequestOutcome.Failed;
+                return OperationOutcome.Failed;
             default:
                 throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
         }
@@ -89,11 +89,11 @@ public static class VolumeReports
     }
 
     /// Records the ended request's outcome once, and the snapshots a volume's delete took whose own delete was waiting.
-    public static void RecordEnded(VolumeAggregate volume, VolumeRequestEnded ended, RequestOutcome outcome,
+    public static void RecordEnded(VolumeAggregate volume, VolumeOperationEnded ended, OperationOutcome outcome,
         IActivityRecorder activity)
     {
-        Dictionary<VolumeRequestKind, string> actions = outcome == RequestOutcome.Done ? DoneAction : FailedAction;
-        if (actions.TryGetValue(ended.Request.Kind, out string? action))
+        Dictionary<VolumeOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
+        if (actions.TryGetValue(ended.Operation.Kind, out string? action))
         {
             activity.StageOutcome(volume.TenantId, action, "volume", volume.Id, volume.Name);
         }
@@ -103,11 +103,11 @@ public static class VolumeReports
         }
     }
 
-    public static void RecordSnapshotEnded(VolumeSnapshot snapshot, PendingRequest<VolumeSnapshotRequestKind> ended,
-        RequestOutcome outcome, IActivityRecorder activity)
+    public static void RecordSnapshotEnded(VolumeSnapshot snapshot, PendingOperation<VolumeSnapshotOperationKind> ended,
+        OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<VolumeSnapshotRequestKind, string> actions =
-            outcome == RequestOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
+        Dictionary<VolumeSnapshotOperationKind, string> actions =
+            outcome == OperationOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
         if (actions.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(snapshot.TenantId, action, "volume_snapshot", snapshot.Id, snapshot.Name);
@@ -119,20 +119,20 @@ public static class VolumeReports
     /// waiting attach or detach asked for ends it, as before this rollout. With the new worker the command's own Done
     /// and this race; the later one finds nothing waiting and is ignored, so the outcome is recorded once. A create or a
     /// delete is never ended here.
-    public static VolumeRequestEnded? EndAttachOrDetachTheObservationReached(VolumeAggregate volume)
+    public static VolumeOperationEnded? EndAttachOrDetachTheObservationReached(VolumeAggregate volume)
     {
-        PendingRequest<VolumeRequestKind>? waiting = volume.Pending;
+        PendingOperation<VolumeOperationKind>? waiting = volume.Pending;
         if (waiting == null)
         {
             return null;
         }
         bool inUse = volume.CurrentAttachedVmId != null || volume.CurrentAttachedElsewhere;
-        bool reached = (waiting.Kind == VolumeRequestKind.Attach && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId)
-                       || (waiting.Kind == VolumeRequestKind.Detach && !inUse);
+        bool reached = (waiting.Kind == VolumeOperationKind.Attach && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId)
+                       || (waiting.Kind == VolumeOperationKind.Detach && !inUse);
         if (!reached)
         {
             return null;
         }
-        return volume.EndRequest(waiting.Id, VolumeRequestEnd.Done(null, null));
+        return volume.EndOperation(waiting.Id, VolumeOperationEnd.Done(null, null));
     }
 }

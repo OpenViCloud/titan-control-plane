@@ -31,7 +31,7 @@ public class StopVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A stop still waiting, or already
         // stopped with nothing else asked of it: answer like the first request, record and send nothing
         // (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool stopIsWaiting = vm.Pending?.Kind == VmRequestKind.Stop;
+        bool stopIsWaiting = vm.Pending?.Kind == VmOperationKind.Stop;
         bool alreadyStopped = vm.Pending == null && vm.CurrentState == VmState.Stopped;
         if (stopIsWaiting || alreadyStopped)
         {
@@ -39,10 +39,10 @@ public class StopVmCommandHandler(
         }
 
         // The guard stays on the aggregate (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id): any other state is refused there.
-        RequestTicket ticket = vm.RequestStop();
+        OperationTicket ticket = vm.Stop();
 
         activity.Stage("vm.stop_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStopAsync(vm.Id, ticket.RequestId, ticket.ProviderId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStopAsync(vm.Id, ticket.OperationId, ticket.ProviderId, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

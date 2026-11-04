@@ -55,7 +55,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net", Cluster);
         var rule = FirewallRule.Create(network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         rule.MarkActive("sg-7");
-        rule.RequestDelete();
+        rule.Delete();
         db.Networks.Add(network);
         db.FirewallRules.Add(rule);
         await db.SaveChangesAsync();

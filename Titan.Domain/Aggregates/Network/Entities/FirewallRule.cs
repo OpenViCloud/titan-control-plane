@@ -1,0 +1,239 @@
+using Titan.Domain.Exceptions;
+using Titan.Domain.Model;
+using Titan.Domain.Values;
+
+namespace Titan.Domain.Aggregates.Network;
+
+/// One rule of a network: a line in the network's ACL on Incus (titan-ops features/network/design.md#firewall-on-incus).
+/// A child of Network (titan-ops architecture/code-structure.md#child-entity): the network's delete taking
+/// every rule with it is the network's invariant, so only the root reaches the methods below, and
+/// handlers go through Network.AddFirewallRule, DeleteFirewallRule,
+/// EndFirewallRuleOperation and MarkFirewallRule*.
+public class FirewallRule : ProviderResource<FirewallRuleOperationKind>, IEntity
+{
+    public Guid Id { get; private set; }
+    public Guid NetworkId { get; private set; }
+    public Guid TenantId { get; private set; }
+    public FirewallDirection Direction { get; private set; }
+    public FirewallProtocol Protocol { get; private set; }
+    public int? StartPort { get; private set; }
+    public int? EndPort { get; private set; }
+    public FirewallCidr Cidr { get; private set; } = default!;
+    public string? ExternalId { get; private set; }
+    // Same split as Network (titan-ops architecture/desired-and-current.md#desired-and-current): CurrentState is the Incus
+    // ACL rule state, null while the rule is not in the ACL.
+    public FirewallRuleState? CurrentState { get; private set; }
+    public CurrentExistence CurrentExistence { get; private set; }
+    public DesiredExistence DesiredExistence { get; private set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+
+    /// Deleted absorbs every later observation (titan-ops architecture/intent-and-observation.md#intent-versus-observation):
+    /// a late observation must not bring back a rule Incus has already removed.
+    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
+
+    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed under its network,
+    /// still observed; a rule whose delete is waiting is still in force on Incus. FirewallRuleRepository's list and
+    /// reconciler queries write the same test in SQL.
+    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+
+    private FirewallRule() { }
+
+    /// The ports as one value; null for ICMP and All. The two columns stay the storage: EF Core 9 has no nullable
+    /// complex property, so the value is rebuilt from them (titan-ops architecture/code-structure.md#logic-placement).
+    public PortRange? Ports
+    {
+        get
+        {
+            if (StartPort == null || EndPort == null)
+            {
+                return null;
+            }
+            return PortRange.Of(StartPort.Value, EndPort.Value);
+        }
+    }
+
+    /// The move the waiting operation makes, for display.
+    public FirewallRuleTransition? Transition
+    {
+        get
+        {
+            switch (PendingOperationKind)
+            {
+                case FirewallRuleOperationKind.Create:
+                    return FirewallRuleTransition.Creating;
+                case FirewallRuleOperationKind.Delete:
+                    return FirewallRuleTransition.Deleting;
+                default:
+                    return null;
+            }
+        }
+    }
+
+    private bool CreateIsWaiting => PendingOperationKind == FirewallRuleOperationKind.Create;
+    private bool DeleteIsWaiting => PendingOperationKind == FirewallRuleOperationKind.Delete;
+    /// A delete was asked and still waits, or the rule is gone: a later delete is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
+
+    /// Counted by occupancy toward MaxFirewallRulesPerNetwork (titan-ops features/network/design.md#firewall-rule-quota-counting):
+    /// what Incus holds or is about to hold. A delete asked for stops counting at once; a failed create with nothing
+    /// on Incus, and a rule Incus lost, do not count.
+    public bool CountsTowardQuota =>
+        DesiredExistence == DesiredExistence.Exists
+        && (CurrentExistence == CurrentExistence.Exists
+            || (CurrentExistence == CurrentExistence.NotCreated && CreateIsWaiting));
+
+    /// Called by Network.AddFirewallRule after the network checked itself.
+    internal static FirewallRule Create(
+        Guid networkId, Guid tenantId,
+        FirewallDirection direction, FirewallProtocol protocol,
+        int? startPort, int? endPort, string cidr)
+    {
+        var rule = new FirewallRule
+        {
+            Id = Guid.NewGuid(),
+            NetworkId = networkId,
+            TenantId = tenantId,
+            Direction = direction,
+            Protocol = protocol,
+            StartPort = startPort,
+            EndPort = endPort,
+            Cidr = FirewallCidr.Parse(cidr),
+            CurrentState = null,
+            CurrentExistence = CurrentExistence.NotCreated,
+            DesiredExistence = DesiredExistence.Exists,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        rule.SetPending(NewOperation(FirewallRuleOperationKind.Create));
+        return rule;
+    }
+
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
+    // ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
+
+    /// The reconciler read the rule in its ACL.
+    internal void MarkObserved(FirewallRuleState state)
+    {
+        if (IsTerminal) return;
+        CurrentExistence = CurrentExistence.Exists;
+        CurrentState = state;
+    }
+
+    /// The reconciler did not find the rule in its ACL. Never Deleted: only a delete's Done confirms that
+    /// (titan-ops architecture/desired-and-current.md#existence-axis).
+    internal void MarkNotFound()
+    {
+        if (IsTerminal) return;
+        CurrentExistence = CurrentExistence.NotFound;
+        CurrentState = null;
+    }
+
+    // ---- The report of the rule's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that ends
+    // its operation.
+
+    /// Ends the waiting operation when the report names it; any other report is ignored and returns null. Done of the
+    /// create records the id, existence and the state read; Done of the delete ends the rule; Failed records the reason,
+    /// keeps an id the worker found, and gives a delete back (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<FirewallRuleOperationKind>? EndOperation(Guid operationId, FirewallRuleOperationEnd end)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<FirewallRuleOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+        if (bringsTheProviderId)
+        {
+            ExternalId = end.ExternalId;
+            CurrentExistence = CurrentExistence.Exists;
+        }
+        if (end.ObservedState != null)
+        {
+            CurrentExistence = CurrentExistence.Exists;
+            CurrentState = end.ObservedState;
+        }
+
+        if (end.Outcome == OperationOutcome.Done)
+        {
+            ClearFailure();
+            if (waiting!.Kind == FirewallRuleOperationKind.Delete)
+            {
+                CurrentExistence = CurrentExistence.Deleted;
+                CurrentState = null;
+            }
+        }
+        else
+        {
+            RecordFailure(end.Reason, end.Detail);
+            if (waiting!.Kind == FirewallRuleOperationKind.Delete)
+            {
+                // Still in the ACL and still enforced: it counts against the quota again.
+                DesiredExistence = DesiredExistence.Exists;
+            }
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    /// Incus deleted the network's ACL, and this rule with it: the network's delete Done ends the rule, whatever it waited
+    /// on. Returns true when the rule's own delete was waiting, so the caller records its outcome once.
+    internal bool EndWithItsNetwork()
+    {
+        if (IsTerminal)
+        {
+            return false;
+        }
+        bool itsOwnDeleteWasWaiting = DeleteIsWaiting;
+        CurrentExistence = CurrentExistence.Deleted;
+        CurrentState = null;
+        SetPending(null);
+        return itsOwnDeleteWasWaiting;
+    }
+
+    /// Intent: remove a rule Incus may hold — whatever its state, even not found; Incus answers. With a provider id,
+    /// the current pair waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm). Refuses a
+    /// repeat and a rule already deleted; the handler answers those
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// A rule that never reached Incus is deleted here, at once, and gets no ticket
+    /// (titan-ops architecture/desired-and-current.md#delete-locally).
+    internal OperationTicket? Delete()
+    {
+        if (CreateIsWaiting)
+        {
+            throw new BusinessException("FIREWALL_RULE_NOT_READY",
+                "Firewall rule is not yet provisioned. Wait for activation before deleting.");
+        }
+
+        if (DeleteIsWaiting || IsTerminal)
+        {
+            throw new BusinessException("FIREWALL_RULE_INVALID_STATE",
+                $"A firewall rule that is {CurrentExistence} (asked: {DesiredExistence}) cannot be deleted through Incus.");
+        }
+        // Never reached Incus: no command to send and no report coming.
+        bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
+        if (neverReachedIncus)
+        {
+            // A failed create may have reported a state with no id; a deleted rule shows none.
+            DesiredExistence = DesiredExistence.Deleted;
+            CurrentExistence = CurrentExistence.Deleted;
+            CurrentState = null;
+            SetPending(null);
+            return null;
+        }
+
+        PendingOperation<FirewallRuleOperationKind> operation = NewOperation(FirewallRuleOperationKind.Delete);
+        DesiredExistence = DesiredExistence.Deleted;
+        SetPending(operation);
+        return OperationTicket.Of(operation.Id, RequireExternalId());
+    }
+
+    /// The reconciler lists only rules with an ExternalId (FirewallRuleRepository.ListReconcilableAsync), so this
+    /// cannot fire on that path; it throws rather than let a caller assert the id.
+    public string RequireExternalId() =>
+        ExternalId ?? throw new BusinessException("FIREWALL_RULE_INVALID_STATE", "Firewall rule has no provider resource yet.");
+}

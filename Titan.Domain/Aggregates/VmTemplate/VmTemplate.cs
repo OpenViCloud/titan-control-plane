@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.VmTemplate;
 // A template answers "which operating system", never "how big" (titan-ops features/catalog/design.md#vm-offering-sizing).
 // It points at an offering (VmOfferingId) for its base sizing instead of owning sizing numbers: a tier id cannot drift
 // (titan-ops features/catalog/design.md#template-borrows-sizing).
-public class VmTemplate : AggregateRoot
+public class VmTemplate : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public string Name { get; private set; } = default!;
@@ -108,22 +108,22 @@ public class VmTemplate : AggregateRoot
     }
 
     /// Refused when that cluster has the alias or a sync waiting: the handler recognises the repeat first and sends
-    /// nothing (titan-ops architecture/resource-lifecycle.md#repeat). The request has no provider id to hand out yet (the
-    /// worker names the alias), so the caller gets the request itself for the command's key and payload.
-    public PendingRequest<VmTemplateRequestKind> RequestSyncIn(string clusterId)
+    /// nothing (titan-ops architecture/resource-lifecycle.md#repeat). The operation has no provider id to hand out yet (the
+    /// worker names the alias), so the caller gets the operation itself for the command's key and payload.
+    public PendingOperation<VmTemplateOperationKind> SyncIn(string clusterId)
     {
-        PendingRequest<VmTemplateRequestKind> request = RowFor(clusterId).RequestSync();
+        PendingOperation<VmTemplateOperationKind> operation = RowFor(clusterId).Sync();
         UpdatedAt = DateTimeOffset.UtcNow;
-        return request;
+        return operation;
     }
 
     /// The report of a sync's command in one cluster (titan-ops architecture/resource-lifecycle.md#shape): ends that
     /// cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with no row
     /// has nothing waiting, so no row is added for it.
-    public PendingRequest<VmTemplateRequestKind>? EndSyncRequest(string clusterId, Guid requestId, VmTemplateRequestEnd end)
+    public PendingOperation<VmTemplateOperationKind>? EndSyncOperation(string clusterId, Guid operationId, VmTemplateOperationEnd end)
     {
         VmTemplateCluster? cluster = ClusterOrNull(clusterId);
-        PendingRequest<VmTemplateRequestKind>? ended = cluster?.EndRequest(requestId, end);
+        PendingOperation<VmTemplateOperationKind>? ended = cluster?.EndOperation(operationId, end);
         if (ended != null)
         {
             UpdatedAt = DateTimeOffset.UtcNow;

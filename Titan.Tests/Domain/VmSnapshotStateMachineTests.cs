@@ -40,9 +40,9 @@ public class VmSnapshotStateMachineTests
             case Seed.CreateFailed: s.MarkRequestFailed("could not create", "raw"); break;
             case Seed.Exists: s.MarkCreated("vm42/s7"); break;
             case Seed.RevertRequested: s.MarkCreated("vm42/s7"); s.Revert(); break;
-            case Seed.DeleteRequested: s.MarkCreated("vm42/s7"); s.RequestDelete(); break;
+            case Seed.DeleteRequested: s.MarkCreated("vm42/s7"); s.Delete(); break;
             case Seed.NotFound: s.MarkCreated("vm42/s7"); s.MarkNotFound(); break;
-            case Seed.Deleted: s.MarkCreated("vm42/s7"); s.RequestDelete(); s.MarkDeleted(); break;
+            case Seed.Deleted: s.MarkCreated("vm42/s7"); s.Delete(); s.MarkDeleted(); break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
         return s;
@@ -117,9 +117,9 @@ public class VmSnapshotStateMachineTests
     public void RequestFailed_OnAWaitingCreate_RecordsWhy_AndEndsIt()
     {
         var s = SnapshotIn(Seed.CreateFailed);
-        Assert.Equal("could not create", s.RequestFailureReason);
-        Assert.Equal("raw", s.RequestFailureDetail);
-        Assert.NotNull(s.RequestFailedAt);
+        Assert.Equal("could not create", s.OperationFailureReason);
+        Assert.Equal("raw", s.OperationFailureDetail);
+        Assert.NotNull(s.OperationFailedAt);
     }
 
     [Theory]
@@ -132,7 +132,7 @@ public class VmSnapshotStateMachineTests
         string before = Shape(s);
         s.MarkRequestFailed("late", "late");
         Assert.Equal(before, Shape(s));
-        Assert.Null(s.RequestFailureReason);
+        Assert.Null(s.OperationFailureReason);
     }
 
     // ---------- revert ----------
@@ -141,9 +141,9 @@ public class VmSnapshotStateMachineTests
     public void Revert_WhenIncusHasIt_WaitsForTheRevert_AndYieldsTheId()
     {
         var s = SnapshotIn(Seed.Exists);
-        RequestTicket ticket = s.Revert();
+        OperationTicket ticket = s.Revert();
         Assert.Equal("vm42/s7", ticket.ProviderId);
-        Assert.Equal(ticket.RequestId, s.Pending!.Id);
+        Assert.Equal(ticket.OperationId, s.Pending!.Id);
         Assert.Equal("Exists/Exists/Reverting", Shape(s));
     }
 
@@ -203,9 +203,9 @@ public class VmSnapshotStateMachineTests
     public void AFailedRevert_EndsIt_WithTheReason_AndKeepsTheSnapshot()
     {
         var s = SnapshotIn(Seed.RevertRequested);
-        s.EndRequest(s.Pending!.Id, VmSnapshotRequestEnd.Failed(null, "revert failed", "raw"));
+        s.EndOperation(s.Pending!.Id, VmSnapshotOperationEnd.Failed(null, "revert failed", "raw"));
         Assert.Equal("Exists/Exists/-", Shape(s));
-        Assert.Equal("revert failed", s.RequestFailureReason);
+        Assert.Equal("revert failed", s.OperationFailureReason);
     }
 
     // ---------- delete ----------
@@ -216,7 +216,7 @@ public class VmSnapshotStateMachineTests
     public void RequestDelete_WithAnId_IsAccepted(Seed seed)
     {
         var s = SnapshotIn(seed);
-        Assert.Equal("vm42/s7", s.RequestDelete()!.ProviderId);
+        Assert.Equal("vm42/s7", s.Delete()!.ProviderId);
         Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
         Assert.Equal(DesiredExistence.Deleted, s.DesiredExistence);
     }
@@ -230,7 +230,7 @@ public class VmSnapshotStateMachineTests
     {
         var s = SnapshotIn(seed);
         string before = Shape(s);
-        var ex = Assert.Throws<BusinessException>(() => s.RequestDelete());
+        var ex = Assert.Throws<BusinessException>(() => s.Delete());
         Assert.Equal("VM_SNAPSHOT_INVALID_STATE", ex.Code);
         Assert.Equal(before, Shape(s));
     }
@@ -250,23 +250,23 @@ public class VmSnapshotStateMachineTests
     public void AFailedDelete_GivesTheSnapshotBack_WithTheReason()
     {
         var s = SnapshotIn(Seed.DeleteRequested);
-        s.EndRequest(s.Pending!.Id, VmSnapshotRequestEnd.Failed(null, "delete failed", "raw"));
+        s.EndOperation(s.Pending!.Id, VmSnapshotOperationEnd.Failed(null, "delete failed", "raw"));
         Assert.Equal("Exists/Exists/-", Shape(s));
-        Assert.Equal("delete failed", s.RequestFailureReason);
-        Assert.Equal("vm42/s7", s.RequestDelete()!.ProviderId);
+        Assert.Equal("delete failed", s.OperationFailureReason);
+        Assert.Equal("vm42/s7", s.Delete()!.ProviderId);
     }
 
     [Fact]
     public void RequestDelete_DeletesHere_OnlyForACreateThatFailedBeforeIncusHadIt()
     {
         var failed = SnapshotIn(Seed.CreateFailed);
-        Assert.Null(failed.RequestDelete());
+        Assert.Null(failed.Delete());
         Assert.Equal("Deleted/Deleted/-", Shape(failed));
 
         foreach (Seed seed in new[] { Seed.Creating, Seed.Exists, Seed.NotFound, Seed.Deleted })
         {
             VmSnapshot snapshot = SnapshotIn(seed);
-            Assert.False(LocalDelete.DeletedHere(() => snapshot.RequestDelete()));
+            Assert.False(LocalDelete.DeletedHere(() => snapshot.Delete()));
         }
     }
 

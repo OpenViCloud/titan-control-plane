@@ -32,7 +32,7 @@ public class NetworkDeletionTests
         Network network = OnIncus();
         _networks.Setup(r => r.HasActiveVmsAsync(network.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(network));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(network));
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
@@ -44,7 +44,7 @@ public class NetworkDeletionTests
         Network network = OnIncus();
         _networks.Setup(r => r.HasLiveLoadBalancersAsync(network.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().RequestAsync(network));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(network));
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
@@ -55,10 +55,10 @@ public class NetworkDeletionTests
     {
         Network network = OnIncus();
 
-        RequestTicket? ticket = await Deletion().RequestAsync(network);
+        OperationTicket? ticket = await Deletion().DeleteAsync(network);
 
         Assert.Equal("net-ext", ticket!.ProviderId);
-        Assert.Equal((NetworkRequestKind.Delete, ticket.RequestId), (network.Pending!.Kind, network.Pending.Id));
+        Assert.Equal((NetworkOperationKind.Delete, ticket.OperationId), (network.Pending!.Kind, network.Pending.Id));
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
@@ -69,20 +69,20 @@ public class NetworkDeletionTests
         Network network = TestAggregates.Network(_tenant, "net-nd", "cluster-1");
         network.MarkRequestFailed("create gave up", null);
 
-        RequestTicket? ticket = await Deletion().RequestAsync(network);
+        OperationTicket? ticket = await Deletion().DeleteAsync(network);
 
         Assert.Null(ticket);
         Assert.Null(network.Pending);
         Assert.True(network.IsTerminal);
     }
 
-    // The compiler keeps Titan.Application off RequestDelete, so NetworkDeletion is the only way to delete a network.
+    // The compiler keeps Titan.Application off Delete, so NetworkDeletion is the only way to delete a network.
     [Fact]
     public void OnlyNetworkDeletionDeletesANetwork()
     {
         const BindingFlags surface = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
         string[] publicMethods = [.. typeof(Network).GetMethods(surface).Select(m => m.Name)];
         Assert.Contains(nameof(Network.Rename), publicMethods);
-        Assert.DoesNotContain(nameof(Network.RequestDelete), publicMethods);
+        Assert.DoesNotContain(nameof(Network.Delete), publicMethods);
     }
 }

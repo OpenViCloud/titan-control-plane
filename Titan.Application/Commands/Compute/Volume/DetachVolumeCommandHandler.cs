@@ -35,11 +35,11 @@ public class DetachVolumeCommandHandler(
             return;
         }
 
-        RequestTicket ticket = volume.Detach();
+        OperationTicket ticket = volume.Detach();
 
         activity.Stage("volume.detach_requested", "volume", volume.Id, volume.Name); // atomic with Detach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDetachAsync(volume.Id, ticket.RequestId, ticket.ProviderId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDetachAsync(volume.Id, ticket.OperationId, ticket.ProviderId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

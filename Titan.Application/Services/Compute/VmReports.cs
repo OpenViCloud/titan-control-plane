@@ -17,55 +17,55 @@ namespace Titan.Application.Services.Compute;
 /// </summary>
 public static class VmReports
 {
-    private static readonly Dictionary<VmRequestKind, string> DoneAction = new()
+    private static readonly Dictionary<VmOperationKind, string> DoneAction = new()
     {
-        [VmRequestKind.Create] = "vm.created",
-        [VmRequestKind.Start] = "vm.started",
-        [VmRequestKind.Stop] = "vm.stopped",
-        [VmRequestKind.Delete] = "vm.deleted",
+        [VmOperationKind.Create] = "vm.created",
+        [VmOperationKind.Start] = "vm.started",
+        [VmOperationKind.Stop] = "vm.stopped",
+        [VmOperationKind.Delete] = "vm.deleted",
     };
 
     // A failed create records nothing: the request was the create, and a failure is not its outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
-    private static readonly Dictionary<VmRequestKind, string> FailedAction = new()
+    private static readonly Dictionary<VmOperationKind, string> FailedAction = new()
     {
-        [VmRequestKind.Start] = "vm.start_failed",
-        [VmRequestKind.Stop] = "vm.stop_failed",
-        [VmRequestKind.Delete] = "vm.delete_failed",
+        [VmOperationKind.Start] = "vm.start_failed",
+        [VmOperationKind.Stop] = "vm.stop_failed",
+        [VmOperationKind.Delete] = "vm.delete_failed",
     };
 
     // The tenant-facing reason when a give-up arrives on the old intents route, which carries none.
-    private static readonly Dictionary<VmRequestKind, string> FixedFailureReason = new()
+    private static readonly Dictionary<VmOperationKind, string> FixedFailureReason = new()
     {
-        [VmRequestKind.Create] = "VM provisioning failed due to a system error. Please try again or contact support.",
-        [VmRequestKind.Start] = "The VM could not be started. Please try again or contact support.",
-        [VmRequestKind.Stop] = "The VM could not be stopped. Please try again or contact support.",
-        [VmRequestKind.Delete] = "The VM could not be deleted. Please try again or contact support.",
+        [VmOperationKind.Create] = "VM provisioning failed due to a system error. Please try again or contact support.",
+        [VmOperationKind.Start] = "The VM could not be started. Please try again or contact support.",
+        [VmOperationKind.Stop] = "The VM could not be stopped. Please try again or contact support.",
+        [VmOperationKind.Delete] = "The VM could not be deleted. Please try again or contact support.",
     };
 
-    private static readonly Dictionary<VmSnapshotRequestKind, string> SnapshotDoneAction = new()
+    private static readonly Dictionary<VmSnapshotOperationKind, string> SnapshotDoneAction = new()
     {
-        [VmSnapshotRequestKind.Create] = "vm_snapshot.created",
-        [VmSnapshotRequestKind.Revert] = "vm_snapshot.reverted",
-        [VmSnapshotRequestKind.Delete] = "vm_snapshot.deleted",
+        [VmSnapshotOperationKind.Create] = "vm_snapshot.created",
+        [VmSnapshotOperationKind.Revert] = "vm_snapshot.reverted",
+        [VmSnapshotOperationKind.Delete] = "vm_snapshot.deleted",
     };
 
-    private static readonly Dictionary<VmSnapshotRequestKind, string> SnapshotFailedAction = new()
+    private static readonly Dictionary<VmSnapshotOperationKind, string> SnapshotFailedAction = new()
     {
-        [VmSnapshotRequestKind.Revert] = "vm_snapshot.revert_failed",
-        [VmSnapshotRequestKind.Delete] = "vm_snapshot.delete_failed",
+        [VmSnapshotOperationKind.Revert] = "vm_snapshot.revert_failed",
+        [VmSnapshotOperationKind.Delete] = "vm_snapshot.delete_failed",
     };
 
-    public static string ReasonFor(VmRequestKind kind) => FixedFailureReason[kind];
+    public static string ReasonFor(VmOperationKind kind) => FixedFailureReason[kind];
 
-    public static RequestOutcome ParseOutcome(string outcome)
+    public static OperationOutcome ParseOutcome(string outcome)
     {
         switch (outcome)
         {
             case "Done":
-                return RequestOutcome.Done;
+                return OperationOutcome.Done;
             case "Failed":
-                return RequestOutcome.Failed;
+                return OperationOutcome.Failed;
             default:
                 throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
         }
@@ -93,11 +93,11 @@ public static class VmReports
     /// (titan-ops features/volume/design.md#vm-delete-releases-volumes), which stay attached if the delete gave up
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
     public static async Task RecordEndedAsync(
-        VmAggregate vm, VmRequestEnded ended, RequestOutcome outcome,
+        VmAggregate vm, VmOperationEnded ended, OperationOutcome outcome,
         IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
-        VmRequestKind kind = ended.Request.Kind;
-        Dictionary<VmRequestKind, string> actions = outcome == RequestOutcome.Done ? DoneAction : FailedAction;
+        VmOperationKind kind = ended.Operation.Kind;
+        Dictionary<VmOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
         if (actions.TryGetValue(kind, out string? action))
         {
             activity.StageOutcome(vm.TenantId, action, "vm", vm.Id, vm.Name);
@@ -107,7 +107,7 @@ public static class VmReports
             activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
         }
 
-        if (kind != VmRequestKind.Delete)
+        if (kind != VmOperationKind.Delete)
         {
             return;
         }
@@ -115,7 +115,7 @@ public static class VmReports
         List<VolumeAggregate> attachedVolumes = await volumes.ListAttachedToVmLockedAsync(vm.Id, ct);
         foreach (VolumeAggregate volume in attachedVolumes)
         {
-            if (outcome == RequestOutcome.Done)
+            if (outcome == OperationOutcome.Done)
             {
                 volume.MarkDetachedByVmDelete(vm.Id);
                 volume.ReleaseFromVmDelete(vm.Id);
@@ -127,11 +127,11 @@ public static class VmReports
         }
     }
 
-    public static void RecordSnapshotEnded(VmSnapshot snapshot, PendingRequest<VmSnapshotRequestKind> ended,
-        RequestOutcome outcome, IActivityRecorder activity)
+    public static void RecordSnapshotEnded(VmSnapshot snapshot, PendingOperation<VmSnapshotOperationKind> ended,
+        OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<VmSnapshotRequestKind, string> actions =
-            outcome == RequestOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
+        Dictionary<VmSnapshotOperationKind, string> actions =
+            outcome == OperationOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
         if (actions.TryGetValue(ended.Kind, out string? action))
         {
             activity.StageOutcome(snapshot.TenantId, action, "vm_snapshot", snapshot.Id, snapshot.Name);
@@ -142,20 +142,20 @@ public static class VmReports
     /// reports nothing when a stop or start succeeds may still run, an observation that reaches what a waiting stop or
     /// start asked for ends it, as before this rollout. With the new worker the command's own Done and this race; the
     /// later one finds nothing waiting and is ignored, so the outcome is recorded once. A create is never ended here.
-    public static VmRequestEnded? EndStopOrStartTheObservationReached(VmAggregate vm)
+    public static VmOperationEnded? EndStopOrStartTheObservationReached(VmAggregate vm)
     {
-        PendingRequest<VmRequestKind>? waiting = vm.Pending;
+        PendingOperation<VmOperationKind>? waiting = vm.Pending;
         if (waiting == null)
         {
             return null;
         }
         bool runs = vm.CurrentState == VmState.Running || vm.CurrentState == VmState.Ready;
-        bool reached = (waiting.Kind == VmRequestKind.Stop && vm.CurrentState == VmState.Stopped)
-                       || (waiting.Kind == VmRequestKind.Start && runs);
+        bool reached = (waiting.Kind == VmOperationKind.Stop && vm.CurrentState == VmState.Stopped)
+                       || (waiting.Kind == VmOperationKind.Start && runs);
         if (!reached)
         {
             return null;
         }
-        return vm.EndRequest(waiting.Id, VmRequestEnd.Done(null, null));
+        return vm.EndOperation(waiting.Id, VmOperationEnd.Done(null, null));
     }
 }

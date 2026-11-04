@@ -48,9 +48,9 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
             ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
-        PendingRequest<VmSnapshotRequestKind>? waiting = snapshot.Pending;
-        PendingRequest<VmSnapshotRequestKind>? ended = null;
-        RequestOutcome outcome = RequestOutcome.Done;
+        PendingOperation<VmSnapshotOperationKind>? waiting = snapshot.Pending;
+        PendingOperation<VmSnapshotOperationKind>? ended = null;
+        OperationOutcome outcome = OperationOutcome.Done;
         switch (req.Report)
         {
             case "Observed":
@@ -65,32 +65,32 @@ public class UpdateVmSnapshotStatusCommandHandler(IVmRepository vmRepo, IActivit
                 }
                 break;
             case "Created":
-                if (waiting is { Kind: VmSnapshotRequestKind.Create })
+                if (waiting is { Kind: VmSnapshotOperationKind.Create })
                 {
-                    ended = vm.EndSnapshotRequest(snapshot.Id, waiting.Id, VmSnapshotRequestEnd.Done(req.ExternalId));
+                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(req.ExternalId));
                 }
                 break;
             case "Reverted":
-                if (waiting is { Kind: VmSnapshotRequestKind.Revert })
+                if (waiting is { Kind: VmSnapshotOperationKind.Revert })
                 {
-                    ended = vm.EndSnapshotRequest(snapshot.Id, waiting.Id, VmSnapshotRequestEnd.Done(null));
+                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(null));
                 }
                 break;
             case "RequestFailed":
                 // The waiting request ends Failed, keeping an id the create's give-up found.
                 if (waiting != null)
                 {
-                    outcome = RequestOutcome.Failed;
-                    ended = vm.EndSnapshotRequest(snapshot.Id, waiting.Id,
-                        VmSnapshotRequestEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    outcome = OperationOutcome.Failed;
+                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id,
+                        VmSnapshotOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
                 }
                 break;
             case "Deleted":
                 // Only a delete's own report ends a snapshot; with no delete waiting it is gone from Incus, which is what
                 // NotFound records.
-                if (waiting is { Kind: VmSnapshotRequestKind.Delete })
+                if (waiting is { Kind: VmSnapshotOperationKind.Delete })
                 {
-                    ended = vm.EndSnapshotRequest(snapshot.Id, waiting.Id, VmSnapshotRequestEnd.Done(null));
+                    ended = vm.EndSnapshotOperation(snapshot.Id, waiting.Id, VmSnapshotOperationEnd.Done(null));
                 }
                 else
                 {

@@ -32,5 +32,5 @@ public record LoadBalancerQueryResult(
                 .ToList(),
             lb.DesiredBackends.Select(b => new LoadBalancerBackendQueryResult(b.VmId)).ToList(),
             lb.CurrentExistence, lb.DesiredExistence, lb.Transition,
-            lb.RequestFailureReason, lb.RequestFailedAt, lb.CreatedAt);
+            lb.OperationFailureReason, lb.OperationFailedAt, lb.CreatedAt);
 }

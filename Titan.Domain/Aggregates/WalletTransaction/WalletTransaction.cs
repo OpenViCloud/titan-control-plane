@@ -8,7 +8,7 @@ namespace Titan.Domain.Aggregates.WalletTransaction;
 /// that forgot a minus would record a spend as income, and the balance would still reconcile against its
 /// own wrong ledger. Its own aggregate: the ledger has no upper bound, so no wallet holds it; WalletLedger writes each
 /// row with the balance change.
-public class WalletTransaction : AggregateRoot
+public class WalletTransaction : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public Guid WalletId { get; private set; }

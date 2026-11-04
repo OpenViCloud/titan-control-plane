@@ -51,7 +51,7 @@ public class InvoiceWalletPaymentTests
         InvoiceAggregate invoice = Owed(300_000L);
         Holds(500_000L);
 
-        WalletMutation debit = await Payment().RequestAsync(invoice);
+        WalletMutation debit = await Payment().PayAsync(invoice);
 
         Assert.Equal(WalletMutationType.Debit, debit.Type);
         Assert.Equal(WalletMutationStatus.Pending, debit.Status);
@@ -70,7 +70,7 @@ public class InvoiceWalletPaymentTests
         invoice.MarkPaid(DateTimeOffset.UtcNow, "admin");
         Holds(500_000L);
 
-        var ex = await Assert.ThrowsAsync<BusinessException>(() => Payment().RequestAsync(invoice));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal("INVOICE_INVALID_STATE", ex.Code);
         _mutations.Verify(m => m.Add(It.IsAny<WalletMutation>()), Times.Never);
@@ -82,7 +82,7 @@ public class InvoiceWalletPaymentTests
         InvoiceAggregate invoice = Owed(300_000L);
         Holds(invoice.Total - 1);
 
-        var ex = await Assert.ThrowsAsync<BusinessException>(() => Payment().RequestAsync(invoice));
+        var ex = await Assert.ThrowsAsync<BusinessException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal("INVOICE_WALLET_INSUFFICIENT", ex.Code);
         _mutations.Verify(m => m.Add(It.IsAny<WalletMutation>()), Times.Never);
@@ -94,7 +94,7 @@ public class InvoiceWalletPaymentTests
         InvoiceAggregate invoice = Owed(300_000L);
         Holds(invoice.Total);
 
-        WalletMutation debit = await Payment().RequestAsync(invoice);
+        WalletMutation debit = await Payment().PayAsync(invoice);
 
         Assert.Equal(WalletMutationStatus.Pending, debit.Status);
     }
@@ -105,7 +105,7 @@ public class InvoiceWalletPaymentTests
         InvoiceAggregate invoice = Owed(300_000L);
         _wallets.Setup(w => w.GetBalanceAsync(TenantId, It.IsAny<CancellationToken>())).ReturnsAsync(500_000L);
 
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().RequestAsync(invoice));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal("INVOICE_PAYMENT_CONFLICT", ex.Code);
     }
@@ -118,7 +118,7 @@ public class InvoiceWalletPaymentTests
         WalletMutation row = FailedDebit(invoice, _wallet.Id, invoice.Total);
         HasRow(invoice, row);
 
-        WalletMutation debit = await Payment().RequestAsync(invoice);
+        WalletMutation debit = await Payment().PayAsync(invoice);
 
         Assert.Same(row, debit);
         Assert.Equal(WalletMutationStatus.Pending, debit.Status);
@@ -134,7 +134,7 @@ public class InvoiceWalletPaymentTests
         WalletMutation row = FailedDebit(invoice, _wallet.Id, invoice.Total + 1);
         HasRow(invoice, row);
 
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().RequestAsync(invoice));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal("INVOICE_PAYMENT_CONFLICT", ex.Code);
         Assert.Equal(WalletMutationStatus.Failed, row.Status);
@@ -148,7 +148,7 @@ public class InvoiceWalletPaymentTests
         WalletMutation row = FailedDebit(invoice, Guid.NewGuid(), invoice.Total);
         HasRow(invoice, row);
 
-        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().RequestAsync(invoice));
+        var ex = await Assert.ThrowsAsync<ConflictException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal("INVOICE_PAYMENT_CONFLICT", ex.Code);
         Assert.Equal(WalletMutationStatus.Failed, row.Status);
@@ -162,7 +162,7 @@ public class InvoiceWalletPaymentTests
         WalletMutation row = WalletMutation.Create(WalletMutationType.Debit, _wallet.Id, invoice.Total, WalletMutation.InvoiceRefType, invoice.Id);
         HasRow(invoice, row);
 
-        await Assert.ThrowsAsync<ConcurrencyConflictException>(() => Payment().RequestAsync(invoice));
+        await Assert.ThrowsAsync<ConcurrencyConflictException>(() => Payment().PayAsync(invoice));
 
         Assert.Equal(WalletMutationStatus.Pending, row.Status);
         _mutations.Verify(m => m.Add(It.IsAny<WalletMutation>()), Times.Never);

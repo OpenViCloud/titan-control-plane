@@ -36,8 +36,8 @@ public class DeleteVmSnapshotCommandHandler(
 
         // A snapshot that never reached Incus is deleted here and gets no ticket
         // (titan-ops architecture/desired-and-current.md#delete-locally): the request and its outcome at once.
-        RequestTicket? ticket = vm.RequestSnapshotDelete(snapshot.Id);
-        activity.Stage("vm_snapshot.delete_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with RequestDelete
+        OperationTicket? ticket = vm.DeleteSnapshot(snapshot.Id);
+        activity.Stage("vm_snapshot.delete_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with Delete
         if (ticket == null)
         {
             activity.StageOutcome(snapshot.TenantId, "vm_snapshot.deleted", "vm_snapshot", snapshot.Id, snapshot.Name);
@@ -46,7 +46,7 @@ public class DeleteVmSnapshotCommandHandler(
         }
 
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, ticket.RequestId, vmId, ticket.ProviderId, projectName,
+        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, ticket.OperationId, vmId, ticket.ProviderId, projectName,
             vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
     }

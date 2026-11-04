@@ -46,7 +46,7 @@ public class ClusterIdContractTests
     {
         using var db = NewDb();
         var template = VmTemplate.Create("t", null, "img", 10, "m");
-        template.RequestSyncIn("mock");
+        template.SyncIn("mock");
         template.MarkCreatedIn("mock", "205");
         db.VmTemplates.Add(template);
         await db.SaveChangesAsync();

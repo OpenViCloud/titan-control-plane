@@ -6,7 +6,7 @@ namespace Titan.Domain.Aggregates.ApiToken;
 /// A long-lived bearer a tenant member creates for Terraform, CI and the CLI
 /// (titan-ops features/public-api/design.md#api-token). It acts as the member who created it. Only a hash of the
 /// secret is kept: the portal makes the secret and shows it once. Titan-only, deleted outright when revoked.
-public class ApiToken : AggregateRoot
+public class ApiToken : IAggregateRoot
 {
     public const int MaxNameLength = 64;
     public const int MaxPerTenant = 20;
@@ -16,7 +16,7 @@ public class ApiToken : AggregateRoot
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
 
-    /// The member who created it; requests made with the token act as this user.
+    /// The member who created it; calls made with the token act as this user.
     public string KeycloakUserId { get; private set; } = default!;
     public string Name { get; private set; } = default!;
 

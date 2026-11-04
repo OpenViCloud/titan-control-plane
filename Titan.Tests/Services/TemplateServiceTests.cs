@@ -100,14 +100,14 @@ public class TemplateServiceTests
     private static VmTemplate PendingTemplate()
     {
         var t = VmTemplate.Create("Ubuntu-Web", "web", "Ubuntu-20.04", 20, TierS);
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
         return t;
     }
 
     private static VmTemplate SyncedTemplate(string name, string extId, string clusterId = Mock)
     {
         var t = VmTemplate.Create(name, "d", "img", 10, TierS);
-        t.RequestSyncIn(clusterId);
+        t.SyncIn(clusterId);
         t.MarkCreatedIn(clusterId, extId);
         return t;
     }
@@ -115,7 +115,7 @@ public class TemplateServiceTests
     private static VmTemplate FailedTemplate(string name, string reason, string clusterId = Mock)
     {
         var t = VmTemplate.Create(name, null, "img", 10, TierS);
-        t.RequestSyncIn(clusterId);
+        t.SyncIn(clusterId);
         t.MarkRequestFailedIn(clusterId, reason, null);
         return t;
     }
@@ -175,7 +175,7 @@ public class TemplateServiceTests
     public async Task NeverAsked_EveryTemplateAskedInEveryCluster_SendsNothing_EvenWhenOneFailed()
     {
         var t = FailedTemplate("failed-in-mock", "bad image", Mock);
-        t.RequestSyncIn(Singapore);
+        t.SyncIn(Singapore);
         t.MarkCreatedIn(Singapore, "9");
         var (_, repo, wf) = Make(t);
 
@@ -190,7 +190,7 @@ public class TemplateServiceTests
     public async Task NeverAsked_OneTemplateMissingACluster_AmongOthersThatAreThere_IsAsked()
     {
         var everywhere = SyncedTemplate("everywhere", "1", Mock);
-        everywhere.RequestSyncIn(Singapore);
+        everywhere.SyncIn(Singapore);
         everywhere.MarkCreatedIn(Singapore, "2");
         var added = SyncedTemplate("added-later", "3", Mock);
         var (_, repo, wf) = Make(everywhere, added);
@@ -261,7 +261,7 @@ public class TemplateServiceTests
     {
         var pending = PendingTemplate();
         var synced = VmTemplate.Create("CentOS", "db", "CentOS-7.9", 40, TierL);
-        synced.RequestSyncIn(Mock);
+        synced.SyncIn(Mock);
         synced.MarkCreatedIn(Mock, "77");
         var failed = FailedTemplate("Broken", "boom");
         var (svc, _, _) = Make(pending, synced, failed);
@@ -387,7 +387,7 @@ public class TemplateServiceTests
     public async Task ListAllForAdmin_ShowsEachClustersExistenceAndId()
     {
         var t = SyncedTemplate("Ubuntu", "205", Singapore);
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
         var (svc, _, _) = Make(t);
 
         var clusters = Assert.Single(await svc.ListAllForAdminAsync()).Clusters;
@@ -437,7 +437,7 @@ public class TemplateServiceTests
     public async Task UpdateStatus_InOneCluster_LeavesTheOtherClusterAlone()
     {
         var t = PendingTemplate();
-        t.RequestSyncIn(Singapore);
+        t.SyncIn(Singapore);
         var (svc, _, _) = Make(t);
 
         await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "3", clusterId: Singapore));
@@ -483,8 +483,8 @@ public class TemplateServiceTests
         await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "Template image has the wrong architecture.", detail: "x86_64 on aarch64"));
 
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
-        Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureReason);
-        Assert.Equal("x86_64 on aarch64", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.RequestFailureDetail);
+        Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureReason);
+        Assert.Equal("x86_64 on aarch64", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureDetail);
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
@@ -523,7 +523,7 @@ public class TemplateServiceTests
         await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "late", detail: "raw"));
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).RequestFailureReason);
+        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).OperationFailureReason);
     }
 
     [Fact] // an observation ends no sync, on the old route too
@@ -531,7 +531,7 @@ public class TemplateServiceTests
     {
         var t = SyncedTemplate("Ubuntu", "205");
         t.MarkNotFoundIn(Mock);
-        t.RequestSyncIn(Mock);
+        t.SyncIn(Mock);
         var (svc, _, _) = Make(t);
 
         await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: true));

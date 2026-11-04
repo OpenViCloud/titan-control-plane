@@ -28,7 +28,7 @@ public class StartVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A start still waiting, or already
         // running (Ready is running with a guest that said so) and nothing else asked of it: answer like the first
         // request (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool startIsWaiting = vm.Pending?.Kind == VmRequestKind.Start;
+        bool startIsWaiting = vm.Pending?.Kind == VmOperationKind.Start;
         bool instanceRuns = vm.CurrentState == VmState.Running || vm.CurrentState == VmState.Ready;
         bool alreadyRunning = vm.Pending == null && instanceRuns;
         if (startIsWaiting || alreadyRunning)
@@ -36,10 +36,10 @@ public class StartVmCommandHandler(
             return;
         }
 
-        RequestTicket ticket = vm.RequestStart();
+        OperationTicket ticket = vm.Start();
 
         activity.Stage("vm.start_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStartAsync(vm.Id, ticket.RequestId, ticket.ProviderId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStartAsync(vm.Id, ticket.OperationId, ticket.ProviderId, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

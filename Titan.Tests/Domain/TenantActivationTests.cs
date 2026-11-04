@@ -69,7 +69,7 @@ public class TenantActivationTests
     {
         var t = Pending();
 
-        t.RequestActivation();
+        t.Activate();
 
         Assert.Equal(TenantStatus.Active, t.Status);
     }
@@ -80,7 +80,7 @@ public class TenantActivationTests
         var t = Pending();
         t.Suspend();
 
-        t.RequestActivation();
+        t.Activate();
 
         Assert.Equal(TenantStatus.Active, t.Status);
     }
@@ -91,7 +91,7 @@ public class TenantActivationTests
         var t = Active();
         t.Suspend();
 
-        t.RequestActivation();
+        t.Activate();
 
         Assert.Equal(TenantStatus.Active, t.Status);
     }
@@ -101,7 +101,7 @@ public class TenantActivationTests
     {
         var t = Active();
 
-        var ex = Assert.Throws<BusinessException>(() => t.RequestActivation());
+        var ex = Assert.Throws<BusinessException>(() => t.Activate());
 
         Assert.Equal("INVALID_STATUS", ex.Code);
     }
@@ -191,6 +191,6 @@ public class TenantActivationTests
         string[] publicMethods = [.. typeof(Tenant).GetMethods(surface).Select(m => m.Name)];
         Assert.Contains(nameof(Tenant.Suspend), publicMethods);
         Assert.DoesNotContain(nameof(Tenant.Approve), publicMethods);
-        Assert.DoesNotContain(nameof(Tenant.RequestActivation), publicMethods);
+        Assert.DoesNotContain(nameof(Tenant.Activate), publicMethods);
     }
 }

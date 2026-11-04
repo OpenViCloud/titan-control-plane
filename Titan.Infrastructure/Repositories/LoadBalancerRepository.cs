@@ -37,7 +37,7 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
             lb => lb.TenantId == tenantId
                   && lb.DesiredExistence == DesiredExistence.Exists
                   && (lb.CurrentExistence == CurrentExistence.Exists
-                      || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingRequestId != null)), ct);
+                      || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingOperationId != null)), ct);
 
     // LoadBalancer.IsNotDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>

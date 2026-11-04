@@ -45,7 +45,7 @@ public class AttachVolumeCommandHandler(
         activity.Stage("volume.attach_requested", "volume", volume.Id, volume.Name); // atomic with Attach
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeAttachAsync(
-            volume.Id, providerIds.RequestId, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
+            volume.Id, providerIds.OperationId, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }
