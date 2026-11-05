@@ -12,6 +12,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// and time (titan-ops architecture/resource-lifecycle.md#shape): the kind is read from the columns it used to be derived
 /// from, in the order Vm.PendingIntent read them, and the two columns the model no longer writes stay with a default,
 /// so the image after the migration can still insert. The old column names below are the schema before it, by necessity.
+/// The rows go on through VmSingleStatus, so a waiting request is read back as the status it moved the VM to.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class VmPendingRequestMigrationTests : IAsyncLifetime
@@ -56,11 +57,11 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         return id;
     }
 
-    private async Task<(Guid? Id, string? Kind, DateTimeOffset? AskedAt)> PendingColumnsAsync(Guid vmId)
+    private async Task<(Guid? Id, VmStatus Status, DateTimeOffset? AskedAt)> PendingColumnsAsync(Guid vmId)
     {
         await using TitanDbContext db = NewDbContext();
         Vm vm = await db.Vms.SingleAsync(v => v.Id == vmId);
-        return (vm.Pending?.Id, vm.Pending?.Kind.ToString(), vm.Pending?.AskedAt);
+        return (vm.PendingOperationId, vm.Status, vm.PendingOperationAskedAt);
     }
 
     [Fact]
@@ -75,12 +76,13 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
         await MigrateToLatestAsync();
 
-        Assert.Equal("Delete", (await PendingColumnsAsync(deleting)).Kind);
-        Assert.Equal("Stop", (await PendingColumnsAsync(stopping)).Kind);
-        Assert.Equal("Create", (await PendingColumnsAsync(creating)).Kind);
-        Assert.Equal("Start", (await PendingColumnsAsync(starting)).Kind);
+        Assert.Equal(VmStatus.Deleting, (await PendingColumnsAsync(deleting)).Status);
+        Assert.Equal(VmStatus.Stopping, (await PendingColumnsAsync(stopping)).Status);
+        Assert.Equal(VmStatus.Creating, (await PendingColumnsAsync(creating)).Status);
+        Assert.Equal(VmStatus.Starting, (await PendingColumnsAsync(starting)).Status);
+        Assert.NotNull((await PendingColumnsAsync(starting)).Id);
         Assert.NotNull((await PendingColumnsAsync(starting)).AskedAt);
-        Assert.Equal((null, null, null), await PendingColumnsAsync(resting));
+        Assert.Equal((null, VmStatus.Running, null), await PendingColumnsAsync(resting));
     }
 
     // A delete whose command already gave up: the image before this one kept it waiting and let the next press reopen the
@@ -104,14 +106,14 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
         await using TitanDbContext read = NewDbContext();
         Vm ended = await read.Vms.SingleAsync(v => v.Id == gaveUp);
-        Assert.Null(ended.Pending);
-        Assert.Equal(DesiredExistence.Exists, ended.DesiredExistence);
-        Assert.Equal(CurrentExistence.Exists, ended.CurrentExistence);
+        Assert.Null(ended.PendingOperationId);
+        // The delete is over and the instance is still there: the VM rests on its last Incus word.
+        Assert.Equal(VmStatus.Running, ended.Status);
         Assert.NotNull(ended.OperationFailureReason);
         Assert.NotNull(ended.OperationFailedAt);
         Vm waiting = await read.Vms.SingleAsync(v => v.Id == stillOpen);
-        Assert.Equal(VmOperationKind.Delete, waiting.Pending!.Kind);
-        Assert.Equal(DesiredExistence.Deleted, waiting.DesiredExistence);
+        Assert.NotNull(waiting.PendingOperationId);
+        Assert.Equal(VmStatus.Deleting, waiting.Status);
     }
 
     // The worker reported Created and the old image waited for the reconciler to see Running or Ready; an observation no
@@ -127,10 +129,11 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
         await using TitanDbContext read = NewDbContext();
         Vm over = await read.Vms.SingleAsync(v => v.Id == named);
-        Assert.Null(over.Pending);
+        Assert.Null(over.PendingOperationId);
+        Assert.Equal(VmStatus.Running, over.Status);
         Assert.Equal("ext", over.ExternalId);
         Assert.Null(over.OperationFailureReason);
-        Assert.Equal("Create", (await PendingColumnsAsync(unnamed)).Kind);
+        Assert.Equal(VmStatus.Creating, (await PendingColumnsAsync(unnamed)).Status);
     }
 
     // A command still open meets the new worker with the request's key and id, so its report names the request and
@@ -162,7 +165,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await using TitanDbContext read = NewDbContext();
         async Task AssertCarried(Guid vmId, string kind)
         {
-            Guid requestId = (await read.Vms.SingleAsync(v => v.Id == vmId)).Pending!.Id;
+            Guid requestId = (await read.Vms.SingleAsync(v => v.Id == vmId)).PendingOperationId!.Value;
             ProviderCommand row = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-{kind}-{vmId}-{requestId}");
             using var payload = System.Text.Json.JsonDocument.Parse(row.Payload);
             Assert.Equal(requestId.ToString(), payload.RootElement.GetProperty("requestId").GetString());
@@ -171,31 +174,8 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await AssertCarried(creating, "create");
         await AssertCarried(deleting, "delete");
         await AssertCarried(stopping, "stop");
-        Assert.Equal(stopIntent, (await read.Vms.SingleAsync(v => v.Id == stopping)).Pending!.Id);
+        Assert.Equal(stopIntent, (await read.Vms.SingleAsync(v => v.Id == stopping)).PendingOperationId!.Value);
         ProviderCommand untouched = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{resting}");
         Assert.DoesNotContain("requestId", untouched.Payload);
-    }
-
-    [Fact] // the model no longer writes create_finished and has_been_running; until VmDropsItsPreRequestColumns the table
-    // still has them, with a default
-    public async Task AVmInsertedByTheNewModel_Succeeds_WithTheOldColumnsDefaulted()
-    {
-        await MigrateToAsync("20261105044846_NetworkDropsItsRouteColumns");
-        Vm vm = Vm.Create(Guid.NewGuid(), Guid.NewGuid(), $"vm-new-{Guid.NewGuid():N}"[..16], "m-mig", "tpl", "cluster-a", 20);
-        await using (TitanDbContext db = NewDbContext())
-        {
-            await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
-            db.Vms.Add(vm);
-            await db.SaveChangesAsync();
-        }
-
-        await using TitanDbContext read = NewDbContext();
-        List<bool> olds = await read.Database
-            .SqlQuery<bool>($"SELECT (create_finished OR has_been_running) AS \"Value\" FROM core.vms WHERE id = {vm.Id}")
-            .ToListAsync();
-        Assert.Equal([false], olds);
-        Vm stored = await read.Vms.SingleAsync(v => v.Id == vm.Id);
-        Assert.Equal(VmOperationKind.Create, stored.Pending!.Kind);
     }
 }

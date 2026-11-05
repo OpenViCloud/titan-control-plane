@@ -18,21 +18,20 @@ public class StateFieldJsonTests
         JsonDocument.Parse(JsonSerializer.Serialize(value, Web)).RootElement;
 
     [Fact]
-    public void Vm_StatesAreSentAsTheirNames_AndNoInstanceIsNull()
+    public void Vm_StatusIsSentAsItsName_AndTheOldFieldsAreGone()
     {
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-01", "offering-1", "tmpl-1", "cluster-1", 0);
 
         var waiting = Json(VmQueryResult.From(vm));
-        Assert.Equal(JsonValueKind.Null, waiting.GetProperty("currentState").ValueKind);
-        Assert.Equal("Running", waiting.GetProperty("desiredState").GetString());
-        Assert.Equal("NotCreated", waiting.GetProperty("currentExistence").GetString());
-        Assert.Equal("Exists", waiting.GetProperty("desiredExistence").GetString());
-        Assert.Equal("Creating", waiting.GetProperty("transition").GetString());
+        Assert.Equal("Creating", waiting.GetProperty("status").GetString());
+        foreach (string gone in new[] { "currentState", "desiredState", "currentExistence", "desiredExistence", "transition" })
+        {
+            Assert.False(waiting.TryGetProperty(gone, out _), $"{gone} is still on the VM result");
+        }
 
         vm.MarkRunning("cs-vm-id", "10.0.0.2");
         var running = Json(VmQueryResult.From(vm));
-        Assert.Equal("Running", running.GetProperty("currentState").GetString());
-        Assert.Equal(JsonValueKind.Null, running.GetProperty("transition").ValueKind);
+        Assert.Equal("Running", running.GetProperty("status").GetString());
     }
 
     [Fact]

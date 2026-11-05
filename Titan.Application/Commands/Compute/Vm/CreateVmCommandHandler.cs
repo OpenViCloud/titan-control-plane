@@ -96,7 +96,7 @@ public class CreateVmCommandHandler(
         // that the worker never hears of (titan-ops architecture/provider-and-worker.md#provider-command-table).
         await commands.EnqueueVmCreateAsync(
             vm.Id,
-            vm.Pending!.Id, // the create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds)
+            vm.PendingOperationId!.Value, // the create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds)
             vm.Name,
             vm.VmOfferingId,
             offering.CpuUnits,

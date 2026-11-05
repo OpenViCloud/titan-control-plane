@@ -21,7 +21,7 @@ public class LoadBalancerRequestLifecycleTests
     private static Vm VmOnIncus()
     {
         Vm vm = Vm.Create(Tenant, NetworkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-a", 20);
-        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..28], VmState.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.PendingOperationId!.Value, $"vm{Guid.NewGuid():N}"[..28], VmStatus.Running, "10.0.0.5", null);
         return vm;
     }
 

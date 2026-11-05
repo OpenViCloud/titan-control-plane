@@ -28,7 +28,7 @@ public class ListDiskBackupsQueryHandler(
         var items = new List<BackupItemQueryResult>();
         foreach (var vm in await vms.ListAllAsync(null, ct))
         {
-            if (vm.CurrentExistence != CurrentExistence.Exists || vm.ExternalId == null)
+            if (!vm.HasAnInstance)
             {
                 continue;
             }

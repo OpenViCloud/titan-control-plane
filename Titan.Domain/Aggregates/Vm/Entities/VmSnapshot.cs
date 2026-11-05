@@ -78,8 +78,9 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// delete no-ops once the VM is gone.
     public bool BlocksVmDelete => CreateIsWaiting || RevertIsWaiting;
 
-    /// Called by Vm.AddSnapshot after the VM checked itself, with the id the handler chose.
-    internal static VmSnapshot Create(Guid id, Guid vmId, Guid tenantId, string name)
+    /// Called by Vm.AddSnapshot after the VM checked itself, with the ids the handler chose: the snapshot's and its
+    /// create's.
+    internal static VmSnapshot Create(Guid id, Guid vmId, Guid tenantId, string name, Guid operationId)
     {
         if (id == Guid.Empty)
         {
@@ -99,20 +100,8 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
             DesiredExistence = DesiredExistence.Exists,
             CreatedAt = DateTime.UtcNow
         };
-        snapshot.SetPending(NewOperation(VmSnapshotOperationKind.Create));
+        snapshot.SetPending(PendingOperation<VmSnapshotOperationKind>.Of(operationId, VmSnapshotOperationKind.Create, DateTimeOffset.UtcNow));
         return snapshot;
-    }
-
-    /// The create this snapshot waits on, for its command. The snapshot is not on Incus yet, so the command acts on its
-    /// vm there: the ticket carries the vm's provider id, which the vm hands in after its own check.
-    internal OperationTicket TicketForCreate(string vmProviderId)
-    {
-        PendingOperation<VmSnapshotOperationKind>? waiting = Pending;
-        if (waiting == null || waiting.Kind != VmSnapshotOperationKind.Create)
-        {
-            throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "No create is waiting for this snapshot.");
-        }
-        return OperationTicket.Of(waiting.Id, vmProviderId);
     }
 
     /// Incus holds it and nothing waits: the only situation a snapshot can be reverted from.
@@ -123,24 +112,21 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
-    /// The revert is the waiting operation; existence stays. The VM's own rule is checked by Vm.RevertSnapshot before
-    /// this is reached.
-    internal OperationTicket Revert()
+    /// The revert is the waiting operation, with the id the handler chose; existence stays. The VM's own rule is
+    /// checked by Vm.RevertSnapshot before this is reached.
+    internal void Revert(Guid operationId)
     {
         if (!RestsOnIncus)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot must exist on Incus, with nothing waiting, to revert.");
-        string externalSnapshotId = GetExternalId();
-        PendingOperation<VmSnapshotOperationKind> operation = NewOperation(VmSnapshotOperationKind.Revert);
-        SetPending(operation);
-        return OperationTicket.Of(operation.Id, externalSnapshotId);
+        SetPending(PendingOperation<VmSnapshotOperationKind>.Of(operationId, VmSnapshotOperationKind.Revert, DateTimeOffset.UtcNow));
     }
 
     /// Follows Incus: a snapshot with a provider id is deleted through Incus, even one Incus no longer has; the
     /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    /// A snapshot that never reached Incus is deleted here, at once, and gets no ticket
-    /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    internal OperationTicket? Delete()
+    /// A snapshot that never reached Incus is deleted here, at once: IsDeleted tells the handler there is no command
+    /// to send (titan-ops architecture/desired-and-current.md#delete-locally).
+    internal void Delete(Guid operationId)
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "A delete is already in progress for this snapshot.");
@@ -153,18 +139,17 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
             DesiredExistence = DesiredExistence.Deleted;
             CurrentExistence = CurrentExistence.Deleted;
             SetPending(null);
-            return null;
+            return;
         }
         if (PendingOperationId != null || ExternalId is null)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot must be on Incus, with nothing waiting, to delete.");
-        PendingOperation<VmSnapshotOperationKind> operation = NewOperation(VmSnapshotOperationKind.Delete);
         DesiredExistence = DesiredExistence.Deleted;
-        SetPending(operation);
-        return OperationTicket.Of(operation.Id, ExternalId);
+        SetPending(PendingOperation<VmSnapshotOperationKind>.Of(operationId, VmSnapshotOperationKind.Delete, DateTimeOffset.UtcNow));
     }
 
     /// Throws rather than let a caller assert the id
-    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the reconciler's read model.
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public: a revert or delete
+    /// command names the snapshot by it, and the reconciler's read model too.
     public string GetExternalId()
     {
         if (ExternalId == null)

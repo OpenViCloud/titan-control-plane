@@ -29,7 +29,7 @@ internal static class TestAggregates
     internal static VmSnapshot WithSnapshot(this Vm vm, string name)
     {
         Guid snapshotId = Guid.NewGuid();
-        vm.AddSnapshot(snapshotId, name);
+        vm.AddSnapshot(snapshotId, Guid.NewGuid(), name);
         return vm.Snapshots.Single(s => s.Id == snapshotId);
     }
 

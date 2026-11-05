@@ -20,11 +20,7 @@ public class StateEnumSpecTests(OpenApiSpecTests.ApiFactory factory) : IClassFix
 {
     public static TheoryData<string, string, Type, bool> StateFields => new()
     {
-        { "VmQueryResult", "currentState", typeof(VmState), true },
-        { "VmQueryResult", "desiredState", typeof(VmDesiredState), false },
-        { "VmQueryResult", "currentExistence", typeof(CurrentExistence), false },
-        { "VmQueryResult", "desiredExistence", typeof(DesiredExistence), false },
-        { "VmQueryResult", "transition", typeof(VmTransition), true },
+        { "VmQueryResult", "status", typeof(VmStatus), false },
         { "NetworkQueryResult", "currentState", typeof(NetworkStatus), true },
         { "NetworkQueryResult", "currentExistence", typeof(CurrentExistence), false },
         { "NetworkQueryResult", "desiredExistence", typeof(DesiredExistence), false },

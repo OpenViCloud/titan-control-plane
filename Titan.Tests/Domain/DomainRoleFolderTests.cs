@@ -107,7 +107,7 @@ public class DomainRoleFolderTests
         var offenders = new List<string>();
         foreach (var type in values)
         {
-            // A generic's reflection name carries its arity (PendingOperation`1); the source says PendingOperation<VmOperationKind>.
+            // A generic's reflection name carries its arity (PendingOperation`1); the source says PendingOperation<VmSnapshotOperationKind>.
             string name = type.Name.Split('`')[0];
             var users = sources.Where(s => Regex.IsMatch(s.Code, $@"\b{name}\b")).Select(s => s.Aggregate).ToList();
             if (users.Count < 2 && !SharedByTheRollout.ContainsKey(name))

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using Titan.Application.Queries.Compute.Vm;
+using Titan.Application.Queries.Compute.Vm.Contracts;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Infrastructure.Hosting;
@@ -54,13 +55,13 @@ public class VmReconcilerTests
         running.MarkRunning("41", "10.0.0.5");
         Vm failed = VmIn(Cluster, "failed");
         failed.MarkRunning("42", "10.0.0.6");
-        failed.MarkObserved(VmState.Error, null);
+        failed.MarkObserved(VmStatus.Error, null);
         Vm lost = VmIn(Cluster, "lost");
         lost.MarkRunning("46", "10.0.0.9");
         lost.MarkNotFound();
         Vm destroyed = VmIn(Cluster, "destroyed");
         destroyed.MarkRunning("43", "10.0.0.7");
-        destroyed.Delete();
+        destroyed.Delete(Guid.NewGuid());
         destroyed.MarkDeleted();
         Vm withoutId = VmIn(Cluster, "without-id");
         Vm otherCluster = VmIn("vn-han-1", "other-cluster");
@@ -84,7 +85,7 @@ public class VmReconcilerTests
         db.Vms.Add(refused);
         await db.SaveChangesAsync();
         var handler = new EndVmRequestCommandHandler(new VmRepository(db), new VolumeRepository(db), new FakeActivityRecorder());
-        await handler.HandleAsync(new EndVmRequestCommand(refused.Id, refused.Pending!.Id, "Failed", ExternalId: "45",
+        await handler.HandleAsync(new EndVmRequestCommand(refused.Id, refused.PendingOperationId!.Value, "Failed", ExternalId: "45",
             Reason: "The VM could not be created."));
 
         List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
@@ -115,6 +116,44 @@ public class VmReconcilerTests
         Assert.Equal("10.0.0.5", row.IpAddress);
         Assert.Equal("2001:db8::5", row.PublicIpv6Address);
         Assert.NotNull(heartbeat.Snapshot()[$"vms/{Cluster}"].LastPollAt);
+    }
+
+    // The worker contract keeps CurrentExistence, now read off the status and the Incus word
+    // (titan-ops features/vm/design.md#vm-status): NotFound stops the worker repeating an absent instance, Exists with a
+    // word stops it repeating a status Titan already has, and anything else makes it report next cycle.
+    [Theory]
+    [InlineData("not-found", "NotFound", null)]
+    [InlineData("running", "Exists", "Running")]
+    [InlineData("created-without-a-word", "NotCreated", null)]
+    [InlineData("delete-waiting-not-found", "NotCreated", null)]
+    public void Row_GivesCurrentExistence_FromTheStatusAndTheIncusWord(string history, string existence, string? word)
+    {
+        Vm vm = VmIn(Cluster, "vm-1");
+        if (history == "created-without-a-word")
+        {
+            vm.MarkCreated("41");
+        }
+        else
+        {
+            vm.MarkRunning("41", "10.0.0.5");
+        }
+        if (history == "not-found")
+        {
+            vm.MarkNotFound();
+            Assert.Equal(VmStatus.NotFound, vm.Status);
+        }
+        if (history == "delete-waiting-not-found")
+        {
+            vm.Delete(Guid.NewGuid());
+            vm.MarkNotFound();
+            Assert.Equal(VmStatus.Deleting, vm.Status);
+        }
+
+        ReconcilableVmQueryResult row = ReconcilableVmQueryResult.From(vm);
+
+        Assert.Equal(existence, row.CurrentExistence);
+        Assert.Equal(word, row.CurrentState);
+        Assert.Equal("41", row.ExternalId);
     }
 
     [Fact]

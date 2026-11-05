@@ -24,7 +24,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
     {
         var vm = Vm.Create(tenant.Id, networkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
-        vm.MarkObserved(VmState.Running, "10.0.0.5", null);
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5", null);
         return vm;
     }
 

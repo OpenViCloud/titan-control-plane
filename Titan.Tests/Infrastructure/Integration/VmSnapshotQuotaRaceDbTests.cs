@@ -27,7 +27,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
         string offeringId = await SeedOfferingAsync();
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..20]); // on Incus, running: snapshottable
-        vm.MarkObserved(VmState.Running, "10.0.0.5");
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5");
         int cap = tenant.Quota.MaxVmSnapshotsPerVm;
         for (int i = 0; i < cap - 1; i++)
         {
@@ -62,7 +62,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ASnapshotWhoseVmDoesNotExist_IsRefusedByTheDatabase()
     {
-        VmSnapshot orphan = VmSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "orphan");
+        VmSnapshot orphan = VmSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "orphan", Guid.NewGuid());
 
         await using TitanDbContext db = pg.NewDbContext();
         db.VmSnapshots.Add(orphan); // no such VM

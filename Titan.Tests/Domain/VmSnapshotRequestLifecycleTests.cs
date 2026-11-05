@@ -13,7 +13,7 @@ public class VmSnapshotRequestLifecycleTests
     private static Vm RunningVm()
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
-        vm.FinishOperation(vm.Pending!.Id, "vm42", VmState.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm42", VmStatus.Running, "10.0.0.5", null);
         return vm;
     }
 
@@ -91,7 +91,9 @@ public class VmSnapshotRequestLifecycleTests
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vm42/s1", snapshot.ExternalId);
         Assert.NotNull(snapshot.OperationFailureReason);
-        Assert.Equal("vm42/s1", vm.DeleteSnapshot(snapshot.Id)!.ProviderId);
+        vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
+        Assert.Equal(VmSnapshotTransition.Deleting, snapshot.Transition);
+        Assert.Equal("vm42/s1", snapshot.GetExternalId());
     }
 
     // ---------- the revert ----------
@@ -101,11 +103,12 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket revert = vm.RevertSnapshot(snapshot.Id);
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, revert);
         Assert.Equal(VmSnapshotOperationKind.Revert, snapshot.Pending!.Kind);
-        Assert.Equal(revert.OperationId, snapshot.Pending.Id);
+        Assert.Equal(revert, snapshot.Pending.Id);
 
-        VmSnapshotOperationKind? ended = vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null);
+        VmSnapshotOperationKind? ended = vm.FinishSnapshotOperation(snapshot.Id, revert, null);
 
         Assert.Equal(VmSnapshotOperationKind.Revert, ended);
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
@@ -117,9 +120,10 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket revert = vm.RevertSnapshot(snapshot.Id);
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, revert);
 
-        Failed(vm, snapshot.Id, revert.OperationId);
+        Failed(vm, snapshot.Id, revert);
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
@@ -132,9 +136,13 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Failed(vm, snapshot.Id, vm.RevertSnapshot(snapshot.Id).OperationId);
+        Guid firstRevert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, firstRevert);
+        Failed(vm, snapshot.Id, firstRevert);
+        Guid secondRevert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, secondRevert);
 
-        vm.FinishSnapshotOperation(snapshot.Id, vm.RevertSnapshot(snapshot.Id).OperationId, null);
+        vm.FinishSnapshotOperation(snapshot.Id, secondRevert, null);
 
         Assert.Null(snapshot.OperationFailureReason);
         Assert.Null(snapshot.OperationFailureDetail);
@@ -148,14 +156,15 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket delete = vm.DeleteSnapshot(snapshot.Id)!;
+        Guid delete = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, delete);
 
-        VmSnapshotOperationKind? ended = vm.FinishSnapshotOperation(snapshot.Id, delete.OperationId, null);
+        VmSnapshotOperationKind? ended = vm.FinishSnapshotOperation(snapshot.Id, delete, null);
 
         Assert.Equal(VmSnapshotOperationKind.Delete, ended);
         Assert.Equal("Deleted/Deleted/-", Shape(snapshot));
         Assert.True(snapshot.IsDeleted);
-        Assert.Null(vm.FinishSnapshotOperation(snapshot.Id, delete.OperationId, null));
+        Assert.Null(vm.FinishSnapshotOperation(snapshot.Id, delete, null));
     }
 
     [Fact]
@@ -163,16 +172,19 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket first = vm.DeleteSnapshot(snapshot.Id)!;
+        Guid first = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, first);
         Assert.Equal(0, vm.SnapshotQuotaUsage);
 
-        Failed(vm, snapshot.Id, first.OperationId);
+        Failed(vm, snapshot.Id, first);
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
         Assert.Equal(1, vm.SnapshotQuotaUsage);
-        OperationTicket second = vm.DeleteSnapshot(snapshot.Id)!;
-        Assert.NotEqual(first.OperationId, second.OperationId);
+        Guid second = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, second);
+        Assert.Equal(second, snapshot.PendingOperationId);
+        Assert.Equal(VmSnapshotTransition.Deleting, snapshot.Transition);
     }
 
     // ---------- only the matching id ends a request ----------
@@ -183,7 +195,7 @@ public class VmSnapshotRequestLifecycleTests
         Vm vm = RunningVm();
         VmSnapshot creating = Creating(vm);
         VmSnapshot reverting = Ready(vm);
-        vm.RevertSnapshot(reverting.Id);
+        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
 
         Assert.Null(vm.FinishSnapshotOperation(creating.Id, Guid.NewGuid(), "vm42/s9"));
         Assert.Null(Failed(vm, reverting.Id, Guid.NewGuid()));
@@ -202,9 +214,10 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket revert = vm.RevertSnapshot(snapshot.Id);
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, revert);
 
-        Assert.Null(vm.FinishOperation(revert.OperationId, null, null, null, null));
+        Assert.False(vm.StopSucceeded(revert, null, null, null));
 
         Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
     }
@@ -217,9 +230,9 @@ public class VmSnapshotRequestLifecycleTests
         Vm vm = RunningVm();
         VmSnapshot creating = Creating(vm);
         VmSnapshot reverting = Ready(vm);
-        vm.RevertSnapshot(reverting.Id);
+        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
         VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
 
         vm.MarkSnapshotObserved(creating.Id);
         vm.MarkSnapshotObserved(reverting.Id);
@@ -238,15 +251,16 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        OperationTicket delete = vm.DeleteSnapshot(snapshot.Id)!;
-        vm.FinishSnapshotOperation(snapshot.Id, delete.OperationId, null);
+        Guid delete = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, delete);
+        vm.FinishSnapshotOperation(snapshot.Id, delete, null);
 
         vm.MarkSnapshotObserved(snapshot.Id);
         vm.MarkSnapshotNotFound(snapshot.Id);
-        Assert.Null(Failed(vm, snapshot.Id, delete.OperationId));
+        Assert.Null(Failed(vm, snapshot.Id, delete));
 
         Assert.Equal("Deleted/Deleted/-", Shape(snapshot));
-        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => vm.DeleteSnapshot(snapshot.Id)).Code);
+        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid())).Code);
     }
 
     // ---------- the VM's delete ----------
@@ -258,21 +272,23 @@ public class VmSnapshotRequestLifecycleTests
         Vm vm = RunningVm();
         VmSnapshot creating = Creating(vm);
         VmSnapshot reverting = Ready(vm);
-        OperationTicket revert = vm.RevertSnapshot(reverting.Id);
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(reverting.Id, revert);
         VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
 
         Assert.True(creating.BlocksVmDelete);
         Assert.True(reverting.BlocksVmDelete);
         Assert.False(deleting.BlocksVmDelete);
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", Assert.Throws<BusinessException>(() => vm.Delete()).Code);
+        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
 
         Failed(vm, creating.Id, creating.Pending!.Id);
-        Failed(vm, reverting.Id, revert.OperationId);
+        Failed(vm, reverting.Id, revert);
 
         Assert.False(creating.BlocksVmDelete);
         Assert.False(reverting.BlocksVmDelete);
-        Assert.NotNull(vm.Delete());
+        vm.Delete(Guid.NewGuid());
+        Assert.Equal(VmStatus.Deleting, vm.Status);
     }
 
     // Incus deletes an instance's snapshots with it: the VM's delete Done ends every snapshot, whatever it waited on.
@@ -282,14 +298,15 @@ public class VmSnapshotRequestLifecycleTests
         Vm vm = RunningVm();
         VmSnapshot resting = Ready(vm);
         VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
         VmSnapshot failedCreate = Creating(vm);
         Failed(vm, failedCreate.Id, failedCreate.Pending!.Id);
-        OperationTicket vmDelete = vm.Delete()!;
+        Guid vmDelete = Guid.NewGuid();
+        vm.Delete(vmDelete);
 
-        VmOperationKind? ended = vm.FinishOperation(vmDelete.OperationId, null, null, null, null);
+        bool ended = vm.DeleteSucceeded(vmDelete);
 
-        Assert.Equal(VmOperationKind.Delete, ended);
+        Assert.True(ended);
         Assert.All(new[] { resting, deleting, failedCreate }, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(new[] { resting, deleting, failedCreate }, s => Assert.Null(s.Pending));
     }
@@ -299,14 +316,16 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot deleting = Ready(vm);
-        OperationTicket snapshotDelete = vm.DeleteSnapshot(deleting.Id)!;
-        OperationTicket vmDelete = vm.Delete()!;
+        Guid snapshotDelete = Guid.NewGuid();
+        vm.DeleteSnapshot(deleting.Id, snapshotDelete);
+        Guid vmDelete = Guid.NewGuid();
+        vm.Delete(vmDelete);
 
-        VmOperationKind? ended = vm.FailOperation(vmDelete.OperationId, null, null, null, null, "refused", "raw");
+        bool ended = vm.DeleteFailed(vmDelete, "refused", "raw");
 
-        Assert.Equal(VmOperationKind.Delete, ended);
+        Assert.True(ended);
         Assert.Equal("Exists/Deleted/Deleting", Shape(deleting));
-        Assert.Equal(snapshotDelete.OperationId, deleting.Pending!.Id);
+        Assert.Equal(snapshotDelete, deleting.Pending!.Id);
     }
 
     [Fact]
@@ -315,7 +334,7 @@ public class VmSnapshotRequestLifecycleTests
         Vm vm = RunningVm();
         VmSnapshot resting = Ready(vm);
         VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
 
         resting.EndWithItsVm();
         deleting.EndWithItsVm();

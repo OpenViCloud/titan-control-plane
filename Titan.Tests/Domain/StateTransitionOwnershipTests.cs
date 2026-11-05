@@ -75,17 +75,28 @@ public class StateTransitionOwnershipTests
 
     // ── a caller may not assert a provider id the aggregate owns (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
     //
-    // `vm.ExternalId!` is a claim the application layer cannot prove — that a Running VM carries an id is an
-    // invariant of Vm. The id is handed out by the method that validated the state (Vm.Stop,
-    // Volume.Attach, Network.ProviderIdForVm, …), so there is no id to be had without the check.
+    // `x.ExternalId!` is a claim the application layer cannot prove — that a resource on the provider carries an id is
+    // an invariant of the aggregate, so a Domain method that throws without it hands it out (Volume.Attach,
+    // Network.ProviderIdForVm, …). The VM's rows in the allowlist are the named exception.
     //
     // Only `req.X!` passes: worker callback payload, already checked by a FastEndpoints validator, owned by no
     // aggregate. Comments are stripped before matching, so prose that names the pattern does not trip the guard.
     private static readonly Regex ProviderIdAssertion =
         new(@"(?<recv>\w+)\.(?<prop>ExternalTemplateId|ExternalId)!", RegexOptions.Compiled);
 
+    // The VM hands out no id (titan-ops features/vm/design.md#vm-status, Tôn Chủ 2026-11-05): the intent the handler
+    // called just before refused every VM without one, so its status proves the id is there.
+    private const string VmIdFollowsTheIntent = "the VM intent called just before refuses a VM without a provider id";
+
+
     private static readonly Dictionary<string, string> ProviderIdAssertionAllowlist = new()
     {
+        ["StopVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent,
+        ["StartVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent,
+        ["DeleteVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (Deleting; Deleted returned before)",
+        ["DeleteAdminVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (Deleting; Deleted returned before)",
+        ["CreateVmSnapshotCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (AddSnapshot)",
+        ["GetVmShellTargetQueryHandler.cs|vm.ExternalId"] = "EnsureShellCanOpen passes only Running or Ready, which only a report carrying the id reaches",
     };
 
     [Fact]
@@ -265,7 +276,6 @@ public class StateTransitionOwnershipTests
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
         ["VmTemplateCluster.FinishOperation"] = TemplateReport,
-        ["Vm.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VmSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["Volume.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VolumeSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
@@ -276,9 +286,6 @@ public class StateTransitionOwnershipTests
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
             "handler must recognise first.",
-        ["Vm.Accept"] = "private helper, reached only from Stop/Start/Delete, each of " +
-            "which refuses every state it cannot accept before calling it; it records the request those " +
-            "methods already validated. A check here would repeat theirs.",
     };
 
     [Fact]
@@ -302,10 +309,13 @@ public class StateTransitionOwnershipTests
                 if (body.Contains("static ")) continue;              // Create() sets initial state
                 scanned++;
 
+                // A report move of the VM refuses every other source status by returning false
+                // (`if (Status != VmStatus.Stopping || …) return false;`, titan-ops features/vm/design.md#vm-status).
                 var validates = body.Contains("throw")
                              || body.Contains("IsDeleted")
                              || body.Contains("IsTerminal")
-                             || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)");
+                             || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)")
+                             || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| PendingOperationId != operationId\)\s*\{\s*return false;");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");
             }
         }

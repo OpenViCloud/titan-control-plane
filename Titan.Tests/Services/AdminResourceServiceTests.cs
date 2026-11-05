@@ -118,7 +118,7 @@ public class AdminResourceServiceTests
         var dto = Assert.Single(await svc.ListVmsAsync(null));
 
         Assert.Equal("a-web", dto.Name);
-        Assert.Equal("Running", dto.CurrentState);
+        Assert.Equal("Running", dto.Status);
         Assert.Equal("10.0.0.5", dto.IpAddress);
         Assert.Equal("s", dto.VmOfferingId);
         Assert.Equal("vn-hcm-1", dto.ClusterId);
@@ -199,7 +199,8 @@ public class AdminResourceServiceTests
             e.Action == "vm.delete.cross_tenant" && e.ActorKeycloakUserId == "admin-1"
             && e.ResourceType == "vm" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);
         Assert.True(repo.SaveCalled);
-        Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
+        Assert.Equal(VmStatus.Deleting, vm.Status);
+        Assert.NotNull(vm.PendingOperationId);
     }
 
     // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path releases the VM's volumes like the
@@ -231,20 +232,20 @@ public class AdminResourceServiceTests
         var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
-        Guid firstRequest = vm.Pending!.Id;
+        Guid firstRequest = vm.PendingOperationId!.Value;
         await svc.DeleteVmAsync(vm.Id);
 
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Once);
         wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, firstRequest, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
         wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
-        Assert.Equal(firstRequest, vm.Pending!.Id);
+        Assert.Equal(firstRequest, vm.PendingOperationId!.Value);
     }
 
     [Fact] // deleting a VM that is already gone is done, not an error, and audits nothing
     public async Task DeleteVm_AlreadyDeleted_IsANoOp()
     {
         var vm = RunningVm(TenantBOwner, "gone");
-        vm.Delete();
+        vm.Delete(Guid.NewGuid());
         vm.MarkDeleted();
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
@@ -321,10 +322,10 @@ public class AdminResourceServiceTests
 
         await svc.DeleteVmAsync(vm.Id);
 
-        Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
+        Assert.Equal(VmStatus.Deleted, vm.Status);
         Assert.True(repo.SaveCalled);
         wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
-        // The VM was destroyed locally, so an audit row is staged; it persists with DeleteLocally() through the
+        // The VM was destroyed locally, so an audit row is staged; it persists with the Deleted status through the
         // VM repo's SaveAsync (same DbContext), so there is no separate audit save.
         audit.Verify(a => a.Add(It.Is<AdminAuditLog>(e =>
             e.Action == "vm.delete.cross_tenant" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);

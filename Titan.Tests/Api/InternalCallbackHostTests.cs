@@ -30,7 +30,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
-        vm.Stop();
+        vm.Stop(Guid.NewGuid());
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
@@ -95,30 +95,31 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     public async Task ADoneNamingTheWaitingRequest_InTheWorkersJson_EndsIt_AndAnswers204()
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
-        Guid requestId = vm.Pending!.Id;
+        Guid requestId = vm.PendingOperationId!.Value;
 
         HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{requestId}",
             """{"outcome":"Done","observed":{"status":"Stopped","ipAddress":null}}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal(VmState.Stopped, stored.CurrentState);
+        Assert.Null(stored.PendingOperationId);
+        Assert.Equal(VmStatus.Stopped, stored.ObservedState);
+        Assert.Equal(VmStatus.Stopped, stored.Status);
     }
 
     [Fact]
-    public async Task AFailedWithItsReason_InTheWorkersJson_PutsDesiredBack_AndKeepsTheReason()
+    public async Task AFailedWithItsReason_InTheWorkersJson_PutsTheStatusBackToTheLastIncusWord_AndKeepsTheReason()
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
-        Guid requestId = vm.Pending!.Id;
+        Guid requestId = vm.PendingOperationId!.Value;
 
         HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{requestId}",
             """{"outcome":"Failed","reason":"The stop could not be completed.","detail":"incus: timeout"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal(VmDesiredState.Running, stored.DesiredState);
+        Assert.Null(stored.PendingOperationId);
+        Assert.Equal(VmStatus.Running, stored.Status);
         Assert.Equal(("The stop could not be completed.", "incus: timeout"), (stored.OperationFailureReason, stored.OperationFailureDetail));
     }
 
@@ -132,8 +133,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Equal((VmState.Frozen, "10.0.0.9", "2001:db8::9"), (stored.CurrentState, stored.IpAddress, stored.PublicIpv6Address));
-        Assert.Equal(VmOperationKind.Stop, stored.Pending!.Kind);
+        Assert.Equal((VmStatus.Frozen, "10.0.0.9", "2001:db8::9"), (stored.ObservedState, stored.IpAddress, stored.PublicIpv6Address));
+        Assert.Equal(vm.PendingOperationId, stored.PendingOperationId);
+        Assert.Equal(VmStatus.Stopping, stored.Status);
     }
 
     [Theory]
@@ -143,12 +145,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.Pending!.Id}", json);
+        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.PendingOperationId!.Value}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("INVALID_STATUS", envelope.RootElement.GetProperty("code").GetString());
-        Assert.Equal(VmOperationKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
+        Assert.Equal(VmStatus.Stopping, (await ReloadAsync(vm.Id)).Status);
     }
 
     [Fact]
@@ -160,7 +162,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Equal(VmState.Running, stored.CurrentState);
+        Assert.Equal(VmStatus.Running, stored.ObservedState);
+        Assert.Equal(VmStatus.Stopping, stored.Status);
     }
 
     [Theory]
@@ -170,11 +173,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.Pending!.Id}",
+        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.PendingOperationId!.Value}",
             """{"outcome":"Done","observed":{"status":"Stopped"}}""", token);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        Assert.Equal(VmOperationKind.Stop, (await ReloadAsync(vm.Id)).Pending!.Kind);
+        Assert.Equal(VmStatus.Stopping, (await ReloadAsync(vm.Id)).Status);
     }
 
     // ---------- the volume's and its snapshots' routes ----------
@@ -444,11 +447,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, $"ext-{vm.Id:N}/s1");
-        vm.RevertSnapshot(reverting.Id);
+        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
         VmSnapshot deleting = vm.WithSnapshot("deleting");
         vm.FinishSnapshotOperation(deleting.Id, deleting.Pending!.Id, $"ext-{vm.Id:N}/s2");
-        vm.DeleteSnapshot(deleting.Id);
-        vm.AddSnapshot(Guid.NewGuid(), "creating");
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
+        vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "creating");
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(

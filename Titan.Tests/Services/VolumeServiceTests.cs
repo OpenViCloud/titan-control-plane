@@ -190,7 +190,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmStatus.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -241,7 +241,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        var vm = MakeVm(VmState.Running, owner: TestTenant.WithRoomToSpare());
+        var vm = MakeVm(VmStatus.Running, owner: TestTenant.WithRoomToSpare());
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -256,7 +256,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, clusterId: "cluster-a");
-        var vm = MakeVm(VmState.Running, clusterId: "cluster-b");
+        var vm = MakeVm(VmStatus.Running, clusterId: "cluster-b");
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -271,7 +271,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available);
-        var vm = MakeVm(VmState.Error, clusterId: volume.ClusterId);
+        var vm = MakeVm(VmStatus.Error, clusterId: volume.ClusterId);
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -318,7 +318,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmStatus.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -456,7 +456,7 @@ public class VolumeServiceTests
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Available, externalVolumeId: "cs-vol-1");
-        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
+        var vm = MakeVm(VmStatus.Running, clusterId: volume.ClusterId, externalVmId: "cs-vm-1");
         _repo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
@@ -539,7 +539,7 @@ public class VolumeServiceTests
     [InlineData(VolumeSeed.Deleting, "volume.deleted")]
     public async Task EndRequest_DoneOfARequest_RecordsItsOutcomeOnce(VolumeSeed from, string action)
     {
-        Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
+        Vm vm = MakeVm(VmStatus.Running, externalVmId: "vm-attached");
         var volume = MakeVolume(from, attachTo: vm);
         SetupVolume(volume);
         SetupTenantVms(vm);
@@ -582,7 +582,7 @@ public class VolumeServiceTests
     {
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
-        Vm othersVm = MakeVm(VmState.Running, externalVmId: "vm-shared-name", owner: TestTenant.WithRoomToSpare());
+        Vm othersVm = MakeVm(VmStatus.Running, externalVmId: "vm-shared-name", owner: TestTenant.WithRoomToSpare());
         SetupTenantVms(othersVm);
 
         await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true, ["vm-shared-name"]));
@@ -595,7 +595,7 @@ public class VolumeServiceTests
     [Fact]
     public async Task Observe_UsedByATitanVmAndAnInstanceOutsideTitan_IsBoth()
     {
-        Vm vm = MakeVm(VmState.Running, externalVmId: "vm-mine");
+        Vm vm = MakeVm(VmStatus.Running, externalVmId: "vm-mine");
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
         SetupTenantVms(vm);
@@ -609,7 +609,7 @@ public class VolumeServiceTests
     [Fact] // attached outside Titan to a Titan VM, nothing waiting: current follows Incus, desired stays — drift, no outcome
     public async Task Observe_AttachedOutsideTitan_IsDrift_AndRecordsNothing()
     {
-        Vm vm = MakeVm(VmState.Running, externalVmId: "vm-mine");
+        Vm vm = MakeVm(VmStatus.Running, externalVmId: "vm-mine");
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
         SetupTenantVms(vm);
@@ -652,7 +652,7 @@ public class VolumeServiceTests
     [Fact]
     public async Task EndRequest_AFailedDetach_LeavesItAttached_WithTheReason_AndRecordsDetachFailed()
     {
-        Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
+        Vm vm = MakeVm(VmStatus.Running, externalVmId: "vm-attached");
         var volume = MakeVolume(VolumeSeed.Detaching, attachTo: vm);
         SetupVolume(volume);
         SetupTenantVms(vm);
@@ -833,7 +833,7 @@ public class VolumeServiceTests
         var volume = MakeVolume(VolumeSeed.Available);
         volume.MarkObserved(null, true);
         SetupVolume(volume);
-        var vm = MakeVm(VmState.Running, clusterId: volume.ClusterId);
+        var vm = MakeVm(VmStatus.Running, clusterId: volume.ClusterId);
         _vmRepo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var attach = await Assert.ThrowsAsync<BusinessException>(() => CreateService().AttachAsync(volume.Id, new AttachVolumeBody(vm.Id)));
@@ -893,7 +893,7 @@ public class VolumeServiceTests
     {
         var vol = Volume.Create((owner ?? TenantIdOwner).Id, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
         var externalId = externalVolumeId ?? "cs-vol-default";
-        Vm target = attachTo ?? MakeVm(VmState.Running, clusterId: clusterId, owner: owner);
+        Vm target = attachTo ?? MakeVm(VmStatus.Running, clusterId: clusterId, owner: owner);
         switch (status)
         {
             case VolumeSeed.Creating:
@@ -935,7 +935,7 @@ public class VolumeServiceTests
     }
 
     private static Vm MakeVm(
-        VmState status,
+        VmStatus status,
         string? clusterId = null,
         string? externalVmId = null,
         Titan.Domain.Aggregates.Tenant.Tenant? owner = null)
@@ -950,12 +950,12 @@ public class VolumeServiceTests
 
         switch (status)
         {
-            case VmState.Running:
+            case VmStatus.Running:
                 vm.MarkRunning(externalVmId ?? "cs-vm-1", "10.0.0.1");
                 break;
-            case VmState.Error:
+            case VmStatus.Error:
                 vm.MarkRunning(externalVmId ?? "cs-vm-1", "10.0.0.1");
-                vm.MarkObserved(VmState.Error, null);
+                vm.MarkObserved(VmStatus.Error, null);
                 break;
         }
 

@@ -90,11 +90,11 @@ public class VolumeStateMachineTests
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         if (shape == VmShape.Creating) return vm;
         vm.MarkRunning("vm42", "10.0.0.5");
-        if (shape == VmShape.Ready) vm.MarkObserved(VmState.Ready, "10.0.0.5");
+        if (shape == VmShape.Ready) vm.MarkObserved(VmStatus.Ready, "10.0.0.5");
         else if (shape == VmShape.Stopped) vm.MarkStopped();
-        else if (shape == VmShape.Frozen) vm.MarkObserved(VmState.Frozen, "10.0.0.5");
-        else if (shape == VmShape.Error) vm.MarkObserved(VmState.Error, null);
-        else if (shape == VmShape.Deleted) { vm.Delete(); vm.MarkDeleted(); }
+        else if (shape == VmShape.Frozen) vm.MarkObserved(VmStatus.Frozen, "10.0.0.5");
+        else if (shape == VmShape.Error) vm.MarkObserved(VmStatus.Error, null);
+        else if (shape == VmShape.Deleted) { vm.Delete(Guid.NewGuid()); vm.MarkDeleted(); }
         return vm;
     }
 

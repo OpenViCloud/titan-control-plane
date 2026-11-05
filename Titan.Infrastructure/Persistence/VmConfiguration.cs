@@ -15,13 +15,10 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.TenantId).HasColumnName("tenant_id");
         builder.Property(v => v.NetworkId).HasColumnName("network_id");
         builder.Property(v => v.Name).HasColumnName("name").IsRequired();
-        // titan-ops architecture/desired-and-current.md#desired-and-current: what the worker reports writes current_*, a
-        // request writes desired_* (Vm.cs names the exceptions). current_state holds the Incus status word for word (the
-        // enum names ARE the Incus words), NULL while Incus has no instance.
-        builder.Property(v => v.CurrentState).HasColumnName("current_state").HasConversion<string>();
-        builder.Property(v => v.DesiredState).HasColumnName("desired_state").HasConversion<string>().IsRequired();
-        builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
+        // titan-ops features/vm/design.md#vm-status: status is the one status; observed_state is the Incus word the worker
+        // read last, word for word (the enum names ARE the Incus words), NULL while none is known.
+        builder.Property(v => v.Status).HasColumnName("status").HasConversion<string>().IsRequired();
+        builder.Property(v => v.ObservedState).HasColumnName("observed_state").HasConversion<string>();
         builder.Property(v => v.OperationFailureReason).HasColumnName("request_failure_reason");
         builder.Property(v => v.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(v => v.OperationFailedAt).HasColumnName("request_failed_at");
@@ -40,18 +37,16 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
-        // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Vm.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<VmOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(v => v.Pending);
-        builder.Ignore(v => v.Transition);
+        // The one waiting request, by id and the time it was asked; the status says what it asks for
+        // (titan-ops features/vm/design.md#vm-status).
+        builder.Property(v => v.PendingOperationId).HasColumnName("pending_request_id");
+        builder.Property(v => v.PendingOperationAskedAt).HasColumnName("pending_request_asked_at");
+        builder.Ignore(v => v.HasAnInstance);
 
         // Same condition as VmRepository.ExistsByNameAsync: the name is free again only once the VM is Deleted.
         builder.HasIndex(v => new { v.TenantId, v.Name })
             .IsUnique()
-            .HasFilter("current_existence <> 'Deleted'");
+            .HasFilter("status <> 'Deleted'");
 
         // The snapshots are the VM's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
         // through the backing field. Restrict, not cascade: no row of either table is ever deleted.

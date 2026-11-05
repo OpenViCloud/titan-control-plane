@@ -95,8 +95,8 @@ namespace Titan.Domain.Aggregates.Network
 namespace Titan.Domain.Aggregates.Vm
 {
     /// A VM's requests end by their own command's report (titan-ops architecture/resource-lifecycle.md#shape); these replay
-    /// the worker's reports under the one-call names test setups used before, through the real FinishOperation,
-    /// FailOperation and MarkObserved. A replay for a request the VM is not waiting on does nothing, like the report it
+    /// the worker's reports under the one-call names test setups used before, through the real CreateSucceeded,
+    /// CreateFailed, DeleteSucceeded and MarkObserved. A replay for a request the VM is not waiting on does nothing, like the report it
     /// stands for.
     public static class VmProvisionedOnTheProvider
     {
@@ -104,36 +104,34 @@ namespace Titan.Domain.Aggregates.Vm
         public static void MarkRunning(this Vm vm, string externalId, string? ipAddress, string? publicIpv6Address = null)
         {
             vm.MarkCreated(externalId);
-            vm.MarkObserved(VmState.Running, ipAddress, publicIpv6Address);
+            vm.MarkObserved(VmStatus.Running, ipAddress, publicIpv6Address);
         }
 
-        public static void MarkStopped(this Vm vm) => vm.MarkObserved(VmState.Stopped, null);
+        public static void MarkStopped(this Vm vm) => vm.MarkObserved(VmStatus.Stopped, null);
 
         /// The create command's Done, carrying only the instance name: existence, no status yet.
         public static void MarkCreated(this Vm vm, string externalId)
         {
-            if (vm.Pending is { Kind: VmOperationKind.Create } create)
+            if (vm.Status == VmStatus.Creating)
             {
-                vm.FinishOperation(create.Id, externalId, null, null, null);
+                vm.CreateSucceeded(vm.PendingOperationId!.Value, externalId, null, null, null);
             }
         }
 
         /// The reconciler's observation, by its parts.
-        public static void MarkObserved(this Vm vm, VmState state, string? ipAddress, string? publicIpv6Address = null) =>
+        public static void MarkObserved(this Vm vm, VmStatus state, string? ipAddress, string? publicIpv6Address = null) =>
             vm.MarkObserved(state, ipAddress, publicIpv6Address);
 
         /// The delete command's Done.
-        public static VmOperationKind? MarkDeleted(this Vm vm) =>
-            vm.Pending is { Kind: VmOperationKind.Delete } delete
-                ? vm.FinishOperation(delete.Id, null, null, null, null)
-                : null;
+        public static bool MarkDeleted(this Vm vm) =>
+            vm.Status == VmStatus.Deleting && vm.DeleteSucceeded(vm.PendingOperationId!.Value);
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this Vm vm, string? reason, string? detail, string? externalId = null)
         {
-            if (vm.Pending is { Kind: VmOperationKind.Create } create)
+            if (vm.Status == VmStatus.Creating)
             {
-                vm.FailOperation(create.Id, externalId, null, null, null, reason, detail);
+                vm.CreateFailed(vm.PendingOperationId!.Value, externalId, reason, detail);
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id.

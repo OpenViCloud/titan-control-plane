@@ -39,7 +39,7 @@ public class OpenVmSshEndpointTests
         _currentUser.SetupGet(u => u.TenantId).Returns(_tenantId);
         _vm = Vm.Create(_tenantIdOwner.Id, Guid.NewGuid(), "web-1", "s", "tpl-1", "local-mac", 20);
         _vm.MarkCreated("vmabc");
-        _vm.MarkObserved(VmState.Running, "10.0.0.5");
+        _vm.MarkObserved(VmStatus.Running, "10.0.0.5");
         _vms.Setup(r => r.FindByIdAsync(_vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(_vm);
     }
 
@@ -128,7 +128,7 @@ public class OpenVmSshEndpointTests
     [Fact]
     public async Task AStoppedVm_IsInvalidStatus_AndTakesNoPlace()
     {
-        _vm.MarkObserved(VmState.Stopped, null);
+        _vm.MarkObserved(VmStatus.Stopped, null);
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => Endpoint(upgrade: true).HandleAsync(CancellationToken.None));
 

@@ -18,17 +18,25 @@ namespace Titan.Tests.Domain;
 // semantics of FinishOperation and FailOperation beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
-// VmTemplateCluster) is on the shape with internal methods, reached through its root.
+// VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
+// Pending property: its one status says what the waiting request asks, and it keeps only that request's id
+// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
-    // Aggregates on the new shape: the ones with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
-    private static List<Type> OnTheRequestShape() =>
+    // On the shape without a Pending property, each kept by name.
+    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm)];
+
+    // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
+    private static List<Type> WithAPendingProperty() =>
         typeof(Vm).Assembly.GetExportedTypes()
             .Where(t => t.IsClass && t.Namespace is not null && t.Namespace.StartsWith("Titan.Domain.Aggregates.", StringComparison.Ordinal)
                         && t.GetProperty("Pending", BindingFlags.Public | BindingFlags.Instance) is not null)
             .ToList();
+
+    // Aggregates on the new shape: the ones with a Pending property, and the ones named without it.
+    private static List<Type> OnTheRequestShape() => [.. WithAPendingProperty(), .. OnTheShapeWithoutPending];
 
     // Each rollout phase adds its aggregate here, with the factory that builds one waiting on a request.
     private static readonly Dictionary<Type, Func<object>> WaitingOnARequest = new()
@@ -44,7 +52,7 @@ public class RequestLifecycleShapeTests
         [typeof(VmSnapshot)] = () =>
         {
             Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
-            vm.FinishOperation(vm.Pending!.Id, "vm-shape", VmState.Running, "10.0.0.9", null);
+            vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
             return vm.WithSnapshot("shape");
         },
         [typeof(Network)] = () => ANetwork(),
@@ -54,7 +62,7 @@ public class RequestLifecycleShapeTests
             Guid tenantId = TestTenant.WithRoomToSpare().Id;
             Guid networkId = Guid.NewGuid();
             Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
-            backend.FinishOperation(backend.Pending!.Id, "vm-shape", VmState.Running, "10.0.0.9", null);
+            backend.CreateSucceeded(backend.PendingOperationId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
             lb.FinishOperation(lb.Pending!.Id, lb.Vip);
@@ -92,13 +100,28 @@ public class RequestLifecycleShapeTests
         foreach (Type type in shaped)
         {
             string[] names = type.GetMethods(Declared).Select(m => m.Name).Distinct().ToArray();
-            foreach (string required in new[] { "FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound" })
+            foreach (string required in RequiredReportsOf(type))
             {
                 if (!names.Contains(required)) missing.Add($"{type.Name}.{required}");
             }
             if (!names.Any(n => IntentVerbs.Contains(n))) missing.Add($"{type.Name}.<intent verb>");
         }
         Assert.True(missing.Count == 0, "Aggregates on the request shape without the five methods: " + string.Join(", ", missing));
+    }
+
+    // A type named without Pending must still be invisible to the scan (or it would be counted twice) and still keep the
+    // waiting request's id, the one thing a report is compared with.
+    [Fact]
+    public void ATypeNamedWithoutPending_HasNoPendingProperty_AndKeepsTheWaitingRequestsId()
+    {
+        List<Type> scanned = WithAPendingProperty();
+        foreach (Type type in OnTheShapeWithoutPending)
+        {
+            Assert.DoesNotContain(type, scanned);
+            PropertyInfo? id = type.GetProperty("PendingOperationId", BindingFlags.Public | BindingFlags.Instance);
+            Assert.True(id != null, $"{type.Name} keeps no PendingOperationId");
+            Assert.Equal(typeof(Guid?), id.PropertyType);
+        }
     }
 
     [Fact] // a Mark* that returns something is a Mark* that ends a request somewhere
@@ -112,11 +135,79 @@ public class RequestLifecycleShapeTests
         Assert.True(offenders.Count == 0, "Mark* must return void (titan-ops architecture/resource-lifecycle.md#shape): " + string.Join(", ", offenders));
     }
 
+    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the other types end a request by
+    // FinishOperation and FailOperation.
+    private static readonly string[] VmReportMoves =
+    [
+        "CreateSucceeded", "CreateFailed", "StartSucceeded", "StartFailed",
+        "StopSucceeded", "StopFailed", "DeleteSucceeded", "DeleteFailed",
+    ];
+
+    private static IEnumerable<string> RequiredReportsOf(Type type)
+    {
+        if (type == typeof(Vm))
+        {
+            return [.. VmReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
+    }
+
+    // Each VM move run for real on a VM waiting in that move's status: a report naming another operation returns false
+    // and leaves every public property as it was.
+    [Fact]
+    public void EveryVmMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in VmReportMoves)
+        {
+            Vm vm = VmWaitingFor(move);
+            MethodInfo ending = typeof(Vm).GetMethod(move, BindingFlags.Public | BindingFlags.Instance)!;
+            object?[] arguments = VmReportArguments(ending, Guid.NewGuid());
+            Dictionary<string, object?> before = PublicProperties(vm);
+
+            object? result = ending.Invoke(vm, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(vm));
+        }
+    }
+
+    private static Vm VmWaitingFor(string move)
+    {
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
+        if (move.StartsWith("Create", StringComparison.Ordinal))
+        {
+            return vm;
+        }
+        bool fromStopped = move.StartsWith("Start", StringComparison.Ordinal);
+        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-shape", fromStopped ? VmStatus.Stopped : VmStatus.Running, null, null);
+        if (move.StartsWith("Start", StringComparison.Ordinal)) vm.Start(Guid.NewGuid());
+        else if (move.StartsWith("Stop", StringComparison.Ordinal)) vm.Stop(Guid.NewGuid());
+        else vm.Delete(Guid.NewGuid());
+        return vm;
+    }
+
+    // The operation id first, then a plausible value for every other parameter of the move.
+    private static object?[] VmReportArguments(MethodInfo move, Guid operationId)
+    {
+        var arguments = new List<object?> { operationId };
+        foreach (ParameterInfo parameter in move.GetParameters().Skip(1))
+        {
+            if (parameter.ParameterType == typeof(VmStatus?)) arguments.Add(VmStatus.Running);
+            else if (parameter.Name == "externalId") arguments.Add("foreign");
+            else arguments.Add("late");
+        }
+        return [.. arguments];
+    }
+
     [Fact] // run for real, through each type's factory: a report naming another operation leaves every public property as it was
     public void FinishOrFail_WithAForeignId_ReturnsNull_AndChangesNoPublicProperty()
     {
         foreach ((Type type, Func<object> build) in WaitingOnARequest)
         {
+            if (type == typeof(Vm))
+            {
+                continue; // EveryVmMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
+            }
             foreach (string method in new[] { "FinishOperation", "FailOperation" })
             {
                 object aggregate = build();
@@ -136,8 +227,7 @@ public class RequestLifecycleShapeTests
     private static object?[] WhatTheWorkerSawFor(Type type, string method)
     {
         object?[] seen;
-        if (type == typeof(Vm)) seen = ["foreign", VmState.Running, "10.0.0.9", null];
-        else if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
+        if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
         else if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
         else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleState.enabled];
         else if (type == typeof(VolumeSnapshot) || type == typeof(VmSnapshot) || type == typeof(LoadBalancer)

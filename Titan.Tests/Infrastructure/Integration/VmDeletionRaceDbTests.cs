@@ -37,7 +37,7 @@ public class VmDeletionRaceDbTests(PostgresFixture pg)
         network.MarkActive($"net{Guid.NewGuid():N}"[..20], "10.0.0.0/24", "10.0.0.1");
         Vm vm = Vm.Create(tenant.Id, network.Id, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", Cluster, 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
-        vm.MarkObserved(VmState.Running, "10.0.0.5", null);
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5", null);
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             seed.Tenants.Add(tenant);
@@ -61,7 +61,7 @@ public class VmDeletionRaceDbTests(PostgresFixture pg)
 
         await using TitanDbContext read = pg.NewDbContext();
         Vm stored = (await new VmRepository(read).FindByIdAsync(vm.Id))!;
-        bool vmIsGoing = stored.DesiredExistence == DesiredExistence.Deleted;
+        bool vmIsGoing = stored.IsDeletedOrDeleting;
         bool aLoadBalancerSendsToIt = await new LoadBalancerRepository(read).IsBackendAsync(vm.Id);
         Assert.False(vmIsGoing && aLoadBalancerSendsToIt, "a load balancer sends to a VM being deleted");
     }

@@ -8,8 +8,8 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Domain;
 
 // The two cross-aggregate checks a load balancer create and update go through: the network (Networking) and each
-// backend VM (Compute). Each aggregate hands out its provider id only past its own check
-// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+// backend VM (Compute). The network hands out its provider id only past its own check; the VM checks itself, and its
+// GetExternalId throws without one (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
 public class LoadBalancerTargetTests
 {
     private static readonly Tenant Owner = TestTenant.WithRoomToSpare();
@@ -66,11 +66,14 @@ public class LoadBalancerTargetTests
     }
 
     [Fact]
-    public void Vm_OnTheNetwork_OnIncus_HandsOutItsInstanceName()
+    public void Vm_OnTheNetwork_OnIncus_IsABackend_NamedByItsInstance()
     {
         Guid networkId = Guid.NewGuid();
+        Vm vm = VmOnIncus(networkId);
 
-        Assert.Equal("vmabc", VmOnIncus(networkId).ProviderIdForLoadBalancerBackend(networkId));
+        vm.EnsureLoadBalancerCanSendTo(networkId);
+
+        Assert.Equal("vmabc", vm.ExternalId);
     }
 
     // Stopped is fine: the health check takes it out of rotation (titan-ops features/load-balancer/design.md#lb-and-vm-network).
@@ -81,7 +84,9 @@ public class LoadBalancerTargetTests
         Vm vm = VmOnIncus(networkId);
         vm.MarkStopped();
 
-        Assert.Equal("vmabc", vm.ProviderIdForLoadBalancerBackend(networkId));
+        vm.EnsureLoadBalancerCanSendTo(networkId);
+
+        Assert.Equal("vmabc", vm.ExternalId);
     }
 
     [Fact]
@@ -91,12 +96,12 @@ public class LoadBalancerTargetTests
         Vm elsewhere = VmOnIncus(Guid.NewGuid());
         Vm creating = Vm.Create(Owner.Id, networkId, "vm-2", "m", "tpl", "cluster-a", 20);
         Vm deleting = VmOnIncus(networkId);
-        deleting.Delete();
+        deleting.Delete(Guid.NewGuid());
 
         foreach (Vm vm in new[] { elsewhere, creating, deleting })
         {
             Assert.Equal("LOAD_BALANCER_BACKEND_INVALID",
-                Assert.Throws<BusinessException>(() => vm.ProviderIdForLoadBalancerBackend(networkId)).Code);
+                Assert.Throws<BusinessException>(() => vm.EnsureLoadBalancerCanSendTo(networkId)).Code);
         }
     }
 }

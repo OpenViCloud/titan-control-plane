@@ -8,7 +8,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// Desired/current state and the existence pair as Postgres stores them: what InMemory cannot show — filtered unique
+/// A VM's status and Incus word, and a network's and rule's desired/current state and existence pair, as Postgres stores them: what InMemory cannot show — filtered unique
 /// indexes and the column spelling (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
@@ -24,7 +24,8 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     {
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "rt-vm", "m", "tpl", "cluster-a", 20);
         vm.MarkRunning("42", "10.0.0.5");
-        OperationTicket ticket = vm.Stop();
+        Guid stop = Guid.NewGuid();
+        vm.Stop(stop);
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
@@ -34,15 +35,17 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
+            // The status and the Incus word are stored as their names.
             var stored = (await db.Database
-                .SqlQueryRaw<string>("SELECT desired_state AS \"Value\" FROM core.vms WHERE id = {0}", vm.Id)
+                .SqlQueryRaw<string>("SELECT status || '|' || observed_state AS \"Value\" FROM core.vms WHERE id = {0}", vm.Id)
                 .ToListAsync())[0];
-            Assert.Equal("Stopped", stored);
+            Assert.Equal("Stopping|Running", stored);
 
             var reloaded = await db.Vms.SingleAsync(v => v.Id == vm.Id);
-            Assert.Equal(VmOperationKind.Stop, reloaded.Pending?.Kind);
-            Assert.Equal(ticket.OperationId, reloaded.Pending!.Id);
-            Assert.Equal(vm.Pending!.AskedAt, reloaded.Pending.AskedAt, TimeSpan.FromMilliseconds(1));
+            Assert.Equal(VmStatus.Stopping, reloaded.Status);
+            Assert.Equal(VmStatus.Running, reloaded.ObservedState);
+            Assert.Equal(stop, reloaded.PendingOperationId!.Value);
+            Assert.Equal(vm.PendingOperationAskedAt!.Value, reloaded.PendingOperationAskedAt!.Value, TimeSpan.FromMilliseconds(1));
         }
     }
 

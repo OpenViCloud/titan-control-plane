@@ -26,6 +26,6 @@ public class VmSchemaTests
         IIndex index = NameIndex();
 
         Assert.True(index.IsUnique);
-        Assert.Equal("current_existence <> 'Deleted'", index.GetFilter());
+        Assert.Equal("status <> 'Deleted'", index.GetFilter());
     }
 }

@@ -128,7 +128,7 @@ public class VmSnapshotServiceTests
     public async Task Create_VmInError_ThrowsBusinessException()
     {
         SetupCurrentUser(TenantId);
-        var vm = Given(MakeVmWithStatus(VmState.Error));
+        var vm = Given(MakeVmWithStatus(VmStatus.Error));
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("test"), default));
@@ -170,7 +170,7 @@ public class VmSnapshotServiceTests
         {
             vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
         }
-        vm.MarkObserved(VmState.Error, null);
+        vm.MarkObserved(VmStatus.Error, null);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("test"), default));
@@ -204,7 +204,7 @@ public class VmSnapshotServiceTests
         {
             vm.WithSnapshot($"s{i}").MarkCreated($"cs-vm-id/s{i}");
         }
-        vm.DeleteSnapshot(vm.Snapshots.First().Id);
+        vm.DeleteSnapshot(vm.Snapshots.First().Id, Guid.NewGuid());
 
         var result = await CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("fourth"), default);
 
@@ -317,9 +317,9 @@ public class VmSnapshotServiceTests
     public async Task Revert_VmInError_ThrowsBusinessException()
     {
         SetupCurrentUser(TenantId);
-        var vm = Given(MakeVmWithStatus(VmState.Running));
+        var vm = Given(MakeVmWithStatus(VmStatus.Running));
         var snap = MakeSnapshot(vm, Snap.Ready);
-        vm.MarkObserved(VmState.Error, null);
+        vm.MarkObserved(VmStatus.Error, null);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().RevertAsync(vm.Id, snap.Id, default));
@@ -496,7 +496,9 @@ public class VmSnapshotServiceTests
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Snapshot creation failed.", snap.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
-        Assert.Equal("cs-snap-abc", vm.DeleteSnapshot(snap.Id)!.ProviderId);
+        vm.DeleteSnapshot(snap.Id, Guid.NewGuid());
+        Assert.Equal(VmSnapshotTransition.Deleting, snap.Transition);
+        Assert.Equal("cs-snap-abc", snap.GetExternalId());
     }
 
     [Fact]
@@ -544,9 +546,9 @@ public class VmSnapshotServiceTests
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
         Guid deleteId = snap.Pending!.Id;
-        vm.Delete();
-        VmOperationKind? deletion = vm.MarkDeleted();
-        Assert.Equal(VmOperationKind.Delete, deletion);
+        vm.Delete(Guid.NewGuid());
+        bool deletion = vm.MarkDeleted();
+        Assert.True(deletion);
         Assert.Equal(CurrentExistence.Deleted, snap.CurrentExistence);
 
         await CreateService().EndRequestAsync(vm.Id, snap.Id, deleteId, "Done");
@@ -756,14 +758,14 @@ public class VmSnapshotServiceTests
         return vm;
     }
 
-    private static Vm MakeVmWithStatus(VmState status)
+    private static Vm MakeVmWithStatus(VmStatus status)
     {
         var vm = MakeVmForTenant(TenantIdOwner);
         switch (status)
         {
-            case VmState.Running:  vm.MarkRunning("cs-vm-id", "10.0.0.1"); break;
-            case VmState.Stopped:  vm.MarkRunning("cs-vm-id", "10.0.0.1"); vm.MarkStopped(); break;
-            case VmState.Error:    vm.MarkRunning("cs-vm-id", "10.0.0.1"); vm.MarkObserved(VmState.Error, null); break;
+            case VmStatus.Running:  vm.MarkRunning("cs-vm-id", "10.0.0.1"); break;
+            case VmStatus.Stopped:  vm.MarkRunning("cs-vm-id", "10.0.0.1"); vm.MarkStopped(); break;
+            case VmStatus.Error:    vm.MarkRunning("cs-vm-id", "10.0.0.1"); vm.MarkObserved(VmStatus.Error, null); break;
         }
         return vm;
     }
@@ -780,9 +782,9 @@ public class VmSnapshotServiceTests
         switch (seed)
         {
             case Snap.Ready:           snap.MarkCreated("cs-snap-abc"); break;
-            case Snap.RevertRequested: snap.MarkCreated("cs-snap-abc"); snap.Revert(); break;
-            case Snap.DeleteRequested: snap.MarkCreated("cs-snap-abc"); snap.Delete(); break;
-            case Snap.Deleted:         snap.MarkCreated("cs-snap-abc"); snap.Delete(); snap.MarkDeleted(); break;
+            case Snap.RevertRequested: snap.MarkCreated("cs-snap-abc"); snap.Revert(Guid.NewGuid()); break;
+            case Snap.DeleteRequested: snap.MarkCreated("cs-snap-abc"); snap.Delete(Guid.NewGuid()); break;
+            case Snap.Deleted:         snap.MarkCreated("cs-snap-abc"); snap.Delete(Guid.NewGuid()); snap.MarkDeleted(); break;
             case Snap.CreateFailed:    snap.MarkRequestFailed("could not create", "raw"); break;
         }
         return snap;

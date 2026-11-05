@@ -142,7 +142,8 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         bool available = RestsOnIncus && !IsInUse;
         if (!available)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
-        var vmExternalId = vm.ProviderIdForVolumeAttach();
+        vm.EnsureVolumeCanAttach();
+        string vmExternalId = vm.ExternalId!;
         if (ClusterId != vm.ClusterId)
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 

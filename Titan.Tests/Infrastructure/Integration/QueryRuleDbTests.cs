@@ -41,7 +41,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     private Vm NewVm(string offering, string name, Guid? networkId = null) =>
         Vm.Create(_tenant.Id, networkId ?? Guid.NewGuid(), $"{name}-{Guid.NewGuid():N}"[..20], offering, "tpl-1", "cluster-a", 20);
 
-    private Vm SeenVm(string offering, string name, VmState state, Guid? networkId = null)
+    private Vm SeenVm(string offering, string name, VmStatus state, Guid? networkId = null)
     {
         Vm vm = NewVm(offering, name, networkId);
         vm.MarkRunning($"vm{Guid.NewGuid():N}"[..20], "10.0.0.5");
@@ -55,11 +55,11 @@ public class QueryRuleDbTests(PostgresFixture pg)
         string offering = await OfferingAsync();
         Vm failed = NewVm(offering, "failed");
         failed.MarkRequestFailed("refused", null);
-        Vm lost = SeenVm(offering, "lost", VmState.Running);
+        Vm lost = SeenVm(offering, "lost", VmStatus.Running);
         lost.MarkNotFound();
-        Vm deleting = SeenVm(offering, "deleting", VmState.Running);
-        deleting.Delete();
-        await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmState.Stopped), failed, lost, deleting);
+        Vm deleting = SeenVm(offering, "deleting", VmStatus.Running);
+        deleting.Delete(Guid.NewGuid());
+        await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmStatus.Stopped), failed, lost, deleting);
 
         await using TitanDbContext db = pg.NewDbContext();
         Assert.Equal(2, await new VmRepository(db).CountActiveByTenantAsync(_tenant.Id));
@@ -71,9 +71,9 @@ public class QueryRuleDbTests(PostgresFixture pg)
         string offering = await OfferingAsync();
         var vms = new[]
         {
-            SeenVm(offering, "running", VmState.Running), SeenVm(offering, "ready", VmState.Ready),
-            SeenVm(offering, "frozen", VmState.Frozen), SeenVm(offering, "error", VmState.Error),
-            SeenVm(offering, "stopped", VmState.Stopped), NewVm(offering, "creating"),
+            SeenVm(offering, "running", VmStatus.Running), SeenVm(offering, "ready", VmStatus.Ready),
+            SeenVm(offering, "frozen", VmStatus.Frozen), SeenVm(offering, "error", VmStatus.Error),
+            SeenVm(offering, "stopped", VmStatus.Stopped), NewVm(offering, "creating"),
         };
         await SaveAsync(vms.Cast<object>().ToArray());
 
@@ -91,14 +91,14 @@ public class QueryRuleDbTests(PostgresFixture pg)
         string offering = await OfferingAsync();
         Guid deletingNetwork = Guid.NewGuid(), creatingNetwork = Guid.NewGuid(), failedNetwork = Guid.NewGuid(),
             lostNetwork = Guid.NewGuid(), deletedNetwork = Guid.NewGuid();
-        Vm deleting = SeenVm(offering, "deleting", VmState.Running, deletingNetwork);
-        deleting.Delete();
+        Vm deleting = SeenVm(offering, "deleting", VmStatus.Running, deletingNetwork);
+        deleting.Delete(Guid.NewGuid());
         Vm failed = NewVm(offering, "failed", failedNetwork);
         failed.MarkRequestFailed("refused", null);
-        Vm lost = SeenVm(offering, "lost", VmState.Running, lostNetwork);
+        Vm lost = SeenVm(offering, "lost", VmStatus.Running, lostNetwork);
         lost.MarkNotFound();
-        Vm deleted = SeenVm(offering, "deleted", VmState.Running, deletedNetwork);
-        deleted.Delete();
+        Vm deleted = SeenVm(offering, "deleted", VmStatus.Running, deletedNetwork);
+        deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
         await SaveAsync(deleting, NewVm(offering, "creating", creatingNetwork), failed, lost, deleted);
 
@@ -144,7 +144,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     public async Task SnapshotBilling_IsWhatIncusHolds()
     {
         string offering = await OfferingAsync();
-        Vm vm = SeenVm(offering, "vm", VmState.Running);
+        Vm vm = SeenVm(offering, "vm", VmStatus.Running);
         vm.WithSnapshot("vm-creating");
         VmSnapshot vmReady = vm.WithSnapshot("vm-ready");
         vmReady.MarkCreated($"{vm.ExternalId}/s1");
@@ -208,7 +208,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     {
         string offering = await OfferingAsync();
         Guid networkId = Guid.NewGuid();
-        Vm backend = SeenVm(offering, "backend", VmState.Running, networkId);
+        Vm backend = SeenVm(offering, "backend", VmStatus.Running, networkId);
         LoadBalancer created = NewLoadBalancer(networkId, 1, backend);
         created.MarkCreated(created.Vip);
         LoadBalancer leaving = NewLoadBalancer(networkId, 2, backend);
