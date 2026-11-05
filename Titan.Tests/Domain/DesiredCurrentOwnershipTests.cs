@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
+// control plane provisions to the provider keeps two states, but the VM, which keeps one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
 // (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure

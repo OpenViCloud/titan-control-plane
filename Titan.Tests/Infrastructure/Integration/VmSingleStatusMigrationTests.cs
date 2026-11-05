@@ -34,7 +34,7 @@ public sealed class VmSingleStatusMigrationTests : IAsyncLifetime
     // A VM row as the image before this migration wrote it. A waiting request has its id and kind; a VM that never
     // reached Incus has no provider id.
     private async Task<(Guid Id, Guid? RequestId)> SeedVmAsync(string currentExistence, string? currentState,
-        string? pendingKind = null, string? failureReason = null)
+        string? pendingKind = null, string? failureReason = null, bool namedOnIncus = false)
     {
         Guid id = Guid.NewGuid();
         Guid? requestId = null;
@@ -45,7 +45,7 @@ public sealed class VmSingleStatusMigrationTests : IAsyncLifetime
             askedAt = DateTimeOffset.UtcNow;
         }
         string? externalId = null;
-        if (currentExistence != "NotCreated")
+        if (currentExistence != "NotCreated" || namedOnIncus)
         {
             externalId = "vm" + id.ToString("N")[..20];
         }
@@ -111,6 +111,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         // without one nothing ever would, so it is Failed and deletes at once.
         var existsWithoutAWord = await SeedVmAsync("Exists", null);
         var notCreatedWithoutAReason = await SeedVmAsync("NotCreated", null);
+        var notCreatedFailedWithAnId = await SeedVmAsync("NotCreated", null, failureReason: "VM provisioning failed.", namedOnIncus: true);
         // Billing reads the word alone, so a Deleted or not-found row loses a word the old model may have left.
         var deletedWithAWord = await SeedVmAsync("Deleted", "Running");
         var notFoundWithAWord = await SeedVmAsync("NotFound", "Stopped");
@@ -133,9 +134,10 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.Equal("Stopping|-", byVm[stopWaitingNotFound.Id]);
         Assert.Equal("Unknown|-", byVm[existsWithoutAWord.Id]);
         Assert.Equal("Failed|-", byVm[notCreatedWithoutAReason.Id]);
+        Assert.Equal("Unknown|-", byVm[notCreatedFailedWithAnId.Id]);
         Assert.Equal("Deleted|-", byVm[deletedWithAWord.Id]);
         Assert.Equal("NotFound|-", byVm[notFoundWithAWord.Id]);
-        Assert.Equal(17, byVm.Count);
+        Assert.Equal(18, byVm.Count);
     }
 
     // The model reads the migrated rows: the waiting request keeps its id, and the status and the word load as enums.

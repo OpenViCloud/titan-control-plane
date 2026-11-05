@@ -759,10 +759,10 @@ public class VmServiceTests
 
         Assert.Equal(VmStatus.Running, vm.ObservedState); // the worker records Stopped, not CP
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        var intentId = Assert.IsType<Guid>(vm.PendingOperationId);
+        var operationId = Assert.IsType<Guid>(vm.PendingOperationId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Stop follows Incus (titan-ops features/vm/design.md#requests-follow-incus): with no Incus status there is
@@ -799,9 +799,9 @@ public class VmServiceTests
 
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
-        var intentId = Assert.IsType<Guid>(vm.PendingOperationId);
+        var operationId = Assert.IsType<Guid>(vm.PendingOperationId);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A VM owned by another tenant is invisible (404), never stopped.
@@ -833,10 +833,10 @@ public class VmServiceTests
 
         Assert.Equal(VmStatus.Stopped, vm.ObservedState); // the worker records Running, not CP
         Assert.Equal(VmStatus.Starting, vm.Status);
-        var intentId = Assert.IsType<Guid>(vm.PendingOperationId);
+        var operationId = Assert.IsType<Guid>(vm.PendingOperationId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmStartAsync(
-            vm.Id, intentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Start follows Incus: only Stopped and Frozen (a resume); Error is offered stop and delete only.

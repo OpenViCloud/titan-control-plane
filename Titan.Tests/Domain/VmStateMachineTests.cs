@@ -5,7 +5,7 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/intent-and-observation.md#intent-versus-observation. Two different laws live on this one aggregate and this file is split to match:
-//   - Intent  (RequestX)   : a REQUEST from a person. Illegal from the wrong state -> throws.
+//   - Intent  (Stop, Start, Delete): a REQUEST from a person. Illegal from the wrong state -> throws.
 //   - Observation (MarkX)  : a REPORT of what the provider is. Cannot be "illegal" — if it disagrees
 //                            with Titan, Titan's copy is stale. Never throws for transition legality.
 // How a request ENDS — by its own command's report, never by an observation — is VmRequestLifecycleTests
