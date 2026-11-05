@@ -54,7 +54,7 @@ public class VmRequestEndpointTests
                 if (token != null) ctx.Request.Headers["X-Internal-Token"] = token;
                 ctx.Request.RouteValues["vmId"] = vm.Id.ToString();
             },
-            new ObserveVmCommandHandler(RepoHolding(vm).Object, Mock.Of<IVolumeRepository>(), Mock.Of<IActivityRecorder>()),
+            new ObserveVmCommandHandler(RepoHolding(vm).Object),
             ConfigWithToken("secret"));
 
     [Fact]

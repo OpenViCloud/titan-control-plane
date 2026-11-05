@@ -11,8 +11,7 @@ namespace Titan.Application.Commands.Compute.Vm;
 
 // The CP records the request (Vm.Pending) and enqueues the provider command; it writes no status
 // (titan-ops architecture/intent-and-observation.md#intent-has-identity). The command's own report ends the request and
-// records the "vm.stopped" outcome (titan-ops architecture/resource-lifecycle.md#kinds), or until rollout phase 6 the
-// observation that reaches Stopped; not this handler.
+// records the "vm.stopped" outcome (titan-ops architecture/resource-lifecycle.md#kinds); not this handler.
 public class StopVmCommandHandler(
     IVmRepository repo,
     ICurrentUser currentUser,

@@ -91,17 +91,23 @@ public class VmServiceTests
     private StartVmCommandHandler CreateStartHandler() =>
         new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
 
-    private UpdateVmStatusCommandHandler CreateUpdateStatusHandler() =>
-        new(_repo.Object, _volumeRepo.Object, _activity);
-
-    private MarkVmIntentFailedCommandHandler CreateMarkIntentFailedHandler() =>
-        new(_repo.Object, _volumeRepo.Object, _activity);
-
     private EndVmRequestCommandHandler CreateEndRequestHandler() =>
         new(_repo.Object, _volumeRepo.Object, _activity);
 
     private ObserveVmCommandHandler CreateObserveHandler() =>
-        new(_repo.Object, _volumeRepo.Object, _activity);
+        new(_repo.Object);
+
+    private Task Observe(Vm vm, string status, string? ip = null, string? ipv6 = null) =>
+        CreateObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, true, new VmObservationReport(status, ip, ipv6)), default);
+
+    private Task ObserveGone(Vm vm) =>
+        CreateObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, false), default);
+
+    // The report of the request the VM waits on now, as its command sends it.
+    private Task EndWaiting(Vm vm, string outcome, string? externalId = null, string? seen = null,
+        string? reason = null, string? detail = null) =>
+        CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.Pending!.Id, outcome, externalId,
+            seen == null ? null : new VmObservationReport(seen), reason, detail), default);
 
     private ListVmsQueryHandler CreateListHandler() =>
         new(_repo.Object, _currentUser.Object);
@@ -969,15 +975,15 @@ public class VmServiceTests
         Assert.Equal("VM_NOT_FOUND", ex.Code);
     }
 
-    // ── UpdateStatusAsync ─────────────────────────────────────────────────
+    // ── The worker's reports ──────────────────────────────────────────────
 
     [Fact]
-    public async Task UpdateStatus_ObservedRunning_RecordsTheStatusAndAddress()
+    public async Task Observation_Running_RecordsTheStatusAndAddress()
     {
         var vm = MakeVm(VmSeed.CreatedNotSeen);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-id", IpAddress: "10.0.0.1"), default);
+        await Observe(vm, "Running", "10.0.0.1");
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Equal("cs-vm-id", vm.ExternalId);
@@ -986,12 +992,12 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_ObservedError_RecordsIt_AndKeepsTheProviderId()
+    public async Task Observation_Error_RecordsIt_AndKeepsTheProviderId()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Error", ExternalId: null, IpAddress: null), default);
+        await Observe(vm, "Error");
 
         Assert.Equal(VmState.Error, vm.CurrentState);
         Assert.Null(vm.IpAddress);
@@ -1003,14 +1009,14 @@ public class VmServiceTests
     // The worker sends a clean reason for the tenant and the raw diagnostic in Detail. Both persist; the detail is
     // what admins later read (titan-ops architecture/desired-and-current.md#request-failure).
     [Fact]
-    public async Task UpdateStatus_RequestFailed_PersistsBothReasonAndDetail_AndLeavesNoIncusStatus()
+    public async Task Failed_OfTheCreate_PersistsBothReasonAndDetail_AndLeavesNoIncusStatus()
     {
         var vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "RequestFailed",
-            Reason: "VM provisioning failed due to a system error. Please try again or contact support.",
-            Detail: "instance create failed: operation timed out"), default);
+        await EndWaiting(vm, "Failed",
+            reason: "VM provisioning failed due to a system error. Please try again or contact support.",
+            detail: "instance create failed: operation timed out");
 
         Assert.Equal("VM provisioning failed due to a system error. Please try again or contact support.", vm.OperationFailureReason);
         Assert.Equal("instance create failed: operation timed out", vm.OperationFailureDetail);
@@ -1037,13 +1043,12 @@ public class VmServiceTests
     [InlineData("Destroyed")]
     [InlineData("running")]
     [InlineData("1")]
-    public async Task UpdateStatus_AWordIncusDoesNotReport_IsAnUnknownStatus(string reported)
+    public async Task Observation_AWordIncusDoesNotReport_IsAnUnknownStatus(string reported)
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, reported), default));
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() => Observe(vm, reported));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
         Assert.Equal(VmState.Running, vm.CurrentState);
@@ -1055,41 +1060,26 @@ public class VmServiceTests
     [InlineData("Stopped", VmState.Stopped)]
     [InlineData("Frozen", VmState.Frozen)]
     [InlineData("Error", VmState.Error)]
-    public async Task UpdateStatus_EveryIncusStatus_IsRecordedAsIs(string reported, VmState expected)
+    public async Task Observation_EveryIncusStatus_IsRecordedAsIs(string reported, VmState expected)
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, reported), default);
+        await Observe(vm, reported);
 
         Assert.Equal(expected, vm.CurrentState);
     }
 
     [Fact] // the reconciler did not find the instance
-    public async Task UpdateStatus_ObservedNotExisting_IsNotFound()
+    public async Task Observation_NotExisting_IsNotFound()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", false), default);
+        await ObserveGone(vm);
 
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.Null(vm.CurrentState);
-    }
-
-    [Theory] // a malformed report is refused before anything is read
-    [InlineData("Observed")]  // no Exists
-    [InlineData("Destroyed")] // the old report name
-    [InlineData("Absent")]
-    public async Task UpdateStatus_MalformedReport_Is400(string report)
-    {
-        var vm = MakeVm(VmSeed.Running);
-        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, report), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
     }
 
     // The admin DTO does expose the raw diagnostic for debugging.
@@ -1106,13 +1096,13 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Deleted_WithADeleteWaiting_EndsTheVm()
+    public async Task Done_OfADelete_EndsTheVm()
     {
         var vm = MakeVm(VmSeed.Running);
         vm.Delete();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.Null(vm.Pending);
@@ -1120,42 +1110,42 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    // A Deleted on the old route is not the report of a waiting stop: the stop keeps waiting for its own, and nothing is
+    // Not finding the instance is not the report of a waiting stop: the stop keeps waiting for its own, and nothing is
     // recorded as if it had ended (titan-ops architecture/resource-lifecycle.md#invariants).
     [Fact]
-    public async Task UpdateStatus_Deleted_WhileAStopWaits_IsNotFound_AndTheStopKeepsWaiting()
+    public async Task NotFound_WhileAStopWaits_IsRecorded_AndTheStopKeepsWaiting()
     {
         var vm = MakeVm(VmSeed.Running);
         OperationTicket stop = vm.Stop();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await ObserveGone(vm);
 
         Assert.Equal(stop.OperationId, vm.Pending!.Id);
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.Empty(_activity.Events);
     }
 
-    // Only a delete's own report ends a VM (titan-ops architecture/resource-lifecycle.md#invariants); a Deleted on the old route
-    // with nothing waiting says the instance is gone from Incus, which is what NotFound records.
+    // Only a delete's own report ends a VM (titan-ops architecture/resource-lifecycle.md#invariants); an instance gone
+    // from Incus with nothing waiting is what NotFound records.
     [Fact]
-    public async Task UpdateStatus_Deleted_WithNoDeleteWaiting_IsNotFound_AndRecordsNothing()
+    public async Task NotFound_WithNoDeleteWaiting_EndsNoVm_AndRecordsNothing()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await ObserveGone(vm);
 
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
         Assert.False(vm.IsTerminal);
         Assert.Empty(_activity.Events);
     }
 
-    // The VM's Deleted takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every one is Deleted
+    // The VM delete's Done takes its snapshots with it (titan-ops features/vm/design.md#vm-snapshot): every one is Deleted
     // in the same save, and a snapshot whose own delete was waiting gets its outcome here, once — its delete command
     // will only find it already gone.
     [Fact]
-    public async Task UpdateStatus_Deleted_MarksTheVmsSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
+    public async Task Done_OfADelete_MarksTheVmsSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
     {
         var vm = MakeVm(VmSeed.Running);
         var ready = vm.WithSnapshot("ready");
@@ -1166,7 +1156,7 @@ public class VmServiceTests
         vm.Delete();
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
@@ -1180,7 +1170,7 @@ public class VmServiceTests
     // A volume left attached to a deleted VM must not stay Attached for ever: it could not be detached, attached or
     // deleted, and its disk would still be billed (titan-ops features/volume/design.md#vm-delete-releases-volumes).
     [Fact]
-    public async Task Delete_ThenDeleted_LeavesTheAttachedVolumeDeletable()
+    public async Task Delete_ThenItsDone_LeavesTheAttachedVolumeDeletable()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -1191,7 +1181,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.Null(volume.Pending);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         Assert.Null(volume.Transition);
         Assert.Null(volume.CurrentAttachedVmId);
@@ -1199,17 +1189,17 @@ public class VmServiceTests
         volume.Delete();
     }
 
-    // Seen detached by the VM's Deleted whether or not the volume's detach was asked (a repeat that found it detaching,
+    // Seen detached by the VM delete's Done whether or not the volume's detach was asked (a repeat that found it detaching,
     // say). The desired attachment is the customer's and stays: nothing waits, so it reads as drift.
     [Fact]
-    public async Task UpdateStatus_Deleted_SeesItsVolumesDetached()
+    public async Task Done_OfADelete_SeesItsVolumesDetached()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         Volume volume = AttachedVolume(vm);
         vm.Delete();
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.Transition);
@@ -1228,14 +1218,14 @@ public class VmServiceTests
 
     [Fact]
     // Incus says Running before the guest has an address: that is Running (the callback used to refuse it, and the
-    // VM sat Creating until DHCP answered — or forever). The create ended with the Created report; Running is drift
-    // toward what was asked, and records nothing.
-    public async Task UpdateStatus_RunningWithoutAnAddress_IsRunning_AndRecordsNothing()
+    // VM sat Creating until DHCP answered — or forever). The create ended with its Done; Running is drift toward what
+    // was asked, and records nothing.
+    public async Task Observation_RunningWithoutAnAddress_IsRunning_AndRecordsNothing()
     {
         var vm = MakeVm(VmSeed.CreatedNotSeen);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running"), default);
+        await Observe(vm, "Running");
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Null(vm.IpAddress);
@@ -1244,25 +1234,12 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_InvalidStatus_ThrowsBadRequestException()
-    {
-        var vm = MakeVm(VmSeed.Creating);
-        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Blah", null, null), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        _repo.Verify(r => r.SaveAsync(default), Times.Never);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_VmNotFound_ThrowsNotFoundException()
+    public async Task Observation_OfAnUnknownVm_ThrowsNotFoundException()
     {
         _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Vm?)null);
 
-        var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(Guid.NewGuid(), "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default));
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateObserveHandler().HandleAsync(
+            new ObserveVmCommand(Guid.NewGuid(), true, new VmObservationReport("Running", "10.0.0.1")), default));
 
         Assert.Equal("VM_NOT_FOUND", ex.Code);
     }
@@ -1435,15 +1412,15 @@ public class VmServiceTests
         Assert.Null(dto.UserData);
     }
 
-    // ── UpdateStatus stores PublicIpv6Address ────────────────
+    // ── An observation stores PublicIpv6Address ────────────────
 
     [Fact]
-    public async Task UpdateStatus_Running_WithPublicIpv6_StoresAddress()
+    public async Task Observation_Running_WithPublicIpv6_StoresAddress()
     {
         var vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1", PublicIpv6Address: "2001:db8::1"), default);
+        await Observe(vm, "Running", "10.0.0.1", "2001:db8::1");
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Equal("2001:db8::1", vm.PublicIpv6Address);
@@ -1451,12 +1428,12 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Running_WithoutPublicIpv6_IpV6AddressNull()
+    public async Task Observation_Running_WithoutPublicIpv6_IpV6AddressNull()
     {
         var vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
+        await Observe(vm, "Running", "10.0.0.1");
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Null(vm.PublicIpv6Address);
@@ -1741,22 +1718,21 @@ public class VmServiceTests
     // An observation never ends a create (titan-ops architecture/resource-lifecycle.md#invariants): Running while the
     // create waits records what Incus shows and leaves the create to its own command's report.
     [Fact]
-    public async Task UpdateStatus_Running_WhileTheCreateWaits_RecordsNothing_AndTheCreateKeepsWaiting()
+    public async Task Observation_Running_WhileTheCreateWaits_RecordsNothing_AndTheCreateKeepsWaiting()
     {
         var vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
+        await Observe(vm, "Running", "10.0.0.1");
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Equal(VmTransition.Creating, vm.Transition);
         Assert.Empty(_activity.Events);
     }
 
-    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReachedAsync): a worker from before the request
-    // routes reports nothing when a stop or start succeeds, so the observation that reaches what was asked still ends it.
+    // Each request ends by its own command's report, which records its outcome once, for the VM's tenant.
     [Fact]
-    public async Task UpdateStatus_FulfillingStopStartDelete_RecordsEachOutcome()
+    public async Task TheReportsOfStopStartDelete_RecordEachOutcome()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
@@ -1764,11 +1740,11 @@ public class VmServiceTests
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Stopped", ExternalId: null, IpAddress: null), default);
+        await EndWaiting(vm, "Done", seen: "Stopped");
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-id", IpAddress: "10.0.0.2"), default);
+        await EndWaiting(vm, "Done", seen: "Running");
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         Assert.Equal(
             new[] { "vm.stop_requested", "vm.stopped", "vm.start_requested", "vm.started", "vm.delete_requested", "vm.deleted" },
@@ -1777,15 +1753,15 @@ public class VmServiceTests
             e => Assert.Equal(TenantId, e.OutcomeTenantId));
     }
 
-    // ── The create command's report is the create's Done (titan-ops architecture/resource-lifecycle.md#kinds) ──
+    // ── The create's Done carries the instance name (titan-ops architecture/resource-lifecycle.md#kinds) ──
 
     [Fact]
-    public async Task UpdateStatus_Created_EndsTheCreate_StoresTheProviderId_AndRecordsVmCreated()
+    public async Task Done_OfTheCreate_EndsIt_StoresTheProviderId_AndRecordsVmCreated()
     {
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: "cs-vm-abc"), default);
+        await EndWaiting(vm, "Done", "cs-vm-abc");
 
         Assert.Equal("cs-vm-abc", vm.ExternalId);
         Assert.Null(vm.CurrentState); // the status is the reconciler's to say
@@ -1798,43 +1774,34 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_RunningAfterCreated_RecordsVmCreatedOnce_NotVmStarted()
+    public async Task Running_AfterTheCreatesDone_RecordsVmCreatedOnce_NotVmStarted()
     {
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: "cs-vm-abc"), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Running", ExternalId: "cs-vm-abc", IpAddress: "10.0.0.1"), default);
+        await EndWaiting(vm, "Done", "cs-vm-abc");
+        await Observe(vm, "Running", "10.0.0.1");
+        await Observe(vm, "Running", "10.0.0.1");
 
         Assert.Equal("vm.created", Assert.Single(_activity.Events).Action);
         Assert.Null(vm.Transition);
     }
 
-    [Fact]
-    public async Task UpdateStatus_Created_WithoutAProviderId_Is400()
-    {
-        Vm vm = MakeVm(VmSeed.Creating);
-        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-
-        await Assert.ThrowsAsync<BadRequestException>(() =>
-            CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: ""), default));
-    }
-
-    // The create ended with its Created report; a give-up that arrives after it (an overlapping lease) names a request
+    // The create ended with its Done; a give-up that arrives after it (an overlapping lease) names a request
     // that no longer waits and is ignored (titan-ops architecture/resource-lifecycle.md#lost-and-stale). The VM exists on
     // the provider, so its delete reaches the provider.
     [Fact]
-    public async Task UpdateStatus_AGiveUpAfterTheCreateEnded_IsIgnored_AndDeleteGoesToTheProvider()
+    public async Task AGiveUpAfterTheCreateEnded_IsIgnored_AndDeleteGoesToTheProvider()
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+        Guid createId = vm.Pending!.Id;
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: "cs-vm-abc"), default);
-        await CreateUpdateStatusHandler().HandleAsync(
-            new UpdateVmStatusCommand(vm.Id, "RequestFailed", Reason: "IPv6 could not be assigned."), default);
+        await EndWaiting(vm, "Done", "cs-vm-abc");
+        await CreateEndRequestHandler().HandleAsync(
+            new EndVmRequestCommand(vm.Id, createId, "Failed", Reason: "IPv6 could not be assigned."), default);
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Null(vm.OperationFailureReason);
@@ -1852,10 +1819,10 @@ public class VmServiceTests
         SetupTenant();
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Created", ExternalId: "cs-vm-abc"), default);
+        await EndWaiting(vm, "Done", "cs-vm-abc");
 
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Deleted"), default);
+        await EndWaiting(vm, "Done");
 
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -1875,13 +1842,13 @@ public class VmServiceTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
-    [Fact] // the create report was lost, the give-up report carries the id
-    public async Task UpdateStatus_RequestFailedCarryingTheId_KeepsTheProviderId()
+    [Fact] // Incus made the instance but the create gave up: its Failed carries the id
+    public async Task Failed_OfTheCreate_CarryingTheId_KeepsTheProviderId()
     {
         Vm vm = MakeVm(VmSeed.Creating);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "RequestFailed", ExternalId: "cs-vm-abc"), default);
+        await EndWaiting(vm, "Failed", "cs-vm-abc");
 
         Assert.NotNull(vm.OperationFailedAt);
         Assert.Equal("cs-vm-abc", vm.ExternalId);
@@ -1889,12 +1856,12 @@ public class VmServiceTests
     }
 
     [Fact] // a guest-OS shutdown is not the outcome of anyone's request
-    public async Task UpdateStatus_StoppedWithoutARequest_RecordsNothing()
+    public async Task Observation_StoppedWithoutARequest_RecordsNothing()
     {
         var vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateUpdateStatusHandler().HandleAsync(new UpdateVmStatusCommand(vm.Id, "Observed", true, "Stopped", ExternalId: null, IpAddress: null), default);
+        await Observe(vm, "Stopped");
 
         Assert.Empty(_activity.Events);
     }
@@ -1902,17 +1869,17 @@ public class VmServiceTests
     // ── The worker reports that a stop/start gave up ──
 
     [Fact]
-    public async Task IntentFailed_OnAWaitingStop_FreesTheVm_AndRecordsStopFailedOnce()
+    public async Task Failed_OfAWaitingStop_FreesTheVm_AndRecordsStopFailedOnce()
     {
         SetupCurrentUser(TenantId);
         Vm vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        Guid intentId = Assert.IsType<Guid>(vm.Pending?.Id);
+        Guid requestId = Assert.IsType<Guid>(vm.Pending?.Id);
         _activity.Events.Clear();
 
-        await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
-        await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
+        await CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, requestId, "Failed"), default);
+        await CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, requestId, "Failed"), default);
 
         Assert.Null(vm.Pending);
         var e = Assert.Single(_activity.Events);
@@ -1923,16 +1890,16 @@ public class VmServiceTests
     }
 
     [Fact]
-    public async Task IntentFailed_OnAWaitingStart_RecordsStartFailed()
+    public async Task Failed_OfAWaitingStart_RecordsStartFailed()
     {
         SetupCurrentUser(TenantId);
         Vm vm = MakeVm(VmSeed.Stopped);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
-        Guid intentId = Assert.IsType<Guid>(vm.Pending?.Id);
+        Guid requestId = Assert.IsType<Guid>(vm.Pending?.Id);
         _activity.Events.Clear();
 
-        await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, intentId), default);
+        await CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, requestId, "Failed"), default);
 
         Assert.Equal("vm.start_failed", Assert.Single(_activity.Events).Action);
     }
@@ -1944,20 +1911,20 @@ public class VmServiceTests
         Vm vm = MakeVm(VmSeed.Running);
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
-        Guid firstIntentId = Assert.IsType<Guid>(vm.Pending?.Id);
-        await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, firstIntentId), default);
+        Guid firstStopId = Assert.IsType<Guid>(vm.Pending?.Id);
+        await CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, firstStopId, "Failed"), default);
 
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
-        Guid secondIntentId = Assert.IsType<Guid>(vm.Pending?.Id);
-        Assert.NotEqual(firstIntentId, secondIntentId);
+        Guid secondStopId = Assert.IsType<Guid>(vm.Pending?.Id);
+        Assert.NotEqual(firstStopId, secondStopId);
         _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, secondIntentId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, secondStopId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task IntentFailed_ForAnOlderRequest_ChangesNothing_AndSavesNothing()
+    public async Task Failed_NamingAnOlderRequest_ChangesNothing_AndSavesNothing()
     {
         SetupCurrentUser(TenantId);
         Vm vm = MakeVm(VmSeed.Running);
@@ -1966,20 +1933,11 @@ public class VmServiceTests
         _activity.Events.Clear();
         _repo.Invocations.Clear();
 
-        await CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(vm.Id, Guid.NewGuid()), default);
+        await CreateEndRequestHandler().HandleAsync(new EndVmRequestCommand(vm.Id, Guid.NewGuid(), "Failed"), default);
 
         Assert.Equal(VmOperationKind.Stop, vm.Pending?.Kind);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task IntentFailed_UnknownVm_ThrowsNotFound()
-    {
-        _repo.Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Vm?)null);
-
-        await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateMarkIntentFailedHandler().HandleAsync(new MarkVmIntentFailedCommand(Guid.NewGuid(), Guid.NewGuid()), default));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

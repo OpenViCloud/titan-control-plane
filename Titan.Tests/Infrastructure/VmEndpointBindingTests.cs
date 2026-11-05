@@ -1,6 +1,5 @@
 using FastEndpoints;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm;
@@ -10,13 +9,12 @@ using Titan.Application.Queries.Compute.Vm.Contracts;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Vm;
-using Titan.Infrastructure.Endpoints.Internal;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Infrastructure;
 
-// The wiring between the 8 VM endpoints and the handlers behind them: "this endpoint reaches that one
+// The wiring between the 7 VM endpoints and the handlers behind them: "this endpoint reaches that one
 // operation, carrying these arguments, and returns what came back". The VM handler tests call the
 // handlers directly, so nothing else observes whether an endpoint calls the right operation with the
 // right arguments.
@@ -208,51 +206,4 @@ public class VmEndpointBindingTests
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
-
-    // PATCH /internal/vms/{vmId}/status — the worker callback. An OBSERVATION, not an intent
-    // (titan-ops architecture/intent-and-observation.md#intent-versus-observation), and it WRITES, which is why its
-    // handler lives in Commands/.
-    [Fact]
-    public async Task UpdateVmStatusEndpoint_WithValidToken_ReachesUpdateStatusCommand()
-    {
-        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
-        var ep = Factory.Create<UpdateVmStatusEndpoint>(
-            ctx =>
-            {
-                WithVmIdRoute(ctx);
-                ctx.Request.Headers["X-Internal-Token"] = "secret";
-            },
-            handler, ConfigWithToken("secret"));
-
-        await ep.HandleAsync(
-            new UpdateVmStatusBody("Observed", true, "Stopped"), CancellationToken.None);
-
-        _repo.Verify(r => r.FindByIdAsync(VmId, default), Times.Once);
-        _repo.Verify(r => r.SaveAsync(default), Times.Once);
-    }
-
-    [Fact] // the callback must refuse an unauthenticated caller and never reach the write path
-    public async Task UpdateVmStatusEndpoint_WrongToken_Returns401_AndNeverReachesHandler()
-    {
-        var handler = new UpdateVmStatusCommandHandler(_repo.Object, new Mock<IVolumeRepository>().Object, new Titan.Tests.Fakes.FakeActivityRecorder());
-        var ep = Factory.Create<UpdateVmStatusEndpoint>(
-            ctx =>
-            {
-                WithVmIdRoute(ctx);
-                ctx.Request.Headers["X-Internal-Token"] = "wrong";
-            },
-            handler, ConfigWithToken("secret"));
-
-        await ep.HandleAsync(
-            new UpdateVmStatusBody("Observed", true, "Running", "one-42", "10.0.0.5"), CancellationToken.None);
-
-        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
-        _repo.Verify(r => r.SaveAsync(default), Times.Never);
-    }
-
-    private static IConfiguration ConfigWithToken(string token) =>
-        new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?> { ["Internal:Token"] = token })
-            .Build();
 }

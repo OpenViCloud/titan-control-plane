@@ -83,8 +83,8 @@ public class VmReconcilerTests
         Vm refused = VmIn(Cluster, "gave-up");
         db.Vms.Add(refused);
         await db.SaveChangesAsync();
-        var handler = new UpdateVmStatusCommandHandler(new VmRepository(db), new VolumeRepository(db), new FakeActivityRecorder());
-        await handler.HandleAsync(new UpdateVmStatusCommand(refused.Id, "RequestFailed", ExternalId: "45",
+        var handler = new EndVmRequestCommandHandler(new VmRepository(db), new VolumeRepository(db), new FakeActivityRecorder());
+        await handler.HandleAsync(new EndVmRequestCommand(refused.Id, refused.Pending!.Id, "Failed", ExternalId: "45",
             Reason: "The VM could not be created."));
 
         List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);

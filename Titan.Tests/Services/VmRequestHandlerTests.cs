@@ -14,8 +14,7 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The two request routes of titan-ops architecture/resource-lifecycle.md#callback-routes at the handler: a report ends the
-// request it names and records its outcome once; an observation writes current and ends nothing, but for the temporary exception pinned at the end of this file. The old routes'
-// mapping onto the same shape is in VmServiceTests (UpdateStatus_* and IntentFailed_*).
+// request it names and records its outcome once; an observation writes current and ends nothing.
 public class VmRequestHandlerTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
@@ -30,7 +29,7 @@ public class VmRequestHandlerTests
     }
 
     private EndVmRequestCommandHandler EndHandler() => new(_repo.Object, _volumeRepo.Object, _activity);
-    private ObserveVmCommandHandler ObserveHandler() => new(_repo.Object, _volumeRepo.Object, _activity);
+    private ObserveVmCommandHandler ObserveHandler() => new(_repo.Object);
 
     private Vm Given(Vm vm)
     {
@@ -297,14 +296,20 @@ public class VmRequestHandlerTests
         Assert.Empty(_activity.Events);
     }
 
-    // TEMPORARY, rollout phase 6 removes it (VmReports.EndStopOrStartTheObservationReachedAsync).
+    // Seeing what a stop asked for is not its report: only the Done carrying the stop's id ends it
+    // (titan-ops architecture/resource-lifecycle.md#invariants).
     [Fact]
-    public async Task AnObservation_ReachingAWaitingStop_EndsIt_AndTheLaterDone_IsIgnored()
+    public async Task AnObservation_ReachingAWaitingStop_LeavesItWaiting_AndTheLaterDone_EndsIt()
     {
         Vm vm = Given(RunningVm());
         OperationTicket stop = vm.Stop();
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, true, Seen("Stopped")));
+
+        Assert.Equal(stop.OperationId, vm.Pending!.Id);
+        Assert.Equal(VmState.Stopped, vm.CurrentState);
+        Assert.Empty(Outcomes());
+
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, stop.OperationId, "Done", null, Seen("Stopped")));
 
         Assert.Null(vm.Pending);

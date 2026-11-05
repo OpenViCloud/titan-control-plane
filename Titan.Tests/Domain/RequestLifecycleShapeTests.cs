@@ -165,7 +165,7 @@ public class RequestLifecycleShapeTests
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "Vm"), Path.Combine("Titan.Application", "Commands", "Admin", "Vm"),
                 Path.Combine("Titan.Application", "Commands", "Compute", "VmSnapshot")],
-            except: ["Rename", "RequestVmSsh"], atLeast: 14, "VM");
+            except: ["Rename", "RequestVmSsh"], atLeast: 12, "VM");
     }
 
     // A volume's create makes a new row, so it has nothing to lock; a snapshot's create locks its volume for the cap.
@@ -174,7 +174,7 @@ public class RequestLifecycleShapeTests
     {
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "Volume"), Path.Combine("Titan.Application", "Commands", "Compute", "VolumeSnapshot")],
-            except: ["CreateVolumeCommandHandler"], atLeast: 12, "volume");
+            except: ["CreateVolumeCommandHandler"], atLeast: 10, "volume");
     }
 
     // A network's create makes a new row, so it has nothing to lock; a rule's create locks its network for the cap.
@@ -183,7 +183,7 @@ public class RequestLifecycleShapeTests
     {
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Networking", "Network"), Path.Combine("Titan.Application", "Commands", "Networking", "FirewallRule")],
-            except: ["CreateNetworkCommandHandler", "RenameNetworkCommandHandler"], atLeast: 9, "network");
+            except: ["CreateNetworkCommandHandler", "RenameNetworkCommandHandler"], atLeast: 7, "network");
     }
 
     // A load balancer's create makes a new row, so it has nothing to lock (it locks its network); a rename is Titan-side
@@ -193,16 +193,16 @@ public class RequestLifecycleShapeTests
     {
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "LoadBalancer")],
-            except: ["CreateLoadBalancerCommandHandler", "RenameLoadBalancerCommandHandler"], atLeast: 5, "load balancer");
+            except: ["CreateLoadBalancerCommandHandler", "RenameLoadBalancerCommandHandler"], atLeast: 4, "load balancer");
     }
 
     // Every template handler is a request or a report on rows that already exist: sync-all locks each template it asks
-    // a sync of, the two callbacks and the old route lock the template they report on.
+    // a sync of, the two callbacks lock the template they report on.
     [Fact]
     public void EveryTemplateLifecycleHandler_LocksTheRow()
     {
         AssertEveryHandlerLocks([Path.Combine("Titan.Application", "Commands", "Catalog", "VmTemplate")],
-            except: [], atLeast: 4, "template");
+            except: [], atLeast: 3, "template");
     }
 
     private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
@@ -230,7 +230,7 @@ public class RequestLifecycleShapeTests
             .Cast<Match>().ToList();
         Assert.Equal(4, vmEnqueues.Count);
 
-        // A property named requestId, not any mention: stop and start also write `intentId = requestId`.
+        // A property named requestId, not any mention of the word.
         var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "VM command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
     }

@@ -87,7 +87,12 @@ public class LoadBalancerServiceTests
         new(_repo, _vms.Object, _currentUser.Object, _commands.Object, _activity);
     private DeleteLoadBalancerCommandHandler DeleteHandler() =>
         new(_repo, _currentUser.Object, _commands.Object, _activity);
-    private UpdateLoadBalancerStatusCommandHandler StatusHandler() => new(_repo, _activity);
+    private EndLoadBalancerRequestCommandHandler EndHandler() => new(_repo, _activity);
+    private ObserveLoadBalancerCommandHandler ObserveHandler() => new(_repo);
+
+    private Task End(LoadBalancer lb, Guid requestId, string outcome, string? externalId = null, string? reason = null,
+        string? detail = null) =>
+        EndHandler().HandleAsync(new EndLoadBalancerRequestCommand(lb.Id, requestId, outcome, externalId, reason, detail));
     private RenameLoadBalancerCommandHandler RenameHandler() => new(_repo, _currentUser.Object);
 
     private async Task<LoadBalancer> CreatedAsync(Network network, params Vm[] vms)
@@ -377,14 +382,15 @@ public class LoadBalancerServiceTests
     // ---- worker reports (A2, C2, C5, C6, E1, E7)
 
     [Fact]
-    public async Task Created_RecordsTheOutcomeOnce()
+    public async Task Done_OfTheCreate_RecordsTheOutcomeOnce()
     {
         Network network = NetworkWithIpv6();
         LoadBalancer lb = await CreatedAsync(network, VmOn(network));
+        Guid create = lb.Pending!.Id;
         _activity.Events.Clear();
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Created", ExternalId: lb.Vip));
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Created", ExternalId: lb.Vip));
+        await End(lb, create, "Done", lb.Vip);
+        await End(lb, create, "Done", lb.Vip);
 
         Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
         Assert.Equal(new[] { "load_balancer.created" }, _activity.Events.Select(e => e.Action));
@@ -392,18 +398,18 @@ public class LoadBalancerServiceTests
     }
 
     [Fact]
-    public async Task Updated_ForTheWaitingIntent_RecordsTheOutcome_AnotherIntentChangesNothing()
+    public async Task Done_OfTheWaitingUpdate_RecordsTheOutcome_AnotherRequestChangesNothing()
     {
         Network network = NetworkWithIpv6();
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
-        Guid intent = lb.Pending!.Id;
+        Guid update = lb.Pending!.Id;
         _activity.Events.Clear();
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: Guid.NewGuid()));
+        await End(lb, Guid.NewGuid(), "Done");
         Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: intent));
+        await End(lb, update, "Done");
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { "load_balancer.updated" }, _activity.Events.Select(e => e.Action));
@@ -416,10 +422,9 @@ public class LoadBalancerServiceTests
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
-        Guid intent = lb.Pending!.Id;
+        Guid update = lb.Pending!.Id;
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "RequestFailed", IntentId: intent,
-            Reason: "Load balancer update failed.", Detail: "raw"));
+        await End(lb, update, "Failed", reason: "Load balancer update failed.", detail: "raw");
 
         Assert.Null(lb.Transition);
         Assert.Equal(new[] { 80 }, lb.DesiredListeners.Select(l => l.Port));
@@ -438,8 +443,7 @@ public class LoadBalancerServiceTests
         Guid update = lb.Pending!.Id;
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "RequestFailed", IntentId: update,
-            Reason: "Load balancer update failed."));
+        await End(lb, update, "Failed", reason: "Load balancer update failed.");
 
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
         Assert.Null(lb.OperationFailureReason);
@@ -452,7 +456,7 @@ public class LoadBalancerServiceTests
         LoadBalancer lb = await OnIncusAsync(network, VmOn(network));
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "RequestFailed", Reason: "Load balancer deletion failed."));
+        await End(lb, lb.Pending!.Id, "Failed", reason: "Load balancer deletion failed.");
 
         Assert.Null(lb.Transition);
         Assert.Equal(DesiredExistence.Exists, lb.DesiredExistence);
@@ -468,7 +472,7 @@ public class LoadBalancerServiceTests
         LoadBalancer lb = await CreatedAsync(network, VmOn(network));
         _activity.Events.Clear();
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "RequestFailed", ExternalId: lb.Vip, Reason: "x"));
+        await End(lb, lb.Pending!.Id, "Failed", lb.Vip, reason: "x");
 
         Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
         Assert.Null(lb.Transition);
@@ -478,33 +482,20 @@ public class LoadBalancerServiceTests
     }
 
     [Fact]
-    public async Task Observed_Absent_IsNotFound_AndDeleted_RecordsTheOutcome()
+    public async Task Observed_Absent_IsNotFound_AndTheDeletesDone_RecordsTheOutcome()
     {
         Network network = NetworkWithIpv6();
         LoadBalancer lb = await OnIncusAsync(network, VmOn(network));
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
         _activity.Events.Clear();
 
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Observed", Exists: false));
+        await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(lb.Id, false));
         Assert.Equal(CurrentExistence.NotFound, lb.CurrentExistence);
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        await StatusHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Deleted"));
+        await End(lb, lb.Pending!.Id, "Done");
 
         Assert.True(lb.IsTerminal);
         Assert.Equal(new[] { "load_balancer.deleted" }, _activity.Events.Select(e => e.Action));
-    }
-
-    [Theory]
-    [InlineData("Observed", null, null)]
-    [InlineData("Created", null, null)]
-    [InlineData("Updated", null, null)]
-    [InlineData("Running", null, null)]
-    public async Task AMalformedReport_IsRefused_BeforeLoading(string report, bool? exists, string? externalId)
-    {
-        string code = await CodeOf(() => StatusHandler().HandleAsync(
-            new UpdateLoadBalancerStatusCommand(Guid.NewGuid(), report, exists, externalId)));
-
-        Assert.Equal("INVALID_STATUS", code);
     }
 
     // ---- queries

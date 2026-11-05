@@ -14,8 +14,7 @@ namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a load balancer, at the handler: a
 // report ends the request it names and records its outcome once; an observation writes current and ends nothing; the
-// row is locked. The old route's mapping onto the same shape follows, and the requests' own repeat and lock rules are
-// at the end. LoadBalancerServiceTests keeps the rest of the old route.
+// row is locked. The requests' own repeat and lock rules are at the end.
 public class LoadBalancerRequestHandlerTests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
@@ -41,7 +40,6 @@ public class LoadBalancerRequestHandlerTests
 
     private EndLoadBalancerRequestCommandHandler EndHandler() => new(_repo.Object, _activity);
     private ObserveLoadBalancerCommandHandler ObserveHandler() => new(_repo.Object);
-    private UpdateLoadBalancerStatusCommandHandler OldHandler() => new(_repo.Object, _activity);
     private UpdateLoadBalancerCommandHandler UpdateHandler() =>
         new(_repo.Object, _vms.Object, _currentUser.Object, _commands.Object, _activity);
     private DeleteLoadBalancerCommandHandler DeleteHandler() =>
@@ -250,106 +248,25 @@ public class LoadBalancerRequestHandlerTests
         Assert.Equal("Exists/Deleted/Deleting", Shape(deleting));
     }
 
-    // ---------- the old route, mapped onto the waiting request until rollout phase 6 ----------
+    // ---------- the replaced update ----------
 
-    [Fact]
-    public async Task OldRoute_Created_IsTheCreatesDone_AndRecordsLoadBalancerCreatedOnce()
-    {
-        LoadBalancer lb = Creating();
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Created", ExternalId: lb.Vip));
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Created", ExternalId: lb.Vip));
-
-        Assert.Equal("Exists/Exists/-", Shape(lb));
-        Assert.Single(lb.AppliedListeners);
-        Assert.Equal(["load_balancer.created"], Outcomes());
-    }
-
-    // Only the create's own report ends it (titan-ops architecture/resource-lifecycle.md#invariants).
-    [Fact]
-    public async Task OldRoute_Observed_WhileTheCreateWaits_EndsNothing()
-    {
-        LoadBalancer lb = Creating();
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Observed", Exists: false));
-
-        Assert.Equal("NotFound/Exists/Creating", Shape(lb));
-        Assert.Empty(Outcomes());
-    }
-
-    [Fact]
-    public async Task OldRoute_Updated_OfTheWaitingUpdatesId_IsItsDone_AnyOtherIdIsIgnored()
-    {
-        Vm a = VmOnIncus();
-        LoadBalancer lb = OnIncus(a);
-        Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: Guid.NewGuid()));
-        Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: update));
-
-        Assert.Equal("Exists/Exists/-", Shape(lb));
-        Assert.Equal([53], lb.AppliedListeners.Select(l => l.Port));
-        Assert.Equal(["load_balancer.updated"], Outcomes());
-    }
-
-    // An update's Updated arriving after a delete replaced it names a request no longer waiting.
-    [Fact]
-    public async Task OldRoute_UpdatedOfAReplacedUpdate_LeavesTheDeleteWaiting()
+    // The report of an update a delete replaced names a request no longer waiting, Done or Failed: the delete keeps
+    // waiting for its own (titan-ops architecture/desired-and-current.md#abandoned-request).
+    [Theory]
+    [InlineData("Done")]
+    [InlineData("Failed")]
+    public async Task AReport_OfAnUpdateADeleteReplaced_LeavesTheDeleteWaiting(string outcome)
     {
         Vm a = VmOnIncus();
         LoadBalancer lb = OnIncus(a);
         Guid update = lb.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
         lb.Delete();
 
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Updated", IntentId: update));
+        await End(lb, update, outcome);
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(lb));
         Assert.Empty(Outcomes());
-    }
-
-    [Fact]
-    public async Task OldRoute_RequestFailed_EndsWhateverWaits_Failed_ButAnUpdateGiveUpOfAnotherIntentIsIgnored()
-    {
-        Vm a = VmOnIncus();
-        LoadBalancer creating = Creating(a);
-        LoadBalancer updating = OnIncus(a);
-        Guid update = updating.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [a]).OperationId;
-        LoadBalancer deleting = OnIncus(a);
-        deleting.Delete();
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(updating.Id, "RequestFailed", IntentId: Guid.NewGuid(),
-            Reason: "stale"));
-        Assert.Equal(LoadBalancerTransition.Updating, updating.Transition);
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(deleting.Id, "RequestFailed", IntentId: update,
-            Reason: "stale"));
-        Assert.Equal(LoadBalancerTransition.Deleting, deleting.Transition);
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(creating.Id, "RequestFailed", Reason: "r", Detail: "raw"));
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(updating.Id, "RequestFailed", IntentId: update,
-            Reason: "r", Detail: "raw"));
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(deleting.Id, "RequestFailed", Reason: "r", Detail: "raw"));
-
-        Assert.All(new[] { creating, updating, deleting }, lb => Assert.Null(lb.Pending));
-        Assert.All(new[] { creating, updating, deleting }, lb => Assert.Equal("raw", lb.OperationFailureDetail));
-        Assert.Equal(DesiredExistence.Exists, deleting.DesiredExistence);
-        Assert.Equal([80], updating.DesiredListeners.Select(l => l.Port));
-        Assert.Equal(["load_balancer.update_failed", "load_balancer.delete_failed"], Outcomes());
-    }
-
-    [Fact]
-    public async Task OldRoute_Deleted_WithADeleteWaiting_IsTheDeletesDone_AndWithNothingWaitingIsNotFound()
-    {
-        LoadBalancer deleting = OnIncus();
-        deleting.Delete();
-        LoadBalancer resting = OnIncus();
-
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(deleting.Id, "Deleted"));
-        await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(resting.Id, "Deleted"));
-
-        Assert.Equal("Deleted/Deleted/-", Shape(deleting));
-        Assert.Equal("NotFound/Exists/-", Shape(resting));
-        Assert.Equal(["load_balancer.deleted"], Outcomes());
+        NothingSaved();
     }
 
     // ---------- the requests: repeats, the replaced update, and the lock ----------
@@ -399,7 +316,6 @@ public class LoadBalancerRequestHandlerTests
     [InlineData("Delete")]
     [InlineData("EndLoadBalancerRequest")]
     [InlineData("ObserveLoadBalancer")]
-    [InlineData("UpdateLoadBalancerStatus")]
     public async Task EveryHandler_LoadsTheLoadBalancerLocked(string handler)
     {
         Vm a = VmOnIncus();
@@ -416,11 +332,8 @@ public class LoadBalancerRequestHandlerTests
             case "EndLoadBalancerRequest":
                 await EndHandler().HandleAsync(new EndLoadBalancerRequestCommand(lb.Id, Guid.NewGuid(), "Done"));
                 break;
-            case "ObserveLoadBalancer":
-                await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(lb.Id, true));
-                break;
             default:
-                await OldHandler().HandleAsync(new UpdateLoadBalancerStatusCommand(lb.Id, "Observed", Exists: true));
+                await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(lb.Id, true));
                 break;
         }
 

@@ -8,7 +8,6 @@ using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Queries.Catalog.VmTemplate;
 using Titan.Application.Queries.Catalog.VmTemplate.Contracts;
-using Titan.Infrastructure.Endpoints.Internal;
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -40,7 +39,8 @@ public class TemplateServiceTests
         var svc = new TemplateFacade(
             new ListTemplatesQueryHandler(repo, Clusters),
             new ListAdminTemplatesQueryHandler(repo),
-            new UpdateTemplateStatusCommandHandler(repo, Clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance),
+            new EndTemplateSyncRequestCommandHandler(repo, Clusters),
+            new ObserveTemplateCommandHandler(repo, Clusters),
             new SyncTemplatesCommandHandler(repo, Clusters, wf.Object, syncLog),
             syncLog);
         return (svc, repo, wf);
@@ -54,7 +54,8 @@ public class TemplateServiceTests
     private sealed class TemplateFacade(
         ListTemplatesQueryHandler list,
         ListAdminTemplatesQueryHandler listAdmin,
-        UpdateTemplateStatusCommandHandler updateStatus,
+        EndTemplateSyncRequestCommandHandler endSync,
+        ObserveTemplateCommandHandler observe,
         SyncTemplatesCommandHandler sync,
         SyncCountLogger syncLog)
     {
@@ -64,11 +65,13 @@ public class TemplateServiceTests
         public Task<List<AdminTemplateQueryResult>> ListAllForAdminAsync(CancellationToken ct = default)
             => listAdmin.HandleAsync(new ListAdminTemplatesQuery(), ct);
 
-        public Task UpdateStatusAsync(Guid templateId, UpdateTemplateStatusRequest req, CancellationToken ct = default)
-            => updateStatus.HandleAsync(
-                new UpdateTemplateStatusCommand(templateId, req.ClusterId!, req.Report, req.Exists, req.ExternalId, req.Reason,
-                    req.Detail),
-                ct);
+        public Task EndSyncAsync(Guid templateId, Guid requestId, string outcome, string? externalId = null,
+            string? reason = null, string? detail = null, CancellationToken ct = default)
+            => endSync.HandleAsync(
+                new EndTemplateSyncRequestCommand(templateId, Mock, requestId, outcome, externalId, reason, detail), ct);
+
+        public Task ObserveAsync(Guid templateId, bool exists, CancellationToken ct = default)
+            => observe.HandleAsync(new ObserveTemplateCommand(templateId, Mock, exists), ct);
 
         public async Task<int> SyncAllAsync(CancellationToken ct = default)
         {
@@ -120,9 +123,7 @@ public class TemplateServiceTests
         return t;
     }
 
-    private static UpdateTemplateStatusRequest Report(string report, bool? exists = null, string? extId = null,
-        string? reason = null, string? detail = null, string clusterId = Mock) =>
-        new(report, exists, extId, reason, detail, clusterId);
+    private static Guid WaitingSync(VmTemplate t) => t.Clusters.Single(c => c.ClusterId == Mock).Pending!.Id;
 
     private static string Shape(VmTemplate t, string clusterId)
     {
@@ -417,15 +418,15 @@ public class TemplateServiceTests
         Assert.Empty(await svc.ListAllForAdminAsync());
     }
 
-    // ── UpdateStatus (worker callback) ─────────────────────────────────────
+    // ── The worker's reports: what customers see ─────────────────────────
 
     [Fact] // the sync command: the alias is there and of the cluster's architecture
-    public async Task UpdateStatus_Created_RecordsTheAlias_AndTheTemplateExists()
+    public async Task SyncDone_RecordsTheAlias_AndTheTemplateExists()
     {
         var t = PendingTemplate();
         var (svc, repo, _) = Make(t);
 
-        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
+        await svc.EndSyncAsync(t.Id, WaitingSync(t), "Done", "tpl-205");
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Equal("tpl-205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
@@ -433,54 +434,13 @@ public class TemplateServiceTests
         Assert.Single(await svc.ListAsync(Mock));
     }
 
-    [Fact] // a report names its cluster; the other cluster is not touched by it
-    public async Task UpdateStatus_InOneCluster_LeavesTheOtherClusterAlone()
-    {
-        var t = PendingTemplate();
-        t.SyncIn(Singapore);
-        var (svc, _, _) = Make(t);
-
-        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "3", clusterId: Singapore));
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Singapore));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-    }
-
-    [Fact] // a worker report for a cluster Titan does not have must not invent a row for it
-    public async Task UpdateStatus_UnknownCluster_ThrowsClusterNotFound_AndRecordsNothing()
-    {
-        var t = PendingTemplate();
-        var (svc, repo, _) = Make(t);
-
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            svc.UpdateStatusAsync(t.Id, Report("Created", extId: "9", clusterId: "vn-hcm-1")));
-
-        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
-        Assert.Null(t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == "vn-hcm-1"));
-        Assert.False(repo.Saved);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_CreatedWithoutExternalId_Rejected_SoWeNeverRecordATemplateWeCannotReference()
-    {
-        var t = PendingTemplate();
-        var (svc, repo, _) = Make(t);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            svc.UpdateStatusAsync(t.Id, Report("Created")));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-        Assert.False(repo.Saved);
-    }
-
     [Fact] // the sync command gave up (wrong architecture, no cluster): the reason for the operator, existence unchanged
-    public async Task UpdateStatus_RequestFailed_RecordsReasonAndDetail_AndEndsTheWait()
+    public async Task SyncFailed_RecordsReasonAndDetail_AndEndsTheWait()
     {
         var t = PendingTemplate();
         var (svc, _, _) = Make(t);
 
-        await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "Template image has the wrong architecture.", detail: "x86_64 on aarch64"));
+        await svc.EndSyncAsync(t.Id, WaitingSync(t), "Failed", reason: "Template image has the wrong architecture.", detail: "x86_64 on aarch64");
 
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
         Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureReason);
@@ -488,65 +448,14 @@ public class TemplateServiceTests
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
-    // The old route lives until rollout phase 6 (titan-ops architecture/resource-lifecycle.md#callback-routes), mapped onto
-    // the cluster's waiting sync: a worker from before the request routes reports on it.
-    [Fact]
-    public async Task UpdateStatus_Created_EndsTheWaitingSync()
-    {
-        var t = PendingTemplate();
-        var (svc, repo, _) = Make(t);
-
-        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
-
-        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).Pending);
-        Assert.Equal([t.Id], repo.Locked);
-    }
-
-    [Fact] // nothing waits: the alias seen is recorded as an observation would
-    public async Task UpdateStatus_Created_WithNothingWaiting_RecordsTheAliasAndExists()
-    {
-        var t = VmTemplate.Create("a", null, "img", 10, TierS);
-        var (svc, _, _) = Make(t);
-
-        await svc.UpdateStatusAsync(t.Id, Report("Created", extId: "tpl-205"));
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Equal("tpl-205", t.ProviderIdIn(Mock));
-    }
-
-    [Fact] // a give-up with nothing waiting is the stale report of a sync already over
-    public async Task UpdateStatus_RequestFailed_WithNothingWaiting_RecordsNothing()
-    {
-        var t = SyncedTemplate("Ubuntu", "205");
-        var (svc, _, _) = Make(t);
-
-        await svc.UpdateStatusAsync(t.Id, Report("RequestFailed", reason: "late", detail: "raw"));
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.Null(t.Clusters.Single(c => c.ClusterId == Mock).OperationFailureReason);
-    }
-
-    [Fact] // an observation ends no sync, on the old route too
-    public async Task UpdateStatus_ObservedThere_WhileAReSyncWaits_LeavesItWaiting()
-    {
-        var t = SyncedTemplate("Ubuntu", "205");
-        t.MarkNotFoundIn(Mock);
-        t.SyncIn(Mock);
-        var (svc, _, _) = Make(t);
-
-        await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: true));
-
-        Assert.Equal("Exists/Exists/Syncing", Shape(t, Mock));
-    }
-
     // The template reconciler reports what the cluster holds.
     [Fact]
-    public async Task UpdateStatus_ObservedNotThere_RecordsNotFound_AndHidesItFromCustomers()
+    public async Task ObservedNotThere_RecordsNotFound_AndHidesItFromCustomers()
     {
         var t = SyncedTemplate("Ubuntu", "205");
         var (svc, repo, _) = Make(t);
 
-        await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: false));
+        await svc.ObserveAsync(t.Id, exists: false);
 
         Assert.Equal("NotFound/Exists/-", Shape(t, Mock));
         Assert.Equal("205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
@@ -555,69 +464,16 @@ public class TemplateServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_ObservedThere_OnALostTemplate_RecordsItExistsAgain()
+    public async Task ObservedThere_OnALostTemplate_RecordsItExistsAgain()
     {
         var t = SyncedTemplate("Ubuntu", "205");
         t.MarkNotFoundIn(Mock);
         var (svc, _, _) = Make(t);
 
-        await svc.UpdateStatusAsync(t.Id, Report("Observed", exists: true));
+        await svc.ObserveAsync(t.Id, exists: true);
 
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         Assert.Single(await svc.ListAsync(Mock));
-    }
-
-    [Fact]
-    public async Task UpdateStatus_ObservedWithoutExists_Rejected()
-    {
-        var t = SyncedTemplate("Ubuntu", "205");
-        var (svc, repo, _) = Make(t);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            svc.UpdateStatusAsync(t.Id, Report("Observed")));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
-        Assert.False(repo.Saved);
-    }
-
-    [Theory] // the words of the old body are refused, not read as something else
-    [InlineData("Bogus")]
-    [InlineData("Synced")]
-    [InlineData("Absent")]
-    [InlineData("Deleted")]
-    public async Task UpdateStatus_UnknownReport_Rejected(string report)
-    {
-        var t = PendingTemplate();
-        var (svc, repo, _) = Make(t);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            svc.UpdateStatusAsync(t.Id, Report(report, extId: "1")));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.False(repo.Saved);
-    }
-
-    [Fact] // a malformed report is the worker's bug, whatever the template: refused before anything is looked up
-    public async Task UpdateStatus_MalformedReport_OnAnUnknownTemplate_Is400_Not404()
-    {
-        var (svc, _, _) = Make();
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
-            svc.UpdateStatusAsync(Guid.NewGuid(), Report("Created")));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_UnknownTemplate_ThrowsNotFound()
-    {
-        var (svc, _, _) = Make();
-
-        var ex = await Assert.ThrowsAsync<NotFoundException>(() =>
-            svc.UpdateStatusAsync(Guid.NewGuid(), Report("Created", extId: "1")));
-
-        Assert.Equal("TEMPLATE_NOT_FOUND", ex.Code);
     }
 
     // ── SyncAll (admin trigger) ─────────────────────────────────────
@@ -679,6 +535,7 @@ public class TemplateServiceTests
     public async Task SyncAll_LocksNoTemplate_ThatHasNothingToAsk()
     {
         var t = SyncedTemplate("everywhere", "1", Mock);
+        t.SyncIn(Singapore);
         t.MarkCreatedIn(Singapore, "2");
         var (svc, repo, wf) = Make(t);
 

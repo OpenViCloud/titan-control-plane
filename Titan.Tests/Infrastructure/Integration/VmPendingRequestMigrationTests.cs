@@ -176,10 +176,11 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.DoesNotContain("requestId", untouched.Payload);
     }
 
-    [Fact] // the model no longer writes create_finished and has_been_running; the table still has them, with a default
+    [Fact] // the model no longer writes create_finished and has_been_running; until VmDropsItsPreRequestColumns the table
+    // still has them, with a default
     public async Task AVmInsertedByTheNewModel_Succeeds_WithTheOldColumnsDefaulted()
     {
-        await MigrateToLatestAsync();
+        await MigrateToAsync("20261105044846_NetworkDropsItsRouteColumns");
         Vm vm = Vm.Create(Guid.NewGuid(), Guid.NewGuid(), $"vm-new-{Guid.NewGuid():N}"[..16], "m-mig", "tpl", "cluster-a", 20);
         await using (TitanDbContext db = NewDbContext())
         {

@@ -229,44 +229,6 @@ public class VmTemplateSyncRequestLifecycleTests
         Assert.Equal("Template sync failed due to a system error.", Row(t, Mock).OperationFailureReason);
     }
 
-    // The old route's Created with nothing waiting (titan-ops architecture/resource-lifecycle.md#callback-routes): an
-    // observation that brings the alias. It ends no sync of the other cluster, and converges on a cluster with no row.
-    [Fact]
-    public void SeeingTheAliasByItsName_RecordsItAndExists_OnAClusterWithNoRowToo()
-    {
-        VmTemplate t = NewTemplate();
-
-        t.MarkAliasObservedIn(Singapore, "tpl-b");
-
-        Assert.Equal("Exists/Exists/-", Shape(t, Singapore));
-        Assert.Equal("tpl-b", t.ProviderIdIn(Singapore));
-    }
-
-    [Fact]
-    public void SeeingTheAliasByItsName_KeepsTheFirstAlias_AndLeavesTheSyncWaiting()
-    {
-        VmTemplate t = NewTemplate();
-        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
-        t.MarkNotFoundIn(Mock);
-        PendingOperation<VmTemplateOperationKind> resync = t.SyncIn(Mock);
-
-        t.MarkAliasObservedIn(Mock, "tpl-other");
-
-        Assert.Equal((Alias, resync), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).Pending));
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData(null)]
-    public void SeeingTheAliasByItsName_WithoutAName_IsRefused(string? alias)
-    {
-        VmTemplate t = NewTemplate();
-        t.SyncIn(Mock);
-
-        Assert.Throws<ArgumentException>(() => t.MarkAliasObservedIn(Mock, alias!));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Mock));
-    }
-
     [Fact] // seeing is only possible for a template Titan knows the alias of
     public void SeeingTheAlias_WithNoProviderId_IsRefused()
     {

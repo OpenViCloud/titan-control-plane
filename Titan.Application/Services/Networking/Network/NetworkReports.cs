@@ -12,7 +12,7 @@ namespace Titan.Application.Services.Networking.Network;
 /// <summary>
 /// What every network and firewall rule callback handler does with a worker's report, in one place: parse the outcome
 /// and the Incus words, and record the outcome of a request that ended once
-/// (titan-ops features/activity/design.md#request-and-outcome-names). The new routes and the old ones share it, so they
+/// (titan-ops features/activity/design.md#request-and-outcome-names). The request and observation routes share it, so they
 /// cannot drift apart (titan-ops architecture/resource-lifecycle.md#callback-routes).
 /// </summary>
 public static class NetworkReports

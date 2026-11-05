@@ -69,17 +69,16 @@ public class VolumeSnapshotServiceTests
             => new VolSnapCmd.RestoreVolumeSnapshotCommandHandler(volumeRepo, tenantRepo, currentUser, commands, activity)
                 .HandleAsync(new RestoreVolumeSnapshotCommand(volumeId, snapshotId, body.Name), ct);
 
-        public Task UpdateStatusAsync(Guid volumeId, Guid snapshotId, UpdateVolumeSnapshotStatusBody body, CancellationToken ct = default)
-            => new VolSnapCmd.UpdateVolumeSnapshotStatusCommandHandler(volumeRepo, activity)
-                .HandleAsync(new UpdateVolumeSnapshotStatusCommand(volumeId, snapshotId, body.Report, body.Exists, body.ExternalId,
-                    body.Reason, body.Detail), ct);
+        public Task EndRequestAsync(EndVolumeSnapshotRequestCommand report, CancellationToken ct = default)
+            => new VolSnapCmd.EndVolumeSnapshotRequestCommandHandler(volumeRepo, activity).HandleAsync(report, ct);
+
+        public Task ObserveAsync(ObserveVolumeSnapshotCommand observation, CancellationToken ct = default)
+            => new VolSnapCmd.ObserveVolumeSnapshotCommandHandler(volumeRepo).HandleAsync(observation, ct);
     }
 
     // Test-local request bodies; the facade unpacks them into commands.
     private record CreateVolumeSnapshotBody(string Name);
     private record RestoreVolumeSnapshotBody(string Name);
-    private record UpdateVolumeSnapshotStatusBody(
-        string Report, bool? Exists = null, string? ExternalId = null, string? Reason = null, string? Detail = null);
 
     // ── CreateAsync ──────────────────────────────────────────────────────────
 
@@ -300,7 +299,7 @@ public class VolumeSnapshotServiceTests
         var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Created", ExternalId: "cs-snap-9"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "cs-snap-9"));
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
@@ -468,14 +467,14 @@ public class VolumeSnapshotServiceTests
 
     // ── Callbacks (titan-ops features/volume/design.md#volume-reports) ──────────────
 
-    [Fact] // Incus made the snapshot before the create command answered: its id is the create done
-    public async Task UpdateStatus_Created_StoresTheId_AndEndsTheCreate()
+    [Fact]
+    public async Task EndRequest_DoneOfTheCreate_StoresTheId_AndEndsIt()
     {
         var volume = MakeVolume(VolSeed.Available);
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Created", ExternalId: "vol1/s1"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "vol1/s1"));
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vol1/s1", snapshot.ExternalId);
@@ -483,14 +482,14 @@ public class VolumeSnapshotServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_RequestFailed_OnAWaitingCreate_RecordsWhy()
+    public async Task EndRequest_FailedCreate_RecordsWhy()
     {
         var volume = MakeVolume(VolSeed.Available);
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id,
-            new UpdateVolumeSnapshotStatusBody("RequestFailed", Reason: "Snapshot creation failed.", Detail: "raw"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+            "Failed", Reason: "Snapshot creation failed.", Detail: "raw"));
 
         Assert.Equal("NotCreated/Exists/-", Shape(snapshot));
         Assert.Equal("Snapshot creation failed.", snapshot.OperationFailureReason);
@@ -500,15 +499,15 @@ public class VolumeSnapshotServiceTests
     // The give-up found the snapshot on Incus: the id and existence are kept, so the delete reaches Incus, but the
     // create still failed — it records why, and a failed create has no outcome.
     [Fact]
-    public async Task UpdateStatus_RequestFailedCarryingTheId_RecordsTheIdAndWhy_WithoutSnapshotCreated()
+    public async Task EndRequest_FailedCreateCarryingTheId_RecordsTheIdAndWhy_WithoutSnapshotCreated()
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id,
-            new UpdateVolumeSnapshotStatusBody("RequestFailed", ExternalId: "vol1/s1", Reason: "Snapshot creation failed."), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+            "Failed", "vol1/s1", Reason: "Snapshot creation failed."));
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("vol1/s1", snapshot.ExternalId);
@@ -522,15 +521,15 @@ public class VolumeSnapshotServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_RequestFailed_WhileADeleteWaits_GivesTheSnapshotBack_WithTheReason_AndItCanBeDeletedAgain()
+    public async Task EndRequest_FailedDelete_GivesTheSnapshotBack_WithTheReason_AndItCanBeDeletedAgain()
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting, csSnapId: "cs-snap-1");
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id,
-            new UpdateVolumeSnapshotStatusBody("RequestFailed", Reason: "Snapshot deletion failed.", Detail: "refused"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+            "Failed", Reason: "Snapshot deletion failed.", Detail: "refused"));
 
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         Assert.Equal("Snapshot deletion failed.", snapshot.OperationFailureReason);
@@ -544,42 +543,42 @@ public class VolumeSnapshotServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Deleted_EndsTheDelete()
+    public async Task EndRequest_DoneOfTheDelete_EndsIt()
     {
         var volume = MakeVolume(VolSeed.Available);
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Deleted"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done"));
 
         Assert.Equal("Deleted/Deleted/-", Shape(snapshot));
     }
 
     // Only the delete command ends a delete: the reconciler not finding the snapshot is NotFound.
     [Fact]
-    public async Task UpdateStatus_NotFound_WhileADeleteWaits_IsNotFound_AndTheDeleteKeepsWaiting()
+    public async Task Observe_NotFound_WhileADeleteWaits_IsNotFound_AndTheDeleteKeepsWaiting()
     {
         var volume = MakeVolume(VolSeed.Available);
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Observed", Exists: false), default);
+        await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
 
         Assert.Equal("NotFound/Deleted/Deleting", Shape(snapshot));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateStatus_NotFound_OnASnapshotStillWanted_IsNotFound_AndSeenAgainExists()
+    public async Task Observe_NotFound_OnASnapshotStillWanted_IsNotFound_AndSeenAgainExists()
     {
         var volume = MakeVolume(VolSeed.Available);
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Exists);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Observed", Exists: false), default);
+        await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
         Assert.Equal("NotFound/Exists/-", Shape(snapshot));
 
-        await CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Observed", Exists: true), default);
+        await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, true));
         Assert.Equal("Exists/Exists/-", Shape(snapshot));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
@@ -587,19 +586,19 @@ public class VolumeSnapshotServiceTests
     // The snapshot is reached through the volume the route names (titan-ops architecture/code-structure.md#child-entity):
     // no such volume, no such snapshot.
     [Fact]
-    public async Task UpdateStatus_SnapshotNotFound_ThrowsNotFoundException()
+    public async Task EndRequest_SnapshotNotFound_ThrowsNotFoundException()
     {
         _volumeRepo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), Guid.NewGuid(), new UpdateVolumeSnapshotStatusBody("Deleted"), default));
+            () => CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Done")));
 
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", ex.Code);
     }
 
     // The route names another volume, one that exists but does not have the snapshot: not found, and nothing changes.
     [Fact]
-    public async Task UpdateStatus_SnapshotUnderAnotherVolume_ThrowsNotFoundException()
+    public async Task EndRequest_SnapshotUnderAnotherVolume_ThrowsNotFoundException()
     {
         var volume = MakeVolume(VolSeed.Available);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting);
@@ -608,39 +607,11 @@ public class VolumeSnapshotServiceTests
         SetupVolume(otherVolume);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().UpdateStatusAsync(otherVolume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody("Deleted"), default));
+            () => CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(otherVolume.Id, snapshot.Id, snapshot.Pending!.Id, "Done")));
 
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", ex.Code);
         Assert.Equal("Exists/Deleted/Deleting", Shape(snapshot));
         _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Theory] // reports the worker never sends, the old words included
-    [InlineData("BackedUp")]
-    [InlineData("Absent")]
-    [InlineData("Error")]
-    [InlineData("Creating")]
-    [InlineData("Frobnicated")]
-    public async Task UpdateStatus_UnknownReport_Is400(string report)
-    {
-        var volume = MakeVolume(VolSeed.Available);
-        SetupVolume(volume);
-        var snapshot = MakeSnapshot(volume, SnapSeed.Exists);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(volume.Id, snapshot.Id, new UpdateVolumeSnapshotStatusBody(report), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_ObservedWithoutExists_Is400()
-    {
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), Guid.NewGuid(), new UpdateVolumeSnapshotStatusBody("Observed"), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
     }
 
     // ── Activity: one request, one outcome (titan-ops features/activity/design.md#request-and-outcome-names) ─────
@@ -657,9 +628,10 @@ public class VolumeSnapshotServiceTests
         _activity.Verify(a => a.Stage("volume_snapshot.create_requested", "volume_snapshot", result.SnapshotId, "nightly"), Times.Once);
 
         VolumeSnapshot saved = Assert.Single(volume.Snapshots);
-        await CreateService().UpdateStatusAsync(volume.Id, saved.Id, new UpdateVolumeSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
-        await CreateService().UpdateStatusAsync(volume.Id, saved.Id, new UpdateVolumeSnapshotStatusBody("Observed", Exists: true), default);
-        await CreateService().UpdateStatusAsync(volume.Id, saved.Id, new UpdateVolumeSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
+        Guid createId = saved.Pending!.Id;
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, saved.Id, createId, "Done", "cs-snap-1"));
+        await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, saved.Id, true));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, saved.Id, createId, "Done", "cs-snap-1"));
 
         _activity.Verify(a => a.StageOutcome(saved.TenantId, "volume_snapshot.created", "volume_snapshot", saved.Id, "nightly"), Times.Once);
     }
@@ -677,8 +649,9 @@ public class VolumeSnapshotServiceTests
 
         _activity.Verify(a => a.Stage("volume_snapshot.delete_requested", "volume_snapshot", snap.Id, "snap-01"), Times.Once);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snap.Id, new UpdateVolumeSnapshotStatusBody("Deleted"), default);
-        await CreateService().UpdateStatusAsync(volume.Id, snap.Id, new UpdateVolumeSnapshotStatusBody("Deleted"), default);
+        Guid deleteId = snap.Pending!.Id;
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, deleteId, "Done"));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, deleteId, "Done"));
 
         _activity.Verify(a => a.StageOutcome(TenantId, "volume_snapshot.deleted", "volume_snapshot", snap.Id, "snap-01"), Times.Once);
     }
@@ -706,7 +679,7 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snap = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().UpdateStatusAsync(volume.Id, snap.Id, new UpdateVolumeSnapshotStatusBody("RequestFailed", Reason: "boom"), default);
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, snap.Pending!.Id, "Failed", Reason: "boom"));
 
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }

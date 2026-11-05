@@ -26,8 +26,8 @@ public class SnapshotMeterService(
 {
     public string Name => "Snapshot";
 
-    // The repositories decide what bills: seen Ready/BackedUp and no delete asked for. A VM snapshot
-    // being reverted stays Ready and still bills.
+    // The repositories decide what bills: a snapshot seen on the provider (current existence Exists). A VM snapshot
+    // being reverted still exists and still bills.
 
     public async Task<int> RunTickAsync(DateTimeOffset now, CancellationToken ct)
     {

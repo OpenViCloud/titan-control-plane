@@ -11,8 +11,7 @@ namespace Titan.Application.Services.Compute;
 /// <summary>
 /// What every volume and volume snapshot callback handler does with a worker's report, in one place: parse the outcome,
 /// resolve the instances using a volume to a Titan VM, and record the outcome of a request that ended once
-/// (titan-ops features/activity/design.md#request-and-outcome-names). The new routes and the old ones share it, so they
-/// cannot drift apart (titan-ops architecture/resource-lifecycle.md#callback-routes).
+/// (titan-ops features/activity/design.md#request-and-outcome-names).
 /// </summary>
 public static class VolumeReports
 {
@@ -149,28 +148,5 @@ public static class VolumeReports
         {
             activity.StageOutcome(snapshot.TenantId, action, "volume_snapshot", snapshot.Id, snapshot.Name);
         }
-    }
-
-    /// TEMPORARY, removed in rollout phase 6 (titan-ops architecture/resource-lifecycle.md#rollout): a worker from before
-    /// the request routes reports an attach or detach only as an observation, so an observation that shows what a
-    /// waiting attach or detach asked for ends it, as before this rollout. With the new worker the command's own Done
-    /// and this race; the later one finds nothing waiting and is ignored, so the outcome is recorded once. A create or a
-    /// delete is never ended here.
-    public static PendingOperation<VolumeOperationKind>? EndAttachOrDetachTheObservationReached(VolumeAggregate volume,
-        IActivityRecorder activity)
-    {
-        PendingOperation<VolumeOperationKind>? waiting = volume.Pending;
-        if (waiting == null)
-        {
-            return null;
-        }
-        bool inUse = volume.CurrentAttachedVmId != null || volume.CurrentAttachedElsewhere;
-        bool reached = (waiting.Kind == VolumeOperationKind.Attach && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId)
-                       || (waiting.Kind == VolumeOperationKind.Detach && !inUse);
-        if (!reached)
-        {
-            return null;
-        }
-        return FinishOperation(volume, waiting.Id, null, null, activity);
     }
 }
