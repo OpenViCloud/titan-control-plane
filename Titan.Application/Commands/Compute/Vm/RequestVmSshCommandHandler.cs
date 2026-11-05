@@ -13,7 +13,7 @@ public class RequestVmSshCommandHandler(IVmRepository repo, ICurrentUser current
     {
         Guid tenantId = currentUser.RequireTenantId();
         Domain.Aggregates.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, command.VmId, ct);
-        vm.ShellInstanceName();
+        vm.EnsureShellCanOpen();
         await activity.RecordAsync("vm.ssh_requested", "vm", vm.Id, vm.Name, ct);
     }
 }

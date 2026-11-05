@@ -134,7 +134,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
-    /// Checks the volume, the VM (Vm.ProviderIdForVolumeAttach) and the cluster; the provider ids come out only past all
+    /// Checks the volume, the VM (Vm.EnsureVolumeCanAttach) and the cluster; the provider ids come out only past all
     /// three (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
     /// waits for Incus to be seen using the volume.
     public VolumeAttachProviderIds Attach(Vm.Vm vm)
@@ -142,7 +142,8 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         bool available = RestsOnIncus && !IsInUse;
         if (!available)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
-        var vmExternalId = vm.ProviderIdForVolumeAttach();
+        vm.EnsureVolumeCanAttach();
+        string vmExternalId = vm.ExternalId!;
         if (ClusterId != vm.ClusterId)
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 

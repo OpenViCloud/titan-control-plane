@@ -81,7 +81,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         vm.MarkRunning("42", "10.0.0.5");
         var snapshot = vm.WithSnapshot("snap");
         snapshot.MarkCreated("42:3");
-        vm.RevertSnapshot(snapshot.Id);
+        vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
         db.Vms.Add(vm); // the snapshot comes with the VM
         await db.SaveChangesAsync();
         var heartbeat = new ReconcilerHeartbeat();

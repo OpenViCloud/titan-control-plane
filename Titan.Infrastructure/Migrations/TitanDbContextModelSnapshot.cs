@@ -1287,25 +1287,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
-                    b.Property<string>("DesiredState")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_state");
-
                     b.Property<int>("DiskSizeGb")
                         .HasColumnType("integer")
                         .HasColumnName("disk_size_gb");
@@ -1327,6 +1308,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
+                    b.Property<string>("ObservedState")
+                        .HasColumnType("text")
+                        .HasColumnName("observed_state");
+
                     b.Property<DateTimeOffset?>("OperationFailedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("request_failed_at");
@@ -1347,13 +1332,14 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("pending_request_id");
 
-                    b.Property<string>("PendingOperationKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
                     b.Property<string>("PublicIpv6Address")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_address");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<string>("TemplateId")
                         .IsRequired()
@@ -1379,7 +1365,7 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique()
-                        .HasFilter("current_existence <> 'Deleted'");
+                        .HasFilter("status <> 'Deleted'");
 
                     b.ToTable("vms", "core");
                 });

@@ -42,10 +42,10 @@ public class VmSnapshotFirewallRepositoryStateTests
         var vm = RunningVm(cluster);
         vm.WithSnapshot("creating");
         Ready(vm, "ready");
-        Ready(vm, "reverting").Revert();
-        Ready(vm, "deleting").Delete();
+        Ready(vm, "reverting").Revert(Guid.NewGuid());
+        Ready(vm, "deleting").Delete(Guid.NewGuid());
         var deleted = Ready(vm, "deleted");
-        deleted.Delete();
+        deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
         Ready(vm, "lost").MarkNotFound();
         vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");

@@ -23,7 +23,7 @@ public class ScheduleBackupsCommandHandler(
         foreach (var vm in await vms.ListAllAsync(null, ct))
         {
             string? externalId = vm.ExternalId;
-            if (vm.CurrentExistence != CurrentExistence.Exists || externalId == null)
+            if (!vm.HasAnInstance || externalId == null)
             {
                 continue;
             }

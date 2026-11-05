@@ -123,7 +123,8 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid revert = vm.RevertSnapshot(snapshot.Id).OperationId;
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, revert);
 
         await End(vm, snapshot, revert, "Done");
         await End(vm, snapshot, revert, "Done");
@@ -137,7 +138,8 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid revert = vm.RevertSnapshot(snapshot.Id).OperationId;
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(snapshot.Id, revert);
 
         await End(vm, snapshot, revert, "Failed");
         await End(vm, snapshot, revert, "Failed");
@@ -152,7 +154,8 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.DeleteSnapshot(snapshot.Id)!.OperationId;
+        Guid delete = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, delete);
 
         await End(vm, snapshot, delete, "Done");
         await End(vm, snapshot, delete, "Done");
@@ -166,7 +169,8 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        Guid delete = vm.DeleteSnapshot(snapshot.Id)!.OperationId;
+        Guid delete = Guid.NewGuid();
+        vm.DeleteSnapshot(snapshot.Id, delete);
 
         await End(vm, snapshot, delete, "Failed");
 
@@ -180,7 +184,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        vm.RevertSnapshot(snapshot.Id);
+        vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
 
         await End(vm, snapshot, Guid.NewGuid(), "Done");
         await End(vm, snapshot, Guid.NewGuid(), "Failed");
@@ -246,7 +250,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        vm.RevertSnapshot(snapshot.Id);
+        vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, true));
 
@@ -259,7 +263,7 @@ public class VmSnapshotRequestHandlerTests
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
-        vm.DeleteSnapshot(snapshot.Id);
+        vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, false));
 

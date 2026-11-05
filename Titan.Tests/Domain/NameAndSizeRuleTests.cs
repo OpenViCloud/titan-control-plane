@@ -153,9 +153,9 @@ public class NameAndSizeRuleTests
     public void VmAddSnapshot_WithABlankName_OrOver100_IsInvalidSnapshotName()
     {
         Vm vm = RunningVm();
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), "")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), "  ")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), new string('a', VmSnapshot.NameMaxLength + 1))));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "  ")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), new string('a', VmSnapshot.NameMaxLength + 1))));
         Assert.Empty(vm.Snapshots);
         Assert.Equal("before upgrade", vm.WithSnapshot("before upgrade").Name);
     }

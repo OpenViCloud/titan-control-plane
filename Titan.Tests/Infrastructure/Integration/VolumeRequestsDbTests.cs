@@ -46,7 +46,7 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
         volume.FinishOperation(attach.OperationId, null, true, vm.Id, false);
         if (vmDeleteWaits)
         {
-            vm.Delete();
+            vm.Delete(Guid.NewGuid());
             if (released)
             {
                 volume.ReleaseFromVmDelete(vm.Id);
@@ -115,7 +115,7 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
         {
             var handler = new EndVmRequestCommandHandler(new VmRepository(db), new VolumeRepository(db),
                 new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Tenant)));
-            await handler.HandleAsync(new EndVmRequestCommand(vm.Id, vm.Pending!.Id, "Done"));
+            await handler.HandleAsync(new EndVmRequestCommand(vm.Id, vm.PendingOperationId!.Value, "Done"));
         }
 
         await using TitanDbContext read = pg.NewDbContext();
@@ -144,7 +144,7 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
             await using TitanDbContext db = pg.NewDbContext();
             var handler = new EndVmRequestCommandHandler(new VmRepository(db), new VolumeRepository(db),
                 new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Tenant)));
-            await handler.HandleAsync(new EndVmRequestCommand(vm.Id, vm.Pending!.Id, "Done"));
+            await handler.HandleAsync(new EndVmRequestCommand(vm.Id, vm.PendingOperationId!.Value, "Done"));
         });
         await Task.Delay(TimeSpan.FromSeconds(1));
         await held.CommitAsync();

@@ -32,7 +32,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
         Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}", "race@titan.local");
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
-        vm.MarkObserved(VmState.Running, "10.0.0.5");
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5");
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             seed.Tenants.Add(tenant);
@@ -59,9 +59,10 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
 
         await using TitanDbContext read = pg.NewDbContext();
         Vm stored = await read.Vms.SingleAsync(v => v.Id == vm.Id);
-        Assert.Equal(VmOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VmStatus.Deleting, stored.Status);
+        Guid deleteRequest = stored.PendingOperationId!.Value;
         Assert.Equal(1, await read.ActivityEvents.CountAsync(e => e.ResourceId == vm.Id && e.Action == "vm.delete_requested"));
-        Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == $"vm-delete-{vm.Id}-{stored.Pending.Id}"));
+        Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == $"vm-delete-{vm.Id}-{deleteRequest}"));
         Assert.Equal(ProviderCommandStatus.Failed, (await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{vm.Id}")).Status);
     }
 }

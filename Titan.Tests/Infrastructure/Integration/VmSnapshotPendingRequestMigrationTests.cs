@@ -152,11 +152,12 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Vm vm = Vm.Create(tenantId, Guid.NewGuid(), "vm-after", "m-mig", "tpl", "cluster-a", 20);
-        vm.FinishOperation(vm.Pending!.Id, "vm-after", VmState.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-after", VmStatus.Running, "10.0.0.5", null);
         VmSnapshot creating = vm.WithSnapshot("creating");
         VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, "vm-after/s1");
-        OperationTicket revert = vm.RevertSnapshot(reverting.Id);
+        Guid revert = Guid.NewGuid();
+        vm.RevertSnapshot(reverting.Id, revert);
         await using (TitanDbContext db = NewDbContext())
         {
             await db.Database.ExecuteSqlRawAsync(
@@ -169,6 +170,6 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         List<string> rows = await read.Database
             .SqlQuery<string>($"SELECT resource || '|' || kind || '|' || request_id::text AS \"Value\" FROM core.pending_requests WHERE tenant_id = {tenantId} AND resource = 'vm-snapshot' ORDER BY kind")
             .ToListAsync();
-        Assert.Equal([$"vm-snapshot|Create|{creating.Pending!.Id}", $"vm-snapshot|Revert|{revert.OperationId}"], rows);
+        Assert.Equal([$"vm-snapshot|Create|{creating.Pending!.Id}", $"vm-snapshot|Revert|{revert}"], rows);
     }
 }

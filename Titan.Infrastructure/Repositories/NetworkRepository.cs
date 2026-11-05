@@ -61,9 +61,10 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     // Vm.HoldsItsNetwork, asked of the network's VMs.
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
-            v => v.NetworkId == networkId &&
-                 (v.CurrentExistence == CurrentExistence.Exists
-                  || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
+            v => v.NetworkId == networkId
+                 && v.Status != Domain.Aggregates.Vm.VmStatus.Deleted
+                 && v.Status != Domain.Aggregates.Vm.VmStatus.NotFound
+                 && v.Status != Domain.Aggregates.Vm.VmStatus.Failed, ct);
 
     // !LoadBalancer.IsDeleted. Read here, not through a Compute repository: Networking -> Compute in Titan.Application
     // would close a module cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above

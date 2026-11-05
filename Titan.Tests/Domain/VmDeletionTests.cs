@@ -23,7 +23,7 @@ public class VmDeletionTests
     {
         Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
         vm.MarkCreated("vm-ext");
-        vm.MarkObserved(VmState.Running, "10.0.0.5", null);
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5", null);
         return vm;
     }
 
@@ -33,7 +33,7 @@ public class VmDeletionTests
         Vm vm = OnIncus();
         _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm, Guid.NewGuid()));
 
         Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
     }
@@ -42,12 +42,13 @@ public class VmDeletionTests
     public async Task AVmOnIncus_NoLoadBalancerSendsTo_IsDispatched_WithItsProviderId()
     {
         Vm vm = OnIncus();
+        Guid delete = Guid.NewGuid();
 
-        OperationTicket? ticket = await Deletion().DeleteAsync(vm);
+        await Deletion().DeleteAsync(vm, delete);
 
-        Assert.NotNull(ticket);
-        Assert.Equal("vm-ext", ticket!.ProviderId);
-        Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
+        Assert.Equal("vm-ext", vm.ExternalId);
+        Assert.Equal(VmStatus.Deleting, vm.Status);
+        Assert.Equal(delete, vm.PendingOperationId);
     }
 
     [Fact]
@@ -56,10 +57,10 @@ public class VmDeletionTests
         Vm vm = Vm.Create(_tenant.Id, Guid.NewGuid(), "vm-vd", "m", "tpl", "cluster-1", 20);
         vm.MarkRequestFailed("create gave up", null);
 
-        OperationTicket? ticket = await Deletion().DeleteAsync(vm);
+        await Deletion().DeleteAsync(vm, Guid.NewGuid());
 
-        Assert.Null(ticket); // nothing on the provider: no command, deleted here
-        Assert.True(vm.IsDeleted);
+        Assert.True(vm.IsDeleted); // nothing on the provider: no command, deleted here
+        Assert.Null(vm.PendingOperationId);
     }
 
     // The VM's own refusal comes before the load balancer's: a snapshot being created answers that, as before.
@@ -70,7 +71,7 @@ public class VmDeletionTests
         vm.WithSnapshot("creating");
         _loadBalancers.Setup(r => r.IsBackendAsync(vm.Id, default)).ReturnsAsync(true);
 
-        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm));
+        BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm, Guid.NewGuid()));
 
         Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
     }
@@ -83,6 +84,5 @@ public class VmDeletionTests
         string[] publicMethods = [.. typeof(Vm).GetMethods(surface).Select(m => m.Name)];
         Assert.Contains(nameof(Vm.Rename), publicMethods);
         Assert.DoesNotContain(nameof(Vm.Delete), publicMethods);
-        Assert.DoesNotContain(nameof(Vm.DeleteLocally), publicMethods);
     }
 }

@@ -24,7 +24,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
     // !Vm.IsDeleted
     public async Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)
+            .Where(v => v.TenantId == tenantId && v.Status != VmStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -32,9 +32,10 @@ public class VmRepository(TitanDbContext db) : IVmRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms.CountAsync(
             v => v.TenantId == tenantId
-                 && v.DesiredExistence == DesiredExistence.Exists
-                 && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
+                 && v.Status != VmStatus.Deleting
+                 && v.Status != VmStatus.Deleted
+                 && v.Status != VmStatus.NotFound
+                 && v.Status != VmStatus.Failed, ct);
 
     // !Vm.IsDeleted — the same condition as the unique index's filter (VmConfiguration): a narrower check would let
     // the index 500.
@@ -42,7 +43,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
         await db.Vms.AnyAsync(
             v => v.TenantId == tenantId &&
                  v.Name == name &&
-                 v.CurrentExistence != CurrentExistence.Deleted, ct);
+                 v.Status != VmStatus.Deleted, ct);
 
     // !Vm.IsDeleted with a provider id: every VM Incus may hold, a create that gave up included — an instance that
     // runs is billed whether or not its create ended well (titan-ops architecture/resource-lifecycle.md#reconciler).
@@ -50,25 +51,24 @@ public class VmRepository(TitanDbContext db) : IVmRepository
         await db.Vms
             .Where(v => v.ClusterId == clusterId
                         && v.ExternalId != null
-                        && v.CurrentExistence != CurrentExistence.Deleted)
+                        && v.Status != VmStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 
     // Vm.IsBilled
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.CurrentExistence == CurrentExistence.Exists
-                        && (v.CurrentState == VmState.Running
-                            || v.CurrentState == VmState.Ready
-                            || v.CurrentState == VmState.Frozen
-                            || v.CurrentState == VmState.Error))
+            .Where(v => v.ObservedState == VmStatus.Running
+                        || v.ObservedState == VmStatus.Ready
+                        || v.ObservedState == VmStatus.Frozen
+                        || v.ObservedState == VmStatus.Error)
             .AsNoTracking()
             .ToListAsync(ct);
 
     // !Vm.IsDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
     public async Task<List<Vm>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || v.TenantId == tenantId))
+            .Where(v => v.Status != VmStatus.Deleted && (tenantId == null || v.TenantId == tenantId))
             .OrderBy(v => v.TenantId).ThenBy(v => v.Name)
             .AsNoTracking()
             .ToListAsync(ct);

@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states. A person's request writes DesiredState; only an
+// control plane provisions to the provider keeps two states, except the VM, which keeps one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
 // (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
@@ -15,12 +15,16 @@ namespace Titan.Tests.Domain;
 // means "no assignment in the shapes we look for", not "no path exists".
 public class DesiredCurrentOwnershipTests
 {
+    // The provisioned aggregates that keep one status instead of the split, by name: the VM
+    // (titan-ops features/vm/design.md#vm-status). Its status moves only through its own table of moves
+    // (VmStatusTests), so the scans below leave it out, and the last fact checks it really has no split.
+    private static readonly string[] OneStatus = ["Vm"];
+
     // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
     // there is no observation coming, so the control plane is the only witness
     // (titan-ops architecture/desired-and-current.md#delete-locally).
     private static readonly Dictionary<string, string> IntentWritesCurrentAllowlist = new()
     {
-        ["Vm.DeleteLocally"] = "delete of a VM with no provider id: nothing to terminate, no reconciler to report it",
         ["Network.DeleteLocally"] = "delete of a network whose create failed before Incus had it: nothing to observe",
         ["FirewallRule.Delete"] = "the delete of a rule whose create failed (no provider id) happens in the request: nothing to observe",
         ["Volume.Delete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
@@ -29,7 +33,7 @@ public class DesiredCurrentOwnershipTests
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["FirewallRule.EndWithItsNetwork"] = "part of Network.FinishOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["VmSnapshot.EndWithItsVm"] = "part of Vm.FinishOperation: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -81,8 +85,6 @@ public class DesiredCurrentOwnershipTests
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
             "Network.FailFirewallRuleOperation", "Network.FailOperation", "Network.FinishFirewallRuleOperation",
             "Network.FinishOperation", "Network.RecordWhatTheWorkerSaw",
-            "Vm.FailOperation", "Vm.FailSnapshotOperation", "Vm.FinishOperation", "Vm.FinishSnapshotOperation",
-            "Vm.RecordWhatTheWorkerSaw",
             "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
             "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
@@ -131,8 +133,9 @@ public class DesiredCurrentOwnershipTests
         // titan-ops architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
         Assert.Equal(8, provisioned.Count);
 
-        // No allowlist: a new provisioned aggregate is born split, or this fails.
-        var missing = provisioned.Except(split).OrderBy(t => t).ToList();
+        // No allowlist beyond OneStatus: a new provisioned aggregate is born split, or this fails.
+        Assert.Empty(OneStatus.Intersect(split));
+        var missing = provisioned.Except(split).Except(OneStatus).OrderBy(t => t).ToList();
         Assert.True(missing.Count == 0,
             "Provisioned aggregates without DesiredState + CurrentState:\n  " + string.Join("\n  ", missing));
     }
@@ -188,8 +191,9 @@ public class DesiredCurrentOwnershipTests
         return methods;
     }
 
-    // `?` in the type: Vm.CurrentState is VmState? (null while Incus has no instance) — a pattern without it would
-    // drop the VM from every scan here, still green. Desired is DesiredState or, where Titan sets no Incus status
+    // `?` in the type: a nullable current state (Network.CurrentState, null while Incus has no network) — a pattern
+    // without it would drop the type from every scan here, still green. The VM keeps one status and is out on purpose
+    // (OneStatus). Desired is DesiredState or, where Titan sets no Incus status
     // (network, firewall rule), only DesiredExistence; current is CurrentState or, where Incus has no status word
     // (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.

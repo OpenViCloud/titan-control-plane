@@ -93,7 +93,7 @@ public class LoadBalancerStateMachineTests
     public void Create_WithAVmWhoseDeleteWasPressed_IsRefused()
     {
         Vm vm = VmOnIncus();
-        vm.Delete();
+        vm.Delete(Guid.NewGuid());
 
         var ex = Assert.Throws<BusinessException>(() => NewLoadBalancer(vm));
 

@@ -5,7 +5,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Vm;
 
-// The state guard lives in the aggregate (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+// The status guard lives in the aggregate (titan-ops features/vm/design.md#vm-status).
 public class StartVmEndpoint(StartVmCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()

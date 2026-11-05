@@ -9,8 +9,8 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 namespace Titan.Application.Commands.Compute.Vm;
 
 
-// The mirror of StopVm: the start command's own report ends the request and records "vm.started" — nothing here
-// writes a status.
+// The mirror of StopVm: the VM moves to Starting, and the start command's own report ends the request and records
+// "vm.started".
 public class StartVmCommandHandler(
     IVmRepository repo,
     ICurrentUser currentUser,
@@ -28,18 +28,18 @@ public class StartVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A start still waiting, or already
         // running (Ready is running with a guest that said so) and nothing else asked of it: answer like the first
         // request (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool startIsWaiting = vm.Pending?.Kind == VmOperationKind.Start;
-        bool instanceRuns = vm.CurrentState == VmState.Running || vm.CurrentState == VmState.Ready;
-        bool alreadyRunning = vm.Pending == null && instanceRuns;
+        bool startIsWaiting = vm.Status == VmStatus.Starting;
+        bool alreadyRunning = vm.Status == VmStatus.Running || vm.Status == VmStatus.Ready;
         if (startIsWaiting || alreadyRunning)
         {
             return;
         }
 
-        OperationTicket ticket = vm.Start();
+        Guid operationId = Guid.NewGuid();
+        vm.Start(operationId);
 
         activity.Stage("vm.start_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStartAsync(vm.Id, ticket.OperationId, ticket.ProviderId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStartAsync(vm.Id, operationId, vm.ExternalId!, projectName, vm.ClusterId, ct);
         await repo.SaveAsync(ct);
     }
 }

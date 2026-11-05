@@ -25,7 +25,7 @@ public class VmRepositoryStateTests
     private static List<Vm> EveryShape()
     {
         Vm New(string name) => Vm.Create(TenantOwner.Id, NetworkId, name, "m", "tpl-1", "cluster-a", 20);
-        Vm Seen(string name, VmState state)
+        Vm Seen(string name, VmStatus state)
         {
             Vm vm = New(name);
             vm.MarkRunning($"ext-{name}", "10.0.0.5");
@@ -42,19 +42,19 @@ public class VmRepositoryStateTests
         Vm createFailedWithAnInstance = New("create-failed-with-instance");
         createFailedWithAnInstance.MarkCreated("ext-create-failed-with-instance");
         createFailedWithAnInstance.MarkRequestFailed("refused", null);
-        Vm notFound = Seen("not-found", VmState.Running);
+        Vm notFound = Seen("not-found", VmStatus.Running);
         notFound.MarkNotFound();
-        Vm deleting = Seen("deleting", VmState.Running);
-        deleting.Delete();
-        Vm deleted = Seen("deleted", VmState.Running);
-        deleted.Delete();
+        Vm deleting = Seen("deleting", VmStatus.Running);
+        deleting.Delete(Guid.NewGuid());
+        Vm deleted = Seen("deleted", VmStatus.Running);
+        deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
 
         return new List<Vm>
         {
             creating, createdNotSeen, createFailed, createFailedWithAnInstance,
-            Seen("running", VmState.Running), Seen("ready", VmState.Ready), Seen("stopped", VmState.Stopped),
-            Seen("frozen", VmState.Frozen), Seen("error", VmState.Error),
+            Seen("running", VmStatus.Running), Seen("ready", VmStatus.Ready), Seen("stopped", VmStatus.Stopped),
+            Seen("frozen", VmStatus.Frozen), Seen("error", VmStatus.Error),
             notFound, deleting, deleted
         };
     }

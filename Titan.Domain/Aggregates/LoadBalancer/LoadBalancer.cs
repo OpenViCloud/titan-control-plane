@@ -335,7 +335,8 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
             {
                 throw new BusinessException("LOAD_BALANCER_BACKEND_INVALID", $"VM '{vm.Id}' is not one of this tenant's.");
             }
-            asked.Add((vm.Id, vm.ProviderIdForLoadBalancerBackend(NetworkId)));
+            vm.EnsureLoadBalancerCanSendTo(NetworkId);
+            asked.Add((vm.Id, vm.ExternalId!));
         }
 
         foreach (LoadBalancerListener row in _listeners)

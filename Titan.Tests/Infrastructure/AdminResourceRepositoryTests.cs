@@ -86,7 +86,7 @@ public class AdminResourceRepositoryTests
         using var db = NewDb();
         db.Vms.AddRange(
             Vm(TenantAOwner, "live"),
-            Vm(TenantBOwner, "gone", v => { v.MarkCreated("gone-1"); v.Delete(); v.MarkDeleted(); })); // expunged — must not surface to admin
+            Vm(TenantBOwner, "gone", v => { v.MarkCreated("gone-1"); v.Delete(Guid.NewGuid()); v.MarkDeleted(); })); // expunged — must not surface to admin
         await db.SaveChangesAsync();
         var repo = new VmRepository(db);
 

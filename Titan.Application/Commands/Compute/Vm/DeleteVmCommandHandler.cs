@@ -45,7 +45,8 @@ public class DeleteVmCommandHandler(
         // snapshot command would act on an instance being deleted (titan-ops architecture/code-structure.md#child-entity).
         // A load balancer still sending to it refuses too, rather than editing the load balancer behind the customer's
         // back (titan-ops features/load-balancer/design.md#lb-and-vm-network).
-        OperationTicket? ticket = await deletion.DeleteAsync(vm, ct);
+        Guid operationId = Guid.NewGuid();
+        await deletion.DeleteAsync(vm, operationId, ct);
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
@@ -60,7 +61,7 @@ public class DeleteVmCommandHandler(
 
         // Never reached the provider — no external resource, no reconciler running. The request and
         // its outcome happen here at once, so both rows go in the SaveChanges with the local delete.
-        bool finishedLocally = ticket == null;
+        bool finishedLocally = vm.IsDeleted;
         if (finishedLocally)
         {
             activity.StageOutcome(vm.TenantId, "vm.deleted", "vm", vm.Id, vm.Name);
@@ -68,7 +69,7 @@ public class DeleteVmCommandHandler(
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, ticket!.OperationId, ticket.ProviderId, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
+        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, vm.ExternalId!, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

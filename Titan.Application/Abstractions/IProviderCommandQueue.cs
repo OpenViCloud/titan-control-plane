@@ -20,7 +20,7 @@ public interface IProviderCommandQueue
     // cpuUnits/vcpuCount/memoryMb come from the selected VM offering (titan-ops features/catalog/design.md#vm-offering-sizing): the
     // worker has no access to Titan's catalog, so the resolved sizing travels with the command. vendorData is Titan's own
     // cloud-init script (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData.
-    // requestId is the VM's waiting request (Vm.Pending): one command per request, the key and the payload carry
+    // requestId is the VM's waiting request (Vm.PendingOperationId): one command per request, the key and the payload carry
     // the id, and the worker's report brings it back (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId,
         decimal cpuUnits, int vcpuCount, int memoryMb, string templateId, string clusterId,
