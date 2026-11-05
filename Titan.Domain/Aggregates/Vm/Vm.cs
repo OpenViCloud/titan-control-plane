@@ -636,8 +636,8 @@ public class Vm : IAggregateRoot
         return true;
     }
 
-    /// The delete command gave up: back to the Incus word the VM holds (Unknown without one), with the reason; the next delete is a new
-    /// operation (titan-ops architecture/desired-and-current.md#abandoned-operation).
+    /// The delete command gave up: back to the Incus word the VM holds (Unknown without one), with the reason; the
+    /// next delete is a new operation (titan-ops architecture/desired-and-current.md#abandoned-operation).
     public bool DeleteFailed(Guid operationId, string? reason, string? detail)
     {
         if (Status != VmStatus.Deleting || PendingOperationId != operationId)
