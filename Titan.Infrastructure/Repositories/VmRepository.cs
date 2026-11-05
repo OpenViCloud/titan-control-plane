@@ -21,7 +21,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
         return await FindByIdAsync(id, ct);
     }
 
-    // Vm.IsNotDeleted
+    // !Vm.IsDeleted
     public async Task<List<Vm>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)
@@ -36,7 +36,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
                  && (v.CurrentExistence == CurrentExistence.Exists
                      || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
 
-    // Vm.IsNotDeleted — the same condition as the unique index's filter (VmConfiguration): a narrower check would let
+    // !Vm.IsDeleted — the same condition as the unique index's filter (VmConfiguration): a narrower check would let
     // the index 500.
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         await db.Vms.AnyAsync(
@@ -44,7 +44,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
                  v.Name == name &&
                  v.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    // Vm.IsNotDeleted with a provider id: every VM Incus may hold, a create that gave up included — an instance that
+    // !Vm.IsDeleted with a provider id: every VM Incus may hold, a create that gave up included — an instance that
     // runs is billed whether or not its create ended well (titan-ops architecture/resource-lifecycle.md#reconciler).
     public async Task<List<Vm>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Vms
@@ -65,7 +65,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Vm.IsNotDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
+    // !Vm.IsDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
     public async Task<List<Vm>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Vms
             .Where(v => v.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || v.TenantId == tenantId))

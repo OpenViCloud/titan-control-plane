@@ -103,6 +103,23 @@ public class VolumeRequestHandlerTests
         Assert.Equal(["volume.attached"], Outcomes());
     }
 
+    // A report without the instance list did not read the volume on Incus: the attachment last seen stays.
+    [Fact]
+    public async Task Failed_WithoutTheInstanceList_LeavesTheAttachmentAsLastSeen()
+    {
+        Volume volume = Given(RestingVolume());
+        VolumeAttachProviderIds attach = volume.Attach(_vm);
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, attach.OperationId, "Done", AttachedTo: ["vm-ext"]));
+        OperationTicket detach = volume.Detach();
+
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, detach.OperationId, "Failed",
+            Reason: "The volume request could not be completed.", Detail: "raw"));
+
+        Assert.Null(volume.Pending);
+        Assert.Equal(_vm.Id, volume.CurrentAttachedVmId);
+        Assert.False(volume.CurrentAttachedElsewhere);
+    }
+
     [Theory]
     [InlineData("Attach", "volume.attach_failed")]
     [InlineData("Detach", "volume.detach_failed")]
@@ -119,7 +136,7 @@ public class VolumeRequestHandlerTests
                 break;
             case "Detach":
                 VolumeAttachProviderIds attach = volume.Attach(_vm);
-                volume.FinishOperation(attach.OperationId, null, new VolumeObservation(_vm.Id, false));
+                volume.FinishOperation(attach.OperationId, null, true, _vm.Id, false);
                 requestId = volume.Detach().OperationId;
                 attachedTo = ["vm-ext"];
                 break;
@@ -155,13 +172,13 @@ public class VolumeRequestHandlerTests
     public async Task Done_OfTheDelete_RecordsVolumeDeleted_AndTheSnapshotsWhoseDeleteWaited()
     {
         Volume volume = Given(RestingVolume());
-        VolumeSnapshot leaving = volume.AddSnapshot("leaving").Snapshot;
+        VolumeSnapshot leaving = volume.WithSnapshot("leaving");
         volume.MarkSnapshotCreated(leaving.Id, "vol-ext/s1");
         volume.DeleteSnapshot(leaving.Id);
-        VolumeSnapshot gone = volume.AddSnapshot("gone").Snapshot;
+        VolumeSnapshot gone = volume.WithSnapshot("gone");
         volume.MarkSnapshotCreated(gone.Id, "vol-ext/s2");
         volume.FinishSnapshotOperation(gone.Id, volume.DeleteSnapshot(gone.Id)!.OperationId, null);
-        VolumeSnapshot lost = volume.AddSnapshot("lost").Snapshot;
+        VolumeSnapshot lost = volume.WithSnapshot("lost");
         volume.MarkSnapshotCreated(lost.Id, "vol-ext/s3");
         volume.MarkSnapshotNotFound(lost.Id);
         OperationTicket delete = volume.Delete()!;
@@ -261,7 +278,7 @@ public class VolumeRequestHandlerTests
     public async Task Done_OfASnapshotCreate_StoresTheId_AndRecordsVolumeSnapshotCreatedOnce()
     {
         Volume volume = Given(RestingVolume());
-        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
 
         await EndSnapshotHandler().HandleAsync(
             new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "vol-ext/s1"));
@@ -275,7 +292,7 @@ public class VolumeRequestHandlerTests
     public async Task Done_OfASnapshotCreate_WithoutTheSnapshotId_Is422_AndSavesNothing()
     {
         Volume volume = Given(RestingVolume());
-        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => EndSnapshotHandler().HandleAsync(
             new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done")));
@@ -289,7 +306,7 @@ public class VolumeRequestHandlerTests
     public async Task Failed_OfASnapshotDelete_GivesItBack_AndRecordsTheFailedOutcomeOnce()
     {
         Volume volume = Given(RestingVolume());
-        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
         volume.MarkSnapshotCreated(snapshot.Id, "vol-ext/s1");
         OperationTicket delete = volume.DeleteSnapshot(snapshot.Id)!;
 
@@ -316,7 +333,7 @@ public class VolumeRequestHandlerTests
     public async Task ASnapshotObservation_WritesCurrent_AndLeavesTheCreateWaiting()
     {
         Volume volume = Given(RestingVolume());
-        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
 
         await ObserveSnapshotHandler().HandleAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
 

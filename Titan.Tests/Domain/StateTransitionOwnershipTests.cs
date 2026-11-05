@@ -56,7 +56,7 @@ public class StateTransitionOwnershipTests
                                "is wrong. Rename to SettleOutsideTitan() when Billing gets a story",
     };
 
-    // Aggregates with a Status but no IsTerminal, i.e. whose terminal state is not absorbing.
+    // Aggregates with a Status but no IsDeleted or IsTerminal, i.e. whose terminal state is not absorbing.
     private static readonly Dictionary<string, string> NoTerminalGuardAllowlist = new()
     {
         ["Tenant/Tenant"] = "no terminal state exists: a tenant is never deleted, only suspended, " +
@@ -188,11 +188,11 @@ public class StateTransitionOwnershipTests
         Assert.True(stale.Count == 0, "MarkThrowAllowlist rows for methods that no longer throw:\n  " + string.Join("\n  ", stale));
     }
 
-    // Measures the mechanism, not the existence of a test: an aggregate that declares IsTerminal must consult
+    // Measures the mechanism, not the existence of a test: an aggregate that declares IsDeleted (WalletMutation: IsTerminal) must consult
     // it in EVERY Mark* method, because the terminal absorb (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs)
     // is enforced by that early return and nothing else.
     [Fact]
-    public void EveryAggregateWithIsTerminal_ChecksItInEveryMarkMethod()
+    public void EveryAggregateWithAnAbsorbingState_ChecksItInEveryMarkMethod()
     {
         var missing = new List<string>();
         var declared = new List<string>();
@@ -200,7 +200,7 @@ public class StateTransitionOwnershipTests
         foreach (var (file, src) in ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates")))
         {
             var key = $"{Directory.GetParent(file)!.Name}/{Path.GetFileNameWithoutExtension(file)}";
-            if (!src.Contains("public bool IsTerminal")) continue;
+            if (!src.Contains("public bool IsDeleted") && !src.Contains("public bool IsTerminal")) continue;
             declared.Add(key);
 
             foreach (var m in Regex.Matches(src, @"(?:public|internal) (?:void|[A-Za-z<>?]+) (Mark\w*)\([^)]*\)\s*\{").Cast<Match>())
@@ -211,7 +211,7 @@ public class StateTransitionOwnershipTests
                 // The method that ENTERS the terminal state is the one exception, by definition. CurrentState too:
                 // a split aggregate has no Status, and a pattern without it would not recognise its entering method.
                 // CurrentExistence too: a VM enters its terminal state on the existence axis.
-                if (body.Contains("IsTerminal") || Regex.IsMatch(body, @"(?:Status|CurrentState|CurrentExistence) = \w+(?:Status|State|Existence)\.(Destroyed|Deleted)")) continue;
+                if (body.Contains("IsDeleted") || body.Contains("IsTerminal") || Regex.IsMatch(body, @"(?:Status|CurrentState|CurrentExistence) = \w+(?:Status|State|Existence)\.(Destroyed|Deleted)")) continue;
                 missing.Add($"{key}.{name}");
             }
         }
@@ -220,9 +220,9 @@ public class StateTransitionOwnershipTests
         Assert.True(missing.Count == 0,
             "These Mark* methods can move an aggregate OUT of its terminal state (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs). For a VM "
             + "that means a destroyed machine reported Running gets billed (ComputeMeterService.cs:35). "
-            + "Add `if (IsTerminal) return;` as the first statement:\n  " + string.Join("\n  ", missing));
+            + "Add `if (IsDeleted) return;` as the first statement:\n  " + string.Join("\n  ", missing));
 
-        // And the aggregates with a Status but no IsTerminal at all must be declared, with a reason.
+        // And the aggregates with a Status but no IsDeleted at all must be declared, with a reason.
         var withStatus = ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates"))
             // CurrentState: an aggregate split into desired/current (titan-ops architecture/desired-and-current.md#desired-and-current)
             // still has a state that must absorb; dropping it here would shrink the scan without a signal.
@@ -233,7 +233,7 @@ public class StateTransitionOwnershipTests
 
         var unguarded = withStatus.Except(declared).Where(k => !NoTerminalGuardAllowlist.ContainsKey(k)).OrderBy(k => k).ToList();
         Assert.True(unguarded.Count == 0,
-            "Aggregates with a Status and no IsTerminal. Add the guard, or an allowlist row naming the story:\n  "
+            "Aggregates with a Status and no IsDeleted or IsTerminal. Add the guard, or an allowlist row naming the story:\n  "
             + string.Join("\n  ", unguarded));
 
         var staleTerminal = NoTerminalGuardAllowlist.Keys.Where(k => declared.Contains(k) || !withStatus.Contains(k))
@@ -246,7 +246,7 @@ public class StateTransitionOwnershipTests
     // EVERY mutation inside an aggregate validates internally (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation):
     // a guard the caller has to remember is advice; this test is what makes it an invariant.
     //
-    // Internal validation counts in three shapes: it throws; it consults IsTerminal (absorb instead
+    // Internal validation counts in three shapes: it throws; it consults IsDeleted (absorb instead
     // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an Ensure*() on itself
     // (EnsureSnapshottable, EnsureNoCreateWaiting, …), which a text scan looking only for `throw` would report as a violation.
     private const string TemplateReport = "the report of a sync's own command, ignored unless it names the waiting " +
@@ -303,6 +303,7 @@ public class StateTransitionOwnershipTests
                 scanned++;
 
                 var validates = body.Contains("throw")
+                             || body.Contains("IsDeleted")
                              || body.Contains("IsTerminal")
                              || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");
@@ -315,7 +316,7 @@ public class StateTransitionOwnershipTests
         Assert.True(undeclared.Count == 0,
             "These mutations change Status without validating anything themselves, so they are only safe "
             + "while every caller remembers to call a guard first. Fold the check in (throw for intent, "
-            + "`if (IsTerminal) return;` for observation), or add an allowlist row saying why no "
+            + "`if (IsDeleted) return;` for observation), or add an allowlist row saying why no "
             + "invariant exists:\n  " + string.Join("\n  ", undeclared));
 
         var stale = NoInvariantAllowlist.Keys.Where(k => !offenders.Contains(k)).OrderBy(k => k).ToList();

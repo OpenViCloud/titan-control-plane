@@ -32,9 +32,10 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// (titan-ops architecture/domain-methods.md#plain-code).
     public bool IsBilled => CurrentExistence == CurrentExistence.Exists;
 
-    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed under its VM, still
-    /// observed. The repository's list and reconciler queries write the same test in SQL.
-    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Until then the snapshot is still listed under its VM and still observed; the repository's list and reconciler
+    /// queries write !IsDeleted in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
 
     private VmSnapshot() { }
 
@@ -62,7 +63,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     private bool DeleteIsWaiting => PendingOperationKind == VmSnapshotOperationKind.Delete;
     /// A delete was asked and still waits, or the snapshot is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
 
     /// Counted by occupancy toward MaxVmSnapshotsPerVm (titan-ops features/vm/design.md#vm-snapshot-counting): what Incus
     /// holds or is about to hold, a revert in flight included. A delete asked for stops counting at once; a failed
@@ -77,16 +78,20 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// delete no-ops once the VM is gone.
     public bool BlocksVmDelete => CreateIsWaiting || RevertIsWaiting;
 
-    /// Called by Vm.AddSnapshot after the VM checked itself.
-    internal static VmSnapshot Create(Guid vmId, Guid tenantId, string name)
+    /// Called by Vm.AddSnapshot after the VM checked itself, with the id the handler chose.
+    internal static VmSnapshot Create(Guid id, Guid vmId, Guid tenantId, string name)
     {
+        if (id == Guid.Empty)
+        {
+            throw new BusinessException("INVALID_REQUEST", "A snapshot needs an id.");
+        }
         if (string.IsNullOrWhiteSpace(name) || name.Length > NameMaxLength)
         {
             throw new BusinessException("INVALID_SNAPSHOT_NAME", $"A snapshot name is 1 to {NameMaxLength} characters, not blank.");
         }
         var snapshot = new VmSnapshot
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             VmId = vmId,
             TenantId = tenantId,
             Name = name,
@@ -98,8 +103,17 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         return snapshot;
     }
 
-    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
-    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
+    /// The create this snapshot waits on, for its command. The snapshot is not on Incus yet, so the command acts on its
+    /// vm there: the ticket carries the vm's provider id, which the vm hands in after its own check.
+    internal OperationTicket TicketForCreate(string vmProviderId)
+    {
+        PendingOperation<VmSnapshotOperationKind>? waiting = Pending;
+        if (waiting == null || waiting.Kind != VmSnapshotOperationKind.Create)
+        {
+            throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "No create is waiting for this snapshot.");
+        }
+        return OperationTicket.Of(waiting.Id, vmProviderId);
+    }
 
     /// Incus holds it and nothing waits: the only situation a snapshot can be reverted from.
     private bool RestsOnIncus =>
@@ -115,7 +129,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     {
         if (!RestsOnIncus)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot must exist on Incus, with nothing waiting, to revert.");
-        string externalSnapshotId = RequireExternalId();
+        string externalSnapshotId = GetExternalId();
         PendingOperation<VmSnapshotOperationKind> operation = NewOperation(VmSnapshotOperationKind.Revert);
         SetPending(operation);
         return OperationTicket.Of(operation.Id, externalSnapshotId);
@@ -130,7 +144,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "A delete is already in progress for this snapshot.");
-        if (IsTerminal)
+        if (IsDeleted)
             throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "The snapshot is already deleted.");
         // Never reached Incus: no command to send and no report coming.
         bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
@@ -151,8 +165,14 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
 
     /// Throws rather than let a caller assert the id
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Public for the reconciler's read model.
-    public string RequireExternalId() =>
-        ExternalId ?? throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
+    public string GetExternalId()
+    {
+        if (ExternalId == null)
+        {
+            throw new BusinessException("VM_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
+        }
+        return ExternalId;
+    }
 
     // ---- The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends its operation.
@@ -160,9 +180,9 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null. The create records the id and existence, the delete ends the snapshot, the revert changes nothing
     /// else: the disk is back at the snapshot, which stays (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<VmSnapshotOperationKind>? FinishOperation(Guid operationId, string? externalId)
+    internal VmSnapshotOperationKind? FinishOperation(Guid operationId, string? externalId)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VmSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
@@ -178,15 +198,15 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null. Records the reason, keeps an id the worker found, and gives a delete back
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<VmSnapshotOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    internal VmSnapshotOperationKind? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VmSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
@@ -202,7 +222,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<VmSnapshotOperationKind>? WaitingOperationNamed(Guid operationId)
@@ -230,7 +250,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// on. A snapshot already Deleted stays as it is.
     internal void EndWithItsVm()
     {
-        if (IsTerminal)
+        if (IsDeleted)
         {
             return;
         }
@@ -244,7 +264,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// The reconciler found the snapshot on its VM. That proves it exists, not that a create or a revert finished.
     internal void MarkObserved()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.Exists;
     }
 
@@ -252,7 +272,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     internal void MarkNotFound()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.NotFound;
     }
 }

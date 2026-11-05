@@ -74,9 +74,12 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
         CurrentExistence == CurrentExistence.Exists
         || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null);
 
-    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name,
-    /// still observed. The repository's list, name and reconciler queries write the same test in SQL.
-    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+    /// Deleted absorbs every later report and observation (titan-ops architecture/resource-lifecycle.md#invariants):
+    /// ComputeMeterService bills a VM whose instance exists and runs, so a late poll that revived a deleted VM would
+    /// charge for a machine that no longer exists. Until then the VM is still listed, still holds its name and is
+    /// still observed; the repository's list, name and reconciler queries write !IsDeleted in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
 
     /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
     private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);
@@ -144,14 +147,9 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
         return vm;
     }
 
-    /// Deleted absorbs every later report and observation (titan-ops architecture/resource-lifecycle.md#invariants).
-    /// ComputeMeterService bills a VM whose instance exists and runs, so a late poll that revived a deleted VM
-    /// would charge for a machine that no longer exists.
-    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
-
     /// A delete was asked and still waits, or the VM is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => PendingOperationKind == VmOperationKind.Delete || IsTerminal;
+    public bool IsDeletedOrDeleting => PendingOperationKind == VmOperationKind.Delete || IsDeleted;
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): an operation from a person, refused when illegal.
     // What an operation may do in each Incus status is what Incus itself allows there
@@ -215,7 +213,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     /// DeleteLocally(). Internal: VmDeletion is the only way in (titan-ops architecture/domain-services.md#cross-aggregate-lock).
     internal OperationTicket? Delete()
     {
-        if (IsTerminal)
+        if (IsDeleted)
         {
             throw new BusinessException("VM_INVALID_STATUS", "VM is already deleted.");
         }
@@ -242,7 +240,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
 
     private OperationTicket Accept(VmOperationKind kind, VmDesiredState desiredState, DesiredExistence desiredExistence)
     {
-        string providerId = RequireExternalId();
+        string providerId = GetExternalId();
         PendingOperation<VmOperationKind> operation = PendingOperation<VmOperationKind>.Of(Guid.NewGuid(), kind, DateTimeOffset.UtcNow);
         DesiredState = desiredState;
         DesiredExistence = desiredExistence;
@@ -262,8 +260,14 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
 
     /// Throws rather than let a caller assert the id
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
-    private string RequireExternalId() =>
-        ExternalId ?? throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
+    private string GetExternalId()
+    {
+        if (ExternalId == null)
+        {
+            throw new BusinessException("VM_INVALID_STATUS", "VM has no provider resource yet.");
+        }
+        return ExternalId;
+    }
 
     /// The VM half of Volume.Attach. It runs BEFORE the cluster check there, so a VM in the wrong state
     /// answers VM_INVALID_STATUS even when the clusters also differ. An allowlist: a new VmState is refused.
@@ -272,7 +276,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
         if (!IncusCanAttachOrSnapshot())
             throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped or Frozen to attach a volume.");
         EnsureNoStopOrDeleteWaiting();
-        return RequireExternalId();
+        return GetExternalId();
     }
 
     /// A load balancer of this VM's network may send to it: the instance is on Incus and its delete was not pressed.
@@ -327,7 +331,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
             throw new BusinessException("VM_INVALID_STATUS", "VM must be Running or Ready to open an SSH session.");
         }
         EnsureNoStopOrDeleteWaiting();
-        return RequireExternalId();
+        return GetExternalId();
     }
 
     /// The precondition of AddSnapshot and RevertSnapshot, never called by a handler
@@ -343,19 +347,20 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     // call to the snapshot it names (titan-ops architecture/code-structure.md#child-entity). Logic stays on VmSnapshot;
     // this is the way in.
 
-    /// Intent: a new snapshot of this VM. The VM must accept a snapshot (EnsureSnapshottable). The create operation is the
-    /// snapshot's own Pending.
-    public VmSnapshotTicket AddSnapshot(string name)
+    /// Intent: a new snapshot of this VM, with the id the handler chose. The VM must accept a snapshot
+    /// (EnsureSnapshottable). The create operation is the snapshot's own Pending; its ticket carries the VM's provider
+    /// id, the instance the command snapshots.
+    public OperationTicket AddSnapshot(Guid snapshotId, string name)
     {
         EnsureSnapshottable();
-        VmSnapshot snapshot = VmSnapshot.Create(Id, TenantId, name);
+        VmSnapshot snapshot = VmSnapshot.Create(snapshotId, Id, TenantId, name);
         _snapshots.Add(snapshot);
-        return new VmSnapshotTicket(snapshot, RequireExternalId());
+        return snapshot.TicketForCreate(GetExternalId());
     }
 
     /// A snapshot this VM does not have answers like a missing one, the same 404 a snapshot of another VM gets
     /// (titan-ops features/vm/design.md#vm-routes).
-    private VmSnapshot RequireSnapshot(Guid snapshotId)
+    private VmSnapshot GetSnapshot(Guid snapshotId)
     {
         foreach (VmSnapshot snapshot in _snapshots)
         {
@@ -372,37 +377,37 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     /// for it.
     public OperationTicket RevertSnapshot(Guid snapshotId)
     {
-        VmSnapshot snapshot = RequireSnapshot(snapshotId);
+        VmSnapshot snapshot = GetSnapshot(snapshotId);
         EnsureSnapshottable();
         return snapshot.Revert();
     }
 
     /// Intent on one snapshot: its delete goes through Incus; returns the operation and the snapshot's provider id for
     /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
-    public OperationTicket? DeleteSnapshot(Guid snapshotId) => RequireSnapshot(snapshotId).Delete();
+    public OperationTicket? DeleteSnapshot(Guid snapshotId) => GetSnapshot(snapshotId).Delete();
 
     /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
     /// when it names another operation than the one the snapshot waits on.
-    public PendingOperation<VmSnapshotOperationKind>? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
-        RequireSnapshot(snapshotId).FinishOperation(operationId, externalId);
+    public VmSnapshotOperationKind? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
+        GetSnapshot(snapshotId).FinishOperation(operationId, externalId);
 
     /// The report that the snapshot's own command gave up; null when it names another operation than the one the
     /// snapshot waits on.
-    public PendingOperation<VmSnapshotOperationKind>? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
+    public VmSnapshotOperationKind? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
         string? reason, string? detail) =>
-        RequireSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
+        GetSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
-    public void MarkSnapshotObserved(Guid snapshotId) => RequireSnapshot(snapshotId).MarkObserved();
+    public void MarkSnapshotObserved(Guid snapshotId) => GetSnapshot(snapshotId).MarkObserved();
 
-    public void MarkSnapshotNotFound(Guid snapshotId) => RequireSnapshot(snapshotId).MarkNotFound();
+    public void MarkSnapshotNotFound(Guid snapshotId) => GetSnapshot(snapshotId).MarkNotFound();
 
     /// Intent, Titan-side display name only. The aggregate carries it out itself, so the check sits inside
     /// the mutation (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     public void Rename(string newName)
     {
-        if (IsTerminal)
+        if (IsDeleted)
             throw new BusinessException("VM_INVALID_STATUS", "VM cannot be renamed in its current state.");
         RequireName(newName);
         Name = newName;
@@ -423,7 +428,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     /// aggregate writes the current fields itself (titan-ops architecture/desired-and-current.md#delete-locally).
     internal void DeleteLocally()
     {
-        if (IsTerminal)
+        if (IsDeleted)
             throw new BusinessException("VM_INVALID_STATUS", "VM is already deleted.");
         bool reachedTheProvider = ExternalId != null;
         if (reachedTheProvider)
@@ -442,16 +447,18 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a Done that arrived twice, a report for a VM already Deleted. Records what the worker saw, gives
     /// the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<VmOperationKind>? FinishOperation(Guid operationId, string? externalId, VmObservation? observed)
+    /// A null status: the worker did not read the instance, so the addresses are not read either.
+    public VmOperationKind? FinishOperation(Guid operationId, string? externalId,
+        VmState? status, string? ipAddress, string? publicIpv6Address)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VmOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
         RequireProviderIdOnDone(ExternalId, externalId);
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, status, ipAddress, publicIpv6Address);
 
         ClearFailure();
         if (waiting.Kind == VmOperationKind.Delete)
@@ -469,22 +476,23 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a stale give-up, a report for a VM already Deleted. Records what the worker saw and the reason,
     /// and puts desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<VmOperationKind>? FailOperation(Guid operationId, string? externalId, VmObservation? observed,
-        string? reason, string? detail)
+    /// A null status: the worker did not read the instance, so the addresses are not read either.
+    public VmOperationKind? FailOperation(Guid operationId, string? externalId,
+        VmState? status, string? ipAddress, string? publicIpv6Address, string? reason, string? detail)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VmOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, status, ipAddress, publicIpv6Address);
 
         RecordFailure(reason, detail);
         switch (waiting.Kind)
@@ -502,7 +510,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<VmOperationKind>? WaitingOperationNamed(Guid operationId)
@@ -518,7 +526,7 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
 
     // What the worker saw, whatever the outcome: a create that failed after Incus made the instance leaves a VM whose
     // delete still reaches the provider.
-    private void RecordWhatTheWorkerSaw(string? externalId, VmObservation? observed)
+    private void RecordWhatTheWorkerSaw(string? externalId, VmState? status, string? ipAddress, string? publicIpv6Address)
     {
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
@@ -526,12 +534,12 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
             ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
         }
-        if (observed != null)
+        if (status != null)
         {
             CurrentExistence = CurrentExistence.Exists;
-            CurrentState = observed.Status;
-            IpAddress = observed.IpAddress;
-            PublicIpv6Address = observed.PublicIpv6Address;
+            CurrentState = status;
+            IpAddress = ipAddress;
+            PublicIpv6Address = publicIpv6Address;
         }
     }
 
@@ -540,20 +548,20 @@ public class Vm : ProviderResource<VmOperationKind>, IAggregateRoot
     // before a stop finishes is legitimate; throwing would fail the internal callback and leave the VM stuck.
 
     /// The reconciler saw the instance with this Incus status and these addresses.
-    public void MarkObserved(VmObservation observed)
+    public void MarkObserved(VmState status, string? ipAddress, string? publicIpv6Address)
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.Exists;
-        CurrentState = observed.Status;
-        IpAddress = observed.IpAddress;
-        PublicIpv6Address = observed.PublicIpv6Address;
+        CurrentState = status;
+        IpAddress = ipAddress;
+        PublicIpv6Address = publicIpv6Address;
     }
 
     /// The reconciler did not find the instance. Never Deleted: pointing at the wrong cluster also finds nothing
     /// (titan-ops architecture/desired-and-current.md#reconciler-never-dies); only the delete command's Done ends a VM.
     public void MarkNotFound()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.NotFound;
         CurrentState = null;
         IpAddress = null;

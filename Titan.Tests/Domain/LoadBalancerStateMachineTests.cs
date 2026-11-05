@@ -329,7 +329,7 @@ public class LoadBalancerStateMachineTests
         lb.MarkNotFound();
         lb.MarkCreated(lb.Vip);
 
-        Assert.True(lb.IsTerminal);
+        Assert.True(lb.IsDeleted);
         Assert.Equal(CurrentExistence.Deleted, lb.CurrentExistence);
         Assert.Null(lb.Transition);
     }
@@ -355,7 +355,7 @@ public class LoadBalancerStateMachineTests
 
         Assert.Null(failed.Delete());
 
-        Assert.True(failed.IsTerminal);
+        Assert.True(failed.IsDeleted);
         Assert.Equal(DesiredExistence.Deleted, failed.DesiredExistence);
         Assert.NotNull(OnIncus().Delete());
         Assert.Equal("LOAD_BALANCER_INVALID_STATE",

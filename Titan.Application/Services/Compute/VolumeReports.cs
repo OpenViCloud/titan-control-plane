@@ -60,13 +60,13 @@ public static class VolumeReports
     // (titan-ops features/volume/design.md#attachment-from-used-by). Only the volume's own tenant is searched: an instance
     // name of another tenant's VM must never read as this volume's VM. A name matching no VM, or a second VM, is an
     // instance Titan does not manage for this volume.
-    public static async Task<VolumeObservation> ResolveAttachmentAsync(
+    public static async Task<(Guid? AttachedVmId, bool AttachedElsewhere)> ResolveAttachmentAsync(
         IVmRepository vmRepo, Guid tenantId, List<string>? instanceNames, CancellationToken ct)
     {
         bool noInstance = instanceNames == null || instanceNames.Count == 0;
         if (noInstance)
         {
-            return new VolumeObservation(null, false);
+            return (null, false);
         }
         List<VmAggregate> vms = await vmRepo.ListByExternalIdsAsync(tenantId, instanceNames!, ct);
         Guid? attachedVmId = null;
@@ -84,35 +84,36 @@ public static class VolumeReports
                 elsewhere = true;
             }
         }
-        return new VolumeObservation(attachedVmId, elsewhere);
+        return (attachedVmId, elsewhere);
     }
 
     /// Ends the volume's waiting operation with a Done and records its outcome once, with the snapshots a delete took
     /// along whose own delete was waiting. Null when the report names no waiting operation: nothing is recorded.
-    public static PendingOperation<VolumeOperationKind>? FinishOperation(VolumeAggregate volume, Guid operationId,
-        string? externalId, VolumeObservation? observed, IActivityRecorder activity)
+    public static VolumeOperationKind? FinishOperation(VolumeAggregate volume, Guid operationId,
+        string? externalId, bool sawTheVolume, Guid? attachedVmId, bool attachedElsewhere, IActivityRecorder activity)
     {
         // Read before the volume's delete Done takes every snapshot along: the ones waiting on their own delete get its
         // outcome here, once, since their command will only find them gone.
         List<VolumeSnapshot> snapshotsWaitingOnTheirDelete = new();
         foreach (VolumeSnapshot snapshot in volume.Snapshots)
         {
-            if (snapshot.IsDeletedOrDeleting && !snapshot.IsTerminal)
+            if (snapshot.IsDeletedOrDeleting && !snapshot.IsDeleted)
             {
                 snapshotsWaitingOnTheirDelete.Add(snapshot);
             }
         }
 
-        PendingOperation<VolumeOperationKind>? ended = volume.FinishOperation(operationId, externalId, observed);
+        VolumeOperationKind? ended = volume.FinishOperation(operationId, externalId,
+            sawTheVolume: sawTheVolume, attachedVmId: attachedVmId, attachedElsewhere: attachedElsewhere);
         if (ended == null)
         {
             return null;
         }
-        if (DoneAction.TryGetValue(ended.Kind, out string? action))
+        if (DoneAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(volume.TenantId, action, "volume", volume.Id, volume.Name);
         }
-        if (ended.Kind == VolumeOperationKind.Delete)
+        if (ended == VolumeOperationKind.Delete)
         {
             foreach (VolumeSnapshot snapshot in snapshotsWaitingOnTheirDelete)
             {
@@ -124,27 +125,30 @@ public static class VolumeReports
 
     /// Ends the volume's waiting operation with a give-up and records its outcome once. Null when the report names no
     /// waiting operation: nothing is recorded.
-    public static PendingOperation<VolumeOperationKind>? FailOperation(VolumeAggregate volume, Guid operationId,
-        string? externalId, VolumeObservation? observed, string? reason, string? detail, IActivityRecorder activity)
+    public static VolumeOperationKind? FailOperation(VolumeAggregate volume, Guid operationId,
+        string? externalId, bool sawTheVolume, Guid? attachedVmId, bool attachedElsewhere, string? reason, string? detail,
+        IActivityRecorder activity)
     {
-        PendingOperation<VolumeOperationKind>? ended = volume.FailOperation(operationId, externalId, observed, reason, detail);
+        VolumeOperationKind? ended = volume.FailOperation(operationId, externalId,
+            sawTheVolume: sawTheVolume, attachedVmId: attachedVmId, attachedElsewhere: attachedElsewhere,
+            reason: reason, detail: detail);
         if (ended == null)
         {
             return null;
         }
-        if (FailedAction.TryGetValue(ended.Kind, out string? action))
+        if (FailedAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(volume.TenantId, action, "volume", volume.Id, volume.Name);
         }
         return ended;
     }
 
-    public static void RecordSnapshotEnded(VolumeSnapshot snapshot, PendingOperation<VolumeSnapshotOperationKind> ended,
+    public static void RecordSnapshotEnded(VolumeSnapshot snapshot, VolumeSnapshotOperationKind ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
         Dictionary<VolumeSnapshotOperationKind, string> actions =
             outcome == OperationOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
-        if (actions.TryGetValue(ended.Kind, out string? action))
+        if (actions.TryGetValue(ended, out string? action))
         {
             activity.StageOutcome(snapshot.TenantId, action, "volume_snapshot", snapshot.Id, snapshot.Name);
         }

@@ -230,12 +230,12 @@ public class NetworkRepositoryStateTests
 
         Assert.Equal(shapes.Count(n => n.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
         Assert.Equal(shapes.Count(n => n.OccupiesPublicIpv6Quota), await repo.CountPublicIpv6ActiveByTenantAsync(Tenant));
-        Assert.Equal(ByName(shapes.Where(n => n.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(n => !n.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
         // ListAllAsync orders by Name, a NetworkName the InMemory provider cannot sort (Postgres sorts the column): not asked here.
-        Assert.Equal(ByName(shapes.Where(n => n.IsNotDeleted && n.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
+        Assert.Equal(ByName(shapes.Where(n => !n.IsDeleted && n.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
         foreach (Network network in shapes)
         {
-            Assert.True(network.IsNotDeleted == await repo.ExistsByNameAsync(Tenant, network.Name), network.Name.Value);
+            Assert.True(!network.IsDeleted == await repo.ExistsByNameAsync(Tenant, network.Name), network.Name.Value);
         }
     }
 

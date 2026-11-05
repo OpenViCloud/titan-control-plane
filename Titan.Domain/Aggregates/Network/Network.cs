@@ -89,9 +89,11 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         }
     }
 
-    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name,
-    /// still observed. The repository's list, name and reconciler queries write the same test in SQL.
-    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs):
+    /// its name is already free for reuse, so a revived network could collide with a live one. Until then the network
+    /// is still listed, still holds its name and is still observed; the repository's list, name and reconciler queries
+    /// write !IsDeleted in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
 
     private Network() { }
 
@@ -116,7 +118,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     private bool DeleteIsWaiting => PendingOperationKind == NetworkOperationKind.Delete;
     /// A delete was asked and still waits, or the network is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
 
     /// The range the customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
     /// attributes (titan-ops architecture/code-structure.md#logic-placement): the uplink of a network with public IPv6
@@ -167,10 +169,6 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         PublicIpv6Subnet = subnet;
     }
 
-    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs). Its name is already free
-    /// for reuse, so a revived network could collide with a live one.
-    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
-
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what Incus has,
     // so no guard, and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 
@@ -178,7 +176,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     /// not the create's ending: only the create command's own report ends it.
     public void MarkObserved(NetworkStatus status)
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.Exists;
         CurrentState = status;
     }
@@ -187,7 +185,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     public void MarkNotFound()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.NotFound;
         CurrentState = null;
     }
@@ -208,16 +206,18 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     /// returns null: a Done that arrived twice, a report for a network already Deleted. Records what the worker saw,
     /// gives the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
     /// Internal: NetworkRoutes ends it, so a route the network lets go of goes back with it.
-    internal PendingOperation<NetworkOperationKind>? FinishOperation(Guid operationId, string? externalId, NetworkObservation? observed)
+    /// A null status, cidr or gateway: the worker did not read it.
+    internal NetworkOperationKind? FinishOperation(Guid operationId, string? externalId,
+        NetworkStatus? status, string? cidr, string? gateway)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<NetworkOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
         RequireProviderIdOnDone(ExternalId, externalId);
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, status, cidr, gateway);
 
         ClearFailure();
         if (waiting.Kind == NetworkOperationKind.Delete)
@@ -233,23 +233,24 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a stale give-up, a report for a network already Deleted. Records what the worker saw and the
     /// reason, and puts desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
     /// Internal: NetworkRoutes ends it, so a /64 the network lets go of goes back with its route.
-    internal PendingOperation<NetworkOperationKind>? FailOperation(Guid operationId, string? externalId, NetworkObservation? observed,
-        string? reason, string? detail)
+    /// A null status, cidr or gateway: the worker did not read it.
+    internal NetworkOperationKind? FailOperation(Guid operationId, string? externalId,
+        NetworkStatus? status, string? cidr, string? gateway, string? reason, string? detail)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<NetworkOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, status, cidr, gateway);
 
         RecordFailure(reason, detail);
         if (waiting.Kind == NetworkOperationKind.Delete)
@@ -269,7 +270,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<NetworkOperationKind>? WaitingOperationNamed(Guid operationId)
@@ -286,28 +287,20 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
     // What the worker saw, whatever the outcome: a create that failed after Incus made the network leaves a network whose
     // delete still reaches Incus. The addresses come with the name: the ones the create asked for or Incus picked; an
     // empty string is the same absence, and neither is stored.
-    private void RecordWhatTheWorkerSaw(string? externalId, NetworkObservation? observed)
+    private void RecordWhatTheWorkerSaw(string? externalId, NetworkStatus? status, string? cidr, string? gateway)
     {
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
             ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
-            if (observed != null)
-            {
-                Cidr = AddressOrNull(observed.Cidr);
-                Gateway = AddressOrNull(observed.Gateway);
-            }
-            else
-            {
-                Cidr = null;
-                Gateway = null;
-            }
+            Cidr = AddressOrNull(cidr);
+            Gateway = AddressOrNull(gateway);
         }
-        if (observed != null && observed.Status != null)
+        if (status != null)
         {
             CurrentExistence = CurrentExistence.Exists;
-            CurrentState = observed.Status;
+            CurrentState = status;
         }
     }
 
@@ -327,7 +320,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "A delete is already in progress for this network.");
         }
-        if (IsTerminal)
+        if (IsDeleted)
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "The network is already deleted.");
         }
@@ -360,16 +353,16 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
                 $"Network is in cluster '{ClusterId}', the VM was asked for cluster '{vmClusterId}'.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_NOT_ACTIVE", "Network must be Created on Incus to deploy a VM.");
-        return RequireExternalId();
+        return GetExternalId();
     }
 
     // ---- Firewall rules: the network counts its rules and routes each call to the rule it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
 
-    /// Intent: a new rule in this network's ACL. The network must be usable. The create operation is the rule's own
-    /// Pending.
-    public FirewallRuleTicket AddFirewallRule(
-        FirewallDirection direction, FirewallProtocol protocol,
+    /// Intent: a new rule in this network's ACL, with the id the handler chose. The network must be usable. The create
+    /// operation is the rule's own Pending; its ticket carries the network's provider id, the ACL the command writes to.
+    public OperationTicket AddFirewallRule(
+        Guid ruleId, FirewallDirection direction, FirewallProtocol protocol,
         PortRange? ports, FirewallCidr cidr)
     {
         if (!IsUsable)
@@ -381,14 +374,14 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
             startPort = ports.Start;
             endPort = ports.End;
         }
-        FirewallRule rule = FirewallRule.Create(Id, TenantId, direction, protocol, startPort, endPort, cidr.Value);
+        FirewallRule rule = FirewallRule.Create(ruleId, Id, TenantId, direction, protocol, startPort, endPort, cidr.Value);
         _firewallRules.Add(rule);
-        return new FirewallRuleTicket(rule, RequireExternalId());
+        return rule.TicketForCreate(GetExternalId());
     }
 
     /// A rule this network does not have answers like a missing one, the same 404 the handler gives a rule of
     /// another network (titan-ops features/network/design.md#firewall-rule-soft-delete).
-    private FirewallRule RequireFirewallRule(Guid ruleId)
+    private FirewallRule GetFirewallRule(Guid ruleId)
     {
         foreach (FirewallRule rule in _firewallRules)
         {
@@ -402,26 +395,26 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
 
     /// Intent on one rule: its delete goes through Incus; returns the operation and the rule's provider id for the command,
     /// or no ticket when the rule never reached Incus and is deleted here.
-    public OperationTicket? DeleteFirewallRule(Guid ruleId) => RequireFirewallRule(ruleId).Delete();
+    public OperationTicket? DeleteFirewallRule(Guid ruleId) => GetFirewallRule(ruleId).Delete();
 
     /// The report that the rule's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null when
     /// it names another operation than the one the rule waits on.
-    public PendingOperation<FirewallRuleOperationKind>? FinishFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
+    public FirewallRuleOperationKind? FinishFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
         FirewallRuleState? observedState) =>
-        RequireFirewallRule(ruleId).FinishOperation(operationId, externalId, observedState);
+        GetFirewallRule(ruleId).FinishOperation(operationId, externalId, observedState);
 
     /// The report that the rule's own command gave up; null when it names another operation than the one the rule
     /// waits on.
-    public PendingOperation<FirewallRuleOperationKind>? FailFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
+    public FirewallRuleOperationKind? FailFirewallRuleOperation(Guid ruleId, Guid operationId, string? externalId,
         FirewallRuleState? observedState, string? reason, string? detail) =>
-        RequireFirewallRule(ruleId).FailOperation(operationId, externalId, observedState, reason, detail);
+        GetFirewallRule(ruleId).FailOperation(operationId, externalId, observedState, reason, detail);
 
     // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
     public void MarkFirewallRuleObserved(Guid ruleId, FirewallRuleState state) =>
-        RequireFirewallRule(ruleId).MarkObserved(state);
+        GetFirewallRule(ruleId).MarkObserved(state);
 
-    public void MarkFirewallRuleNotFound(Guid ruleId) => RequireFirewallRule(ruleId).MarkNotFound();
+    public void MarkFirewallRuleNotFound(Guid ruleId) => GetFirewallRule(ruleId).MarkNotFound();
 
     /// A load balancer needs the network's public /64 for its VIP: Incus refuses one on a network with no uplink
     /// (titan-ops features/load-balancer/design.md#lb-needs-public-ipv6). Checked before the state.
@@ -431,7 +424,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
             throw new BusinessException("LOAD_BALANCER_NEEDS_PUBLIC_IPV6", "A load balancer needs a network with public IPv6.");
         if (!IsUsable)
             throw new BusinessException("NETWORK_INVALID_STATE", "Load balancers can only be added to a network Incus has created.");
-        return RequireExternalId();
+        return GetExternalId();
     }
 
     /// Incus reports it Created and nothing is waiting: a network being deleted is not usable, even while Incus still
@@ -443,14 +436,20 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         && PendingOperationId == null;
 
     /// Created implies the create's report set the id; this throws rather than let a caller assert it.
-    private string RequireExternalId() =>
-        ExternalId ?? throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
+    private string GetExternalId()
+    {
+        if (ExternalId == null)
+        {
+            throw new BusinessException("NETWORK_INVALID_STATE", "Network is not yet provisioned.");
+        }
+        return ExternalId;
+    }
 
     // Titan-side metadata only, no provider call. A network being or already deleted has no name worth
     // changing.
     public void Rename(NetworkName name)
     {
-        bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsTerminal;
+        bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsDeleted;
         if (beingOrBeenDeleted)
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "Cannot rename a network that is being or has been deleted.");

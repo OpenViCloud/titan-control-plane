@@ -6,7 +6,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure;
 
-// The load balancer queries that hide only a deleted one (LoadBalancer.IsNotDeleted): the tenant list, the name, the
+// The load balancer queries that hide only a deleted one (!LoadBalancer.IsDeleted): the tenant list, the name, the
 // VIP numbers a network has given out, and whether a VM is still a backend
 // (titan-ops features/load-balancer/design.md). One row per shape, so a hidden row cannot be covered by another.
 //
@@ -137,13 +137,13 @@ public class LoadBalancerRepositoryStateTests
         string[] ByName(IEnumerable<LoadBalancer> rows) => rows.Select(lb => lb.Name).OrderBy(n => n).ToArray();
 
         Assert.Equal(shapes.Count(lb => lb.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
-        Assert.Equal(ByName(shapes.Where(lb => lb.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
-        Assert.Equal(ByName(shapes.Where(lb => lb.IsNotDeleted && lb.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
-        Assert.Equal(shapes.Where(lb => lb.IsNotDeleted).Select(lb => lb.VipIndex).OrderBy(i => i), (await repo.ListVipIndexesOfNetworkAsync(NetworkId)).OrderBy(i => i));
+        Assert.Equal(ByName(shapes.Where(lb => !lb.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(lb => !lb.IsDeleted && lb.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
+        Assert.Equal(shapes.Where(lb => !lb.IsDeleted).Select(lb => lb.VipIndex).OrderBy(i => i), (await repo.ListVipIndexesOfNetworkAsync(NetworkId)).OrderBy(i => i));
         foreach (LoadBalancer loadBalancer in shapes)
         {
-            Assert.True(loadBalancer.IsNotDeleted == await repo.ExistsByNameAsync(Tenant, loadBalancer.Name), loadBalancer.Name);
-            Assert.True(loadBalancer.IsNotDeleted == await repo.IsBackendAsync(backendOf[loadBalancer.Name]), loadBalancer.Name);
+            Assert.True(!loadBalancer.IsDeleted == await repo.ExistsByNameAsync(Tenant, loadBalancer.Name), loadBalancer.Name);
+            Assert.True(!loadBalancer.IsDeleted == await repo.IsBackendAsync(backendOf[loadBalancer.Name]), loadBalancer.Name);
         }
     }
 }

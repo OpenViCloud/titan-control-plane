@@ -22,5 +22,5 @@ public record ReconcilableVolumeQueryResult(
 public record ReconcilableVolumeSnapshotQueryResult(Guid Id, Guid VolumeId, string ExternalId, string CurrentExistence)
 {
     public static ReconcilableVolumeSnapshotQueryResult From(VolumeSnapshotEntity s) =>
-        new(s.Id, s.VolumeId, s.RequireExternalId(), s.CurrentExistence.ToString());
+        new(s.Id, s.VolumeId, s.GetExternalId(), s.CurrentExistence.ToString());
 }

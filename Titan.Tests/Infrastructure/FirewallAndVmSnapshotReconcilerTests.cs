@@ -53,7 +53,7 @@ public class FirewallAndVmSnapshotReconcilerTests
     {
         using var db = NewDb();
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net", Cluster);
-        var rule = FirewallRule.Create(network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        var rule = FirewallRule.Create(Guid.NewGuid(), network.Id, network.TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         rule.MarkActive("sg-7");
         rule.Delete();
         db.Networks.Add(network);

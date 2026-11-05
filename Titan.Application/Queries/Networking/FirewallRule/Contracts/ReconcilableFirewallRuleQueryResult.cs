@@ -8,7 +8,7 @@ namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
 public record ReconcilableFirewallRuleQueryResult(Guid Id, Guid NetworkId, string ExternalId, string? CurrentState, string CurrentExistence)
 {
     public static ReconcilableFirewallRuleQueryResult From(FirewallRuleEntity r) =>
-        new(r.Id, r.NetworkId, r.RequireExternalId(), StateName(r.CurrentState), r.CurrentExistence.ToString());
+        new(r.Id, r.NetworkId, r.GetExternalId(), StateName(r.CurrentState), r.CurrentExistence.ToString());
 
     private static string? StateName(FirewallRuleState? state)
     {

@@ -62,7 +62,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ASnapshotWhoseVmDoesNotExist_IsRefusedByTheDatabase()
     {
-        VmSnapshot orphan = VmSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), "orphan");
+        VmSnapshot orphan = VmSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "orphan");
 
         await using TitanDbContext db = pg.NewDbContext();
         db.VmSnapshots.Add(orphan); // no such VM

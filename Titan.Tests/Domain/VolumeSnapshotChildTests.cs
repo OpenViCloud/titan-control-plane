@@ -54,7 +54,7 @@ public class VolumeSnapshotChildTests
     {
         var volume = VolumeWithEverySnapshotSituation(); // usage 2
 
-        VolumeSnapshot snapshot = volume.AddSnapshot("nightly").Snapshot;
+        VolumeSnapshot snapshot = volume.WithSnapshot("nightly");
 
         Assert.Contains(snapshot, volume.Snapshots);
         Assert.Equal(volume.Id, snapshot.VolumeId);
@@ -68,7 +68,7 @@ public class VolumeSnapshotChildTests
     {
         var volume = Volume.Create(TenantIdOwner.Id, "vol-1", "cluster-1", "offering-1", 50); // Creating
 
-        var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot("nightly"));
+        var ex = Assert.Throws<BusinessException>(() => volume.AddSnapshot(Guid.NewGuid(), "nightly"));
 
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
         Assert.Empty(volume.Snapshots);
@@ -91,9 +91,9 @@ public class VolumeSnapshotChildTests
         volume.FinishSnapshotOperation(alreadyGone.Id, volume.DeleteSnapshot(alreadyGone.Id)!.OperationId, null);
         OperationTicket delete = volume.Delete()!; // lost, leaving and gone do not count, so the delete is accepted
 
-        PendingOperation<VolumeOperationKind>? ended = volume.FinishOperation(delete.OperationId, null, null);
+        VolumeOperationKind? ended = volume.FinishOperation(delete.OperationId, null, false, null, false);
 
-        Assert.Equal(VolumeOperationKind.Delete, ended!.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, ended);
         Assert.Equal(CurrentExistence.Deleted, volume.CurrentExistence);
         Assert.All(volume.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(volume.Snapshots, s => Assert.Null(s.Pending));
@@ -105,9 +105,9 @@ public class VolumeSnapshotChildTests
         var volume = RestingVolume();
         OperationTicket delete = volume.Delete()!;
 
-        PendingOperation<VolumeOperationKind>? ended = volume.FinishOperation(delete.OperationId, null, null);
+        VolumeOperationKind? ended = volume.FinishOperation(delete.OperationId, null, false, null, false);
 
-        Assert.Equal(VolumeOperationKind.Delete, ended!.Kind);
+        Assert.Equal(VolumeOperationKind.Delete, ended);
         Assert.Equal(CurrentExistence.Deleted, volume.CurrentExistence);
     }
 
@@ -121,9 +121,9 @@ public class VolumeSnapshotChildTests
         leaving.MarkCreated("vol11/s2");
         volume.DeleteSnapshot(leaving.Id);
         OperationTicket delete = volume.Delete()!;
-        volume.FinishOperation(delete.OperationId, null, null);
+        volume.FinishOperation(delete.OperationId, null, false, null, false);
 
-        PendingOperation<VolumeOperationKind>? repeat = volume.FinishOperation(delete.OperationId, null, null);
+        VolumeOperationKind? repeat = volume.FinishOperation(delete.OperationId, null, false, null, false);
 
         Assert.Null(repeat);
     }
@@ -154,8 +154,8 @@ public class VolumeSnapshotChildTests
         var untouched = volume.WithSnapshot("u");
         Guid createRequestId = snapshot.Pending!.Id;
 
-        Assert.Equal(createRequestId,
-            volume.FinishSnapshotOperation(snapshot.Id, createRequestId, "vol11/s1")!.Id);
+        Assert.Equal(VolumeSnapshotOperationKind.Create,
+            volume.FinishSnapshotOperation(snapshot.Id, createRequestId, "vol11/s1"));
         volume.MarkSnapshotObserved(snapshot.Id);
         Assert.Equal("vol11/s1", volume.ProviderIdForSnapshotRestore(snapshot.Id));
 
@@ -169,8 +169,8 @@ public class VolumeSnapshotChildTests
         volume.MarkSnapshotNotFound(snapshot.Id);
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
         OperationTicket delete = volume.DeleteSnapshot(snapshot.Id)!;
-        Assert.Equal(delete.OperationId,
-            volume.FinishSnapshotOperation(snapshot.Id, delete.OperationId, null)!.Id);
+        Assert.Equal(VolumeSnapshotOperationKind.Delete,
+            volume.FinishSnapshotOperation(snapshot.Id, delete.OperationId, null));
         Assert.Equal(CurrentExistence.Deleted, snapshot.CurrentExistence);
 
         Assert.Equal(VolumeSnapshotTransition.Creating, untouched.Transition);

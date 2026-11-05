@@ -22,8 +22,9 @@ public class ObserveVolumeCommandHandler(
 
         if (command.Exists)
         {
-            VolumeObservation observed = await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
-            volume.MarkObserved(observed.AttachedVmId, observed.AttachedElsewhere);
+            (Guid? attachedVmId, bool attachedElsewhere) =
+                await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
+            volume.MarkObserved(attachedVmId, attachedElsewhere);
         }
         else
         {

@@ -27,18 +27,26 @@ public class EndVolumeRequestCommandHandler(
         Domain.Aggregates.Volume.Volume volume = await repo.FindByIdForUpdateAsync(command.VolumeId, ct)
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
-        VolumeObservation? observed = command.AttachedTo == null
-            ? null
-            : await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
-        PendingOperation<VolumeOperationKind>? ended;
+        // A report without the instance list did not read the volume on Incus.
+        bool sawTheVolume = command.AttachedTo != null;
+        Guid? attachedVmId = null;
+        bool attachedElsewhere = false;
+        if (sawTheVolume)
+        {
+            (attachedVmId, attachedElsewhere) =
+                await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
+        }
+        VolumeOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
-            ended = VolumeReports.FinishOperation(volume, command.RequestId, command.ExternalId, observed, activity);
+            ended = VolumeReports.FinishOperation(volume, command.RequestId, command.ExternalId,
+                sawTheVolume: sawTheVolume, attachedVmId: attachedVmId, attachedElsewhere: attachedElsewhere, activity);
         }
         else
         {
-            ended = VolumeReports.FailOperation(volume, command.RequestId, command.ExternalId, observed,
-                command.Reason, command.Detail, activity);
+            ended = VolumeReports.FailOperation(volume, command.RequestId, command.ExternalId,
+                sawTheVolume: sawTheVolume, attachedVmId: attachedVmId, attachedElsewhere: attachedElsewhere,
+                reason: command.Reason, detail: command.Detail, activity);
         }
         if (ended == null)
         {

@@ -762,8 +762,8 @@ public class VolumeServiceTests
 
         await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, delete.OperationId, "Done"));
 
-        Assert.True(lost.IsTerminal);
-        Assert.True(leaving.IsTerminal);
+        Assert.True(lost.IsDeleted);
+        Assert.True(leaving.IsDeleted);
         string[] actions = _activity.Events.Select(e => $"{e.Action}:{e.ResourceName}").OrderBy(a => a, StringComparer.Ordinal).ToArray();
         Assert.Equal(new[] { "volume.deleted:vol-01", "volume_snapshot.deleted:leaving" }, actions);
     }
@@ -931,7 +931,7 @@ public class VolumeServiceTests
     private static void EndAttachDone(Volume vol, Vm target)
     {
         VolumeAttachProviderIds attach = vol.Attach(target);
-        vol.FinishOperation(attach.OperationId, null, new VolumeObservation(target.Id, false));
+        vol.FinishOperation(attach.OperationId, null, true, target.Id, false);
     }
 
     private static Vm MakeVm(

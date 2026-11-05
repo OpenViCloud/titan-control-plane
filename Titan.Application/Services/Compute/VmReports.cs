@@ -74,37 +74,66 @@ public static class VmReports
         throw new BadRequestException("INVALID_STATUS", $"Unknown VM status: '{status}'");
     }
 
-    public static VmObservation? ParseObservation(VmObservationReport? report) =>
-        report == null ? null : new VmObservation(ParseIncusStatus(report.Status), report.IpAddress, report.PublicIpv6Address);
+    /// The status of the instance the report saw, or null when it saw none. Handlers call it before loading the VM:
+    /// a malformed report is the worker's bug, whatever the VM.
+    public static VmState? ParseObservedStatus(VmObservationReport? report)
+    {
+        if (report == null)
+        {
+            return null;
+        }
+        return ParseIncusStatus(report.Status);
+    }
+
+    /// The addresses of the instance the report saw, or null when it saw none.
+    public static string? ObservedIpAddress(VmObservationReport? report)
+    {
+        if (report == null)
+        {
+            return null;
+        }
+        return report.IpAddress;
+    }
+
+    public static string? ObservedPublicIpv6Address(VmObservationReport? report)
+    {
+        if (report == null)
+        {
+            return null;
+        }
+        return report.PublicIpv6Address;
+    }
 
     /// Ends the VM's waiting operation with a Done and records its outcome once, with what a delete took along: the
     /// snapshots whose own delete was waiting, and the volumes the provider kept and detached
     /// (titan-ops features/volume/design.md#vm-delete-releases-volumes). Null when the report names no waiting
     /// operation: nothing is recorded.
-    public static async Task<PendingOperation<VmOperationKind>?> FinishOperationAsync(VmAggregate vm, Guid operationId,
-        string? externalId, VmObservation? observed, IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
+    public static async Task<VmOperationKind?> FinishOperationAsync(VmAggregate vm, Guid operationId,
+        string? externalId, VmState? status, string? ipAddress, string? publicIpv6Address,
+        IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
         // Read before the VM's delete Done takes every snapshot along: the ones waiting on their own delete get its
         // outcome here, once, since their command will only find them gone.
         List<VmSnapshot> snapshotsWaitingOnTheirDelete = new();
         foreach (VmSnapshot snapshot in vm.Snapshots)
         {
-            if (snapshot.IsDeletedOrDeleting && !snapshot.IsTerminal)
+            if (snapshot.IsDeletedOrDeleting && !snapshot.IsDeleted)
             {
                 snapshotsWaitingOnTheirDelete.Add(snapshot);
             }
         }
 
-        PendingOperation<VmOperationKind>? ended = vm.FinishOperation(operationId, externalId, observed);
+        VmOperationKind? ended = vm.FinishOperation(operationId, externalId,
+            status: status, ipAddress: ipAddress, publicIpv6Address: publicIpv6Address);
         if (ended == null)
         {
             return null;
         }
-        if (DoneAction.TryGetValue(ended.Kind, out string? action))
+        if (DoneAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(vm.TenantId, action, "vm", vm.Id, vm.Name);
         }
-        if (ended.Kind != VmOperationKind.Delete)
+        if (ended != VmOperationKind.Delete)
         {
             return ended;
         }
@@ -125,20 +154,21 @@ public static class VmReports
     /// Ends the VM's waiting operation with a give-up and records its outcome once; the volumes of a delete that gave
     /// up stay attached (titan-ops architecture/resource-lifecycle.md#kinds). Null when the report names no waiting
     /// operation: nothing is recorded.
-    public static async Task<PendingOperation<VmOperationKind>?> FailOperationAsync(VmAggregate vm, Guid operationId,
-        string? externalId, VmObservation? observed, string? reason, string? detail,
+    public static async Task<VmOperationKind?> FailOperationAsync(VmAggregate vm, Guid operationId,
+        string? externalId, VmState? status, string? ipAddress, string? publicIpv6Address, string? reason, string? detail,
         IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
-        PendingOperation<VmOperationKind>? ended = vm.FailOperation(operationId, externalId, observed, reason, detail);
+        VmOperationKind? ended = vm.FailOperation(operationId, externalId,
+            status: status, ipAddress: ipAddress, publicIpv6Address: publicIpv6Address, reason: reason, detail: detail);
         if (ended == null)
         {
             return null;
         }
-        if (FailedAction.TryGetValue(ended.Kind, out string? action))
+        if (FailedAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(vm.TenantId, action, "vm", vm.Id, vm.Name);
         }
-        if (ended.Kind != VmOperationKind.Delete)
+        if (ended != VmOperationKind.Delete)
         {
             return ended;
         }
@@ -150,12 +180,12 @@ public static class VmReports
         return ended;
     }
 
-    public static void RecordSnapshotEnded(VmSnapshot snapshot, PendingOperation<VmSnapshotOperationKind> ended,
+    public static void RecordSnapshotEnded(VmSnapshot snapshot, VmSnapshotOperationKind ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
         Dictionary<VmSnapshotOperationKind, string> actions =
             outcome == OperationOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
-        if (actions.TryGetValue(ended.Kind, out string? action))
+        if (actions.TryGetValue(ended, out string? action))
         {
             activity.StageOutcome(snapshot.TenantId, action, "vm_snapshot", snapshot.Id, snapshot.Name);
         }

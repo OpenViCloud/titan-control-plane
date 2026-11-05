@@ -261,10 +261,10 @@ public class VolumeRepositoryStateTests
 
         Assert.Equal(shapes.Count(v => v.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
         Assert.Equal(ByName(shapes.Where(v => v.IsBilled)), ByName(await repo.ListBillableAsync()));
-        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
-        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
+        Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
         Assert.Equal(
-            ByName(shapes.Where(v => v.IsNotDeleted && (v.CurrentAttachedVmId == vm.Id || v.DesiredAttachedVmId == vm.Id))),
+            ByName(shapes.Where(v => !v.IsDeleted && (v.CurrentAttachedVmId == vm.Id || v.DesiredAttachedVmId == vm.Id))),
             ByName(await repo.ListAttachedToVmLockedAsync(vm.Id)));
     }
 }

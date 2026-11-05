@@ -187,9 +187,9 @@ public class VmSnapshotFirewallRepositoryStateTests
         Guid[] Ids<T>(IEnumerable<T> rows, Func<T, Guid> id) => rows.Select(id).OrderBy(i => i).ToArray();
 
         Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsBilled), s => s.Id), Ids(await snapshots.ListBillableAsync(), s => s.Id));
-        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsNotDeleted), s => s.Id), Ids(await snapshots.FindByVmIdAsync(vm.Id), s => s.Id));
-        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsNotDeleted && s.ExternalId != null), s => s.Id), Ids(await snapshots.ListReconcilableAsync("vn-hcm-1"), s => s.Id));
-        Assert.Equal(Ids(network.FirewallRules.Where(r => r.IsNotDeleted), r => r.Id), Ids(await rules.ListByNetworkAsync(network.Id), r => r.Id));
-        Assert.Equal(Ids(network.FirewallRules.Where(r => r.IsNotDeleted && r.ExternalId != null), r => r.Id), Ids(await rules.ListReconcilableAsync("vn-hcm-1"), r => r.Id));
+        Assert.Equal(Ids(vm.Snapshots.Where(s => !s.IsDeleted), s => s.Id), Ids(await snapshots.FindByVmIdAsync(vm.Id), s => s.Id));
+        Assert.Equal(Ids(vm.Snapshots.Where(s => !s.IsDeleted && s.ExternalId != null), s => s.Id), Ids(await snapshots.ListReconcilableAsync("vn-hcm-1"), s => s.Id));
+        Assert.Equal(Ids(network.FirewallRules.Where(r => !r.IsDeleted), r => r.Id), Ids(await rules.ListByNetworkAsync(network.Id), r => r.Id));
+        Assert.Equal(Ids(network.FirewallRules.Where(r => !r.IsDeleted && r.ExternalId != null), r => r.Id), Ids(await rules.ListReconcilableAsync("vn-hcm-1"), r => r.Id));
     }
 }

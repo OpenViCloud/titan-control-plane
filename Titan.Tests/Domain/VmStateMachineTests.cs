@@ -33,7 +33,6 @@ public class VmStateMachineTests
 
     private static Vm NewVm() => Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
 
-    private static VmObservation Seen(VmState state, string? ip = "10.0.0.5") => new(state, ip, null);
 
     private static Vm VmIn(Seed seed)
     {
@@ -44,7 +43,7 @@ public class VmStateMachineTests
         }
         if (seed == Seed.CreateFailed)
         {
-            vm.FailOperation(vm.Pending!.Id, null, null, "VM provisioning failed due to a system error.", "raw error");
+            vm.FailOperation(vm.Pending!.Id, null, null, null, null, "VM provisioning failed due to a system error.", "raw error");
             return vm;
         }
 
@@ -52,14 +51,14 @@ public class VmStateMachineTests
         switch (seed)
         {
             case Seed.Running: break;
-            case Seed.Ready: vm.MarkObserved(Seen(VmState.Ready)); break;
-            case Seed.Stopped: vm.MarkObserved(Seen(VmState.Stopped, null)); break;
-            case Seed.Frozen: vm.MarkObserved(Seen(VmState.Frozen)); break;
-            case Seed.Error: vm.MarkObserved(Seen(VmState.Error, null)); break;
+            case Seed.Ready: vm.MarkObserved(VmState.Ready, "10.0.0.5", null); break;
+            case Seed.Stopped: vm.MarkObserved(VmState.Stopped, null, null); break;
+            case Seed.Frozen: vm.MarkObserved(VmState.Frozen, "10.0.0.5", null); break;
+            case Seed.Error: vm.MarkObserved(VmState.Error, null, null); break;
             case Seed.NotFound: vm.MarkNotFound(); break;
             case Seed.Deleted:
                 OperationTicket delete = vm.Delete()!;
-                vm.FinishOperation(delete.OperationId, null, null);
+                vm.FinishOperation(delete.OperationId, null, null, null, null);
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
@@ -89,9 +88,9 @@ public class VmStateMachineTests
     public void Start_OfAVmThatNeverRan_AfterItsCreateEnded_IsAStart_NotACreate()
     {
         var vm = NewVm();
-        vm.FinishOperation(vm.Pending!.Id, "42", Seen(VmState.Error, null));
+        vm.FinishOperation(vm.Pending!.Id, "42", VmState.Error, null, null);
         OperationTicket stop = vm.Stop();
-        vm.FinishOperation(stop.OperationId, null, Seen(VmState.Stopped, null));
+        vm.FinishOperation(stop.OperationId, null, VmState.Stopped, null, null);
 
         OperationTicket start = vm.Start();
 
@@ -112,7 +111,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Running);
 
-        vm.MarkObserved(Seen(incus, "10.0.0.7"));
+        vm.MarkObserved(incus, "10.0.0.7", null);
 
         Assert.Equal(incus, vm.CurrentState);
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
@@ -124,7 +123,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Stopped);
 
-        vm.MarkObserved(Seen(VmState.Running, null));
+        vm.MarkObserved(VmState.Running, null, null);
 
         Assert.Equal(VmState.Running, vm.CurrentState);
         Assert.Null(vm.IpAddress);
@@ -135,7 +134,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Running);
 
-        vm.MarkObserved(Seen(VmState.Frozen));
+        vm.MarkObserved(VmState.Frozen, "10.0.0.5", null);
 
         Assert.Equal(VmState.Frozen, vm.CurrentState);
         Assert.Null(vm.Pending);
@@ -147,7 +146,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.Error);
 
-        vm.MarkObserved(Seen(VmState.Running));
+        vm.MarkObserved(VmState.Running, "10.0.0.5", null);
 
         Assert.Equal(VmState.Running, vm.CurrentState);
     }
@@ -165,7 +164,7 @@ public class VmStateMachineTests
         Assert.Null(vm.CurrentState);
         Assert.Null(vm.IpAddress);
         Assert.Equal("42", vm.ExternalId);
-        Assert.False(vm.IsTerminal);
+        Assert.False(vm.IsDeleted);
     }
 
     [Fact] // found again (the cluster came back): exists, with its status
@@ -173,7 +172,7 @@ public class VmStateMachineTests
     {
         var vm = VmIn(Seed.NotFound);
 
-        vm.MarkObserved(Seen(VmState.Stopped, null));
+        vm.MarkObserved(VmState.Stopped, null, null);
 
         Assert.Equal(CurrentExistence.Exists, vm.CurrentExistence);
         Assert.Equal(VmState.Stopped, vm.CurrentState);
@@ -186,11 +185,11 @@ public class VmStateMachineTests
     {
         foreach (var mutate in new Action<Vm>[]
         {
-            v => v.MarkObserved(Seen(VmState.Running, "10.0.0.9")),
-            v => v.MarkObserved(Seen(VmState.Error, null)),
+            v => v.MarkObserved(VmState.Running, "10.0.0.9", null),
+            v => v.MarkObserved(VmState.Error, null, null),
             v => v.MarkNotFound(),
-            v => v.FinishOperation(Guid.NewGuid(), "9", Seen(VmState.Running)),
-            v => v.FailOperation(Guid.NewGuid(), null, null, "late", "late detail"),
+            v => v.FinishOperation(Guid.NewGuid(), "9", VmState.Running, "10.0.0.5", null),
+            v => v.FailOperation(Guid.NewGuid(), null, null, null, null, "late", "late detail"),
         })
         {
             var vm = VmIn(Seed.Deleted);
@@ -202,11 +201,11 @@ public class VmStateMachineTests
     }
 
     [Fact]
-    public void IsTerminal_IsTrueOnlyForDeleted()
+    public void IsDeleted_IsTrueOnlyForDeleted()
     {
-        Assert.True(VmIn(Seed.Deleted).IsTerminal);
+        Assert.True(VmIn(Seed.Deleted).IsDeleted);
         foreach (var seed in Enum.GetValues<Seed>().Where(s => s != Seed.Deleted))
-            Assert.False(VmIn(seed).IsTerminal);
+            Assert.False(VmIn(seed).IsDeleted);
     }
 
     // ---------- Shell session: only a running guest has an agent to exec in ----------
@@ -396,7 +395,7 @@ public class VmStateMachineTests
     public void StartAfterGuestShutdown_IsANewRequest()
     {
         var vm = VmIn(Seed.Running);
-        vm.MarkObserved(Seen(VmState.Stopped, null));
+        vm.MarkObserved(VmState.Stopped, null, null);
 
         OperationTicket ticket = vm.Start();
 
@@ -434,7 +433,7 @@ public class VmStateMachineTests
     public void RequestDelete_OfACreateThatFailedWithAnId_HandsOutATicket()
     {
         var vm = NewVm();
-        vm.FailOperation(vm.Pending!.Id, "42", null, "VM provisioning failed.", "raw");
+        vm.FailOperation(vm.Pending!.Id, "42", null, null, null, "VM provisioning failed.", "raw");
 
         OperationTicket? ticket = vm.Delete();
 
@@ -532,7 +531,7 @@ public class VmStateMachineTests
     [InlineData(Seed.Frozen)]
     public void SnapshotAndAttach_FromEveryStatusIncusAllows_HandOutTheId(Seed from)
     {
-        Assert.Equal("42", VmIn(from).AddSnapshot("s").ExternalVmId);
+        Assert.Equal("42", VmIn(from).AddSnapshot(Guid.NewGuid(), "s").ProviderId);
         Assert.Equal("42", VmIn(from).ProviderIdForVolumeAttach());
     }
 
@@ -544,7 +543,7 @@ public class VmStateMachineTests
     [InlineData(Seed.Deleted)]
     public void SnapshotAndAttach_FromAnythingElse_Throw(Seed from)
     {
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot("s")).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot(Guid.NewGuid(), "s")).Code);
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(from).ProviderIdForVolumeAttach()).Code);
     }
 
@@ -556,7 +555,7 @@ public class VmStateMachineTests
         var vm = VmIn(Seed.Running);
         if (waiting == VmOperationKind.Stop) vm.Stop(); else vm.Delete();
 
-        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.AddSnapshot("s")).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.AddSnapshot(Guid.NewGuid(), "s")).Code);
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.ProviderIdForVolumeAttach()).Code);
     }
 

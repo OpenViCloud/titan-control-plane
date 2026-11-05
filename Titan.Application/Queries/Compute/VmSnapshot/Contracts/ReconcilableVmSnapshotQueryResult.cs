@@ -7,5 +7,5 @@ namespace Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 public record ReconcilableVmSnapshotQueryResult(Guid Id, Guid VmId, string ExternalId, string CurrentExistence)
 {
     public static ReconcilableVmSnapshotQueryResult From(VmSnapshotEntity s) =>
-        new(s.Id, s.VmId, s.RequireExternalId(), s.CurrentExistence.ToString());
+        new(s.Id, s.VmId, s.GetExternalId(), s.CurrentExistence.ToString());
 }

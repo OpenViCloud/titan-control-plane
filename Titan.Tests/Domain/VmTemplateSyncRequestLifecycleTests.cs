@@ -24,7 +24,7 @@ public class VmTemplateSyncRequestLifecycleTests
         return $"{row.CurrentExistence}/{row.DesiredExistence}/{(row.Transition == null ? "-" : row.Transition.Value.ToString())}";
     }
 
-    private static PendingOperation<VmTemplateOperationKind>? Failed(VmTemplate t, string clusterId, Guid operationId,
+    private static VmTemplateOperationKind? Failed(VmTemplate t, string clusterId, Guid operationId,
         string? alias = null) =>
         t.FailSyncOperation(clusterId, operationId, alias, "Template sync failed due to a system error.", "raw");
 
@@ -65,9 +65,9 @@ public class VmTemplateSyncRequestLifecycleTests
         Failed(t, Mock, t.SyncIn(Mock).Id);
         PendingOperation<VmTemplateOperationKind> again = t.SyncIn(Mock);
 
-        PendingOperation<VmTemplateOperationKind>? ended = t.FinishSyncOperation(Mock, again.Id, Alias);
+        VmTemplateOperationKind? ended = t.FinishSyncOperation(Mock, again.Id, Alias);
 
-        Assert.Equal(again, ended);
+        Assert.Equal(again.Kind, ended);
         Assert.Equal("Exists/Exists/-", Shape(t, Mock));
         VmTemplateCluster row = Row(t, Mock);
         Assert.Equal((Alias, (string?)null, (string?)null, (DateTimeOffset?)null),
@@ -108,9 +108,9 @@ public class VmTemplateSyncRequestLifecycleTests
         VmTemplate t = NewTemplate();
         PendingOperation<VmTemplateOperationKind> sync = t.SyncIn(Mock);
 
-        PendingOperation<VmTemplateOperationKind>? ended = Failed(t, Mock, sync.Id);
+        VmTemplateOperationKind? ended = Failed(t, Mock, sync.Id);
 
-        Assert.Equal(sync, ended);
+        Assert.Equal(sync.Kind, ended);
         Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
         VmTemplateCluster row = Row(t, Mock);
         Assert.Equal(("Template sync failed due to a system error.", "raw"), (row.OperationFailureReason, row.OperationFailureDetail));

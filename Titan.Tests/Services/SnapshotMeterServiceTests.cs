@@ -57,7 +57,7 @@ public class SnapshotMeterServiceTests
     {
         var vol = Volume.Create(TenantIdOwner.Id, "vol-1", "cluster-1", "offering-1", 50);
         vol.MarkCreated("ext-vol");
-        var snap = VolumeSnapshot.Create(vol.Id, TenantId, name);
+        var snap = VolumeSnapshot.Create(Guid.NewGuid(), vol.Id, TenantId, name);
         snap.MarkCreated("ext-vol-snap");
         return snap;
     }

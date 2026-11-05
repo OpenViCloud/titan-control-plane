@@ -184,8 +184,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     private async Task<Volume> StoredVolumeWaitingOnADeleteAsync()
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.FinishOperation(volume.Pending!.Id, $"vol-{volume.Id:N}", null);
-        VolumeSnapshot snapshot = volume.AddSnapshot("s1").Snapshot;
+        volume.FinishOperation(volume.Pending!.Id, $"vol-{volume.Id:N}", false, null, false);
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
         volume.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, $"vol-{volume.Id:N}/s1");
         volume.DeleteSnapshot(snapshot.Id);
         volume.Delete();
@@ -300,8 +300,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]),
             "cluster-a", null, wantsPublicIpv6: false);
-        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1"));
-        FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         network.FinishFirewallRuleOperation(rule.Id, rule.Pending!.Id, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
         network.DeleteFirewallRule(rule.Id);
         network.Delete();
@@ -442,13 +442,13 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
-        VmSnapshot reverting = vm.AddSnapshot("reverting").Snapshot;
+        VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, $"ext-{vm.Id:N}/s1");
         vm.RevertSnapshot(reverting.Id);
-        VmSnapshot deleting = vm.AddSnapshot("deleting").Snapshot;
+        VmSnapshot deleting = vm.WithSnapshot("deleting");
         vm.FinishSnapshotOperation(deleting.Id, deleting.Pending!.Id, $"ext-{vm.Id:N}/s2");
         vm.DeleteSnapshot(deleting.Id);
-        vm.AddSnapshot("creating");
+        vm.AddSnapshot(Guid.NewGuid(), "creating");
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(

@@ -180,27 +180,27 @@ public class FirewallRuleLifecycleTests
     // ── Deleted ──
 
     [Fact]
-    public void MarkDeleted_OnAWaitingDelete_EndsIt_Once_AndIsTerminal()
+    public void MarkDeleted_OnAWaitingDelete_EndsIt_Once_AndIsDeleted()
     {
         var rule = ActiveRule();
         rule.Delete();
 
         Assert.True(rule.MarkDeleted());
         Assert.False(rule.MarkDeleted());
-        Assert.True(rule.IsTerminal);
+        Assert.True(rule.IsDeleted);
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
         Assert.Null(rule.CurrentState);
     }
 
     // The network's delete takes its ACL, and the rule with it, whatever the rule waited on.
     [Fact]
-    public void EndWithItsNetwork_WithNoDeleteOfItsOwn_IsTerminal()
+    public void EndWithItsNetwork_WithNoDeleteOfItsOwn_IsDeleted()
     {
         var rule = ActiveRule();
 
         rule.EndWithItsNetwork();
 
-        Assert.True(rule.IsTerminal);
+        Assert.True(rule.IsDeleted);
         Assert.Null(rule.Pending);
     }
 
@@ -219,13 +219,13 @@ public class FirewallRuleLifecycleTests
     }
 
     [Fact]
-    public void EndWithItsNetwork_WhileItsCreateWaits_EndsTheCreate_AndIsTerminal()
+    public void EndWithItsNetwork_WhileItsCreateWaits_EndsTheCreate_AndIsDeleted()
     {
         var rule = NewRule();
 
         rule.EndWithItsNetwork();
 
-        Assert.True(rule.IsTerminal);
+        Assert.True(rule.IsDeleted);
         Assert.Null(rule.Transition);
     }
 
@@ -283,7 +283,7 @@ public class FirewallRuleLifecycleTests
     }
 
     private static FirewallRule NewRule() =>
-        FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
+        FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/24");
 
     private static FirewallRule ActiveRule()
     {

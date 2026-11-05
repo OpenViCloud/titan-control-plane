@@ -10,7 +10,7 @@ namespace Titan.Infrastructure.Repositories;
 /// Every state condition is the SQL twin of a plain bool on VmSnapshot (titan-ops architecture/domain-methods.md#plain-code).
 public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
 {
-    // VmSnapshot.IsNotDeleted
+    // !VmSnapshot.IsDeleted
     public async Task<List<VmSnapshot>> FindByVmIdAsync(Guid vmId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.VmId == vmId && s.CurrentExistence != CurrentExistence.Deleted)
@@ -25,7 +25,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // VmSnapshot.IsNotDeleted with a provider id. A snapshot has no cluster of its own; it lives where its VM lives.
+    // !VmSnapshot.IsDeleted with a provider id. A snapshot has no cluster of its own; it lives where its VM lives.
     public async Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.ExternalId != null

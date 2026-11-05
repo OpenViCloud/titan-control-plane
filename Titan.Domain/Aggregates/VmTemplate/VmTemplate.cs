@@ -59,7 +59,7 @@ public class VmTemplate : IAggregateRoot
         };
     }
 
-    private VmTemplateCluster? ClusterOrNull(string clusterId)
+    private VmTemplateCluster? FindCluster(string clusterId)
     {
         foreach (VmTemplateCluster cluster in _clusters)
         {
@@ -74,7 +74,7 @@ public class VmTemplate : IAggregateRoot
     /// What customers in that cluster may pick: the template whose alias that cluster was last seen to hold.
     public bool IsSyncedIn(string clusterId)
     {
-        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = FindCluster(clusterId);
         if (cluster == null)
         {
             return false;
@@ -86,7 +86,7 @@ public class VmTemplate : IAggregateRoot
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     public string ProviderIdIn(string clusterId)
     {
-        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = FindCluster(clusterId);
         string? externalTemplateId = null;
         if (cluster != null)
         {
@@ -112,7 +112,7 @@ public class VmTemplate : IAggregateRoot
     /// worker names the alias), so the caller gets the operation itself for the command's key and payload.
     public PendingOperation<VmTemplateOperationKind> SyncIn(string clusterId)
     {
-        PendingOperation<VmTemplateOperationKind> operation = RowFor(clusterId).Sync();
+        PendingOperation<VmTemplateOperationKind> operation = GetOrAddCluster(clusterId).Sync();
         UpdatedAt = DateTimeOffset.UtcNow;
         return operation;
     }
@@ -120,14 +120,14 @@ public class VmTemplate : IAggregateRoot
     /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape):
     /// ends that cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with
     /// no row has nothing waiting, so no row is added for it.
-    public PendingOperation<VmTemplateOperationKind>? FinishSyncOperation(string clusterId, Guid operationId, string? externalId)
+    public VmTemplateOperationKind? FinishSyncOperation(string clusterId, Guid operationId, string? externalId)
     {
-        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = FindCluster(clusterId);
         if (cluster == null)
         {
             return null;
         }
-        PendingOperation<VmTemplateOperationKind>? ended = cluster.FinishOperation(operationId, externalId);
+        VmTemplateOperationKind? ended = cluster.FinishOperation(operationId, externalId);
         if (ended != null)
         {
             UpdatedAt = DateTimeOffset.UtcNow;
@@ -137,15 +137,15 @@ public class VmTemplate : IAggregateRoot
 
     /// The report that a sync's command in one cluster gave up: ends that cluster's waiting sync and records the reason
     /// when the report names it, else returns null and changes nothing. A cluster with no row has nothing waiting.
-    public PendingOperation<VmTemplateOperationKind>? FailSyncOperation(string clusterId, Guid operationId, string? externalId,
+    public VmTemplateOperationKind? FailSyncOperation(string clusterId, Guid operationId, string? externalId,
         string? reason, string? detail)
     {
-        VmTemplateCluster? cluster = ClusterOrNull(clusterId);
+        VmTemplateCluster? cluster = FindCluster(clusterId);
         if (cluster == null)
         {
             return null;
         }
-        PendingOperation<VmTemplateOperationKind>? ended = cluster.FailOperation(operationId, externalId, reason, detail);
+        VmTemplateOperationKind? ended = cluster.FailOperation(operationId, externalId, reason, detail);
         if (ended != null)
         {
             UpdatedAt = DateTimeOffset.UtcNow;
@@ -159,22 +159,22 @@ public class VmTemplate : IAggregateRoot
 
     public void MarkObservedIn(string clusterId)
     {
-        RowFor(clusterId).MarkObserved();
+        GetOrAddCluster(clusterId).MarkObserved();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public void MarkNotFoundIn(string clusterId)
     {
-        RowFor(clusterId).MarkNotFound();
+        GetOrAddCluster(clusterId).MarkNotFound();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    private VmTemplateCluster RowFor(string clusterId)
+    private VmTemplateCluster GetOrAddCluster(string clusterId)
     {
         if (string.IsNullOrWhiteSpace(clusterId))
             throw new ArgumentException("clusterId must not be empty", nameof(clusterId));
 
-        VmTemplateCluster? existing = ClusterOrNull(clusterId);
+        VmTemplateCluster? existing = FindCluster(clusterId);
         if (existing != null)
         {
             return existing;

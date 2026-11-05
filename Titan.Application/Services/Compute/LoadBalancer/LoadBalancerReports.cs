@@ -42,11 +42,11 @@ public static class LoadBalancerReports
     }
 
     /// Records the ended request's outcome once, under the load balancer's tenant.
-    public static void RecordEnded(LoadBalancerAggregate loadBalancer, PendingOperation<LoadBalancerOperationKind> ended,
+    public static void RecordEnded(LoadBalancerAggregate loadBalancer, LoadBalancerOperationKind ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
         Dictionary<LoadBalancerOperationKind, string> actions = outcome == OperationOutcome.Done ? DoneAction : FailedAction;
-        if (actions.TryGetValue(ended.Kind, out string? action))
+        if (actions.TryGetValue(ended, out string? action))
         {
             activity.StageOutcome(loadBalancer.TenantId, action, "load_balancer", loadBalancer.Id, loadBalancer.Name);
         }

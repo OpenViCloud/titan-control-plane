@@ -1,13 +1,12 @@
-using VmSnapshotTicket = Titan.Domain.Aggregates.Vm.VmSnapshotTicket;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 // Inside this namespace the bare name `VmSnapshot` binds to the namespace, not to the entity
 // (CS0118, titan-ops architecture/code-structure.md#aggregate-alias). Same for `Vm`. The aliases say which one is meant.
-using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
@@ -37,15 +36,14 @@ public class CreateVmSnapshotCommandHandler(
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.VmSnapshot, vm.SnapshotQuotaUsage);
 
         // The VM checks itself (snapshottable) and adds the snapshot in one call.
-        VmSnapshotTicket ticket = vm.AddSnapshot(command.Name);
-        VmSnapshotEntity snapshot = ticket.Snapshot;
-        string externalVmId = ticket.ExternalVmId;
-        activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
+        Guid snapshotId = Guid.NewGuid();
+        OperationTicket ticket = vm.AddSnapshot(snapshotId, command.Name);
+        activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshotId, command.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotCreateAsync(snapshot.Id, snapshot.Pending!.Id, vmId, externalVmId, command.Name,
+        await commands.EnqueueVmSnapshotCreateAsync(snapshotId, ticket.OperationId, vmId, ticket.ProviderId, command.Name,
             projectName, vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
 
-        return new CreateVmSnapshotCommandResult(snapshot.Id);
+        return new CreateVmSnapshotCommandResult(snapshotId);
     }
 }

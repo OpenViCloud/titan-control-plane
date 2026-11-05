@@ -1137,7 +1137,7 @@ public class VmServiceTests
         await ObserveGone(vm);
 
         Assert.Equal(CurrentExistence.NotFound, vm.CurrentExistence);
-        Assert.False(vm.IsTerminal);
+        Assert.False(vm.IsDeleted);
         Assert.Empty(_activity.Events);
     }
 

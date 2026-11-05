@@ -60,7 +60,7 @@ public class VmSnapshotChildTests
     {
         var vm = VmWithEverySnapshotSituation(); // usage 3
 
-        VmSnapshot snapshot = vm.AddSnapshot("nightly").Snapshot;
+        VmSnapshot snapshot = vm.WithSnapshot("nightly");
 
         Assert.Contains(snapshot, vm.Snapshots);
         Assert.Equal(vm.Id, snapshot.VmId);
@@ -81,7 +81,7 @@ public class VmSnapshotChildTests
             vm.MarkObserved(status.Value, null);
         }
 
-        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot("nightly"));
+        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot(Guid.NewGuid(), "nightly"));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);
@@ -93,7 +93,7 @@ public class VmSnapshotChildTests
         var vm = RunningVm();
         vm.Stop();
 
-        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot("nightly"));
+        var ex = Assert.Throws<BusinessException>(() => vm.AddSnapshot(Guid.NewGuid(), "nightly"));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);
@@ -177,9 +177,9 @@ public class VmSnapshotChildTests
         alreadyGone.MarkDeleted();
         vm.Delete();
 
-        PendingOperation<VmOperationKind>? outcome = vm.MarkDeleted();
+        VmOperationKind? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmOperationKind.Delete, outcome!.Kind);
+        Assert.Equal(VmOperationKind.Delete, outcome);
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
@@ -191,9 +191,9 @@ public class VmSnapshotChildTests
         var vm = RunningVm();
         vm.Delete();
 
-        PendingOperation<VmOperationKind>? outcome = vm.MarkDeleted();
+        VmOperationKind? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmOperationKind.Delete, outcome!.Kind);
+        Assert.Equal(VmOperationKind.Delete, outcome);
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
     }
 
@@ -208,7 +208,7 @@ public class VmSnapshotChildTests
         vm.Delete();
         vm.MarkDeleted();
 
-        PendingOperation<VmOperationKind>? repeat = vm.MarkDeleted();
+        VmOperationKind? repeat = vm.MarkDeleted();
 
         Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing
     }
@@ -262,12 +262,12 @@ public class VmSnapshotChildTests
         var untouched = vm.WithSnapshot("u");
 
         Assert.Equal(VmSnapshotOperationKind.Create,
-            vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1")!.Kind);
+            vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1"));
         vm.MarkSnapshotObserved(snapshot.Id);
         OperationTicket revert = vm.RevertSnapshot(snapshot.Id);
         Assert.Equal("vm42/s1", revert.ProviderId);
         Assert.Equal(VmSnapshotOperationKind.Revert,
-            vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null)!.Kind);
+            vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null));
         Assert.Null(vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null));
 
         OperationTicket delete = vm.DeleteSnapshot(snapshot.Id)!;
@@ -281,7 +281,7 @@ public class VmSnapshotChildTests
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
         OperationTicket again = vm.DeleteSnapshot(snapshot.Id)!;
         Assert.NotNull(vm.FinishSnapshotOperation(snapshot.Id, again.OperationId, null));
-        Assert.True(snapshot.IsTerminal);
+        Assert.True(snapshot.IsDeleted);
 
         Assert.Equal(VmSnapshotTransition.Creating, untouched.Transition);
         Assert.Null(untouched.ExternalId);

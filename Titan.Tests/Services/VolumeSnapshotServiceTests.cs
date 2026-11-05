@@ -754,7 +754,7 @@ public class VolumeSnapshotServiceTests
     private static void EndAttachDone(Volume vol, Vm vm)
     {
         VolumeAttachProviderIds attach = vol.Attach(vm);
-        vol.FinishOperation(attach.OperationId, null, new VolumeObservation(vm.Id, false));
+        vol.FinishOperation(attach.OperationId, null, true, vm.Id, false);
     }
 
     // A snapshot of the volume, in the shape named (titan-ops architecture/code-structure.md#child-entity).

@@ -132,9 +132,9 @@ public class ChildEntityGuardTests
     // method on a child is a way around the root, so each one says why it is not.
     private static readonly Dictionary<string, string> PublicChildMethods = new(StringComparer.Ordinal)
     {
-        ["FirewallRule.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
-        ["VolumeSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
-        ["VmSnapshot.RequireExternalId"] = "a read: hands the provider id to the reconciler's read model",
+        ["FirewallRule.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
+        ["VolumeSnapshot.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
+        ["VmSnapshot.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["InvoiceItem.Create"] = "the items exist before their invoice: built first, handed to the invoice's factory",
     };
 

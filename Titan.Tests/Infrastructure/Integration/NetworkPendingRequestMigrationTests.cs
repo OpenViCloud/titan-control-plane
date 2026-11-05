@@ -175,8 +175,8 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Network withARule = Network.Create(tenantId, NetworkName.Parse("after"), "cluster-a", null, wantsPublicIpv6: false);
-        withARule.FinishOperation(withARule.Pending!.Id, "net-after", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1"));
-        withARule.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
+        withARule.FinishOperation(withARule.Pending!.Id, "net-after", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        withARule.AddFirewallRule(Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         Network creating = Network.Create(tenantId, NetworkName.Parse("creating"), "cluster-a", null, wantsPublicIpv6: false);
         await using (TitanDbContext db = NewDbContext())
         {
