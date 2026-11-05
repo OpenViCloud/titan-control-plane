@@ -7,8 +7,9 @@ namespace Titan.Infrastructure.Migrations
 {
     /// A network's public IPv6 /64 is held in core.cluster_ipv6_routes (ClusterIpv6Route); the three columns that held
     /// it before, and their unique index, go now that no released image writes them. An image from before this migration
-    /// still maps them: rolling one back needs this migration's Down first. Down brings the columns back empty: their
-    /// values are not kept, and no image since ClusterIpv6Route reads them.
+    /// still maps them: rolling one back needs this migration's Down first, and during a deploy that image, still running
+    /// between this migration and its replacement, fails its network reads for that while, as VmPendingRequest's did.
+    /// Down brings the columns back empty: their values are not kept, and no image since ClusterIpv6Route reads them.
     public partial class NetworkDropsItsRouteColumns : Migration
     {
         /// <inheritdoc />

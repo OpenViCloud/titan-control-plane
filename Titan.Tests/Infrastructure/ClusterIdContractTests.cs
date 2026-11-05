@@ -89,7 +89,7 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task ATemplateReport_WithItsClusterId_IsRecorded()
+    public async Task ATemplateReport_ForAConfiguredCluster_PassesTheClusterCheck()
     {
         var templates = new Mock<IVmTemplateRepository>();
         var clusters = new ClusterOptions { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
