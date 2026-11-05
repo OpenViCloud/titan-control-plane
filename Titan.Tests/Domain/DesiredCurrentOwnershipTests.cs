@@ -33,7 +33,7 @@ public class DesiredCurrentOwnershipTests
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["FirewallRule.EndWithItsNetwork"] = "part of Network.FinishOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["VmSnapshot.EndWithItsVm"] = "part of Vm.FinishOperation: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -191,8 +191,9 @@ public class DesiredCurrentOwnershipTests
         return methods;
     }
 
-    // `?` in the type: Vm.CurrentState is VmStatus? (null while Incus has no instance) — a pattern without it would
-    // drop the VM from every scan here, still green. Desired is DesiredState or, where Titan sets no Incus status
+    // `?` in the type: a nullable current state (Network.CurrentState, null while Incus has no network) — a pattern
+    // without it would drop the type from every scan here, still green. The VM keeps one status and is out on purpose
+    // (OneStatus). Desired is DesiredState or, where Titan sets no Incus status
     // (network, firewall rule), only DesiredExistence; current is CurrentState or, where Incus has no status word
     // (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.

@@ -65,14 +65,13 @@ public class Vm : IAggregateRoot
 
     /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
     /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A stop or delete in flight
-    /// still bills while Incus last said so. VmRepository.ListBillableAsync writes the same test in SQL.
+    /// still bills while Incus last said so. Not found and Deleted need no test of their own: both clear the word, and
+    /// a Deleted VM ignores every later observation. VmRepository.ListBillableAsync writes the same test in SQL.
     public bool IsBilled =>
-        Status != VmStatus.Deleted
-        && Status != VmStatus.NotFound
-        && (ObservedState == VmStatus.Running
-            || ObservedState == VmStatus.Ready
-            || ObservedState == VmStatus.Frozen
-            || ObservedState == VmStatus.Error);
+        ObservedState == VmStatus.Running
+        || ObservedState == VmStatus.Ready
+        || ObservedState == VmStatus.Frozen
+        || ObservedState == VmStatus.Error;
 
     /// Holds its network while the instance may be on Incus, a delete in flight included (Incus refuses to delete a
     /// network an instance still uses), or while its create waits (titan-ops features/vm/design.md#counting-and-billing).

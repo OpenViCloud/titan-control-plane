@@ -13,8 +13,9 @@ namespace Titan.Infrastructure.Migrations
     public partial class VmSingleStatus : Migration
     {
         // Old columns to the one status, in the order the old aggregate read them: Deleted absorbs, a waiting request
-        // names its move, then what the reconciler last saw. A combination none of these names becomes Unknown: the
-        // reconciler writes the real status on its next cycle (Tôn Chủ accepts losing VM data in beta).
+        // names its move, then what the reconciler last saw. A combination none of these names becomes Failed when no
+        // instance was ever named (the reconciler lists only VMs with a provider id, and Failed deletes at once), else
+        // Unknown, which the reconciler's next cycle replaces (Tôn Chủ accepts losing VM data in beta).
         private const string StatusFromTheOldColumnsSql = @"
 UPDATE core.vms SET status = CASE
     WHEN current_existence = 'Deleted' THEN 'Deleted'
@@ -25,6 +26,7 @@ UPDATE core.vms SET status = CASE
     WHEN current_existence = 'NotFound' THEN 'NotFound'
     WHEN current_existence = 'NotCreated' AND request_failure_reason IS NOT NULL THEN 'Failed'
     WHEN current_existence = 'Exists' AND current_state IS NOT NULL THEN current_state
+    WHEN external_id IS NULL THEN 'Failed'
     ELSE 'Unknown'
 END;";
 

@@ -90,7 +90,7 @@ public class VmRequestLifecycleTests
     }
 
     [Fact]
-    public void Failed_OfTheCreate_WithoutAnId_LeavesTheVmNotCreated()
+    public void Failed_OfTheCreate_WithoutAnId_IsFailed()
     {
         Vm vm = NewVm();
 

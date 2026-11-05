@@ -109,7 +109,7 @@ namespace Titan.Domain.Aggregates.Vm
 
         public static void MarkStopped(this Vm vm) => vm.MarkObserved(VmStatus.Stopped, null);
 
-        /// The create command's Done, carrying only the instance name: existence, no status yet.
+        /// The create command's Done, carrying only the instance name: status Unknown until an observation.
         public static void MarkCreated(this Vm vm, string externalId)
         {
             if (vm.Status == VmStatus.Creating)

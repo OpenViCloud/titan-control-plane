@@ -58,12 +58,10 @@ public class VmRepository(TitanDbContext db) : IVmRepository
     // Vm.IsBilled
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.Status != VmStatus.Deleted
-                        && v.Status != VmStatus.NotFound
-                        && (v.ObservedState == VmStatus.Running
-                            || v.ObservedState == VmStatus.Ready
-                            || v.ObservedState == VmStatus.Frozen
-                            || v.ObservedState == VmStatus.Error))
+            .Where(v => v.ObservedState == VmStatus.Running
+                        || v.ObservedState == VmStatus.Ready
+                        || v.ObservedState == VmStatus.Frozen
+                        || v.ObservedState == VmStatus.Error)
             .AsNoTracking()
             .ToListAsync(ct);
 

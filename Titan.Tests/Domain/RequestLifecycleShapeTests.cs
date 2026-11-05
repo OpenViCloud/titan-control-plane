@@ -10,12 +10,13 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods, its
+// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods (the
+// VM, with one status, has one report method per move instead of FinishOperation and FailOperation), its
 // Mark* return nothing, a report with a foreign id changes nothing, every lifecycle handler locks the row, and every
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
-// semantics of FinishOperation and FailOperation beyond "a foreign id is ignored" (VmRequestLifecycleTests, VolumeRequestLifecycleTests,
+// semantics of the report methods beyond "a foreign id is ignored" (VmStatusTests, VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a

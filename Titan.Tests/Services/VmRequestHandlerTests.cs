@@ -50,7 +50,7 @@ public class VmRequestHandlerTests
 
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
-    // ---------- FinishOperation and FailOperation: the report names the request ----------
+    // ---------- the report moves (CreateSucceeded … DeleteFailed): the report names the request ----------
 
     [Fact]
     public async Task Done_OfTheCreate_StoresTheId_RecordsVmCreatedOnce_AndSaves()
@@ -298,10 +298,10 @@ public class VmRequestHandlerTests
         Assert.Equal("VM_NOT_FOUND", ex.Code);
     }
 
-    // ---------- Observe: current only ----------
+    // ---------- Observe: the Incus word; the status follows only when nothing waits ----------
 
     [Fact]
-    public async Task AnObservation_WritesCurrent_AndLeavesTheCreateWaiting()
+    public async Task AnObservation_RecordsTheIncusWord_AndLeavesTheCreateWaiting()
     {
         Vm vm = Given(NewVm());
         Guid createId = vm.PendingOperationId!.Value;

@@ -37,7 +37,8 @@ public class StopVmCommandHandler(
             return;
         }
 
-        // The guard stays on the aggregate (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id): any other state is refused there.
+        // The guard stays on the aggregate: any other status is refused there, and an accepted stop means the VM has its
+        // provider id (titan-ops features/vm/design.md#vm-status).
         Guid operationId = Guid.NewGuid();
         vm.Stop(operationId);
 

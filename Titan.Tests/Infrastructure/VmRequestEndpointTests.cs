@@ -101,7 +101,7 @@ public class VmRequestEndpointTests
     }
 
     [Fact]
-    public async Task Observation_WithTheToken_WritesCurrent_LeavesTheRequest_AndAnswers204()
+    public async Task Observation_WithTheToken_RecordsTheIncusWord_LeavesTheRequest_AndAnswers204()
     {
         Vm vm = RunningVmWaitingForAStop(out Guid requestId);
         ObserveVmEndpoint ep = ObserveEndpoint(vm, "secret");

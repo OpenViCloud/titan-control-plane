@@ -8,8 +8,8 @@ using Titan.Tests.Fakes;
 namespace Titan.Tests.Domain;
 
 // The two cross-aggregate checks a load balancer create and update go through: the network (Networking) and each
-// backend VM (Compute). The network hands out its provider id only past its own check; the VM checks itself, and its
-// GetExternalId throws without one (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+// backend VM (Compute). The network hands out its provider id only past its own check; the VM checks itself
+// (EnsureLoadBalancerCanSendTo refuses a VM without an instance), and its ExternalId is read after.
 public class LoadBalancerTargetTests
 {
     private static readonly Tenant Owner = TestTenant.WithRoomToSpare();

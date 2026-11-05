@@ -893,7 +893,15 @@ public class VolumeServiceTests
     {
         var vol = Volume.Create((owner ?? TenantIdOwner).Id, "vol-01", clusterId ?? "cluster-1", "offering-1", 50);
         var externalId = externalVolumeId ?? "cs-vol-default";
-        Vm target = attachTo ?? MakeVm(VmStatus.Running, clusterId: clusterId, owner: owner);
+        Vm target;
+        if (attachTo == null)
+        {
+            target = MakeVm(VmStatus.Running, clusterId: clusterId, owner: owner);
+        }
+        else
+        {
+            target = attachTo;
+        }
         switch (status)
         {
             case VolumeSeed.Creating:

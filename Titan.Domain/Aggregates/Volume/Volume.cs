@@ -134,7 +134,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
-    /// Checks the volume, the VM (Vm.ProviderIdForVolumeAttach) and the cluster; the provider ids come out only past all
+    /// Checks the volume, the VM (Vm.EnsureVolumeCanAttach) and the cluster; the provider ids come out only past all
     /// three (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). The current attachment
     /// waits for Incus to be seen using the volume.
     public VolumeAttachProviderIds Attach(Vm.Vm vm)

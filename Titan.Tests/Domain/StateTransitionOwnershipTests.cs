@@ -221,7 +221,7 @@ public class StateTransitionOwnershipTests
                 var body = end > 0 ? src[m.Index..end] : src[m.Index..];
                 // The method that ENTERS the terminal state is the one exception, by definition. CurrentState too:
                 // a split aggregate has no Status, and a pattern without it would not recognise its entering method.
-                // CurrentExistence too: a VM enters its terminal state on the existence axis.
+                // CurrentExistence too: a split aggregate enters its terminal state on the existence axis.
                 if (body.Contains("IsDeleted") || body.Contains("IsTerminal") || Regex.IsMatch(body, @"(?:Status|CurrentState|CurrentExistence) = \w+(?:Status|State|Existence)\.(Destroyed|Deleted)")) continue;
                 missing.Add($"{key}.{name}");
             }
