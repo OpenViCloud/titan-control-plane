@@ -105,7 +105,7 @@ public class VmRequestLifecycleTests
     // ---------- only the report with the right id ends a request ----------
 
     [Fact]
-    public void AReport_WithAnotherId_ChangesNothing_AndReturnsNull()
+    public void AReport_WithAnotherId_ChangesNothing_AndReturnsFalse()
     {
         Vm vm = RunningVm();
         Guid stop = Guid.NewGuid();

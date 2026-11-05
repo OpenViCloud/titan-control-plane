@@ -9,7 +9,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// A database with VMs under the desired and existence pairs and the pending kind meets the migration that gives the VM
 /// one status (titan-ops features/vm/design.md#vm-status): each combination of the old columns becomes the status the
 /// migration's CASE names, in its order, a combination it does not name becomes Failed without a provider id and
-/// Unknown with one, and observed_state keeps the old current_state word for word. The old column names below are the schema before it, by necessity.
+/// Unknown with one, and observed_state keeps the old current_state word for word, but for a Deleted or not-found row. The old column names below are the schema before it, by necessity.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class VmSingleStatusMigrationTests : IAsyncLifetime
@@ -111,6 +111,9 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         // without one nothing ever would, so it is Failed and deletes at once.
         var existsWithoutAWord = await SeedVmAsync("Exists", null);
         var notCreatedWithoutAReason = await SeedVmAsync("NotCreated", null);
+        // Billing reads the word alone, so a Deleted or not-found row loses a word the old model may have left.
+        var deletedWithAWord = await SeedVmAsync("Deleted", "Running");
+        var notFoundWithAWord = await SeedVmAsync("NotFound", "Stopped");
 
         await MigrateToAsync(ThisMigration);
 
@@ -130,7 +133,9 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         Assert.Equal("Stopping|-", byVm[stopWaitingNotFound.Id]);
         Assert.Equal("Unknown|-", byVm[existsWithoutAWord.Id]);
         Assert.Equal("Failed|-", byVm[notCreatedWithoutAReason.Id]);
-        Assert.Equal(15, byVm.Count);
+        Assert.Equal("Deleted|-", byVm[deletedWithAWord.Id]);
+        Assert.Equal("NotFound|-", byVm[notFoundWithAWord.Id]);
+        Assert.Equal(17, byVm.Count);
     }
 
     // The model reads the migrated rows: the waiting request keeps its id, and the status and the word load as enums.

@@ -24,7 +24,7 @@ UPDATE core.vms SET status = CASE
     WHEN pending_request_id IS NOT NULL AND pending_request_kind = 'Stop' THEN 'Stopping'
     WHEN pending_request_id IS NOT NULL AND pending_request_kind = 'Delete' THEN 'Deleting'
     WHEN current_existence = 'NotFound' THEN 'NotFound'
-    WHEN current_existence = 'NotCreated' AND request_failure_reason IS NOT NULL THEN 'Failed'
+    WHEN current_existence = 'NotCreated' AND request_failure_reason IS NOT NULL AND external_id IS NULL THEN 'Failed'
     WHEN current_existence = 'Exists' AND current_state IS NOT NULL THEN current_state
     WHEN external_id IS NULL THEN 'Failed'
     ELSE 'Unknown'
@@ -125,6 +125,8 @@ UPDATE core.vms SET
                 nullable: false, defaultValue: "Unknown");
             migrationBuilder.Sql(StatusFromTheOldColumnsSql);
             migrationBuilder.RenameColumn(name: "current_state", schema: "core", table: "vms", newName: "observed_state");
+            // Billing reads the word alone: a VM not found or Deleted holds none, as the aggregate keeps it.
+            migrationBuilder.Sql("UPDATE core.vms SET observed_state = NULL WHERE status IN ('Deleted', 'NotFound');");
             migrationBuilder.DropColumn(name: "desired_state", schema: "core", table: "vms");
             migrationBuilder.DropColumn(name: "current_existence", schema: "core", table: "vms");
             migrationBuilder.DropColumn(name: "desired_existence", schema: "core", table: "vms");
