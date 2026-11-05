@@ -5,6 +5,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
@@ -27,14 +28,22 @@ public class EndVmRequestCommandHandler(
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        VmOperationEnd end = new(outcome, command.ExternalId, observed, command.Reason, command.Detail);
-        VmOperationEnded? ended = vm.EndOperation(command.RequestId, end);
+        PendingOperation<VmOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = await VmReports.FinishOperationAsync(vm, command.RequestId, command.ExternalId, observed,
+                activity, volumeRepo, ct);
+        }
+        else
+        {
+            ended = await VmReports.FailOperationAsync(vm, command.RequestId, command.ExternalId, observed,
+                command.Reason, command.Detail, activity, volumeRepo, ct);
+        }
         if (ended == null)
         {
             return;
         }
 
-        await VmReports.RecordEndedAsync(vm, ended, outcome, activity, volumeRepo, ct);
         await repo.SaveAsync(ct);
     }
 }

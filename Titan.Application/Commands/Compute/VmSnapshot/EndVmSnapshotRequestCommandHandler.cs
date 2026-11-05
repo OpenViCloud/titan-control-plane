@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
 
@@ -26,8 +27,16 @@ public class EndVmSnapshotRequestCommandHandler(IVmRepository repo, IActivityRec
             ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
-        VmSnapshotOperationEnd end = new(outcome, command.ExternalId, command.Reason, command.Detail);
-        PendingOperation<VmSnapshotOperationKind>? ended = vm.EndSnapshotOperation(snapshot.Id, command.RequestId, end);
+        PendingOperation<VmSnapshotOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = vm.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
+        }
+        else
+        {
+            ended = vm.FailSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId, command.Reason,
+                command.Detail);
+        }
         if (ended == null)
         {
             return;

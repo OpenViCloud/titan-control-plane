@@ -274,15 +274,30 @@ public class StateTransitionOwnershipTests
     // Internal validation counts in three shapes: it throws; it consults IsTerminal (absorb instead
     // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an Ensure*() on itself
     // (EnsureSnapshottable, EnsureNoCreateWaiting, …), which a text scan looking only for `throw` would report as a violation.
+    private const string TemplateReport = "the report of a sync's own command, ignored unless it names the waiting " +
+        "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
+        "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).";
+
+    private const string PartOfTheReport = "private helper, reached only from the type's FinishOperation and " +
+        "FailOperation, which ignore a report that names another operation, and absorb one for a Deleted resource where " +
+        "the type can be Deleted, before calling it; it records what the worker saw, which a waiting operation may always take. A check here would " +
+        "repeat theirs.";
+
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
         ["VmTemplateCluster.MarkNotFound"] = "there is genuinely no invariant to enforce: NotFound is reachable " +
             "from every existence, carries no required field, and has no terminal state to absorb. " +
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
-        ["VmTemplateCluster.EndOperation"] = "the report of a sync's own command, ignored unless it names the waiting " +
-            "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
-            "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).",
+        ["VmTemplateCluster.FinishOperation"] = TemplateReport,
+        ["Vm.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["VmSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["Volume.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["VolumeSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["Network.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["FirewallRule.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
+        ["VmTemplateCluster.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
             "handler must recognise first.",

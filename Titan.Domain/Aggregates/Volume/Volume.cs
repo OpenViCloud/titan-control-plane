@@ -267,10 +267,16 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is Create's.
     public string ProviderIdForSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).ProviderIdForRestore();
 
-    /// The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape); null when it names
-    /// another operation than the one the snapshot waits on.
-    public PendingOperation<VolumeSnapshotOperationKind>? EndSnapshotOperation(Guid snapshotId, Guid operationId, VolumeSnapshotOperationEnd end) =>
-        RequireSnapshot(snapshotId).EndOperation(operationId, end);
+    /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
+    /// when it names another operation than the one the snapshot waits on.
+    public PendingOperation<VolumeSnapshotOperationKind>? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
+        RequireSnapshot(snapshotId).FinishOperation(operationId, externalId);
+
+    /// The report that the snapshot's own command gave up; null when it names another operation than the one the
+    /// snapshot waits on.
+    public PendingOperation<VolumeSnapshotOperationKind>? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
+        string? reason, string? detail) =>
+        RequireSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
@@ -295,78 +301,98 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     // an operation. It writes both axes — what the worker saw is current, and a failure puts desired back — so it is
     // neither an intent nor a Mark*.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
-    /// give-up, a Done that arrived twice, a report for a volume already Deleted. Done and Failed both record what the
-    /// worker saw. Done gives the operation its effect and clears an older failure; Failed records the reason and puts
-    /// desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public VolumeOperationEnded? EndOperation(Guid operationId, VolumeOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a Done that arrived twice, a report for a volume already Deleted. Records what the worker saw,
+    /// gives the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingOperation<VolumeOperationKind>? FinishOperation(Guid operationId, string? externalId, VolumeObservation? observed)
     {
         if (IsTerminal) return null;
+        PendingOperation<VolumeOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        ClearFailure();
+        if (waiting.Kind == VolumeOperationKind.Delete)
+        {
+            // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots):
+            // every snapshot not yet Deleted goes with the volume.
+            CurrentExistence = CurrentExistence.Deleted;
+            CurrentAttachedVmId = null;
+            CurrentAttachedElsewhere = false;
+            foreach (VolumeSnapshot snapshot in _snapshots)
+            {
+                snapshot.EndWithItsVolume();
+            }
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a stale give-up, a report for a volume already Deleted. Records what the worker saw and the
+    /// reason, and puts desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingOperation<VolumeOperationKind>? FailOperation(Guid operationId, string? externalId, VolumeObservation? observed,
+        string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<VolumeOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId, observed);
+
+        RecordFailure(reason, detail);
+        switch (waiting.Kind)
+        {
+            case VolumeOperationKind.Delete:
+                DesiredExistence = DesiredExistence.Exists;
+                break;
+            case VolumeOperationKind.Attach:
+            case VolumeOperationKind.Detach:
+                DesiredAttachedVmId = CurrentAttachedVmId;
+                break;
+            case VolumeOperationKind.Create:
+                // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
+                break;
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<VolumeOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
         PendingOperation<VolumeOperationKind>? waiting = Pending;
         bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
         if (!reportIsForThePendingOperation)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        return waiting;
+    }
 
-        // What the worker saw, whatever the outcome: a create that failed after Incus made the volume leaves a volume
-        // whose delete still reaches Incus.
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+    // What the worker saw, whatever the outcome: a create that failed after Incus made the volume leaves a volume whose
+    // delete still reaches Incus.
+    private void RecordWhatTheWorkerSaw(string? externalId, VolumeObservation? observed)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
-            ExternalId = end.ExternalId;
+            ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
         }
-        if (end.Observed != null)
+        if (observed != null)
         {
             CurrentExistence = CurrentExistence.Exists;
-            CurrentAttachedVmId = end.Observed.AttachedVmId;
-            CurrentAttachedElsewhere = end.Observed.AttachedElsewhere;
+            CurrentAttachedVmId = observed.AttachedVmId;
+            CurrentAttachedElsewhere = observed.AttachedElsewhere;
         }
-
-        var snapshotsWhoseDeleteEnded = new List<VolumeSnapshot>();
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == VolumeOperationKind.Delete)
-            {
-                // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots):
-                // every snapshot not yet Deleted goes with the volume; the ones whose own delete was waiting are named
-                // for their outcome.
-                CurrentExistence = CurrentExistence.Deleted;
-                CurrentAttachedVmId = null;
-                CurrentAttachedElsewhere = false;
-                foreach (VolumeSnapshot snapshot in _snapshots)
-                {
-                    bool itsOwnDeleteWasWaiting = snapshot.EndWithItsVolume();
-                    if (itsOwnDeleteWasWaiting)
-                    {
-                        snapshotsWhoseDeleteEnded.Add(snapshot);
-                    }
-                }
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            switch (waiting!.Kind)
-            {
-                case VolumeOperationKind.Delete:
-                    DesiredExistence = DesiredExistence.Exists;
-                    break;
-                case VolumeOperationKind.Attach:
-                case VolumeOperationKind.Detach:
-                    DesiredAttachedVmId = CurrentAttachedVmId;
-                    break;
-                case VolumeOperationKind.Create:
-                    // A failed create may be deleted, not retried: desired stays, the reason says why it is not so.
-                    break;
-            }
-        }
-
-        SetPending(null);
-        return new VolumeOperationEnded(waiting, snapshotsWhoseDeleteEnded);
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what Incus has, so

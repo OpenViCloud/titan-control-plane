@@ -8,6 +8,7 @@ using Titan.Domain.Values;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 using Titan.Application.Exceptions;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
@@ -66,21 +67,20 @@ public class UpdateVolumeSnapshotStatusCommandHandler(IVolumeRepository volumeRe
             case "Created":
                 if (waiting is { Kind: VolumeSnapshotOperationKind.Create })
                 {
-                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id, VolumeSnapshotOperationEnd.Done(req.ExternalId));
+                    ended = volume.FinishSnapshotOperation(snapshot.Id, waiting.Id, req.ExternalId);
                 }
                 break;
             case "RequestFailed":
                 if (waiting != null)
                 {
                     outcome = OperationOutcome.Failed;
-                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id,
-                        VolumeSnapshotOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    ended = volume.FailSnapshotOperation(snapshot.Id, waiting.Id, req.ExternalId, req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
                 if (waiting is { Kind: VolumeSnapshotOperationKind.Delete })
                 {
-                    ended = volume.EndSnapshotOperation(snapshot.Id, waiting.Id, VolumeSnapshotOperationEnd.Done(null));
+                    ended = volume.FinishSnapshotOperation(snapshot.Id, waiting.Id, null);
                 }
                 else
                 {

@@ -73,12 +73,48 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
     // ---- The report of the sync's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends it.
 
-    /// Ends the waiting sync when the report names it; any other report is ignored and returns null. Done clears an older
-    /// failure, Failed records the reason (titan-ops architecture/resource-lifecycle.md#kinds). An alias the worker found
-    /// is recorded with Exists whatever the outcome, the first alias kept, as the give-up of a create that finds its
-    /// object is for every other kind. Nothing absorbs a report here: a template is never Deleted, so the id check is the
-    /// whole guard.
-    internal PendingOperation<VmTemplateOperationKind>? EndOperation(Guid operationId, VmTemplateOperationEnd end)
+    /// The sync's command ended Done. Ends the waiting sync when the report names it; any other report is ignored and
+    /// returns null. Records the alias with Exists and clears an older failure
+    /// (titan-ops architecture/resource-lifecycle.md#kinds). Nothing absorbs a report here: a template is never Deleted,
+    /// so the id check is the whole guard.
+    internal PendingOperation<VmTemplateOperationKind>? FinishOperation(Guid operationId, string? externalId)
+    {
+        PendingOperation<VmTemplateOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(ExternalTemplateId, externalId);
+        RecordWhatTheWorkerSaw(externalId);
+
+        CurrentExistence = CurrentExistence.Exists;
+        ClearFailure();
+
+        SetPending(null);
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return waiting;
+    }
+
+    /// The sync's command gave up. Ends the waiting sync when the report names it; any other report is ignored and
+    /// returns null. Records the reason; an alias the worker found is recorded with Exists, as the give-up of a create
+    /// that finds its object is for every other kind (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<VmTemplateOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    {
+        PendingOperation<VmTemplateOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId);
+
+        RecordFailure(reason, detail);
+
+        SetPending(null);
+        UpdatedAt = DateTimeOffset.UtcNow;
+        return waiting;
+    }
+
+    private PendingOperation<VmTemplateOperationKind>? WaitingOperationNamed(Guid operationId)
     {
         PendingOperation<VmTemplateOperationKind>? waiting = Pending;
         bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
@@ -86,29 +122,22 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalTemplateId, end.ExternalId);
-
-        // Incus names the alias after the template, so every report names the same one; the first recorded stays.
-        bool bringsTheAlias = !string.IsNullOrEmpty(end.ExternalId);
-        if (bringsTheAlias)
-        {
-            ExternalTemplateId ??= end.ExternalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            CurrentExistence = CurrentExistence.Exists;
-            ClearFailure();
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-        }
-
-        SetPending(null);
-        UpdatedAt = DateTimeOffset.UtcNow;
         return waiting;
+    }
+
+    // Incus names the alias after the template, so every report names the same one; the first recorded stays.
+    private void RecordWhatTheWorkerSaw(string? externalId)
+    {
+        bool bringsTheAlias = !string.IsNullOrEmpty(externalId);
+        if (!bringsTheAlias)
+        {
+            return;
+        }
+        if (ExternalTemplateId == null)
+        {
+            ExternalTemplateId = externalId;
+        }
+        CurrentExistence = CurrentExistence.Exists;
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, ends no

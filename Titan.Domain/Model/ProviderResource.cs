@@ -5,9 +5,9 @@ namespace Titan.Domain.Model;
 
 /// A resource Titan keeps on the provider: it waits on at most one operation of kind TKind, and remembers the last
 /// operation that failed (titan-ops architecture/resource-lifecycle.md#shape). The state lives here once for every such
-/// type, root or entity; each type keeps its own operations, guards and EndOperation. The role is IAggregateRoot or
-/// IEntity (titan-ops architecture/domain-methods.md#provider-resource). An entity's pending operation is its own,
-/// independent of its root's.
+/// type, root or entity; each type keeps its own operations, guards, FinishOperation and FailOperation. The role is
+/// IAggregateRoot or IEntity (titan-ops architecture/domain-methods.md#provider-resource). An entity's pending operation
+/// is its own, independent of its root's.
 public abstract class ProviderResource<TKind> where TKind : struct, Enum
 {
     // An operation that failed (titan-ops architecture/desired-and-current.md#operation-failure): a fixed reason and the
@@ -37,9 +37,9 @@ public abstract class ProviderResource<TKind> where TKind : struct, Enum
     /// A Done must leave the resource named on the provider, or nothing would be left to delete it through. Without
     /// a stored id the pending operation can only be the one that makes it. Checked before the report writes anything;
     /// a worker that sends it has a bug, and does not retry a 422.
-    protected void RequireProviderIdOnDone(OperationOutcome outcome, string? storedId, string? reportedId)
+    protected void RequireProviderIdOnDone(string? storedId, string? reportedId)
     {
-        bool doneWithoutAnId = outcome == OperationOutcome.Done && storedId == null && string.IsNullOrEmpty(reportedId);
+        bool doneWithoutAnId = storedId == null && string.IsNullOrEmpty(reportedId);
         if (doneWithoutAnId)
         {
             string operation = Pending!.Kind.ToString().ToLowerInvariant();

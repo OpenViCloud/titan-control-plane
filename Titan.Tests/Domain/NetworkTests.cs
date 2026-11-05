@@ -307,10 +307,10 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.Delete();
 
-        NetworkOperationEnded? first = network.MarkDeleted();
-        NetworkOperationEnded? repeat = network.MarkDeleted();
+        PendingOperation<NetworkOperationKind>? first = network.MarkDeleted();
+        PendingOperation<NetworkOperationKind>? repeat = network.MarkDeleted();
 
-        Assert.Equal(NetworkOperationKind.Delete, first!.Operation.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, first!.Kind);
         Assert.Null(repeat);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);

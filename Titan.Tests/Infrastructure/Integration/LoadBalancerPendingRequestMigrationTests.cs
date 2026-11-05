@@ -146,13 +146,13 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         Guid tenantId = Guid.NewGuid();
         Guid networkId = Guid.NewGuid();
         Vm backend = Vm.Create(tenantId, networkId, "vm-after", "m", "tpl", "cluster-a", 20);
-        backend.EndOperation(backend.Pending!.Id, VmOperationEnd.Done("vm-after", new VmObservation(VmState.Running, "10.0.0.5", null)));
+        backend.FinishOperation(backend.Pending!.Id, "vm-after", new VmObservation(VmState.Running, "10.0.0.5", null));
         LoadBalancerListenerSpec http = new(LoadBalancerProtocol.TCP, 80, 8080);
         LoadBalancer creating = LoadBalancer.Create(tenantId, "creating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 1), [http], [backend]);
         LoadBalancer updating = LoadBalancer.Create(tenantId, "updating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 2), [http], [backend]);
-        updating.EndOperation(updating.Pending!.Id, LoadBalancerOperationEnd.Done(updating.Vip));
+        updating.FinishOperation(updating.Pending!.Id, updating.Vip);
         OperationTicket update = updating.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
         await using (TitanDbContext db = NewDbContext())
         {

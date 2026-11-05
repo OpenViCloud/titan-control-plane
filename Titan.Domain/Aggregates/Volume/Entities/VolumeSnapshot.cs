@@ -8,7 +8,8 @@ namespace Titan.Domain.Aggregates.Volume;
 /// (titan-ops features/volume/design.md#volume-snapshot). A child of Volume (titan-ops architecture/code-structure.md#child-entity):
 /// "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
 /// are the volume's invariants, so only the root reaches the methods below, and handlers go through
-/// Volume.AddSnapshot, DeleteSnapshot, ProviderIdForSnapshotRestore, EndSnapshotOperation and MarkSnapshot*.
+/// Volume.AddSnapshot, DeleteSnapshot, ProviderIdForSnapshotRestore, FinishSnapshotOperation, FailSnapshotOperation
+/// and MarkSnapshot*.
 public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEntity
 {
     /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
@@ -153,60 +154,84 @@ public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEn
     // ---- The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends its operation.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null. Done of the
-    /// create records the id and existence, Done of the delete ends the snapshot; Failed records the reason, keeps an
-    /// id the worker found, and gives a delete back (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<VolumeSnapshotOperationKind>? EndOperation(Guid operationId, VolumeSnapshotOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. The create records the id and existence, the delete ends the snapshot
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<VolumeSnapshotOperationKind>? FinishOperation(Guid operationId, string? externalId)
     {
         if (IsTerminal) return null;
-        PendingOperation<VolumeSnapshotOperationKind>? waiting = Pending;
-        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
-        if (!reportIsForThePendingOperation)
+        PendingOperation<VolumeSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId);
 
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
-        if (bringsTheProviderId)
+        ClearFailure();
+        if (waiting.Kind == VolumeSnapshotOperationKind.Delete)
         {
-            ExternalId = end.ExternalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == VolumeSnapshotOperationKind.Delete)
-            {
-                CurrentExistence = CurrentExistence.Deleted;
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == VolumeSnapshotOperationKind.Delete)
-            {
-                DesiredExistence = DesiredExistence.Exists;
-            }
+            CurrentExistence = CurrentExistence.Deleted;
         }
 
         SetPending(null);
         return waiting;
     }
 
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. Records the reason, keeps an id the worker found, and gives a delete back
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<VolumeSnapshotOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<VolumeSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId);
+
+        RecordFailure(reason, detail);
+        if (waiting.Kind == VolumeSnapshotOperationKind.Delete)
+        {
+            DesiredExistence = DesiredExistence.Exists;
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<VolumeSnapshotOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
+        PendingOperation<VolumeSnapshotOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
+        {
+            return null;
+        }
+        return waiting;
+    }
+
+    private void RecordWhatTheWorkerSaw(string? externalId)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
+        if (bringsTheProviderId)
+        {
+            ExternalId = externalId;
+            CurrentExistence = CurrentExistence.Exists;
+        }
+    }
+
     /// Incus deleted the volume, and with it this snapshot: the volume's delete Done ends it, whatever it waited on.
-    /// Returns true when the snapshot's own delete was waiting, so the caller records its outcome once.
-    internal bool EndWithItsVolume()
+    /// A snapshot already Deleted stays as it is.
+    internal void EndWithItsVolume()
     {
         if (IsTerminal)
         {
-            return false;
+            return;
         }
-        bool itsOwnDeleteWasWaiting = DeleteIsWaiting;
         CurrentExistence = CurrentExistence.Deleted;
         SetPending(null);
-        return itsOwnDeleteWasWaiting;
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,

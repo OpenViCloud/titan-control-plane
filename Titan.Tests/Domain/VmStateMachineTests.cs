@@ -44,7 +44,7 @@ public class VmStateMachineTests
         }
         if (seed == Seed.CreateFailed)
         {
-            vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Failed(null, null, "VM provisioning failed due to a system error.", "raw error"));
+            vm.FailOperation(vm.Pending!.Id, null, null, "VM provisioning failed due to a system error.", "raw error");
             return vm;
         }
 
@@ -59,7 +59,7 @@ public class VmStateMachineTests
             case Seed.NotFound: vm.MarkNotFound(); break;
             case Seed.Deleted:
                 OperationTicket delete = vm.Delete()!;
-                vm.EndOperation(delete.OperationId, VmOperationEnd.Done(null, null));
+                vm.FinishOperation(delete.OperationId, null, null);
                 break;
             default: throw new ArgumentOutOfRangeException(nameof(seed));
         }
@@ -89,9 +89,9 @@ public class VmStateMachineTests
     public void Start_OfAVmThatNeverRan_AfterItsCreateEnded_IsAStart_NotACreate()
     {
         var vm = NewVm();
-        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("42", Seen(VmState.Error, null)));
+        vm.FinishOperation(vm.Pending!.Id, "42", Seen(VmState.Error, null));
         OperationTicket stop = vm.Stop();
-        vm.EndOperation(stop.OperationId, VmOperationEnd.Done(null, Seen(VmState.Stopped, null)));
+        vm.FinishOperation(stop.OperationId, null, Seen(VmState.Stopped, null));
 
         OperationTicket start = vm.Start();
 
@@ -189,8 +189,8 @@ public class VmStateMachineTests
             v => v.MarkObserved(Seen(VmState.Running, "10.0.0.9")),
             v => v.MarkObserved(Seen(VmState.Error, null)),
             v => v.MarkNotFound(),
-            v => v.EndOperation(Guid.NewGuid(), VmOperationEnd.Done("9", Seen(VmState.Running))),
-            v => v.EndOperation(Guid.NewGuid(), VmOperationEnd.Failed(null, null, "late", "late detail")),
+            v => v.FinishOperation(Guid.NewGuid(), "9", Seen(VmState.Running)),
+            v => v.FailOperation(Guid.NewGuid(), null, null, "late", "late detail"),
         })
         {
             var vm = VmIn(Seed.Deleted);
@@ -434,7 +434,7 @@ public class VmStateMachineTests
     public void RequestDelete_OfACreateThatFailedWithAnId_HandsOutATicket()
     {
         var vm = NewVm();
-        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Failed("42", null, "VM provisioning failed.", "raw"));
+        vm.FailOperation(vm.Pending!.Id, "42", null, "VM provisioning failed.", "raw");
 
         OperationTicket? ticket = vm.Delete();
 

@@ -152,10 +152,10 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Vm vm = Vm.Create(tenantId, Guid.NewGuid(), "vm-after", "m-mig", "tpl", "cluster-a", 20);
-        vm.EndOperation(vm.Pending!.Id, VmOperationEnd.Done("vm-after", new VmObservation(VmState.Running, "10.0.0.5", null)));
+        vm.FinishOperation(vm.Pending!.Id, "vm-after", new VmObservation(VmState.Running, "10.0.0.5", null));
         VmSnapshot creating = vm.AddSnapshot("creating").Snapshot;
         VmSnapshot reverting = vm.AddSnapshot("reverting").Snapshot;
-        vm.EndSnapshotOperation(reverting.Id, reverting.Pending!.Id, VmSnapshotOperationEnd.Done("vm-after/s1"));
+        vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, "vm-after/s1");
         OperationTicket revert = vm.RevertSnapshot(reverting.Id);
         await using (TitanDbContext db = NewDbContext())
         {

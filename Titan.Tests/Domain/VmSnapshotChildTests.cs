@@ -160,10 +160,10 @@ public class VmSnapshotChildTests
         Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
     }
 
-    // The VM's delete took its snapshots with it (titan-ops features/vm/design.md#vm-snapshot). Only a snapshot whose own
-    // delete was waiting is named: its request is done here, once.
+    // The VM's delete took its snapshots with it (titan-ops features/vm/design.md#vm-snapshot). A snapshot's own waiting
+    // delete ends with it; which snapshots waited is read before the call, by VmReports.
     [Fact]
-    public void MarkDeleted_MarksEverySnapshotDeleted_AndNamesOnlyTheSnapshotsWhoseOwnDeleteWasWaiting()
+    public void MarkDeleted_MarksEverySnapshotDeleted_AndEndsTheirWaitingOperations()
     {
         var vm = RunningVm();
         var ready = vm.WithSnapshot("ready");
@@ -177,30 +177,29 @@ public class VmSnapshotChildTests
         alreadyGone.MarkDeleted();
         vm.Delete();
 
-        VmOperationEnded? outcome = vm.MarkDeleted();
+        PendingOperation<VmOperationKind>? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmOperationKind.Delete, outcome!.Operation.Kind);
+        Assert.Equal(VmOperationKind.Delete, outcome!.Kind);
         Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
         Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
         Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
-        Assert.Equal([leaving.Id], outcome.SnapshotsWhoseDeleteEnded.Select(s => s.Id));
     }
 
     [Fact]
-    public void MarkDeleted_WithNoSnapshots_NamesNone()
+    public void MarkDeleted_WithNoSnapshots_EndsTheDelete()
     {
         var vm = RunningVm();
         vm.Delete();
 
-        VmOperationEnded? outcome = vm.MarkDeleted();
+        PendingOperation<VmOperationKind>? outcome = vm.MarkDeleted();
 
-        Assert.Equal(VmOperationKind.Delete, outcome!.Operation.Kind);
-        Assert.Empty(outcome.SnapshotsWhoseDeleteEnded);
+        Assert.Equal(VmOperationKind.Delete, outcome!.Kind);
+        Assert.Equal(CurrentExistence.Deleted, vm.CurrentExistence);
     }
 
     // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     [Fact]
-    public void MarkDeleted_Repeated_IsAbsorbed_AndNamesNothingAgain()
+    public void MarkDeleted_Repeated_IsAbsorbed()
     {
         var vm = RunningVm();
         var leaving = vm.WithSnapshot("leaving");
@@ -209,9 +208,9 @@ public class VmSnapshotChildTests
         vm.Delete();
         vm.MarkDeleted();
 
-        VmOperationEnded? repeat = vm.MarkDeleted();
+        PendingOperation<VmOperationKind>? repeat = vm.MarkDeleted();
 
-        Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing and names nothing
+        Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing
     }
 
     // A snapshot the VM does not have answers like a missing one.
@@ -227,7 +226,7 @@ public class VmSnapshotChildTests
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.RevertSnapshot(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.DeleteSnapshot(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(
-            () => vm.EndSnapshotOperation(foreign.Id, foreign.Pending!.Id, VmSnapshotOperationEnd.Done("vm42/s9"))).Code);
+            () => vm.FinishSnapshotOperation(foreign.Id, foreign.Pending!.Id, "vm42/s9")).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.MarkSnapshotObserved(foreign.Id)).Code);
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", Assert.Throws<NotFoundException>(() => vm.MarkSnapshotNotFound(foreign.Id)).Code);
     }
@@ -263,25 +262,25 @@ public class VmSnapshotChildTests
         var untouched = vm.WithSnapshot("u");
 
         Assert.Equal(VmSnapshotOperationKind.Create,
-            vm.EndSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, VmSnapshotOperationEnd.Done("vm42/s1"))!.Kind);
+            vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1")!.Kind);
         vm.MarkSnapshotObserved(snapshot.Id);
         OperationTicket revert = vm.RevertSnapshot(snapshot.Id);
         Assert.Equal("vm42/s1", revert.ProviderId);
         Assert.Equal(VmSnapshotOperationKind.Revert,
-            vm.EndSnapshotOperation(snapshot.Id, revert.OperationId, VmSnapshotOperationEnd.Done(null))!.Kind);
-        Assert.Null(vm.EndSnapshotOperation(snapshot.Id, revert.OperationId, VmSnapshotOperationEnd.Done(null)));
+            vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null)!.Kind);
+        Assert.Null(vm.FinishSnapshotOperation(snapshot.Id, revert.OperationId, null));
 
         OperationTicket delete = vm.DeleteSnapshot(snapshot.Id)!;
         Assert.Equal("vm42/s1", delete.ProviderId);
         Assert.Equal(VmSnapshotTransition.Deleting, snapshot.Transition);
-        vm.EndSnapshotOperation(snapshot.Id, delete.OperationId, VmSnapshotOperationEnd.Failed(null, "refused", "raw"));
+        vm.FailSnapshotOperation(snapshot.Id, delete.OperationId, null, "refused", "raw");
         Assert.Null(snapshot.Transition);
         Assert.Equal("refused", snapshot.OperationFailureReason);
 
         vm.MarkSnapshotNotFound(snapshot.Id);
         Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
         OperationTicket again = vm.DeleteSnapshot(snapshot.Id)!;
-        Assert.NotNull(vm.EndSnapshotOperation(snapshot.Id, again.OperationId, VmSnapshotOperationEnd.Done(null)));
+        Assert.NotNull(vm.FinishSnapshotOperation(snapshot.Id, again.OperationId, null));
         Assert.True(snapshot.IsTerminal);
 
         Assert.Equal(VmSnapshotTransition.Creating, untouched.Transition);
@@ -293,7 +292,7 @@ public class VmSnapshotChildTests
     {
         var vm = RunningVm();
         var failed = vm.WithSnapshot("failed");
-        vm.EndSnapshotOperation(failed.Id, failed.Pending!.Id, VmSnapshotOperationEnd.Failed(null, "reason", "detail"));
+        vm.FailSnapshotOperation(failed.Id, failed.Pending!.Id, null, "reason", "detail");
 
         Assert.Null(vm.DeleteSnapshot(failed.Id));
 

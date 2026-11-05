@@ -8,7 +8,7 @@ namespace Titan.Domain.Aggregates.Vm;
 /// (titan-ops features/vm/design.md#vm-snapshot). A child of Vm (titan-ops architecture/code-structure.md#child-entity):
 /// "no VM delete while a snapshot command runs" and "the VM's delete takes its snapshots" are the
 /// VM's invariants, so only the root reaches the methods below, and handlers go through Vm.AddSnapshot,
-/// RevertSnapshot, DeleteSnapshot, EndSnapshotOperation and MarkSnapshot*.
+/// RevertSnapshot, DeleteSnapshot, FinishSnapshotOperation, FailSnapshotOperation and MarkSnapshot*.
 public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
 {
     /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
@@ -157,62 +157,85 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     // ---- The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends its operation.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null. Done of the
-    /// create records the id and existence, Done of the delete ends the snapshot, Done of the revert changes nothing
-    /// else: the disk is back at the snapshot, which stays. Failed records the reason, keeps an id the worker found, and
-    /// gives a delete back (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<VmSnapshotOperationKind>? EndOperation(Guid operationId, VmSnapshotOperationEnd end)
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. The create records the id and existence, the delete ends the snapshot, the revert changes nothing
+    /// else: the disk is back at the snapshot, which stays (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<VmSnapshotOperationKind>? FinishOperation(Guid operationId, string? externalId)
     {
         if (IsTerminal) return null;
-        PendingOperation<VmSnapshotOperationKind>? waiting = Pending;
-        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
-        if (!reportIsForThePendingOperation)
+        PendingOperation<VmSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId);
 
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
-        if (bringsTheProviderId)
+        ClearFailure();
+        if (waiting.Kind == VmSnapshotOperationKind.Delete)
         {
-            ExternalId = end.ExternalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == VmSnapshotOperationKind.Delete)
-            {
-                CurrentExistence = CurrentExistence.Deleted;
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == VmSnapshotOperationKind.Delete)
-            {
-                // Still on Incus: it counts against the quota again, and the next delete is a new operation.
-                DesiredExistence = DesiredExistence.Exists;
-            }
+            CurrentExistence = CurrentExistence.Deleted;
         }
 
         SetPending(null);
         return waiting;
     }
 
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null. Records the reason, keeps an id the worker found, and gives a delete back
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    internal PendingOperation<VmSnapshotOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<VmSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RecordWhatTheWorkerSaw(externalId);
+
+        RecordFailure(reason, detail);
+        if (waiting.Kind == VmSnapshotOperationKind.Delete)
+        {
+            // Still on Incus: it counts against the quota again, and the next delete is a new operation.
+            DesiredExistence = DesiredExistence.Exists;
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<VmSnapshotOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
+        PendingOperation<VmSnapshotOperationKind>? waiting = Pending;
+        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
+        if (!reportIsForThePendingOperation)
+        {
+            return null;
+        }
+        return waiting;
+    }
+
+    private void RecordWhatTheWorkerSaw(string? externalId)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
+        if (bringsTheProviderId)
+        {
+            ExternalId = externalId;
+            CurrentExistence = CurrentExistence.Exists;
+        }
+    }
+
     /// Incus deleted the instance, and this snapshot with it: the VM's delete Done ends the snapshot, whatever it waited
-    /// on. Returns true when the snapshot's own delete was waiting, so the caller records its outcome once.
-    internal bool EndWithItsVm()
+    /// on. A snapshot already Deleted stays as it is.
+    internal void EndWithItsVm()
     {
         if (IsTerminal)
         {
-            return false;
+            return;
         }
-        bool itsOwnDeleteWasWaiting = DeleteIsWaiting;
         CurrentExistence = CurrentExistence.Deleted;
         SetPending(null);
-        return itsOwnDeleteWasWaiting;
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,

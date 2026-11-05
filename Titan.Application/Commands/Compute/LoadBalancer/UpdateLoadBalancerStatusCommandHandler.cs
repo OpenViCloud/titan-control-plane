@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using Titan.Application.Exceptions;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
@@ -70,7 +71,7 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
             case "Created":
                 if (waiting is { Kind: LoadBalancerOperationKind.Create })
                 {
-                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(req.ExternalId));
+                    ended = loadBalancer.FinishOperation(waiting.Id, req.ExternalId);
                 }
                 break;
             case "Updated":
@@ -78,7 +79,7 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 // delete replaced, or one already ended.
                 if (waiting is { Kind: LoadBalancerOperationKind.Update } && waiting.Id == req.IntentId)
                 {
-                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(null));
+                    ended = loadBalancer.FinishOperation(waiting.Id, null);
                 }
                 break;
             case "RequestFailed":
@@ -88,8 +89,7 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 if (waiting != null && !namesAnotherRequest)
                 {
                     outcome = OperationOutcome.Failed;
-                    ended = loadBalancer.EndOperation(waiting.Id,
-                        LoadBalancerOperationEnd.Failed(req.ExternalId, req.Reason, req.Detail));
+                    ended = loadBalancer.FailOperation(waiting.Id, req.ExternalId, req.Reason, req.Detail);
                 }
                 break;
             case "Deleted":
@@ -97,7 +97,7 @@ public class UpdateLoadBalancerStatusCommandHandler(ILoadBalancerRepository repo
                 // what NotFound records.
                 if (waiting is { Kind: LoadBalancerOperationKind.Delete })
                 {
-                    ended = loadBalancer.EndOperation(waiting.Id, LoadBalancerOperationEnd.Done(null));
+                    ended = loadBalancer.FinishOperation(waiting.Id, null);
                 }
                 else
                 {

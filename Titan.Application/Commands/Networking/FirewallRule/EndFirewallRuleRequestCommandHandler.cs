@@ -7,6 +7,7 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
+using Titan.Application.Services;
 
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
@@ -31,8 +32,16 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        FirewallRuleOperationEnd end = new(outcome, command.ExternalId, state, command.Reason, command.Detail);
-        PendingOperation<FirewallRuleOperationKind>? ended = network.EndFirewallRuleOperation(rule.Id, command.RequestId, end);
+        PendingOperation<FirewallRuleOperationKind>? ended;
+        if (outcome == OperationOutcome.Done)
+        {
+            ended = network.FinishFirewallRuleOperation(rule.Id, command.RequestId, command.ExternalId, state);
+        }
+        else
+        {
+            ended = network.FailFirewallRuleOperation(rule.Id, command.RequestId, command.ExternalId, state,
+                command.Reason, command.Detail);
+        }
         if (ended == null)
         {
             return;

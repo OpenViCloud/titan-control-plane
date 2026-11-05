@@ -49,21 +49,20 @@ public class UpdateVolumeStatusCommandHandler(
             ?? throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         PendingOperation<VolumeOperationKind>? waiting = volume.Pending;
-        VolumeOperationEnded? ended = null;
-        OperationOutcome outcome = OperationOutcome.Done;
+        PendingOperation<VolumeOperationKind>? ended = null;
         switch (req.Report)
         {
             case "Observed":
                 await ObserveAsync(volume, req.Exists!.Value, req.AttachedTo, ct);
                 // Temporary allowlist, rollout phase 6 removes it (VolumeReports.EndAttachOrDetachTheObservationReached):
                 // the old attach and detach commands report themselves this way.
-                ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
+                VolumeReports.EndAttachOrDetachTheObservationReached(volume, activity);
                 break;
             case "Created":
                 // The old create and restore commands report the volume name as soon as Incus holds it: the create's Done.
                 if (waiting is { Kind: VolumeOperationKind.Create })
                 {
-                    ended = volume.EndOperation(waiting.Id, VolumeOperationEnd.Done(req.ExternalId, null));
+                    VolumeReports.FinishOperation(volume, waiting.Id, req.ExternalId, null, activity);
                 }
                 break;
             case "RequestFailed":
@@ -73,14 +72,12 @@ public class UpdateVolumeStatusCommandHandler(
                 if (req.Exists != null)
                 {
                     await ObserveAsync(volume, req.Exists.Value, req.AttachedTo, ct);
-                    ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume);
+                    ended = VolumeReports.EndAttachOrDetachTheObservationReached(volume, activity);
                 }
                 PendingOperation<VolumeOperationKind>? stillWaiting = volume.Pending;
                 if (ended == null && stillWaiting != null)
                 {
-                    outcome = OperationOutcome.Failed;
-                    ended = volume.EndOperation(stillWaiting.Id,
-                        VolumeOperationEnd.Failed(req.ExternalId, null, req.Reason, req.Detail));
+                    VolumeReports.FailOperation(volume, stillWaiting.Id, req.ExternalId, null, req.Reason, req.Detail, activity);
                 }
                 break;
             case "Deleted":
@@ -88,18 +85,13 @@ public class UpdateVolumeStatusCommandHandler(
                 // is what NotFound records.
                 if (waiting is { Kind: VolumeOperationKind.Delete })
                 {
-                    ended = volume.EndOperation(waiting.Id, VolumeOperationEnd.Done(null, null));
+                    VolumeReports.FinishOperation(volume, waiting.Id, null, null, activity);
                 }
                 else
                 {
                     volume.MarkNotFound();
                 }
                 break;
-        }
-
-        if (ended != null)
-        {
-            VolumeReports.RecordEnded(volume, ended, outcome, activity);
         }
 
         await repo.SaveAsync(ct);

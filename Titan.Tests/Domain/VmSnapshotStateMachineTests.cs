@@ -203,7 +203,7 @@ public class VmSnapshotStateMachineTests
     public void AFailedRevert_EndsIt_WithTheReason_AndKeepsTheSnapshot()
     {
         var s = SnapshotIn(Seed.RevertRequested);
-        s.EndOperation(s.Pending!.Id, VmSnapshotOperationEnd.Failed(null, "revert failed", "raw"));
+        s.FailOperation(s.Pending!.Id, null, "revert failed", "raw");
         Assert.Equal("Exists/Exists/-", Shape(s));
         Assert.Equal("revert failed", s.OperationFailureReason);
     }
@@ -250,7 +250,7 @@ public class VmSnapshotStateMachineTests
     public void AFailedDelete_GivesTheSnapshotBack_WithTheReason()
     {
         var s = SnapshotIn(Seed.DeleteRequested);
-        s.EndOperation(s.Pending!.Id, VmSnapshotOperationEnd.Failed(null, "delete failed", "raw"));
+        s.FailOperation(s.Pending!.Id, null, "delete failed", "raw");
         Assert.Equal("Exists/Exists/-", Shape(s));
         Assert.Equal("delete failed", s.OperationFailureReason);
         Assert.Equal("vm42/s7", s.Delete()!.ProviderId);

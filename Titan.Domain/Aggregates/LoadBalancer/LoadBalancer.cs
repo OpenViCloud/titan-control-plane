@@ -213,67 +213,95 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
     // ends an operation. It writes both axes and the rows, so it is neither an intent nor a Mark*.
 
-    /// Ends the waiting operation when the report names it; any other report is ignored and returns null: a stale
-    /// give-up, a Done that arrived twice, the report of an update a delete replaced, a report for a load balancer
-    /// already Deleted. A VIP the worker found is kept whatever the outcome. Done gives the operation its effect and
-    /// clears an older failure; Failed records the reason and puts desired back according to the kind
+    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a Done that arrived twice, the report of an update a delete replaced, a report for a load balancer
+    /// already Deleted. Keeps a VIP the worker found, gives the operation its effect and clears an older failure
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<LoadBalancerOperationKind>? EndOperation(Guid operationId, LoadBalancerOperationEnd end)
+    public PendingOperation<LoadBalancerOperationKind>? FinishOperation(Guid operationId, string? externalId)
     {
         if (IsTerminal) return null;
+        PendingOperation<LoadBalancerOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        RequireProviderIdOnDone(ExternalId, externalId);
+        RecordWhatTheWorkerSaw(externalId);
+
+        ClearFailure();
+        if (waiting.Kind == LoadBalancerOperationKind.Delete)
+        {
+            CurrentExistence = CurrentExistence.Deleted;
+        }
+        else
+        {
+            // Incus took what was asked.
+            CurrentExistence = CurrentExistence.Exists;
+            Apply();
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
+    /// returns null: a stale give-up, the report of an update a delete replaced, a report for a load balancer already
+    /// Deleted. Keeps a VIP the worker found, records the reason and puts desired back according to the kind
+    /// (titan-ops architecture/resource-lifecycle.md#kinds).
+    public PendingOperation<LoadBalancerOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    {
+        if (IsTerminal) return null;
+        PendingOperation<LoadBalancerOperationKind>? waiting = WaitingOperationNamed(operationId);
+        if (waiting == null)
+        {
+            return null;
+        }
+        bool bringsTheProviderId = RecordWhatTheWorkerSaw(externalId);
+
+        RecordFailure(reason, detail);
+        if (waiting.Kind == LoadBalancerOperationKind.Delete)
+        {
+            // A delete may have replaced a waiting update, whose rows are still the ones asked: what Incus took is
+            // asked again, or desired and applied would differ with nothing waiting, and the replaced spec asked
+            // again would look like a repeat.
+            DesiredExistence = DesiredExistence.Exists;
+            AskWhatIsApplied();
+        }
+        else if (waiting.Kind == LoadBalancerOperationKind.Update)
+        {
+            AskWhatIsApplied();
+        }
+        else if (bringsTheProviderId)
+        {
+            // The create's one write carries the whole spec: a VIP on Incus holds what was asked.
+            Apply();
+        }
+
+        SetPending(null);
+        return waiting;
+    }
+
+    private PendingOperation<LoadBalancerOperationKind>? WaitingOperationNamed(Guid operationId)
+    {
         PendingOperation<LoadBalancerOperationKind>? waiting = Pending;
         bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
         if (!reportIsForThePendingOperation)
         {
             return null;
         }
-        RequireProviderIdOnDone(end.Outcome, ExternalId, end.ExternalId);
+        return waiting;
+    }
 
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(end.ExternalId);
+    /// Returns true when the report brought the VIP this load balancer did not have yet.
+    private bool RecordWhatTheWorkerSaw(string? externalId)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
-            ExternalId = end.ExternalId;
+            ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
         }
-
-        if (end.Outcome == OperationOutcome.Done)
-        {
-            ClearFailure();
-            if (waiting!.Kind == LoadBalancerOperationKind.Delete)
-            {
-                CurrentExistence = CurrentExistence.Deleted;
-            }
-            else
-            {
-                // Incus took what was asked.
-                CurrentExistence = CurrentExistence.Exists;
-                Apply();
-            }
-        }
-        else
-        {
-            RecordFailure(end.Reason, end.Detail);
-            if (waiting!.Kind == LoadBalancerOperationKind.Delete)
-            {
-                // A delete may have replaced a waiting update, whose rows are still the ones asked: what Incus took is
-                // asked again, or desired and applied would differ with nothing waiting, and the replaced spec asked
-                // again would look like a repeat.
-                DesiredExistence = DesiredExistence.Exists;
-                AskWhatIsApplied();
-            }
-            else if (waiting.Kind == LoadBalancerOperationKind.Update)
-            {
-                AskWhatIsApplied();
-            }
-            else if (bringsTheProviderId)
-            {
-                // The create's one write carries the whole spec: a VIP on Incus holds what was asked.
-                Apply();
-            }
-        }
-
-        SetPending(null);
-        return waiting;
+        return bringsTheProviderId;
     }
 
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
