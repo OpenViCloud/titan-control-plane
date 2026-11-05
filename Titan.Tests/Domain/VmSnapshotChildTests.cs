@@ -160,10 +160,10 @@ public class VmSnapshotChildTests
         Assert.Equal(VmOperationKind.Delete, vm.Pending?.Kind);
     }
 
-    // The VM's delete took its snapshots with it (titan-ops features/vm/design.md#vm-snapshot). Only a snapshot whose own
-    // delete was waiting is named: its request is done here, once.
+    // The VM's delete took its snapshots with it (titan-ops features/vm/design.md#vm-snapshot). A snapshot's own waiting
+    // delete ends with it; which snapshots waited is read before the call, by VmReports.
     [Fact]
-    public void MarkDeleted_MarksEverySnapshotDeleted_AndNamesOnlyTheSnapshotsWhoseOwnDeleteWasWaiting()
+    public void MarkDeleted_MarksEverySnapshotDeleted_AndEndsTheirWaitingOperations()
     {
         var vm = RunningVm();
         var ready = vm.WithSnapshot("ready");
@@ -199,7 +199,7 @@ public class VmSnapshotChildTests
 
     // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     [Fact]
-    public void MarkDeleted_Repeated_IsAbsorbed_AndNamesNothingAgain()
+    public void MarkDeleted_Repeated_IsAbsorbed()
     {
         var vm = RunningVm();
         var leaving = vm.WithSnapshot("leaving");
@@ -210,7 +210,7 @@ public class VmSnapshotChildTests
 
         PendingOperation<VmOperationKind>? repeat = vm.MarkDeleted();
 
-        Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing and names nothing
+        Assert.Null(repeat); // nothing waits on a Deleted VM, so the report ends nothing
     }
 
     // A snapshot the VM does not have answers like a missing one.

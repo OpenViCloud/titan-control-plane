@@ -135,7 +135,8 @@ public class VmTemplate : IAggregateRoot
         return ended;
     }
 
-    /// The report that a sync's command in one cluster gave up: as FinishSyncOperation, the cluster records the reason.
+    /// The report that a sync's command in one cluster gave up: ends that cluster's waiting sync and records the reason
+    /// when the report names it, else returns null and changes nothing. A cluster with no row has nothing waiting.
     public PendingOperation<VmTemplateOperationKind>? FailSyncOperation(string clusterId, Guid operationId, string? externalId,
         string? reason, string? detail)
     {

@@ -279,8 +279,8 @@ public class StateTransitionOwnershipTests
         "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).";
 
     private const string PartOfTheReport = "private helper, reached only from the type's FinishOperation and " +
-        "FailOperation, which absorb a report for a Deleted resource and ignore one that names another operation before " +
-        "calling it; it records what the worker saw, which a waiting operation may always take. A check here would " +
+        "FailOperation, which ignore a report that names another operation, and absorb one for a Deleted resource where " +
+        "the type can be Deleted, before calling it; it records what the worker saw, which a waiting operation may always take. A check here would " +
         "repeat theirs.";
 
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()

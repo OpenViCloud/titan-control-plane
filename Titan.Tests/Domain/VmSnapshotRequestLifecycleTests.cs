@@ -275,8 +275,7 @@ public class VmSnapshotRequestLifecycleTests
         Assert.NotNull(vm.Delete());
     }
 
-    // Incus deletes an instance's snapshots with it: the VM's delete Done ends every snapshot, whatever it waited on,
-    // and names only those whose own delete was waiting, for their outcome.
+    // Incus deletes an instance's snapshots with it: the VM's delete Done ends every snapshot, whatever it waited on.
     [Fact]
     public void TheVmsDeleteDone_EndsEverySnapshot()
     {

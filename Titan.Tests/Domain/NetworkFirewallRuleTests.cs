@@ -77,9 +77,9 @@ public class NetworkFirewallRuleTests
     }
 
     // The network's delete took its ACL and every rule in it (titan-ops features/network/design.md#network-lifecycle).
-    // Only a rule whose own delete was waiting is named: its request is done here, once.
+    // A rule's own waiting delete ends with it; which rules waited is read before the call, by NetworkReports.
     [Fact]
-    public void DeleteDone_MarksEveryLiveRuleDeleted_AndNamesOnlyTheRulesWhoseOwnDeleteWasWaiting()
+    public void DeleteDone_MarksEveryLiveRuleDeleted_AndEndsTheirWaitingOperations()
     {
         var network = UsableNetwork();
         var enabled = Rule(network, 22);
@@ -115,10 +115,10 @@ public class NetworkFirewallRuleTests
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
     }
 
-    // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs): a repeat changes nothing
-    // and names nothing again.
+    // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs): a repeat ends nothing
+    // and changes nothing.
     [Fact]
-    public void DeleteDone_Repeated_IsIgnored_AndNamesNothingAgain()
+    public void DeleteDone_Repeated_IsIgnored()
     {
         var network = UsableNetwork();
         var deleting = Rule(network, 23);

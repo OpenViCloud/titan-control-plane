@@ -220,7 +220,7 @@ public class VolumeRequestLifecycleTests
     // ---------- the delete ----------
 
     [Fact]
-    public void Done_OfTheDelete_EndsTheVolume_TakesItsSnapshots_AndNamesTheOnesWhoseDeleteWaited()
+    public void Done_OfTheDelete_EndsTheVolume_AndTakesItsSnapshots()
     {
         Volume volume = RestingVolume();
         VolumeSnapshot waitingDelete = AddRestingSnapshot(volume);

@@ -75,9 +75,9 @@ public class VolumeSnapshotChildTests
     }
 
     // The volume's delete Done took its snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots).
-    // Only a snapshot whose own delete was waiting is named: its request is done here, once.
+    // A snapshot's own waiting delete ends with it; which snapshots waited is read before the call, by VolumeReports.
     [Fact]
-    public void MarkDeleted_MarksEverySnapshotDeleted_AndNamesOnlyTheSnapshotsWhoseOwnDeleteWasWaiting()
+    public void DeleteDone_MarksEverySnapshotDeleted_AndEndsTheirWaitingOperations()
     {
         var volume = RestingVolume();
         var lost = volume.WithSnapshot("lost");
@@ -100,7 +100,7 @@ public class VolumeSnapshotChildTests
     }
 
     [Fact]
-    public void MarkDeleted_WithNoSnapshots_EndsTheDelete()
+    public void DeleteDone_WithNoSnapshots_EndsTheDelete()
     {
         var volume = RestingVolume();
         OperationTicket delete = volume.Delete()!;
@@ -114,7 +114,7 @@ public class VolumeSnapshotChildTests
     // Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs): the same Done again
     // ends nothing, so no snapshot's delete is recorded twice.
     [Fact]
-    public void MarkDeleted_Repeated_IsAbsorbed_AndNamesNothingAgain()
+    public void DeleteDone_Repeated_IsAbsorbed()
     {
         var volume = RestingVolume();
         var leaving = volume.WithSnapshot("leaving");

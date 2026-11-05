@@ -201,8 +201,8 @@ public class NetworkRoutesTests
 
         Assert.Contains(nameof(Network.MarkObserved), network);
         Assert.DoesNotContain(nameof(Network.ReceivePublicIpv6), network);
-        // FailOperation lets go of the /64 on a create that failed before Incus, and a delete FinishOperation ends gives
-        // the route back.
+        // Only NetworkRoutes ends the network's own operation: a create that failed before Incus lets go of the /64, and
+        // a delete done gives the route back.
         Assert.DoesNotContain(nameof(Network.FinishOperation), network);
         Assert.DoesNotContain(nameof(Network.FailOperation), network);
         Assert.Contains(nameof(ClusterIpv6Route.NextToGive), route);
