@@ -477,7 +477,7 @@ public class Vm : IAggregateRoot
     }
 
     /// The create command gave up. Before Incus held an instance the VM is Failed; after (the report names it) it
-    /// rests in the Incus word last seen, Unknown when none was.
+    /// rests in the Incus word it holds, Unknown when it holds none.
     public bool CreateFailed(Guid operationId, string? externalId, string? reason, string? detail)
     {
         if (Status != VmStatus.Creating || PendingOperationId != operationId)
@@ -537,7 +537,7 @@ public class Vm : IAggregateRoot
         return true;
     }
 
-    /// The start command gave up: back to the Incus word last seen, with the reason
+    /// The start command gave up: back to the Incus word the VM holds (Unknown without one), with the reason
     /// (titan-ops architecture/desired-and-current.md#abandoned-operation).
     public bool StartFailed(Guid operationId, string? reason, string? detail)
     {
@@ -589,7 +589,7 @@ public class Vm : IAggregateRoot
         return true;
     }
 
-    /// The stop command gave up: back to the Incus word last seen, with the reason.
+    /// The stop command gave up: back to the Incus word the VM holds (Unknown without one), with the reason.
     public bool StopFailed(Guid operationId, string? reason, string? detail)
     {
         if (Status != VmStatus.Stopping || PendingOperationId != operationId)
@@ -636,7 +636,7 @@ public class Vm : IAggregateRoot
         return true;
     }
 
-    /// The delete command gave up: back to the Incus word last seen, with the reason; the next delete is a new
+    /// The delete command gave up: back to the Incus word the VM holds (Unknown without one), with the reason; the next delete is a new
     /// operation (titan-ops architecture/desired-and-current.md#abandoned-operation).
     public bool DeleteFailed(Guid operationId, string? reason, string? detail)
     {
