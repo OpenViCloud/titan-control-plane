@@ -47,7 +47,7 @@ public class VmEndpointBindingTests
         _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync(() => [SampleVm()]);
     }
 
-    private static Titan.Domain.Aggregates.Tenant.Tenant ProvisionedTenant() =>
+    private static Titan.Domain.Aggregates.Tenant.Tenant ActiveTenant() =>
         TestTenant.Active("acme", "owner-1", "admin@acme.com");
 
     // A VM owned by TenantId and already Running, so the ownership check passes and Stop has a
@@ -99,7 +99,7 @@ public class VmEndpointBindingTests
     {
         var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
         tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
-            .ReturnsAsync(ProvisionedTenant());
+            .ReturnsAsync(ActiveTenant());
         var handler = new CreateVmCommandHandler(
             _repo.Object,
             new Mock<Titan.Domain.Repositories.INetworkRepository>().Object,
@@ -149,7 +149,7 @@ public class VmEndpointBindingTests
     {
         var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
         tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
-            .ReturnsAsync(ProvisionedTenant());
+            .ReturnsAsync(ActiveTenant());
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
