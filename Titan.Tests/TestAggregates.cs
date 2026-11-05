@@ -26,9 +26,27 @@ internal static class TestAggregates
             owner.Id, NetworkName.Parse(name), clusterId, requested, false, defaultIngressPolicy, defaultEgressPolicy);
     }
 
-    internal static VmSnapshot WithSnapshot(this Vm vm, string name) => vm.AddSnapshot(name).Snapshot;
+    internal static VmSnapshot WithSnapshot(this Vm vm, string name)
+    {
+        Guid snapshotId = Guid.NewGuid();
+        vm.AddSnapshot(snapshotId, name);
+        return vm.Snapshots.Single(s => s.Id == snapshotId);
+    }
 
-    internal static VolumeSnapshot WithSnapshot(this VolumeAggregate volume, string name) => volume.AddSnapshot(name).Snapshot;
+    internal static VolumeSnapshot WithSnapshot(this VolumeAggregate volume, string name)
+    {
+        Guid snapshotId = Guid.NewGuid();
+        volume.AddSnapshot(snapshotId, name);
+        return volume.Snapshots.Single(s => s.Id == snapshotId);
+    }
+
+    internal static FirewallRule WithFirewallRule(
+        this NetworkAggregate network, FirewallDirection direction, FirewallProtocol protocol, PortRange? ports, FirewallCidr cidr)
+    {
+        Guid ruleId = Guid.NewGuid();
+        network.AddFirewallRule(ruleId, direction, protocol, ports, cidr);
+        return network.FirewallRules.Single(r => r.Id == ruleId);
+    }
 
     internal static FirewallRule WithFirewallRule(
         this NetworkAggregate network, FirewallDirection direction, FirewallProtocol protocol, int? startPort, int? endPort, string cidr)
@@ -38,6 +56,6 @@ internal static class TestAggregates
         {
             ports = PortRange.Of(startPort.Value, endPort.Value);
         }
-        return network.AddFirewallRule(direction, protocol, ports, FirewallCidr.Parse(cidr)).Rule;
+        return network.WithFirewallRule(direction, protocol, ports, FirewallCidr.Parse(cidr));
     }
 }

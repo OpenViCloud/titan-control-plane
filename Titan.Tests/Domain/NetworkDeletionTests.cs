@@ -73,7 +73,7 @@ public class NetworkDeletionTests
 
         Assert.Null(ticket);
         Assert.Null(network.Pending);
-        Assert.True(network.IsTerminal);
+        Assert.True(network.IsDeleted);
     }
 
     // The compiler keeps Titan.Application off Delete, so NetworkDeletion is the only way to delete a network.

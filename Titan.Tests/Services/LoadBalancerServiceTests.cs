@@ -363,7 +363,7 @@ public class LoadBalancerServiceTests
 
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
-        Assert.True(lb.IsTerminal);
+        Assert.True(lb.IsDeleted);
         _commands.VerifyNoOtherCalls();
         Assert.Equal(new[] { "load_balancer.delete_requested", "load_balancer.deleted" }, _activity.Events.Select(e => e.Action));
     }
@@ -494,7 +494,7 @@ public class LoadBalancerServiceTests
         Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
         await End(lb, lb.Pending!.Id, "Done");
 
-        Assert.True(lb.IsTerminal);
+        Assert.True(lb.IsDeleted);
         Assert.Equal(new[] { "load_balancer.deleted" }, _activity.Events.Select(e => e.Action));
     }
 

@@ -16,13 +16,7 @@ public class DomainBaseClassTests
     private static readonly Dictionary<string, string> NoRole = new(StringComparer.Ordinal)
     {
         ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, Update and HasDesiredSpec; the listener it becomes is the child entity",
-        ["VmObservation"] = "input of Vm.MarkObserved and of a request's report: what the worker read of the instance",
-        ["VmSnapshotTicket"] = "result of Vm.AddSnapshot, read by the handler that enqueues the command",
-        ["VolumeSnapshotTicket"] = "result of Volume.AddSnapshot, read by the handler that enqueues the command",
-        ["FirewallRuleTicket"] = "result of Network.AddFirewallRule, read by the handler that enqueues the command",
         ["VolumeAttachProviderIds"] = "result of Volume.Attach: the request id and the provider ids the attach command carries",
-        ["VolumeObservation"] = "input of a volume request's report: the Titan VM and the instances outside Titan using the volume",
-        ["NetworkObservation"] = "input of a network request's report: the status, range and gateway the worker read",
     };
 
     [Fact]

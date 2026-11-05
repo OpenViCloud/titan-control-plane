@@ -21,7 +21,7 @@ public class LoadBalancerRequestLifecycleTests
     private static Vm VmOnIncus()
     {
         Vm vm = Vm.Create(Tenant, NetworkId, $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-a", 20);
-        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..28], new VmObservation(VmState.Running, "10.0.0.5", null));
+        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..28], VmState.Running, "10.0.0.5", null);
         return vm;
     }
 
@@ -36,7 +36,7 @@ public class LoadBalancerRequestLifecycleTests
         return lb;
     }
 
-    private static PendingOperation<LoadBalancerOperationKind>? Failed(LoadBalancer lb, Guid operationId,
+    private static LoadBalancerOperationKind? Failed(LoadBalancer lb, Guid operationId,
         string? externalId = null) =>
         lb.FailOperation(operationId, externalId, "The load balancer request could not be completed.", "raw");
 
@@ -65,10 +65,10 @@ public class LoadBalancerRequestLifecycleTests
         LoadBalancer lb = Creating();
         Guid create = lb.Pending!.Id;
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(create, lb.Vip);
-        PendingOperation<LoadBalancerOperationKind>? again = lb.FinishOperation(create, "another");
+        LoadBalancerOperationKind? ended = lb.FinishOperation(create, lb.Vip);
+        LoadBalancerOperationKind? again = lb.FinishOperation(create, "another");
 
-        Assert.Equal((LoadBalancerOperationKind.Create, create), (ended!.Kind, ended.Id));
+        Assert.Equal(LoadBalancerOperationKind.Create, ended);
         Assert.Null(again);
         Assert.Equal(lb.Vip, lb.ExternalId);
         Assert.Equal("Exists/Exists/-", Shape(lb));
@@ -92,7 +92,7 @@ public class LoadBalancerRequestLifecycleTests
         Assert.Empty(lb.AppliedListeners);
         // Never reached Incus: it is deleted here, not through Incus.
         Assert.Null(lb.Delete());
-        Assert.True(lb.IsTerminal);
+        Assert.True(lb.IsDeleted);
     }
 
     // The give-up found the VIP on Incus: it is kept, so the delete goes through Incus. The create's one write carries
@@ -125,9 +125,9 @@ public class LoadBalancerRequestLifecycleTests
         Assert.Equal((LoadBalancerOperationKind.Update, update.OperationId), (lb.Pending!.Kind, lb.Pending.Id));
         Assert.Equal(lb.Vip, update.ProviderId);
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(update.OperationId, null);
+        LoadBalancerOperationKind? ended = lb.FinishOperation(update.OperationId, null);
 
-        Assert.Equal(LoadBalancerOperationKind.Update, ended!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Update, ended);
         Assert.Equal("Exists/Exists/-", Shape(lb));
         Assert.Equal(["UDP 53"], Ports(lb.Listeners));
         Assert.Equal([b.Id], lb.Backends.Select(x => x.VmId));
@@ -175,11 +175,11 @@ public class LoadBalancerRequestLifecycleTests
         OperationTicket delete = lb.Delete()!;
         Assert.Equal(lb.Vip, delete.ProviderId);
 
-        PendingOperation<LoadBalancerOperationKind>? ended = lb.FinishOperation(delete.OperationId, null);
+        LoadBalancerOperationKind? ended = lb.FinishOperation(delete.OperationId, null);
 
-        Assert.Equal(LoadBalancerOperationKind.Delete, ended!.Kind);
+        Assert.Equal(LoadBalancerOperationKind.Delete, ended);
         Assert.Equal("Deleted/Deleted/-", Shape(lb));
-        Assert.True(lb.IsTerminal);
+        Assert.True(lb.IsDeleted);
         Assert.Null(lb.FinishOperation(delete.OperationId, null));
     }
 

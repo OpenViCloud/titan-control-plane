@@ -59,7 +59,7 @@ public class VmDeletionTests
         OperationTicket? ticket = await Deletion().DeleteAsync(vm);
 
         Assert.Null(ticket); // nothing on the provider: no command, deleted here
-        Assert.True(vm.IsTerminal);
+        Assert.True(vm.IsDeleted);
     }
 
     // The VM's own refusal comes before the load balancer's: a snapshot being created answers that, as before.

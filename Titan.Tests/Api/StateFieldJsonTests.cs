@@ -38,7 +38,7 @@ public class StateFieldJsonTests
     [Fact]
     public void FirewallRule_StateIsIncusLowercaseWord()
     {
-        var rule = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress,
+        var rule = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress,
             FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
         rule.MarkObserved(FirewallRuleState.enabled);
 

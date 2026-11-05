@@ -33,7 +33,7 @@ public class VmSnapshotStateMachineTests
     // A snapshot is the VM's child entity (titan-ops architecture/code-structure.md#child-entity): seeded through the VM.
     private static VmSnapshot SnapshotIn(Seed seed)
     {
-        var s = RunningVm.AddSnapshot("snap-1").Snapshot;
+        var s = RunningVm.WithSnapshot("snap-1");
         switch (seed)
         {
             case Seed.Creating: break; // AddSnapshot() lands here
@@ -77,7 +77,7 @@ public class VmSnapshotStateMachineTests
     [InlineData(VmState.Error)]
     public void Create_FromAVmInError_Throws(VmState from)
     {
-        var ex = Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot("s"));
+        var ex = Assert.Throws<BusinessException>(() => VmIn(from).AddSnapshot(Guid.NewGuid(), "s"));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
@@ -85,7 +85,7 @@ public class VmSnapshotStateMachineTests
     public void CreateAndRevert_OfAStoppedVm_AreAccepted()
     {
         Vm stopped = VmIn(VmState.Stopped);
-        var created = stopped.AddSnapshot("s").Snapshot;
+        var created = stopped.WithSnapshot("s");
         Assert.Equal(VmSnapshotTransition.Creating, created.Transition);
 
         var s = stopped.WithSnapshot("ready");
@@ -243,7 +243,7 @@ public class VmSnapshotStateMachineTests
         Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
         Assert.True(s.MarkDeleted());
         Assert.False(s.MarkDeleted());
-        Assert.True(s.IsTerminal);
+        Assert.True(s.IsDeleted);
     }
 
     [Fact]

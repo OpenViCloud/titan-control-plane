@@ -146,7 +146,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         Guid tenantId = Guid.NewGuid();
         Guid networkId = Guid.NewGuid();
         Vm backend = Vm.Create(tenantId, networkId, "vm-after", "m", "tpl", "cluster-a", 20);
-        backend.FinishOperation(backend.Pending!.Id, "vm-after", new VmObservation(VmState.Running, "10.0.0.5", null));
+        backend.FinishOperation(backend.Pending!.Id, "vm-after", VmState.Running, "10.0.0.5", null);
         LoadBalancerListenerSpec http = new(LoadBalancerProtocol.TCP, 80, 8080);
         LoadBalancer creating = LoadBalancer.Create(tenantId, "creating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 1), [http], [backend]);

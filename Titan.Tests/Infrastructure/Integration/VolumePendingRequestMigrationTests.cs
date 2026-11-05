@@ -171,8 +171,8 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         {
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('vol-mig', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
-            volume.FinishOperation(volume.Pending!.Id, "vol-after", null);
-            volume.AddSnapshot("s");
+            volume.FinishOperation(volume.Pending!.Id, "vol-after", false, null, false);
+            volume.AddSnapshot(Guid.NewGuid(), "s");
             db.Volumes.Add(volume);
             await db.SaveChangesAsync();
         }

@@ -21,7 +21,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
         return await FindByIdAsync(id, ct);
     }
 
-    // Volume.IsNotDeleted. Lock first, load second, as FindByIdForUpdateAsync; the lock statement filters as the load does.
+    // !Volume.IsDeleted. Lock first, load second, as FindByIdForUpdateAsync; the lock statement filters as the load does.
     public async Task<List<Volume>> ListAttachedToVmLockedAsync(Guid vmId, CancellationToken ct = default)
     {
         await db.LockRowAsync(
@@ -34,7 +34,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .ToListAsync(ct);
     }
 
-    // Volume.IsNotDeleted
+    // !Volume.IsDeleted
     public async Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)
@@ -57,7 +57,7 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Volume.IsNotDeleted with a provider id.
+    // !Volume.IsDeleted with a provider id.
     public async Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => v.ClusterId == clusterId && v.ExternalId != null && v.CurrentExistence != CurrentExistence.Deleted)

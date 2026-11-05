@@ -61,7 +61,7 @@ public class VolumeSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ASnapshotWhoseVolumeDoesNotExist_IsRefusedByTheDatabase()
     {
-        VolumeSnapshot orphan = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), "orphan");
+        VolumeSnapshot orphan = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "orphan");
 
         await using TitanDbContext db = pg.NewDbContext();
         db.VolumeSnapshots.Add(orphan); // no such volume

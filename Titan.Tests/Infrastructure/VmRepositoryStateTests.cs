@@ -175,12 +175,12 @@ public class VmRepositoryStateTests
 
         Assert.Equal(shapes.Count(v => v.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
         Assert.Equal(ByName(shapes.Where(v => v.IsBilled)), ByName(await repo.ListBillableAsync()));
-        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
-        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted)), ByName(await repo.ListAllAsync(null)));
-        Assert.Equal(ByName(shapes.Where(v => v.IsNotDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("cluster-a")));
+        Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
+        Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListAllAsync(null)));
+        Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("cluster-a")));
         foreach (Vm vm in shapes)
         {
-            Assert.True(vm.IsNotDeleted == await repo.ExistsByNameAsync(Tenant, vm.Name), vm.Name);
+            Assert.True(!vm.IsDeleted == await repo.ExistsByNameAsync(Tenant, vm.Name), vm.Name);
         }
     }
 

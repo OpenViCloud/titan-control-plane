@@ -32,7 +32,7 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        PendingOperation<FirewallRuleOperationKind>? ended;
+        FirewallRuleOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = network.FinishFirewallRuleOperation(rule.Id, command.RequestId, command.ExternalId, state);
@@ -47,7 +47,7 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             return;
         }
 
-        NetworkReports.RecordRuleEnded(rule, ended, outcome, activity);
+        NetworkReports.RecordRuleEnded(rule, ended.Value, outcome, activity);
         await networkRepo.SaveAsync(ct);
     }
 }

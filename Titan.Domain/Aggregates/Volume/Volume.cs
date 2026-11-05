@@ -52,10 +52,11 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// VolumeRepository.ListBillableAsync writes the same test in SQL.
     public bool IsBilled => CurrentExistence == CurrentExistence.Exists;
 
-    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still goes with its
-    /// VM's delete, still observed. The repository's queries write the same test in SQL, the raw SQL that locks the
-    /// attached volumes included (ListAttachedToVmLockedAsync).
-    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Until then the volume is still listed, still goes with its VM's delete and is still observed; the repository's
+    /// queries write !IsDeleted in SQL, the raw SQL that locks the attached volumes included
+    /// (ListAttachedToVmLockedAsync; titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
 
     private Volume() { }
 
@@ -85,7 +86,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     private bool DeleteIsWaiting => PendingOperationKind == VolumeOperationKind.Delete;
     /// A delete was asked and still waits, or the volume is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
 
     /// Incus reports an instance using it, a Titan VM or not.
     private bool IsInUse => CurrentAttachedVmId != null || CurrentAttachedElsewhere;
@@ -131,9 +132,6 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         return volume;
     }
 
-    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
-    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
-
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
     /// Checks the volume, the VM (Vm.ProviderIdForVolumeAttach) and the cluster; the provider ids come out only past all
@@ -148,7 +146,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         if (ClusterId != vm.ClusterId)
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 
-        string externalVolumeId = RequireExternalId();
+        string externalVolumeId = GetExternalId();
         PendingOperation<VolumeOperationKind> operation = NewOperation(VolumeOperationKind.Attach);
         DesiredAttachedVmId = vm.Id;
         SetPending(operation);
@@ -162,7 +160,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         bool onATitanVmOnly = RestsOnIncus && CurrentAttachedVmId != null && !CurrentAttachedElsewhere;
         if (!onATitanVmOnly)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be attached to a Titan VM only, with nothing waiting, to detach.");
-        string externalVolumeId = RequireExternalId();
+        string externalVolumeId = GetExternalId();
         PendingOperation<VolumeOperationKind> operation = NewOperation(VolumeOperationKind.Detach);
         DesiredAttachedVmId = null;
         SetPending(operation);
@@ -178,7 +176,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// keeps its desired attachment until its command reports.
     public void ReleaseFromVmDelete(Guid vmId)
     {
-        bool askedForThatVmWithNothingWaiting = PendingOperationId == null && DesiredAttachedVmId == vmId && !IsTerminal;
+        bool askedForThatVmWithNothingWaiting = PendingOperationId == null && DesiredAttachedVmId == vmId && !IsDeleted;
         if (askedForThatVmWithNothingWaiting)
         {
             DesiredAttachedVmId = null;
@@ -190,7 +188,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     public void KeepAttachmentAfterVmDeleteFailed(Guid vmId)
     {
         bool releasedByThatDelete = PendingOperationId == null && DesiredAttachedVmId == null && CurrentAttachedVmId == vmId
-                                    && !IsTerminal;
+                                    && !IsDeleted;
         if (releasedByThatDelete)
         {
             DesiredAttachedVmId = vmId;
@@ -207,7 +205,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     {
         if (DeleteIsWaiting)
             throw new BusinessException("VOLUME_INVALID_STATE", "A delete is already in progress for this volume.");
-        if (IsTerminal)
+        if (IsDeleted)
             throw new BusinessException("VOLUME_INVALID_STATE", "The volume is already deleted.");
         // Never reached Incus: no command to send and no report coming.
         bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
@@ -235,19 +233,20 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     // ---- Snapshots: the volume counts its snapshots and routes each call to the snapshot it names
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on VolumeSnapshot; this is the way in.
 
-    /// Intent: a new snapshot of this volume. The volume must rest on Incus (EnsureSnapshottable). The create operation
-    /// is the snapshot's own Pending.
-    public VolumeSnapshotTicket AddSnapshot(string name)
+    /// Intent: a new snapshot of this volume, with the id the handler chose. The volume must rest on Incus
+    /// (EnsureSnapshottable). The create operation is the snapshot's own Pending; its ticket carries the volume's
+    /// provider id, the volume the command snapshots.
+    public OperationTicket AddSnapshot(Guid snapshotId, string name)
     {
         EnsureSnapshottable();
-        VolumeSnapshot snapshot = VolumeSnapshot.Create(Id, TenantId, name);
+        VolumeSnapshot snapshot = VolumeSnapshot.Create(snapshotId, Id, TenantId, name);
         _snapshots.Add(snapshot);
-        return new VolumeSnapshotTicket(snapshot, RequireExternalId());
+        return snapshot.TicketForCreate(GetExternalId());
     }
 
     /// A snapshot this volume does not have answers like a missing one, the same 404 a snapshot of another volume gets
     /// (titan-ops features/volume/design.md#volume-snapshot).
-    private VolumeSnapshot RequireSnapshot(Guid snapshotId)
+    private VolumeSnapshot GetSnapshot(Guid snapshotId)
     {
         foreach (VolumeSnapshot snapshot in _snapshots)
         {
@@ -261,33 +260,39 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
 
     /// Intent on one snapshot: its delete goes through Incus; returns the operation and the snapshot's provider id for
     /// the command, or no ticket when the snapshot never reached Incus and is deleted here.
-    public OperationTicket? DeleteSnapshot(Guid snapshotId) => RequireSnapshot(snapshotId).Delete();
+    public OperationTicket? DeleteSnapshot(Guid snapshotId) => GetSnapshot(snapshotId).Delete();
 
     /// A restore starts from a snapshot resting on Incus and hands out its provider id
     /// (titan-ops features/volume/design.md#volume-restore-is-a-new-volume); the new volume is Create's.
-    public string ProviderIdForSnapshotRestore(Guid snapshotId) => RequireSnapshot(snapshotId).ProviderIdForRestore();
+    public string ProviderIdForSnapshotRestore(Guid snapshotId) => GetSnapshot(snapshotId).ProviderIdForRestore();
 
     /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
     /// when it names another operation than the one the snapshot waits on.
-    public PendingOperation<VolumeSnapshotOperationKind>? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
-        RequireSnapshot(snapshotId).FinishOperation(operationId, externalId);
+    public VolumeSnapshotOperationKind? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId) =>
+        GetSnapshot(snapshotId).FinishOperation(operationId, externalId);
 
     /// The report that the snapshot's own command gave up; null when it names another operation than the one the
     /// snapshot waits on.
-    public PendingOperation<VolumeSnapshotOperationKind>? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
+    public VolumeSnapshotOperationKind? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
         string? reason, string? detail) =>
-        RequireSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
+        GetSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
 
-    public void MarkSnapshotObserved(Guid snapshotId) => RequireSnapshot(snapshotId).MarkObserved();
+    public void MarkSnapshotObserved(Guid snapshotId) => GetSnapshot(snapshotId).MarkObserved();
 
-    public void MarkSnapshotNotFound(Guid snapshotId) => RequireSnapshot(snapshotId).MarkNotFound();
+    public void MarkSnapshotNotFound(Guid snapshotId) => GetSnapshot(snapshotId).MarkNotFound();
 
     /// Throws rather than let a caller assert the id
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
-    private string RequireExternalId() =>
-        ExternalId ?? throw new BusinessException("VOLUME_INVALID_STATE", "Volume has no provider resource yet.");
+    private string GetExternalId()
+    {
+        if (ExternalId == null)
+        {
+            throw new BusinessException("VOLUME_INVALID_STATE", "Volume has no provider resource yet.");
+        }
+        return ExternalId;
+    }
 
     /// The precondition of AddSnapshot, never called by a handler
     /// (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
@@ -304,16 +309,18 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a Done that arrived twice, a report for a volume already Deleted. Records what the worker saw,
     /// gives the operation its effect and clears an older failure (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<VolumeOperationKind>? FinishOperation(Guid operationId, string? externalId, VolumeObservation? observed)
+    /// sawTheVolume false: the worker did not read the volume on Incus, so the attachment is not read either.
+    public VolumeOperationKind? FinishOperation(Guid operationId, string? externalId,
+        bool sawTheVolume, Guid? attachedVmId, bool attachedElsewhere)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VolumeOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
         RequireProviderIdOnDone(ExternalId, externalId);
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, sawTheVolume, attachedVmId, attachedElsewhere);
 
         ClearFailure();
         if (waiting.Kind == VolumeOperationKind.Delete)
@@ -330,22 +337,23 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a stale give-up, a report for a volume already Deleted. Records what the worker saw and the
     /// reason, and puts desired back to current according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<VolumeOperationKind>? FailOperation(Guid operationId, string? externalId, VolumeObservation? observed,
-        string? reason, string? detail)
+    /// sawTheVolume false: the worker did not read the volume on Incus, so the attachment is not read either.
+    public VolumeOperationKind? FailOperation(Guid operationId, string? externalId,
+        bool sawTheVolume, Guid? attachedVmId, bool attachedElsewhere, string? reason, string? detail)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<VolumeOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
             return null;
         }
-        RecordWhatTheWorkerSaw(externalId, observed);
+        RecordWhatTheWorkerSaw(externalId, sawTheVolume, attachedVmId, attachedElsewhere);
 
         RecordFailure(reason, detail);
         switch (waiting.Kind)
@@ -363,7 +371,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<VolumeOperationKind>? WaitingOperationNamed(Guid operationId)
@@ -379,7 +387,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
 
     // What the worker saw, whatever the outcome: a create that failed after Incus made the volume leaves a volume whose
     // delete still reaches Incus.
-    private void RecordWhatTheWorkerSaw(string? externalId, VolumeObservation? observed)
+    private void RecordWhatTheWorkerSaw(string? externalId, bool sawTheVolume, Guid? attachedVmId, bool attachedElsewhere)
     {
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
@@ -387,11 +395,11 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
             ExternalId = externalId;
             CurrentExistence = CurrentExistence.Exists;
         }
-        if (observed != null)
+        if (sawTheVolume)
         {
             CurrentExistence = CurrentExistence.Exists;
-            CurrentAttachedVmId = observed.AttachedVmId;
-            CurrentAttachedElsewhere = observed.AttachedElsewhere;
+            CurrentAttachedVmId = attachedVmId;
+            CurrentAttachedElsewhere = attachedElsewhere;
         }
     }
 
@@ -401,7 +409,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// The reconciler read the volume on Incus: the Titan VM using it, and whether an instance outside Titan does.
     public void MarkObserved(Guid? attachedVmId, bool attachedElsewhere)
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.Exists;
         CurrentAttachedVmId = attachedVmId;
         CurrentAttachedElsewhere = attachedElsewhere;
@@ -411,7 +419,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// the attachment (titan-ops features/volume/design.md#vm-delete-releases-volumes).
     public void MarkDetachedByVmDelete(Guid vmId)
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         if (CurrentAttachedVmId == vmId)
         {
             CurrentAttachedVmId = null;
@@ -422,7 +430,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     public void MarkNotFound()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.NotFound;
         CurrentAttachedVmId = null;
         CurrentAttachedElsewhere = false;

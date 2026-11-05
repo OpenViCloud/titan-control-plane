@@ -545,8 +545,8 @@ public class VmSnapshotServiceTests
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
         Guid deleteId = snap.Pending!.Id;
         vm.Delete();
-        PendingOperation<VmOperationKind>? deletion = vm.MarkDeleted();
-        Assert.Equal(VmOperationKind.Delete, deletion!.Kind);
+        VmOperationKind? deletion = vm.MarkDeleted();
+        Assert.Equal(VmOperationKind.Delete, deletion);
         Assert.Equal(CurrentExistence.Deleted, snap.CurrentExistence);
 
         await CreateService().EndRequestAsync(vm.Id, snap.Id, deleteId, "Done");

@@ -33,18 +33,17 @@ public class EndNetworkRequestCommandHandler(
         Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
-        bool sawTheNetwork = status != null || command.Cidr != null || command.Gateway != null;
-        NetworkObservation? observed = sawTheNetwork ? new NetworkObservation(status, command.Cidr, command.Gateway) : null;
-        PendingOperation<NetworkOperationKind>? ended;
+        NetworkOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = await NetworkReports.FinishOperationAsync(routes, network, command.RequestId, command.ExternalId,
-                observed, activity, ct);
+                status: status, cidr: command.Cidr, gateway: command.Gateway, activity, ct);
         }
         else
         {
             ended = await NetworkReports.FailOperationAsync(routes, network, command.RequestId, command.ExternalId,
-                observed, command.Reason, command.Detail, activity, ct);
+                status: status, cidr: command.Cidr, gateway: command.Gateway, reason: command.Reason, detail: command.Detail,
+                activity, ct);
         }
         if (ended == null)
         {

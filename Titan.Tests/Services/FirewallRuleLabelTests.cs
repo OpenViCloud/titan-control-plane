@@ -14,7 +14,7 @@ public class FirewallRuleLabelTests
     [InlineData(FirewallDirection.Ingress, FirewallProtocol.All, null, null, "192.168.0.0/16", "Ingress All from 192.168.0.0/16")]
     public void Describe_ReadsLikeTheRule(FirewallDirection direction, FirewallProtocol protocol, int? startPort, int? endPort, string cidr, string expected)
     {
-        FirewallRule rule = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), direction, protocol, startPort, endPort, cidr);
+        FirewallRule rule = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), direction, protocol, startPort, endPort, cidr);
 
         Assert.Equal(expected, FirewallRuleLabel.Describe(rule));
     }

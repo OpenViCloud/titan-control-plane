@@ -27,7 +27,7 @@ public class EndVmSnapshotRequestCommandHandler(IVmRepository repo, IActivityRec
             ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
-        PendingOperation<VmSnapshotOperationKind>? ended;
+        VmSnapshotOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = vm.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
@@ -42,7 +42,7 @@ public class EndVmSnapshotRequestCommandHandler(IVmRepository repo, IActivityRec
             return;
         }
 
-        VmReports.RecordSnapshotEnded(snapshot, ended, outcome, activity);
+        VmReports.RecordSnapshotEnded(snapshot, ended.Value, outcome, activity);
         await repo.SaveAsync(ct);
     }
 }

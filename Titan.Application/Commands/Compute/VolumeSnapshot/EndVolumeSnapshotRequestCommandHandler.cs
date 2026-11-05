@@ -25,7 +25,7 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        PendingOperation<VolumeSnapshotOperationKind>? ended;
+        VolumeSnapshotOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = volume.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
@@ -40,7 +40,7 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
             return;
         }
 
-        VolumeReports.RecordSnapshotEnded(snapshot, ended, outcome, activity);
+        VolumeReports.RecordSnapshotEnded(snapshot, ended.Value, outcome, activity);
         await repo.SaveAsync(ct);
     }
 }

@@ -28,7 +28,7 @@ public class EndTemplateSyncRequestCommandHandler(IVmTemplateRepository repo, Cl
         VmTemplateAggregate template = await repo.FindByIdForUpdateAsync(command.TemplateId, ct)
             ?? throw new NotFoundException("TEMPLATE_NOT_FOUND", "Template not found.");
 
-        PendingOperation<VmTemplateOperationKind>? ended;
+        VmTemplateOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = template.FinishSyncOperation(command.ClusterId, command.RequestId, command.ExternalId);

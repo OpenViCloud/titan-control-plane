@@ -60,11 +60,11 @@ public class NetworkTests
     [Fact]
     public void AddFirewallRule_WhenCreated_YieldsTheProviderId()
     {
-        Assert.Equal("cs-net-id", AddARule(MakeActiveNetwork()).ExternalNetworkId);
+        Assert.Equal("cs-net-id", AddARule(MakeActiveNetwork()).ProviderId);
     }
 
-    private static FirewallRuleTicket AddARule(Network network) =>
-        network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"));
+    private static OperationTicket AddARule(Network network) =>
+        network.AddFirewallRule(Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0"));
 
     // A DIFFERENT code from ProviderIdForVm, on purpose: the firewall endpoint answers FIREWALL_NETWORK_NOT_READY.
     [Theory]
@@ -118,7 +118,7 @@ public class NetworkTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void MarkCreated_WithoutAnAddress_LeavesCidrAndGatewayNull(string? absent)
+    public void CreateDone_WithoutAnAddress_LeavesCidrAndGatewayNull(string? absent)
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
@@ -187,7 +187,7 @@ public class NetworkTests
         network.MarkNotFound();
 
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
-        Assert.False(network.IsTerminal);
+        Assert.False(network.IsDeleted);
         Assert.NotNull(network.MarkDeleted());
     }
 
@@ -302,19 +302,19 @@ public class NetworkTests
     // ── Delete outcome ─────────────────────────────────────
 
     [Fact]
-    public void MarkDeleted_EndsTheWaitingDelete_Once_AndClearsTheStatus()
+    public void DeleteDone_EndsTheWaitingDelete_Once_AndClearsTheStatus()
     {
         var network = MakeActiveNetwork();
         network.Delete();
 
-        PendingOperation<NetworkOperationKind>? first = network.MarkDeleted();
-        PendingOperation<NetworkOperationKind>? repeat = network.MarkDeleted();
+        NetworkOperationKind? first = network.MarkDeleted();
+        NetworkOperationKind? repeat = network.MarkDeleted();
 
-        Assert.Equal(NetworkOperationKind.Delete, first!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, first);
         Assert.Null(repeat);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);
-        Assert.True(network.IsTerminal);
+        Assert.True(network.IsDeleted);
         Assert.Null(network.Transition);
     }
 

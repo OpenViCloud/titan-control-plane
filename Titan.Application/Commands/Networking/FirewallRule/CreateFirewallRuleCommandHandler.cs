@@ -6,6 +6,7 @@ using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
@@ -46,17 +47,17 @@ public class CreateFirewallRuleCommandHandler(
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage);
 
         // The network answers whether it can take a rule and adds it in one call.
-        FirewallRuleTicket ticket = network.AddFirewallRule(direction, protocol, ports, cidr);
-        FirewallRuleEntity rule = ticket.Rule;
-        string externalNetworkId = ticket.ExternalNetworkId;
+        Guid ruleId = Guid.NewGuid();
+        OperationTicket ticket = network.AddFirewallRule(ruleId, direction, protocol, ports, cidr);
+        FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, ruleId);
 
-        activity.Stage("firewall_rule.create_requested", "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule)); // atomic with the save
+        activity.Stage("firewall_rule.create_requested", "firewall_rule", ruleId, FirewallRuleLabel.Describe(rule)); // atomic with the save
         await commands.EnqueueFirewallRuleCreateAsync(
-            rule.Id, rule.Pending!.Id, networkId, req.Direction, req.Protocol,
+            ruleId, ticket.OperationId, networkId, req.Direction, req.Protocol,
             req.StartPort, req.EndPort, req.Cidr,
-            externalNetworkId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
+            ticket.ProviderId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
         await networkRepo.SaveAsync(ct);
 
-        return new CreateFirewallRuleCommandResult(rule.Id);
+        return new CreateFirewallRuleCommandResult(ruleId);
     }
 }

@@ -28,7 +28,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Networks.Include(n => n.FirewallRules)
             .FirstOrDefaultAsync(n => n.FirewallRules.Any(r => r.Id == ruleId), ct);
 
-    // Network.IsNotDeleted
+    // !Network.IsDeleted
     public async Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks
             .Where(n => n.TenantId == tenantId && n.CurrentExistence != CurrentExistence.Deleted)
@@ -53,7 +53,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                  && (n.CurrentExistence == CurrentExistence.Exists
                      || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)), ct);
 
-    // Network.IsNotDeleted
+    // !Network.IsDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
             n => n.TenantId == tenantId && n.Name == name && n.CurrentExistence != CurrentExistence.Deleted, ct);
@@ -65,7 +65,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                  (v.CurrentExistence == CurrentExistence.Exists
                   || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
 
-    // LoadBalancer.IsNotDeleted. Read here, not through a Compute repository: Networking -> Compute in Titan.Application
+    // !LoadBalancer.IsDeleted. Read here, not through a Compute repository: Networking -> Compute in Titan.Application
     // would close a module cycle (titan-ops architecture/code-structure.md#module-boundary), as HasActiveVmsAsync above
     // reads the VM table.
     public async Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) =>
@@ -94,7 +94,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         return false;
     }
 
-    // Network.IsNotDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
+    // !Network.IsDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
     public async Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Networks
             .Where(n => n.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || n.TenantId == tenantId))
@@ -102,7 +102,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Network.IsNotDeleted with a provider id.
+    // !Network.IsDeleted with a provider id.
     public async Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Networks
             .Where(n => n.ClusterId == clusterId

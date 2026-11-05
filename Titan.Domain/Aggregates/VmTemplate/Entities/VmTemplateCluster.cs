@@ -77,7 +77,7 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
     /// returns null. Records the alias with Exists and clears an older failure
     /// (titan-ops architecture/resource-lifecycle.md#kinds). Nothing absorbs a report here: a template is never Deleted,
     /// so the id check is the whole guard.
-    internal PendingOperation<VmTemplateOperationKind>? FinishOperation(Guid operationId, string? externalId)
+    internal VmTemplateOperationKind? FinishOperation(Guid operationId, string? externalId)
     {
         PendingOperation<VmTemplateOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
@@ -92,13 +92,13 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
 
         SetPending(null);
         UpdatedAt = DateTimeOffset.UtcNow;
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The sync's command gave up. Ends the waiting sync when the report names it; any other report is ignored and
     /// returns null. Records the reason; an alias the worker found is recorded with Exists, as the give-up of a create
     /// that finds its object is for every other kind (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal PendingOperation<VmTemplateOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    internal VmTemplateOperationKind? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
     {
         PendingOperation<VmTemplateOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
@@ -111,7 +111,7 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
 
         SetPending(null);
         UpdatedAt = DateTimeOffset.UtcNow;
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<VmTemplateOperationKind>? WaitingOperationNamed(Guid operationId)

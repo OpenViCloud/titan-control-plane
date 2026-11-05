@@ -28,9 +28,9 @@ public class NetworkRequestsDbTests(PostgresFixture pg)
     {
         Network network = Network.Create(Tenant, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]), "cluster-a", null,
             wantsPublicIpv6: false);
-        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", new NetworkObservation(NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1"));
-        FirewallRule rule = network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null,
-            FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null,
+            FirewallCidr.Parse("10.0.0.0/8"));
         network.FinishFirewallRuleOperation(rule.Id, rule.Pending!.Id, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
         await using TitanDbContext db = pg.NewDbContext();
         db.Networks.Add(network);

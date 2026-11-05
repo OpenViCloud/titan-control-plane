@@ -10,7 +10,7 @@ public class FirewallRuleTests
     [Fact]
     public void Create_FillsAllFields()
     {
-        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
+        var rule = FirewallRule.Create(Guid.NewGuid(), NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.TCP, 80, 80, "0.0.0.0/0");
 
         Assert.NotEqual(Guid.Empty, rule.Id);
         Assert.Equal(NetworkId, rule.NetworkId);
@@ -27,7 +27,7 @@ public class FirewallRuleTests
     [Fact]
     public void Create_IcmpRule_HasNullPorts()
     {
-        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.ICMP, null, null, "10.0.0.0/8");
+        var rule = FirewallRule.Create(Guid.NewGuid(), NetworkId, TenantId, FirewallDirection.Ingress, FirewallProtocol.ICMP, null, null, "10.0.0.0/8");
 
         Assert.Null(rule.StartPort);
         Assert.Null(rule.EndPort);
@@ -36,7 +36,7 @@ public class FirewallRuleTests
     [Fact]
     public void MarkActive_SetsExternalId()
     {
-        var rule = FirewallRule.Create(NetworkId, TenantId, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0");
+        var rule = FirewallRule.Create(Guid.NewGuid(), NetworkId, TenantId, FirewallDirection.Egress, FirewallProtocol.UDP, 53, 53, "0.0.0.0/0");
 
         rule.MarkActive("cs-rule-abc");
 

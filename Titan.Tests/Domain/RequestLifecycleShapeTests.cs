@@ -38,14 +38,14 @@ public class RequestLifecycleShapeTests
         [typeof(VolumeSnapshot)] = () =>
         {
             Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
-            volume.FinishOperation(volume.Pending!.Id, "vol-shape", null);
-            return volume.AddSnapshot("shape").Snapshot;
+            volume.FinishOperation(volume.Pending!.Id, "vol-shape", false, null, false);
+            return volume.WithSnapshot("shape");
         },
         [typeof(VmSnapshot)] = () =>
         {
             Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
-            vm.FinishOperation(vm.Pending!.Id, "vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null));
-            return vm.AddSnapshot("shape").Snapshot;
+            vm.FinishOperation(vm.Pending!.Id, "vm-shape", VmState.Running, "10.0.0.9", null);
+            return vm.WithSnapshot("shape");
         },
         [typeof(Network)] = () => ANetwork(),
         [typeof(LoadBalancer)] = () =>
@@ -54,7 +54,7 @@ public class RequestLifecycleShapeTests
             Guid tenantId = TestTenant.WithRoomToSpare().Id;
             Guid networkId = Guid.NewGuid();
             Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
-            backend.FinishOperation(backend.Pending!.Id, "vm-shape", new VmObservation(VmState.Running, "10.0.0.9", null));
+            backend.FinishOperation(backend.Pending!.Id, "vm-shape", VmState.Running, "10.0.0.9", null);
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
             lb.FinishOperation(lb.Pending!.Id, lb.Vip);
@@ -64,8 +64,8 @@ public class RequestLifecycleShapeTests
         [typeof(FirewallRule)] = () =>
         {
             Network network = ANetwork();
-            network.FinishOperation(network.Pending!.Id, "net-shape", new NetworkObservation(NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1"));
-            return network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8")).Rule;
+            network.FinishOperation(network.Pending!.Id, "net-shape", NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1");
+            return network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         },
         [typeof(VmTemplateCluster)] = () =>
         {
@@ -136,9 +136,9 @@ public class RequestLifecycleShapeTests
     private static object?[] WhatTheWorkerSawFor(Type type, string method)
     {
         object?[] seen;
-        if (type == typeof(Vm)) seen = ["foreign", new VmObservation(VmState.Running, "10.0.0.9", null)];
-        else if (type == typeof(Volume)) seen = ["foreign", new VolumeObservation(Guid.NewGuid(), true)];
-        else if (type == typeof(Network)) seen = ["foreign", new NetworkObservation(NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1")];
+        if (type == typeof(Vm)) seen = ["foreign", VmState.Running, "10.0.0.9", null];
+        else if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
+        else if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
         else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleState.enabled];
         else if (type == typeof(VolumeSnapshot) || type == typeof(VmSnapshot) || type == typeof(LoadBalancer)
                  || type == typeof(VmTemplateCluster)) seen = ["foreign"];

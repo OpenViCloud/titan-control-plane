@@ -26,8 +26,8 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
     {
         string offeringId = await SeedOfferingAsync();
         Vm vm = Vm.Create(Tenant, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-a", 20);
-        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..20], new VmObservation(VmState.Running, "10.0.0.5", null));
-        VmSnapshot snapshot = vm.AddSnapshot("nightly").Snapshot;
+        vm.FinishOperation(vm.Pending!.Id, $"vm{Guid.NewGuid():N}"[..20], VmState.Running, "10.0.0.5", null);
+        VmSnapshot snapshot = vm.WithSnapshot("nightly");
         vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, $"{vm.ExternalId}/s1");
         await using TitanDbContext db = pg.NewDbContext();
         db.Vms.Add(vm);

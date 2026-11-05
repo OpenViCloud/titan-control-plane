@@ -55,7 +55,7 @@ public class NetworkFirewallRuleTests
     {
         var network = NetworkWithEveryRuleSituation(); // usage 2
 
-        FirewallRule rule = network.AddFirewallRule(FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8")).Rule;
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Egress, FirewallProtocol.UDP, PortRange.Of(53, 53), FirewallCidr.Parse("10.0.0.0/8"));
 
         Assert.Contains(rule, network.FirewallRules);
         Assert.Equal(network.Id, rule.NetworkId);
@@ -70,7 +70,7 @@ public class NetworkFirewallRuleTests
         var network = TestAggregates.Network(TenantIdOwner, "net-1", "cluster-1"); // Creating
 
         var ex = Assert.Throws<BusinessException>(
-            () => network.AddFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
+            () => network.AddFirewallRule(Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(80, 80), FirewallCidr.Parse("0.0.0.0/0")));
 
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", ex.Code);
         Assert.Empty(network.FirewallRules);
@@ -94,9 +94,9 @@ public class NetworkFirewallRuleTests
         var creating = Rule(network, 25);
         network.Delete();
 
-        PendingOperation<NetworkOperationKind>? outcome = network.MarkDeleted();
+        NetworkOperationKind? outcome = network.MarkDeleted();
 
-        Assert.Equal(NetworkOperationKind.Delete, outcome!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, outcome);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.All(network.FirewallRules, r => Assert.Equal(CurrentExistence.Deleted, r.CurrentExistence));
         Assert.All(network.FirewallRules, r => Assert.Null(r.Pending));
@@ -109,9 +109,9 @@ public class NetworkFirewallRuleTests
         var network = UsableNetwork();
         network.Delete();
 
-        PendingOperation<NetworkOperationKind>? outcome = network.MarkDeleted();
+        NetworkOperationKind? outcome = network.MarkDeleted();
 
-        Assert.Equal(NetworkOperationKind.Delete, outcome!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, outcome);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
     }
 
@@ -125,9 +125,9 @@ public class NetworkFirewallRuleTests
         deleting.MarkActive("sg-23");
         deleting.Delete();
         Guid deleteId = network.Delete()!.OperationId;
-        network.FinishOperation(deleteId, null, null);
+        network.FinishOperation(deleteId, null, null, null, null);
 
-        PendingOperation<NetworkOperationKind>? repeat = network.FinishOperation(deleteId, null, null);
+        NetworkOperationKind? repeat = network.FinishOperation(deleteId, null, null, null, null);
 
         Assert.Null(repeat);
         Assert.Equal(CurrentExistence.Deleted, deleting.CurrentExistence);
@@ -162,7 +162,7 @@ public class NetworkFirewallRuleTests
         var untouched = Rule(network, 23);
 
         Guid createId = rule.Pending!.Id;
-        Assert.Equal(createId, network.FinishFirewallRuleOperation(rule.Id, createId, "sg-22", null)!.Id);
+        Assert.Equal(FirewallRuleOperationKind.Create, network.FinishFirewallRuleOperation(rule.Id, createId, "sg-22", null));
         network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.disabled);
         Assert.Equal(FirewallRuleState.disabled, rule.CurrentState);
 
@@ -177,8 +177,8 @@ public class NetworkFirewallRuleTests
         Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
         OperationTicket again = network.DeleteFirewallRule(rule.Id)!;
         Assert.Equal(FirewallRuleOperationKind.Delete,
-            network.FinishFirewallRuleOperation(rule.Id, again.OperationId, null, null)!.Kind);
-        Assert.True(rule.IsTerminal);
+            network.FinishFirewallRuleOperation(rule.Id, again.OperationId, null, null));
+        Assert.True(rule.IsDeleted);
 
         Assert.Equal(FirewallRuleTransition.Creating, untouched.Transition);
         Assert.Null(untouched.ExternalId);

@@ -20,14 +20,16 @@ public class ObserveVmCommandHandler(IVmRepository repo)
         {
             throw new BadRequestException("INVALID_STATUS", "Observed is required when the instance exists.");
         }
-        VmObservation? observed = VmReports.ParseObservation(command.Observed);
+        VmState? observedStatus = VmReports.ParseObservedStatus(command.Observed);
 
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        if (command.Exists)
+        // Exists without an observation was refused above, so an existing instance always has a status here.
+        if (command.Exists && observedStatus != null)
         {
-            vm.MarkObserved(observed!);
+            vm.MarkObserved(observedStatus.Value, VmReports.ObservedIpAddress(command.Observed),
+                VmReports.ObservedPublicIpv6Address(command.Observed));
         }
         else
         {

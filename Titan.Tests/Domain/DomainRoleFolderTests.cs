@@ -132,7 +132,7 @@ public class DomainRoleFolderTests
         return ReturnedByAnAggregateMethod(type) ? Results : Inputs;
     }
 
-    // Internal counts: a method a domain service calls (Network.FinishOperation) still hands its result out of the
+    // Internal counts: a method only a domain service calls still hands its result out of the
     // aggregate. Property getters do not: an input record's part (LoadBalancerListenerSpec.Port) is read back, not handed out.
     private static bool ReturnedByAnAggregateMethod(Type type) =>
         typeof(NotFoundException).Assembly.GetExportedTypes()

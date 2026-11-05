@@ -23,7 +23,7 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
         return await FindByIdAsync(id, ct);
     }
 
-    // LoadBalancer.IsNotDeleted
+    // !LoadBalancer.IsDeleted
     public async Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await WithRows()
             .Where(lb => lb.TenantId == tenantId && lb.CurrentExistence != CurrentExistence.Deleted)
@@ -39,12 +39,12 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
                   && (lb.CurrentExistence == CurrentExistence.Exists
                       || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingOperationId != null)), ct);
 
-    // LoadBalancer.IsNotDeleted
+    // !LoadBalancer.IsDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         await db.LoadBalancers.AnyAsync(
             lb => lb.TenantId == tenantId && lb.Name == name && lb.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    // LoadBalancer.IsNotDeleted
+    // !LoadBalancer.IsDeleted
     public async Task<HashSet<int>> ListVipIndexesOfNetworkAsync(Guid networkId, CancellationToken ct = default)
     {
         var indexes = await db.LoadBalancers
@@ -54,12 +54,12 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
         return indexes.ToHashSet();
     }
 
-    // LoadBalancer.IsNotDeleted
+    // !LoadBalancer.IsDeleted
     public async Task<bool> IsBackendAsync(Guid vmId, CancellationToken ct = default) =>
         await db.LoadBalancers.AnyAsync(
             lb => lb.CurrentExistence != CurrentExistence.Deleted && lb.Backends.Any(b => b.VmId == vmId), ct);
 
-    // LoadBalancer.IsNotDeleted with a provider id.
+    // !LoadBalancer.IsDeleted with a provider id.
     public async Task<List<LoadBalancer>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.LoadBalancers
             .Where(lb => lb.ClusterId == clusterId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted)

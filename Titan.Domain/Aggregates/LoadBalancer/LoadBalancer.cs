@@ -52,9 +52,11 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && PendingOperationId != null));
 
-    /// Not yet Deleted (titan-ops architecture/domain-methods.md#plain-code): still listed, still holds its name
-    /// and its VIP number, still sends to its backends, still observed. The repository's queries write the same test in SQL.
-    public bool IsNotDeleted => CurrentExistence != CurrentExistence.Deleted;
+    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Until then the load balancer is still listed, still holds its name and its VIP number, still sends to its
+    /// backends and is still observed; the repository's queries write !IsDeleted in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
 
     private LoadBalancer() { }
 
@@ -81,7 +83,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     private bool DeleteIsWaiting => PendingOperationKind == LoadBalancerOperationKind.Delete;
     /// A delete was asked and still waits, or the load balancer is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsTerminal;
+    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
 
     /// Incus holds it and nothing waits: an update starts only from here.
     private bool RestsOnIncus =>
@@ -89,9 +91,6 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         && ExternalId != null
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
-
-    /// Deleted absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
-    public bool IsTerminal => CurrentExistence == CurrentExistence.Deleted;
 
     /// The network is checked by the caller through Network.ProviderIdForLoadBalancer: this aggregate holds no Network type
     /// (titan-ops architecture/code-structure.md#module-boundary).
@@ -164,7 +163,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     /// (titan-ops features/load-balancer/design.md#lb-rename).
     public void Rename(string name)
     {
-        bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsTerminal;
+        bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsDeleted;
         if (beingOrBeenDeleted)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "Cannot rename a load balancer that is being or has been deleted.");
         RequireName(name);
@@ -191,7 +190,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     {
         if (DeleteIsWaiting)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "A delete is already in progress for this load balancer.");
-        if (IsTerminal)
+        if (IsDeleted)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "The load balancer is already deleted.");
         // Never reached Incus: no command to send and no report coming.
         bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
@@ -217,9 +216,9 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     /// returns null: a Done that arrived twice, the report of an update a delete replaced, a report for a load balancer
     /// already Deleted. Keeps a VIP the worker found, gives the operation its effect and clears an older failure
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<LoadBalancerOperationKind>? FinishOperation(Guid operationId, string? externalId)
+    public LoadBalancerOperationKind? FinishOperation(Guid operationId, string? externalId)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<LoadBalancerOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
@@ -241,16 +240,16 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
     /// returns null: a stale give-up, the report of an update a delete replaced, a report for a load balancer already
     /// Deleted. Keeps a VIP the worker found, records the reason and puts desired back according to the kind
     /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    public PendingOperation<LoadBalancerOperationKind>? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
+    public LoadBalancerOperationKind? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
     {
-        if (IsTerminal) return null;
+        if (IsDeleted) return null;
         PendingOperation<LoadBalancerOperationKind>? waiting = WaitingOperationNamed(operationId);
         if (waiting == null)
         {
@@ -278,7 +277,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         }
 
         SetPending(null);
-        return waiting;
+        return waiting.Kind;
     }
 
     private PendingOperation<LoadBalancerOperationKind>? WaitingOperationNamed(Guid operationId)
@@ -310,7 +309,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     /// The reconciler saw the VIP on its network.
     public void MarkObserved()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.Exists;
     }
 
@@ -318,7 +317,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     public void MarkNotFound()
     {
-        if (IsTerminal) return;
+        if (IsDeleted) return;
         CurrentExistence = CurrentExistence.NotFound;
     }
 

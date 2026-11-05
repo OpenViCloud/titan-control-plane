@@ -23,21 +23,25 @@ public class EndVmRequestCommandHandler(
     {
         // Parsed before the VM is loaded: a malformed report is the worker's bug, whatever the VM.
         OperationOutcome outcome = VmReports.ParseOutcome(command.Outcome);
-        VmObservation? observed = VmReports.ParseObservation(command.Observed);
+        VmState? observedStatus = VmReports.ParseObservedStatus(command.Observed);
+        string? observedIpAddress = VmReports.ObservedIpAddress(command.Observed);
+        string? observedPublicIpv6Address = VmReports.ObservedPublicIpv6Address(command.Observed);
 
         Domain.Aggregates.Vm.Vm vm = await repo.FindByIdForUpdateAsync(command.VmId, ct)
             ?? throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
 
-        PendingOperation<VmOperationKind>? ended;
+        VmOperationKind? ended;
         if (outcome == OperationOutcome.Done)
         {
-            ended = await VmReports.FinishOperationAsync(vm, command.RequestId, command.ExternalId, observed,
+            ended = await VmReports.FinishOperationAsync(vm, command.RequestId, command.ExternalId,
+                status: observedStatus, ipAddress: observedIpAddress, publicIpv6Address: observedPublicIpv6Address,
                 activity, volumeRepo, ct);
         }
         else
         {
-            ended = await VmReports.FailOperationAsync(vm, command.RequestId, command.ExternalId, observed,
-                command.Reason, command.Detail, activity, volumeRepo, ct);
+            ended = await VmReports.FailOperationAsync(vm, command.RequestId, command.ExternalId,
+                status: observedStatus, ipAddress: observedIpAddress, publicIpv6Address: observedPublicIpv6Address,
+                reason: command.Reason, detail: command.Detail, activity, volumeRepo, ct);
         }
         if (ended == null)
         {

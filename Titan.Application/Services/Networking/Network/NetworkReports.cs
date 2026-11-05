@@ -84,8 +84,8 @@ public static class NetworkReports
     /// Ends the network's waiting operation with a Done through NetworkRoutes, so a route the network lets go of goes
     /// back in the same save, and records its outcome once, with the rules a delete took along whose own delete was
     /// waiting. Null when the report names no waiting operation: nothing is recorded.
-    public static async Task<PendingOperation<NetworkOperationKind>?> FinishOperationAsync(NetworkRoutes routes,
-        NetworkAggregate network, Guid operationId, string? externalId, NetworkObservation? observed,
+    public static async Task<NetworkOperationKind?> FinishOperationAsync(NetworkRoutes routes,
+        NetworkAggregate network, Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
         IActivityRecorder activity, CancellationToken ct)
     {
         // Read before the network's delete Done takes every rule along: the ones waiting on their own delete get its
@@ -93,23 +93,23 @@ public static class NetworkReports
         List<FirewallRuleEntity> rulesWaitingOnTheirDelete = new();
         foreach (FirewallRuleEntity rule in network.FirewallRules)
         {
-            if (rule.IsDeletedOrDeleting && !rule.IsTerminal)
+            if (rule.IsDeletedOrDeleting && !rule.IsDeleted)
             {
                 rulesWaitingOnTheirDelete.Add(rule);
             }
         }
 
-        PendingOperation<NetworkOperationKind>? ended = await routes.FinishOperationAsync(network, operationId, externalId,
-            observed, ct);
+        NetworkOperationKind? ended = await routes.FinishOperationAsync(network, operationId, externalId,
+            status: status, cidr: cidr, gateway: gateway, ct);
         if (ended == null)
         {
             return null;
         }
-        if (DoneAction.TryGetValue(ended.Kind, out string? action))
+        if (DoneAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(network.TenantId, action, "network", network.Id, network.Name.Value);
         }
-        if (ended.Kind == NetworkOperationKind.Delete)
+        if (ended == NetworkOperationKind.Delete)
         {
             foreach (FirewallRuleEntity rule in rulesWaitingOnTheirDelete)
             {
@@ -123,28 +123,28 @@ public static class NetworkReports
     /// Ends the network's waiting operation with a give-up through NetworkRoutes, so a /64 the network lets go of goes
     /// back with its route in the same save, and records its outcome once. Null when the report names no waiting
     /// operation: nothing is recorded.
-    public static async Task<PendingOperation<NetworkOperationKind>?> FailOperationAsync(NetworkRoutes routes,
-        NetworkAggregate network, Guid operationId, string? externalId, NetworkObservation? observed, string? reason,
-        string? detail, IActivityRecorder activity, CancellationToken ct)
+    public static async Task<NetworkOperationKind?> FailOperationAsync(NetworkRoutes routes,
+        NetworkAggregate network, Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
+        string? reason, string? detail, IActivityRecorder activity, CancellationToken ct)
     {
-        PendingOperation<NetworkOperationKind>? ended = await routes.FailOperationAsync(network, operationId, externalId,
-            observed, reason, detail, ct);
+        NetworkOperationKind? ended = await routes.FailOperationAsync(network, operationId, externalId,
+            status: status, cidr: cidr, gateway: gateway, reason: reason, detail: detail, ct);
         if (ended == null)
         {
             return null;
         }
-        if (FailedAction.TryGetValue(ended.Kind, out string? action))
+        if (FailedAction.TryGetValue(ended.Value, out string? action))
         {
             activity.StageOutcome(network.TenantId, action, "network", network.Id, network.Name.Value);
         }
         return ended;
     }
 
-    public static void RecordRuleEnded(FirewallRuleEntity rule, PendingOperation<FirewallRuleOperationKind> ended,
+    public static void RecordRuleEnded(FirewallRuleEntity rule, FirewallRuleOperationKind ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
         Dictionary<FirewallRuleOperationKind, string> actions = outcome == OperationOutcome.Done ? RuleDoneAction : RuleFailedAction;
-        if (actions.TryGetValue(ended.Kind, out string? action))
+        if (actions.TryGetValue(ended, out string? action))
         {
             activity.StageOutcome(rule.TenantId, action, "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule));
         }

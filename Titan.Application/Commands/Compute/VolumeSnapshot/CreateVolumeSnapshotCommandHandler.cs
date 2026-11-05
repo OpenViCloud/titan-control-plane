@@ -1,12 +1,11 @@
-using VolumeSnapshotTicket = Titan.Domain.Aggregates.Volume.VolumeSnapshotTicket;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
-using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
@@ -36,15 +35,14 @@ public class CreateVolumeSnapshotCommandHandler(
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.VolumeSnapshot, volume.SnapshotQuotaUsage);
 
         // The volume checks itself (resting on Incus) and adds the snapshot in one call.
-        VolumeSnapshotTicket ticket = volume.AddSnapshot(command.Name);
-        VolumeSnapshotEntity snapshot = ticket.Snapshot;
-        string externalVolumeId = ticket.ExternalVolumeId;
-        activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshot.Id, snapshot.Name); // atomic with the save
+        Guid snapshotId = Guid.NewGuid();
+        OperationTicket ticket = volume.AddSnapshot(snapshotId, command.Name);
+        activity.Stage("volume_snapshot.create_requested", "volume_snapshot", snapshotId, command.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeSnapshotCreateAsync(snapshot.Id, snapshot.Pending!.Id, volumeId, externalVolumeId, projectName,
+        await commands.EnqueueVolumeSnapshotCreateAsync(snapshotId, ticket.OperationId, volumeId, ticket.ProviderId, projectName,
             volume.ClusterId, ct);
         await volumeRepo.SaveAsync(ct);
 
-        return new CreateVolumeSnapshotCommandResult(snapshot.Id);
+        return new CreateVolumeSnapshotCommandResult(snapshotId);
     }
 }

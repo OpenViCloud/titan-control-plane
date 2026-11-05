@@ -10,7 +10,7 @@ namespace Titan.Infrastructure.Repositories;
 /// Every state condition is the SQL twin of a plain bool on VolumeSnapshot (titan-ops architecture/domain-methods.md#plain-code).
 public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotRepository
 {
-    // VolumeSnapshot.IsNotDeleted
+    // !VolumeSnapshot.IsDeleted
     public async Task<List<VolumeSnapshot>> FindByVolumeIdAsync(Guid volumeId, CancellationToken ct = default) =>
         await db.VolumeSnapshots
             .Where(s => s.VolumeId == volumeId && s.CurrentExistence != CurrentExistence.Deleted)
@@ -25,7 +25,7 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // VolumeSnapshot.IsNotDeleted with a provider id. A snapshot has no cluster of its own; it lives where its volume lives.
+    // !VolumeSnapshot.IsDeleted with a provider id. A snapshot has no cluster of its own; it lives where its volume lives.
     public async Task<List<VolumeSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VolumeSnapshots
             .Where(s => s.ExternalId != null

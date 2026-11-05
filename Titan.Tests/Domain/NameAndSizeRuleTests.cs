@@ -153,11 +153,11 @@ public class NameAndSizeRuleTests
     public void VmAddSnapshot_WithABlankName_OrOver100_IsInvalidSnapshotName()
     {
         Vm vm = RunningVm();
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot("")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot("  ")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(new string('a', VmSnapshot.NameMaxLength + 1))));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), "")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), "  ")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => vm.AddSnapshot(Guid.NewGuid(), new string('a', VmSnapshot.NameMaxLength + 1))));
         Assert.Empty(vm.Snapshots);
-        Assert.Equal("before upgrade", vm.AddSnapshot("before upgrade").Snapshot.Name);
+        Assert.Equal("before upgrade", vm.WithSnapshot("before upgrade").Name);
     }
 
     [Fact]
@@ -165,10 +165,10 @@ public class NameAndSizeRuleTests
     {
         Volume volume = Volume.Create(Owner.Id, "data", "cluster-a", "standard", 10);
         volume.MarkCreated("vol-ext");
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot("")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot("  ")));
-        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot(new string('a', VolumeSnapshot.NameMaxLength + 1))));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot(Guid.NewGuid(), "")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot(Guid.NewGuid(), "  ")));
+        Assert.Equal("INVALID_SNAPSHOT_NAME", Code(() => volume.AddSnapshot(Guid.NewGuid(), new string('a', VolumeSnapshot.NameMaxLength + 1))));
         Assert.Empty(volume.Snapshots);
-        Assert.Equal("nightly", volume.AddSnapshot("nightly").Snapshot.Name);
+        Assert.Equal("nightly", volume.WithSnapshot("nightly").Name);
     }
 }

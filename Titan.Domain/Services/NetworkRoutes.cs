@@ -26,15 +26,16 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
     /// route goes back, its number waiting at the back of the line. The held route is read without a lock: no create
     /// locks a held route. A repeated report ends nothing and touches no route, and a network without public IPv6
     /// never held one.
-    public async Task<PendingOperation<NetworkOperationKind>?> FinishOperationAsync(Network network, Guid operationId,
-        string? externalId, NetworkObservation? observed, CancellationToken ct = default)
+    public async Task<NetworkOperationKind?> FinishOperationAsync(Network network, Guid operationId,
+        string? externalId, NetworkStatus? status, string? cidr, string? gateway, CancellationToken ct = default)
     {
-        PendingOperation<NetworkOperationKind>? ended = network.FinishOperation(operationId, externalId, observed);
+        NetworkOperationKind? ended = network.FinishOperation(operationId, externalId,
+            status: status, cidr: cidr, gateway: gateway);
         if (ended == null)
         {
             return null;
         }
-        if (ended.Kind == NetworkOperationKind.Delete)
+        if (ended == NetworkOperationKind.Delete)
         {
             await TakeBackTheRouteOfAsync(network, ct);
         }
@@ -43,11 +44,13 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
 
     /// The report that the network's own command gave up, ended here so the route follows it: a create that failed
     /// before Incus had the network lets go of its /64, and the route goes back as for a delete done.
-    public async Task<PendingOperation<NetworkOperationKind>?> FailOperationAsync(Network network, Guid operationId,
-        string? externalId, NetworkObservation? observed, string? reason, string? detail, CancellationToken ct = default)
+    public async Task<NetworkOperationKind?> FailOperationAsync(Network network, Guid operationId,
+        string? externalId, NetworkStatus? status, string? cidr, string? gateway, string? reason, string? detail,
+        CancellationToken ct = default)
     {
         bool heldAPublicIpv6 = network.HasPublicIpv6;
-        PendingOperation<NetworkOperationKind>? ended = network.FailOperation(operationId, externalId, observed, reason, detail);
+        NetworkOperationKind? ended = network.FailOperation(operationId, externalId,
+            status: status, cidr: cidr, gateway: gateway, reason: reason, detail: detail);
         if (ended == null)
         {
             return null;

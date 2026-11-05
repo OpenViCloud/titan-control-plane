@@ -51,12 +51,12 @@ public class VolumeStateMachineTests
     private static void AttachDone(Volume v)
     {
         VolumeAttachProviderIds attach = v.Attach(AttachedVm);
-        v.FinishOperation(attach.OperationId, null, new VolumeObservation(AttachedVm.Id, false));
+        v.FinishOperation(attach.OperationId, null, true, AttachedVm.Id, false);
     }
 
-    private static PendingOperation<VolumeOperationKind>? GaveUp(Volume volume, Guid operationId, string reason,
-        VolumeObservation? observed = null) =>
-        volume.FailOperation(operationId, null, observed, reason, "raw");
+    private static VolumeOperationKind? GaveUp(Volume volume, Guid operationId, string reason,
+        bool sawTheVolume = false, Guid? attachedVmId = null, bool attachedElsewhere = false) =>
+        volume.FailOperation(operationId, null, sawTheVolume, attachedVmId, attachedElsewhere, reason, "raw");
 
     private static string Shape(Volume v)
     {
@@ -121,8 +121,8 @@ public class VolumeStateMachineTests
     {
         var v = VolumeIn(Seed.Creating, out Guid createRequestId);
 
-        Assert.NotNull(v.FinishOperation(createRequestId, "vol11", null));
-        Assert.Null(v.FinishOperation(createRequestId, "vol11", null));
+        Assert.NotNull(v.FinishOperation(createRequestId, "vol11", false, null, false));
+        Assert.Null(v.FinishOperation(createRequestId, "vol11", false, null, false));
 
         Assert.Equal("vol11", v.ExternalId);
         Assert.Equal(CurrentExistence.Exists, v.CurrentExistence);
@@ -174,7 +174,7 @@ public class VolumeStateMachineTests
         var v = VolumeIn(seed, out Guid createRequestId);
         string before = Shape(v);
 
-        Assert.Null(v.FailOperation(createRequestId, null, null, "late", "late"));
+        Assert.Null(v.FailOperation(createRequestId, null, false, null, false, "late", "late"));
 
         Assert.Equal(before, Shape(v));
         Assert.Null(v.OperationFailureReason);
@@ -324,7 +324,7 @@ public class VolumeStateMachineTests
         var v = VolumeIn(Seed.Available);
         VolumeAttachProviderIds attach = v.Attach(AttachedVm);
 
-        GaveUp(v, attach.OperationId, "attach failed", new VolumeObservation(null, false));
+        GaveUp(v, attach.OperationId, "attach failed", true, null, false);
 
         Assert.Null(v.DesiredAttachedVmId);
         Assert.Null(v.Transition);
@@ -338,7 +338,7 @@ public class VolumeStateMachineTests
         var v = VolumeIn(Seed.Attached);
         OperationTicket detach = v.Detach();
 
-        GaveUp(v, detach.OperationId, "detach failed", new VolumeObservation(AttachedVm.Id, false));
+        GaveUp(v, detach.OperationId, "detach failed", true, AttachedVm.Id, false);
 
         Assert.Equal(AttachedVm.Id, v.DesiredAttachedVmId);
         Assert.Equal(AttachedVm.Id, v.CurrentAttachedVmId);
@@ -476,11 +476,11 @@ public class VolumeStateMachineTests
         var v = VolumeIn(Seed.Available);
         OperationTicket delete = v.Delete()!;
 
-        Assert.NotNull(v.FinishOperation(delete.OperationId, null, null));
-        Assert.Null(v.FinishOperation(delete.OperationId, null, null));
+        Assert.NotNull(v.FinishOperation(delete.OperationId, null, false, null, false));
+        Assert.Null(v.FinishOperation(delete.OperationId, null, false, null, false));
 
         Assert.Equal(CurrentExistence.Deleted, v.CurrentExistence);
-        Assert.True(v.IsTerminal);
+        Assert.True(v.IsDeleted);
     }
 
     // Only the delete command ends a delete: the reconciler finding the volume gone is NotFound.
@@ -552,7 +552,7 @@ public class VolumeStateMachineTests
     [InlineData(Seed.AttachedElsewhere)]
     public void AddSnapshot_WhenIncusHasItAndNothingWaits_YieldsTheId(Seed seed)
     {
-        Assert.Equal("vol11", VolumeIn(seed).AddSnapshot("s").ExternalVolumeId);
+        Assert.Equal("vol11", VolumeIn(seed).AddSnapshot(Guid.NewGuid(), "s").ProviderId);
     }
 
     [Theory]
@@ -565,7 +565,7 @@ public class VolumeStateMachineTests
     [InlineData(Seed.Deleted)]
     public void AddSnapshot_FromEveryOtherSituation_Throws(Seed seed)
     {
-        var ex = Assert.Throws<BusinessException>(() => VolumeIn(seed).AddSnapshot("s"));
+        var ex = Assert.Throws<BusinessException>(() => VolumeIn(seed).AddSnapshot(Guid.NewGuid(), "s"));
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 
@@ -575,7 +575,7 @@ public class VolumeStateMachineTests
     public void Deleted_IgnoresEveryObservation_AndNeverThrows()
     {
         var v = VolumeIn(Seed.Deleted, out Guid createRequestId);
-        Assert.Null(v.FinishOperation(createRequestId, "vol99", null));
+        Assert.Null(v.FinishOperation(createRequestId, "vol99", false, null, false));
         v.MarkObserved(AttachedVm.Id, true);
         v.MarkNotFound();
         Assert.Null(GaveUp(v, createRequestId, "late"));
@@ -604,7 +604,7 @@ public class VolumeStateMachineTests
 
     private static VolumeSnapshot SnapshotIn(SnapSeed seed, out Guid createRequestId)
     {
-        var s = VolumeIn(Seed.Available).AddSnapshot("snap-1").Snapshot;
+        var s = VolumeIn(Seed.Available).WithSnapshot("snap-1");
         createRequestId = s.Pending!.Id;
         switch (seed)
         {
@@ -709,7 +709,7 @@ public class VolumeStateMachineTests
         Assert.Equal(VolumeSnapshotTransition.Deleting, s.Transition);
         Assert.NotNull(s.FinishOperation(delete.OperationId, null));
         Assert.Null(s.FinishOperation(delete.OperationId, null));
-        Assert.True(s.IsTerminal);
+        Assert.True(s.IsDeleted);
     }
 
     [Fact]
@@ -774,7 +774,7 @@ public class VolumeStateMachineTests
     public void Snapshot_Create_OfAVolumeNotResting_Throws(Seed seed)
     {
         var ex = Assert.Throws<BusinessException>(
-            () => VolumeIn(seed).AddSnapshot("snap-1"));
+            () => VolumeIn(seed).AddSnapshot(Guid.NewGuid(), "snap-1"));
         Assert.Equal("VOLUME_INVALID_STATE", ex.Code);
     }
 }

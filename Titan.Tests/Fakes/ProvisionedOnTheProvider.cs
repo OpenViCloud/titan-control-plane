@@ -20,7 +20,7 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
-                return network.FinishOperation(create.Id, externalId, new NetworkObservation(NetworkStatus.Created, cidr, gateway)) != null;
+                return network.FinishOperation(create.Id, externalId, NetworkStatus.Created, cidr, gateway) != null;
             }
             network.MarkObserved(NetworkStatus.Created);
             return false;
@@ -31,14 +31,14 @@ namespace Titan.Domain.Aggregates.Network
         {
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
-                network.FinishOperation(create.Id, externalId, new NetworkObservation(null, cidr, gateway));
+                network.FinishOperation(create.Id, externalId, null, cidr, gateway);
             }
         }
 
         /// The delete command's Done.
-        public static PendingOperation<NetworkOperationKind>? MarkDeleted(this Network network) =>
+        public static NetworkOperationKind? MarkDeleted(this Network network) =>
             network.Pending is { Kind: NetworkOperationKind.Delete } delete
-                ? network.FinishOperation(delete.Id, null, null)
+                ? network.FinishOperation(delete.Id, null, null, null, null)
                 : null;
 
         /// The create command's give-up. True when the network let go of its /64.
@@ -47,7 +47,7 @@ namespace Titan.Domain.Aggregates.Network
             if (network.Pending is { Kind: NetworkOperationKind.Create } create)
             {
                 bool heldAPublicIpv6 = network.HasPublicIpv6;
-                PendingOperation<NetworkOperationKind>? ended = network.FailOperation(create.Id, externalId, null, reason, detail);
+                NetworkOperationKind? ended = network.FailOperation(create.Id, externalId, null, null, null, reason, detail);
                 return ended != null && heldAPublicIpv6 && !network.HasPublicIpv6;
             }
             return false;
@@ -114,18 +114,18 @@ namespace Titan.Domain.Aggregates.Vm
         {
             if (vm.Pending is { Kind: VmOperationKind.Create } create)
             {
-                vm.FinishOperation(create.Id, externalId, null);
+                vm.FinishOperation(create.Id, externalId, null, null, null);
             }
         }
 
         /// The reconciler's observation, by its parts.
         public static void MarkObserved(this Vm vm, VmState state, string? ipAddress, string? publicIpv6Address = null) =>
-            vm.MarkObserved(new VmObservation(state, ipAddress, publicIpv6Address));
+            vm.MarkObserved(state, ipAddress, publicIpv6Address);
 
         /// The delete command's Done.
-        public static PendingOperation<VmOperationKind>? MarkDeleted(this Vm vm) =>
+        public static VmOperationKind? MarkDeleted(this Vm vm) =>
             vm.Pending is { Kind: VmOperationKind.Delete } delete
-                ? vm.FinishOperation(delete.Id, null, null)
+                ? vm.FinishOperation(delete.Id, null, null, null, null)
                 : null;
 
         /// The create command's give-up.
@@ -133,7 +133,7 @@ namespace Titan.Domain.Aggregates.Vm
         {
             if (vm.Pending is { Kind: VmOperationKind.Create } create)
             {
-                vm.FailOperation(create.Id, externalId, null, reason, detail);
+                vm.FailOperation(create.Id, externalId, null, null, null, reason, detail);
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id.
@@ -191,7 +191,7 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
             {
-                volume.FinishOperation(create.Id, externalId, null);
+                volume.FinishOperation(create.Id, externalId, false, null, false);
             }
         }
 
@@ -200,14 +200,14 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Attach } attach)
             {
-                volume.FinishOperation(attach.Id, null, new VolumeObservation(vmId, false));
+                volume.FinishOperation(attach.Id, null, true, vmId, false);
             }
         }
 
         /// The delete command's Done.
-        public static PendingOperation<VolumeOperationKind>? MarkDeleted(this Volume volume) =>
+        public static VolumeOperationKind? MarkDeleted(this Volume volume) =>
             volume.Pending is { Kind: VolumeOperationKind.Delete } delete
-                ? volume.FinishOperation(delete.Id, null, null)
+                ? volume.FinishOperation(delete.Id, null, false, null, false)
                 : null;
 
         /// The create command's give-up.
@@ -215,7 +215,7 @@ namespace Titan.Domain.Aggregates.Volume
         {
             if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
             {
-                volume.FailOperation(create.Id, externalId, null, reason, detail);
+                volume.FailOperation(create.Id, externalId, false, null, false, reason, detail);
             }
         }
 

@@ -66,7 +66,7 @@ public class FirewallRuleQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ARuleWhoseNetworkDoesNotExist_IsRefusedByTheDatabase()
     {
-        FirewallRule orphan = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
+        FirewallRule orphan = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
 
         await using TitanDbContext db = pg.NewDbContext();
         db.FirewallRules.Add(orphan); // no such network

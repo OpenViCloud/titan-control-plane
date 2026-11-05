@@ -114,7 +114,7 @@ public class GroupBRepeatRefusedTests
     [Fact]
     public void VolumeSnapshotDelete_Repeated_IsRefused_AndStaysDeleting()
     {
-        var snapshot = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), "vsnap-1");
+        var snapshot = VolumeSnapshot.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "vsnap-1");
         snapshot.MarkCreated("vsnap-ext");
         snapshot.Delete();
 
