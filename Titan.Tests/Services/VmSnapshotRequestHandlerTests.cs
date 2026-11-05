@@ -13,9 +13,8 @@ namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a VM snapshot, at the handler: a
 // report ends the request it names and records its outcome once; an observation writes current and ends nothing; the
-// snapshot is reached through the VM the route names, with the VM's row locked. The old route's mapping onto the same
-// shape follows, and the requests' own repeat and lock rules are at the end. VmSnapshotServiceTests keeps the rest of
-// the old route.
+// snapshot is reached through the VM the route names, with the VM's row locked. The requests' own repeat and lock rules
+// are at the end.
 public class VmSnapshotRequestHandlerTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
@@ -30,7 +29,6 @@ public class VmSnapshotRequestHandlerTests
 
     private EndVmSnapshotRequestCommandHandler EndHandler() => new(_repo.Object, _activity);
     private ObserveVmSnapshotCommandHandler ObserveHandler() => new(_repo.Object);
-    private UpdateVmSnapshotStatusCommandHandler OldHandler() => new(_repo.Object, _activity);
     private RevertVmSnapshotCommandHandler RevertHandler() => new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
     private DeleteVmSnapshotCommandHandler DeleteHandler() => new(_repo.Object, _currentUser.Object, _commands.Object, _activity);
 
@@ -282,91 +280,6 @@ public class VmSnapshotRequestHandlerTests
         Assert.Equal(CurrentExistence.Exists, theirs.CurrentExistence);
     }
 
-    // ---------- the old route, mapped onto the waiting request until rollout phase 6 ----------
-
-    [Fact]
-    public async Task OldRoute_Created_IsTheCreatesDone_AndRecordsVmSnapshotCreatedOnce()
-    {
-        Vm vm = RunningVm();
-        VmSnapshot snapshot = Creating(vm);
-
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Created", ExternalId: "vm42/s1"));
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Created", ExternalId: "vm42/s1"));
-
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal(["vm_snapshot.created"], Outcomes());
-    }
-
-    // Only the create's own report ends it (titan-ops architecture/resource-lifecycle.md#invariants).
-    [Fact]
-    public async Task OldRoute_Observed_WhileTheCreateWaits_EndsNothing()
-    {
-        Vm vm = RunningVm();
-        VmSnapshot snapshot = Creating(vm);
-
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Observed", Exists: true));
-
-        Assert.Equal("Exists/Exists/Creating", Shape(snapshot));
-        Assert.Empty(Outcomes());
-    }
-
-    [Fact]
-    public async Task OldRoute_Reverted_IsTheRevertsDone_AndWithNoRevertWaitingEndsNothing()
-    {
-        Vm vm = RunningVm();
-        VmSnapshot snapshot = Ready(vm);
-        vm.RevertSnapshot(snapshot.Id);
-
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Reverted"));
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Reverted"));
-
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal(["vm_snapshot.reverted"], Outcomes());
-
-        VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, deleting.Id, "Reverted"));
-        Assert.Equal(VmSnapshotTransition.Deleting, deleting.Transition);
-    }
-
-    [Fact]
-    public async Task OldRoute_RequestFailed_EndsWhateverWaits_Failed()
-    {
-        Vm vm = RunningVm();
-        VmSnapshot reverting = Ready(vm);
-        vm.RevertSnapshot(reverting.Id);
-        VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
-        VmSnapshot creating = Creating(vm);
-
-        foreach (VmSnapshot snapshot in new[] { reverting, deleting, creating })
-        {
-            await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "RequestFailed",
-                Reason: "The snapshot request could not be completed.", Detail: "raw"));
-        }
-
-        Assert.All(new[] { reverting, deleting, creating }, s => Assert.Null(s.Pending));
-        Assert.All(new[] { reverting, deleting, creating }, s => Assert.Equal("raw", s.OperationFailureDetail));
-        Assert.Equal(DesiredExistence.Exists, deleting.DesiredExistence);
-        Assert.Equal(["vm_snapshot.revert_failed", "vm_snapshot.delete_failed"], Outcomes());
-    }
-
-    [Fact]
-    public async Task OldRoute_Deleted_WithADeleteWaiting_IsTheDeletesDone_AndWithNothingWaitingIsNotFound()
-    {
-        Vm vm = RunningVm();
-        VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id);
-        VmSnapshot resting = Ready(vm);
-
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, deleting.Id, "Deleted"));
-        await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, resting.Id, "Deleted"));
-
-        Assert.Equal("Deleted/Deleted/-", Shape(deleting));
-        Assert.Equal("NotFound/Exists/-", Shape(resting));
-        Assert.Equal(["vm_snapshot.deleted"], Outcomes());
-    }
-
     // ---------- the requests: repeats and the lock ----------
 
     // A second revert while the first waits answers like the first: no new request, no row, no activity.
@@ -428,7 +341,6 @@ public class VmSnapshotRequestHandlerTests
     [InlineData("Delete")]
     [InlineData("EndVmSnapshotRequest")]
     [InlineData("ObserveVmSnapshot")]
-    [InlineData("UpdateVmSnapshotStatus")]
     public async Task EveryHandler_LoadsTheVmLocked(string handler)
     {
         Vm vm = RunningVm();
@@ -445,11 +357,8 @@ public class VmSnapshotRequestHandlerTests
             case "EndVmSnapshotRequest":
                 await EndHandler().HandleAsync(new EndVmSnapshotRequestCommand(vm.Id, snapshot.Id, Guid.NewGuid(), "Done"));
                 break;
-            case "ObserveVmSnapshot":
-                await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, true));
-                break;
             default:
-                await OldHandler().HandleAsync(new UpdateVmSnapshotStatusCommand(vm.Id, snapshot.Id, "Observed", Exists: true));
+                await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, true));
                 break;
         }
 

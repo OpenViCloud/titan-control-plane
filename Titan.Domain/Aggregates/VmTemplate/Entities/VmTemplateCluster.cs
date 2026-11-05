@@ -153,18 +153,6 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// A report that names the alias it saw: the old route's Created with no sync waiting. Without the alias the cluster
-    /// would read ready yet be unusable: VM create refuses a cluster with no ExternalTemplateId.
-    internal void MarkAliasObserved(string externalTemplateId)
-    {
-        if (string.IsNullOrEmpty(externalTemplateId))
-            throw new ArgumentException("The alias seen must be named.", nameof(externalTemplateId));
-
-        ExternalTemplateId ??= externalTemplateId;
-        CurrentExistence = CurrentExistence.Exists;
-        UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
     /// The reconciler did not find the alias. The reason of the last failed sync stays.
     internal void MarkNotFound()
     {

@@ -25,11 +25,19 @@ public class ObserveVmSnapshotEndpoint(ObserveVmSnapshotCommandHandler handler, 
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         await handler.HandleAsync(
-            new ObserveVmSnapshotCommand(Route<Guid>("vmId"), Route<Guid>("snapshotId"), body.Exists), ct);
+            new ObserveVmSnapshotCommand(Route<Guid>("vmId"), Route<Guid>("snapshotId"), body.Exists.Value), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; the command additionally carries the two route ids.
-public record ObserveVmSnapshotBody(bool Exists);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveVmSnapshotBody(bool? Exists);

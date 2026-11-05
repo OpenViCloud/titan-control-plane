@@ -37,7 +37,7 @@ public class VmSnapshotServiceTests
             .Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(TestTenant.Active("t", "kc", "t@x.io"));
 
-    // Facade over the five snapshot handlers so the tests keep one call shape; it forwards and adds
+    // Facade over the snapshot handlers so the tests keep one call shape; it forwards and adds
     // nothing.
     private VmSnapshotFacade CreateService() => new(
         _vmRepo.Object, _snapshotRepo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object, _activity.Object);
@@ -66,16 +66,23 @@ public class VmSnapshotServiceTests
             => new VmSnapCmd.DeleteVmSnapshotCommandHandler(vmRepo, currentUser, commands, activity)
                 .HandleAsync(new DeleteVmSnapshotCommand(vmId, snapshotId), ct);
 
-        public Task UpdateStatusAsync(Guid vmId, Guid snapshotId, UpdateSnapshotStatusBody body, CancellationToken ct = default)
-            => new VmSnapCmd.UpdateVmSnapshotStatusCommandHandler(vmRepo, activity)
-                .HandleAsync(new UpdateVmSnapshotStatusCommand(vmId, snapshotId, body.Report, body.Exists, body.ExternalId,
-                    body.Reason, body.Detail), ct);
+        public Task EndRequestAsync(Guid vmId, Guid snapshotId, Guid requestId, string outcome, string? externalId = null,
+            string? reason = null, string? detail = null, CancellationToken ct = default)
+            => new VmSnapCmd.EndVmSnapshotRequestCommandHandler(vmRepo, activity)
+                .HandleAsync(new EndVmSnapshotRequestCommand(vmId, snapshotId, requestId, outcome, externalId, reason, detail), ct);
+
+        public Task ObserveAsync(Guid vmId, Guid snapshotId, bool exists, CancellationToken ct = default)
+            => new VmSnapCmd.ObserveVmSnapshotCommandHandler(vmRepo)
+                .HandleAsync(new ObserveVmSnapshotCommand(vmId, snapshotId, exists), ct);
     }
 
     // Test-local request bodies; the facade unpacks them into commands.
     private record CreateSnapshotBody(string Name);
-    private record UpdateSnapshotStatusBody(
-        string Report, bool? Exists = null, string? ExternalId = null, string? Reason = null, string? Detail = null);
+
+    // The report of the request the snapshot waits on now, as its command sends it.
+    private Task EndWaiting(Vm vm, VmSnapshot snap, string outcome, string? externalId = null, string? reason = null,
+        string? detail = null)
+        => CreateService().EndRequestAsync(vm.Id, snap.Id, snap.Pending!.Id, outcome, externalId, reason, detail);
 
     // ── Create success ───────────────────────────────────────
 
@@ -450,12 +457,12 @@ public class VmSnapshotServiceTests
     // ── Callbacks (titan-ops features/vm/design.md#vm-snapshot-reports) ───────────
 
     [Fact]
-    public async Task UpdateStatus_Created_StoresTheId_AndEndsTheCreate()
+    public async Task Done_OfTheCreate_StoresTheId_AndEndsIt()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Creating);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-abc"), default);
+        await EndWaiting(vm, snap, "Done", "cs-snap-abc");
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("cs-snap-abc", snap.ExternalId);
@@ -463,13 +470,12 @@ public class VmSnapshotServiceTests
     }
 
     [Fact] // the create command gave up before Incus had the snapshot: why, kept for the tenant; the raw detail too
-    public async Task UpdateStatus_RequestFailed_OnAWaitingCreate_RecordsWhy_AndRecordsNoOutcome()
+    public async Task Failed_OfAWaitingCreate_RecordsWhy_AndRecordsNoOutcome()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Creating);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id,
-            new UpdateSnapshotStatusBody("RequestFailed", Reason: "Snapshot creation failed.", Detail: "quota exhausted"), default);
+        await EndWaiting(vm, snap, "Failed", reason: "Snapshot creation failed.", detail: "quota exhausted");
 
         Assert.Equal("NotCreated/Exists/-", Shape(snap));
         Assert.Equal("Snapshot creation failed.", snap.OperationFailureReason);
@@ -477,17 +483,15 @@ public class VmSnapshotServiceTests
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
-    // The create's Created report was lost, but the give-up found the snapshot on Incus: the create ends Failed with the
-    // id kept, so the snapshot can be deleted through Incus; a failure is not the create's outcome
+    // The create gave up after Incus had the snapshot: the create ends Failed with the id kept, so the snapshot can be deleted through Incus; a failure is not the create's outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
     [Fact]
-    public async Task UpdateStatus_RequestFailedCarryingTheId_EndsTheCreateFailed_KeepingTheId_AndRecordsNoOutcome()
+    public async Task Failed_CarryingTheId_EndsTheCreateFailed_KeepingTheId_AndRecordsNoOutcome()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Creating);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id,
-            new UpdateSnapshotStatusBody("RequestFailed", ExternalId: "cs-snap-abc", Reason: "Snapshot creation failed."), default);
+        await EndWaiting(vm, snap, "Failed", "cs-snap-abc", reason: "Snapshot creation failed.");
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Snapshot creation failed.", snap.OperationFailureReason);
@@ -496,25 +500,24 @@ public class VmSnapshotServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Reverted_EndsTheRevert()
+    public async Task Done_OfTheRevert_EndsIt()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.RevertRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Reverted"), default);
+        await EndWaiting(vm, snap, "Done");
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
     [Fact] // a revert Incus refused ends, with why and its outcome; the snapshot stays
-    public async Task UpdateStatus_RequestFailed_OnAWaitingRevert_EndsIt_WithTheReason_AndRecordsRevertFailed()
+    public async Task Failed_OfAWaitingRevert_EndsIt_WithTheReason_AndRecordsRevertFailed()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.RevertRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id,
-            new UpdateSnapshotStatusBody("RequestFailed", Reason: "Reverting failed.", Detail: "raw"), default);
+        await EndWaiting(vm, snap, "Failed", reason: "Reverting failed.", detail: "raw");
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Reverting failed.", snap.OperationFailureReason);
@@ -522,69 +525,68 @@ public class VmSnapshotServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_Deleted_EndsTheDelete()
+    public async Task Done_OfTheDelete_EndsIt()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Deleted"), default);
+        await EndWaiting(vm, snap, "Done");
 
         Assert.Equal("Deleted/Deleted/-", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
-    // The VM's Deleted took the snapshot along and recorded its outcome; the snapshot's own delete command then finds
-    // it gone and reports Deleted too: absorbed, no second outcome (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    // The VM delete's Done took the snapshot along and recorded its outcome; the snapshot's own delete command then
+    // finds it gone and reports its Done too: absorbed, no second outcome (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     [Fact]
-    public async Task UpdateStatus_Deleted_AfterTheVmTookTheSnapshotAlong_IsAbsorbed_AndRecordsNoOutcome()
+    public async Task Done_OfTheDelete_AfterTheVmTookTheSnapshotAlong_IsAbsorbed_AndRecordsNoOutcome()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
+        Guid deleteId = snap.Pending!.Id;
         vm.Delete();
         PendingOperation<VmOperationKind>? deletion = vm.MarkDeleted();
         Assert.Equal(VmOperationKind.Delete, deletion!.Kind);
         Assert.Equal(CurrentExistence.Deleted, snap.CurrentExistence);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Deleted"), default);
+        await CreateService().EndRequestAsync(vm.Id, snap.Id, deleteId, "Done");
 
         Assert.Equal("Deleted/Deleted/-", Shape(snap));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
-    [Fact] // a repeated Created changes nothing and records no outcome (it may still save the unchanged row)
-    public async Task UpdateStatus_CreatedAgain_IsIdempotent_RecordsNothing()
+    [Fact] // a Done on a snapshot that waits on nothing changes nothing and records no outcome
+    public async Task Done_WhenNothingWaits_ChangesNothing_RecordsNothing()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Ready);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-abc"), default);
+        await CreateService().EndRequestAsync(vm.Id, snap.Id, Guid.NewGuid(), "Done", "cs-snap-abc");
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact] // no VM by the route's id
-    public async Task UpdateStatus_SnapshotNotFound_ThrowsNotFoundException()
+    public async Task Report_SnapshotNotFound_ThrowsNotFoundException()
     {
         _vmRepo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>())).ReturnsAsync((Vm?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), Guid.NewGuid(),
-                new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-abc"), default));
+            () => CreateService().EndRequestAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Done", "cs-snap-abc"));
 
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", ex.Code);
     }
 
     [Fact] // the snapshot's VM is not the one the route names
-    public async Task UpdateStatus_SnapshotUnderAnotherVm_ThrowsNotFoundException()
+    public async Task Report_SnapshotUnderAnotherVm_ThrowsNotFoundException()
     {
         var vm = Given(MakeRunningVm());
         var other = Given(MakeRunningVm());
         var snap = MakeSnapshot(other, Snap.Creating);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().UpdateStatusAsync(vm.Id, snap.Id,
-                new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-abc"), default));
+            () => CreateService().EndRequestAsync(vm.Id, snap.Id, snap.Pending!.Id, "Done", "cs-snap-abc"));
 
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", ex.Code);
         Assert.Equal("NotCreated/Exists/Creating", Shape(snap));
@@ -603,8 +605,9 @@ public class VmSnapshotServiceTests
         _activity.Verify(a => a.Stage("vm_snapshot.create_requested", "vm_snapshot", result.SnapshotId, "before-upgrade"), Times.Once);
 
         // The worker reports against the snapshot's own VM.
-        await CreateService().UpdateStatusAsync(vm.Id, result.SnapshotId, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
-        await CreateService().UpdateStatusAsync(vm.Id, result.SnapshotId, new UpdateSnapshotStatusBody("Created", ExternalId: "cs-snap-1"), default);
+        Guid createId = vm.Snapshots.Single(s => s.Id == result.SnapshotId).Pending!.Id;
+        await CreateService().EndRequestAsync(vm.Id, result.SnapshotId, createId, "Done", "cs-snap-1");
+        await CreateService().EndRequestAsync(vm.Id, result.SnapshotId, createId, "Done", "cs-snap-1");
 
         // titan-ops features/activity/design.md#actor-and-tenant: the outcome carries the tenant OF THE RESOURCE (the callback has no caller).
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.created", "vm_snapshot", result.SnapshotId, "before-upgrade"), Times.Once);
@@ -622,7 +625,7 @@ public class VmSnapshotServiceTests
 
         _activity.Verify(a => a.Stage("vm_snapshot.revert_requested", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Reverted"), default);
+        await EndWaiting(vm, snap, "Done");
 
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.reverted", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
     }
@@ -639,8 +642,9 @@ public class VmSnapshotServiceTests
 
         _activity.Verify(a => a.Stage("vm_snapshot.delete_requested", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Deleted"), default);
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Deleted"), default);
+        Guid deleteId = snap.Pending!.Id;
+        await CreateService().EndRequestAsync(vm.Id, snap.Id, deleteId, "Done");
+        await CreateService().EndRequestAsync(vm.Id, snap.Id, deleteId, "Done");
 
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.deleted", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
     }
@@ -666,25 +670,25 @@ public class VmSnapshotServiceTests
     // ── The reconciler's reports, and a failed delete ──
 
     [Fact] // the reconciler seeing the snapshot never completes a revert
-    public async Task UpdateStatus_Observed_DuringARevert_LeavesItWaiting_AndRecordsNoOutcome()
+    public async Task Observed_DuringARevert_LeavesItWaiting_AndRecordsNoOutcome()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.RevertRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Observed", Exists: true), default);
+        await CreateService().ObserveAsync(vm.Id, snap.Id, true);
 
         Assert.Equal("Exists/Exists/Reverting", Shape(snap));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateStatus_ObservedAgain_OnASnapshotIncusHadLost_ExistsAgain()
+    public async Task ObservedAgain_OnASnapshotIncusHadLost_ExistsAgain()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Ready);
         snap.MarkNotFound();
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Observed", Exists: true), default);
+        await CreateService().ObserveAsync(vm.Id, snap.Id, true);
 
         Assert.Equal("Exists/Exists/-", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
@@ -692,37 +696,36 @@ public class VmSnapshotServiceTests
 
     // Only the delete command ends a delete: the reconciler not finding the snapshot is NotFound.
     [Fact]
-    public async Task UpdateStatus_NotFound_WhenTheDeleteWasAsked_IsNotFound_AndTheDeleteKeepsWaiting()
+    public async Task NotFound_WhenTheDeleteWasAsked_IsNotFound_AndTheDeleteKeepsWaiting()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Observed", Exists: false), default);
+        await CreateService().ObserveAsync(vm.Id, snap.Id, false);
 
         Assert.Equal("NotFound/Deleted/Deleting", Shape(snap));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task UpdateStatus_NotFound_WhenNobodyAskedForADelete_IsNotFound()
+    public async Task NotFound_WhenNobodyAskedForADelete_IsNotFound()
     {
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.Ready);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody("Observed", Exists: false), default);
+        await CreateService().ObserveAsync(vm.Id, snap.Id, false);
 
         Assert.Equal("NotFound/Exists/-", Shape(snap));
     }
 
     [Fact] // the failed delete gives the snapshot back, with why; the next delete is a new request
-    public async Task UpdateStatus_RequestFailedOnAWaitingDelete_GivesTheSnapshotBack_AndTheNextDeleteIsAccepted()
+    public async Task Failed_OfAWaitingDelete_GivesTheSnapshotBack_AndTheNextDeleteIsAccepted()
     {
         SetupCurrentUser(TenantId);
         var vm = Given(MakeRunningVm());
         var snap = MakeSnapshot(vm, Snap.DeleteRequested);
 
-        await CreateService().UpdateStatusAsync(vm.Id, snap.Id,
-            new UpdateSnapshotStatusBody("RequestFailed", Reason: "Snapshot deletion failed.", Detail: "refused"), default);
+        await EndWaiting(vm, snap, "Failed", reason: "Snapshot deletion failed.", detail: "refused");
         Assert.Equal("Exists/Exists/-", Shape(snap));
         Assert.Equal("Snapshot deletion failed.", snap.OperationFailureReason);
         _activity.Verify(a => a.StageOutcome(TenantId, "vm_snapshot.delete_failed", "vm_snapshot", snap.Id, "test-snap"), Times.Once);
@@ -731,33 +734,6 @@ public class VmSnapshotServiceTests
 
         Assert.Equal("Exists/Deleted/Deleting", Shape(snap));
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, snap.Pending!.Id, vm.Id, "cs-snap-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Theory] // reports the worker never sends, the old words included
-    [InlineData("Ready")]
-    [InlineData("Present")]
-    [InlineData("Absent")]
-    [InlineData("Error")]
-    [InlineData("Banana")]
-    public async Task UpdateStatus_UnknownReport_IsRefused(string report)
-    {
-        var vm = Given(MakeRunningVm());
-        var snap = MakeSnapshot(vm, Snap.Ready);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(vm.Id, snap.Id, new UpdateSnapshotStatusBody(report), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        _vmRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_ObservedWithoutExists_IsRefused()
-    {
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), Guid.NewGuid(), new UpdateSnapshotStatusBody("Observed"), default));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

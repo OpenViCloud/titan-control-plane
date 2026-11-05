@@ -125,39 +125,20 @@ public class InternalTokenCallbackTests
     [Theory]
     [InlineData(null)]
     [InlineData("wrong")]
-    public async Task UpdateNetworkStatus_WithoutTheToken_Returns401(string? token)
+    public async Task EndVmSnapshotRequest_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateNetworkStatusCommandHandler(new Mock<INetworkRepository>(MockBehavior.Strict).Object,
-            new Titan.Domain.Services.NetworkRoutes(new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object), StrictActivity());
-        var ep = Factory.Create<UpdateNetworkStatusEndpoint>(
-            ctx =>
-            {
-                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
-                SetToken(ctx, token);
-            },
-            handler, ConfigWithToken());
-
-        await ep.HandleAsync(new UpdateNetworkStatusRequest("Created", ExternalId: "7", Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"), CancellationToken.None);
-
-        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("wrong")]
-    public async Task UpdateVmSnapshotStatus_WithoutTheToken_Returns401(string? token)
-    {
-        var handler = new UpdateVmSnapshotStatusCommandHandler(new Mock<IVmRepository>(MockBehavior.Strict).Object, StrictActivity());
-        var ep = Factory.Create<UpdateSnapshotStatusEndpoint>(
+        var handler = new EndVmSnapshotRequestCommandHandler(new Mock<IVmRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var ep = Factory.Create<EndVmSnapshotRequestEndpoint>(
             ctx =>
             {
                 ctx.Request.RouteValues["vmId"] = Guid.NewGuid().ToString();
                 ctx.Request.RouteValues["snapshotId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
                 SetToken(ctx, token);
             },
             handler, ConfigWithToken());
 
-        await ep.HandleAsync(new UpdateSnapshotStatusBody("Created", ExternalId: "vm1/s3"), CancellationToken.None);
+        await ep.HandleAsync(new EndVmSnapshotRequestBody("Done", ExternalId: "vm1/s3"), CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }
@@ -165,12 +146,33 @@ public class InternalTokenCallbackTests
     [Theory]
     [InlineData(null)]
     [InlineData("wrong")]
-    public async Task UpdateVolumeStatus_WithoutTheToken_Returns401(string? token)
+    public async Task EndVolumeRequest_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateVolumeStatusCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object,
+        var handler = new EndVolumeRequestCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object,
             new Mock<IVmRepository>(MockBehavior.Strict).Object,
             StrictActivity());
-        var ep = Factory.Create<UpdateVolumeStatusEndpoint>(
+        var ep = Factory.Create<EndVolumeRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["volumeId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            handler, ConfigWithToken());
+
+        await ep.HandleAsync(new EndVolumeRequestBody("Done", ExternalId: "vol5"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveVolume_WithoutTheToken_Returns401(string? token)
+    {
+        var handler = new ObserveVolumeCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object,
+            new Mock<IVmRepository>(MockBehavior.Strict).Object);
+        var ep = Factory.Create<ObserveVolumeEndpoint>(
             ctx =>
             {
                 ctx.Request.RouteValues["volumeId"] = Guid.NewGuid().ToString();
@@ -178,7 +180,7 @@ public class InternalTokenCallbackTests
             },
             handler, ConfigWithToken());
 
-        await ep.HandleAsync(new UpdateVolumeStatusBody("Created", ExternalId: "vol5"), CancellationToken.None);
+        await ep.HandleAsync(new ObserveVolumeBody(Exists: true, new VolumeObservedBody(["vm5"])), CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }
@@ -186,41 +188,39 @@ public class InternalTokenCallbackTests
     [Theory]
     [InlineData(null)]
     [InlineData("wrong")]
-    public async Task UpdateVolumeSnapshotStatus_WithoutTheToken_Returns401(string? token)
+    public async Task EndVolumeSnapshotRequest_WithoutTheToken_Returns401(string? token)
     {
-        var handler = new UpdateVolumeSnapshotStatusCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object, StrictActivity());
-        var ep = Factory.Create<UpdateVolumeSnapshotStatusEndpoint>(
+        var handler = new EndVolumeSnapshotRequestCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object, StrictActivity());
+        var ep = Factory.Create<EndVolumeSnapshotRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["volumeId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["snapshotId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            handler, ConfigWithToken());
+
+        await ep.HandleAsync(new EndVolumeSnapshotRequestBody("Done", ExternalId: "vol5/s9"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveVolumeSnapshot_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveVolumeSnapshotEndpoint>(
             ctx =>
             {
                 ctx.Request.RouteValues["volumeId"] = Guid.NewGuid().ToString();
                 ctx.Request.RouteValues["snapshotId"] = Guid.NewGuid().ToString();
                 SetToken(ctx, token);
             },
-            handler, ConfigWithToken());
+            new ObserveVolumeSnapshotCommandHandler(new Mock<IVolumeRepository>(MockBehavior.Strict).Object), ConfigWithToken());
 
-        await ep.HandleAsync(new UpdateVolumeSnapshotStatusBody("Created", ExternalId: "vol5/s9"), CancellationToken.None);
-
-        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("wrong")]
-    public async Task UpdateFirewallRuleStatus_WithoutTheToken_Returns401(string? token)
-    {
-        var repo = new Mock<INetworkRepository>(MockBehavior.Strict).Object;
-        IActivityRecorder activity = StrictActivity();
-        var ep = Factory.Create<UpdateFirewallRuleStatusEndpoint>(
-            ctx =>
-            {
-                ctx.Request.RouteValues["networkId"] = Guid.NewGuid().ToString();
-                ctx.Request.RouteValues["ruleId"] = Guid.NewGuid().ToString();
-                SetToken(ctx, token);
-            },
-            new UpdateFirewallRuleStatusCommandHandler(repo, activity),
-            ConfigWithToken());
-
-        await ep.HandleAsync(new UpdateFirewallRuleStatusBody("Created", ExternalRuleId: "acl/rule-1"), CancellationToken.None);
+        await ep.HandleAsync(new ObserveVolumeSnapshotBody(Exists: true), CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }

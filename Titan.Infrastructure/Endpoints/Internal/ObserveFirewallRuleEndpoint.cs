@@ -25,12 +25,20 @@ public class ObserveFirewallRuleEndpoint(ObserveFirewallRuleCommandHandler handl
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         Guid networkId = Route<Guid>("networkId");
         Guid ruleId = Route<Guid>("ruleId");
-        await handler.HandleAsync(new ObserveFirewallRuleCommand(networkId, ruleId, body.Exists, body.Observed?.State), ct);
+        await handler.HandleAsync(new ObserveFirewallRuleCommand(networkId, ruleId, body.Exists.Value, body.Observed?.State), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; ObserveFirewallRuleCommand additionally carries the two route ids.
-public record ObserveFirewallRuleBody(bool Exists, FirewallRuleObservedBody? Observed = null);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveFirewallRuleBody(bool? Exists, FirewallRuleObservedBody? Observed = null);

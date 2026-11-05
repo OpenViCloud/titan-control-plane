@@ -795,18 +795,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("pending_request_kind");
 
-                    b.Property<int?>("PublicIpv6Index")
-                        .HasColumnType("integer")
-                        .HasColumnName("public_ipv6_index");
-
-                    b.Property<DateTimeOffset?>("PublicIpv6ReleasedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("public_ipv6_released_at");
-
-                    b.Property<string>("PublicIpv6RouterAddress")
-                        .HasColumnType("text")
-                        .HasColumnName("public_ipv6_router_address");
-
                     b.Property<string>("PublicIpv6Subnet")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_subnet");
@@ -816,11 +804,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnName("tenant_id");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("ClusterId", "PublicIpv6Index")
-                        .IsUnique()
-                        .HasDatabaseName("ix_networks_cluster_id_public_ipv6_index")
-                        .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique()

@@ -49,29 +49,39 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         return result.NetworkId;
     }
 
-    private async Task ReportAsync(Guid networkId, UpdateNetworkStatusCommand report)
+    private async Task<Guid> WaitingRequestAsync(Guid networkId)
+    {
+        await using TitanDbContext db = pg.NewDbContext();
+        return (await new NetworkRepository(db).FindByIdAsync(networkId))!.Pending!.Id;
+    }
+
+    private async Task EndAsync(Guid networkId, Guid requestId, string outcome, string? externalId = null,
+        string? cidr = null, string? gateway = null, string? reason = null)
     {
         await using TitanDbContext db = pg.NewDbContext();
         var caller = Callers.TenantMember(Guid.NewGuid());
-        var handler = new UpdateNetworkStatusCommandHandler(
+        var handler = new EndNetworkRequestCommandHandler(
             new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)),
             new ActivityRecorder(new ActivityEventRepository(db), caller));
-        await handler.HandleAsync(report);
+        await handler.HandleAsync(new EndNetworkRequestCommand(networkId, requestId, outcome, externalId, null, cidr, gateway,
+            reason, reason == null ? null : "raw incus error"));
     }
 
-    private async Task AskForDeleteAsync(Guid networkId)
+    private async Task<Guid> AskForDeleteAsync(Guid networkId)
     {
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new NetworkRepository(db);
         Network network = (await repo.FindByIdAsync(networkId))!;
-        network.Delete();
+        Guid delete = network.Delete()!.OperationId;
         await repo.SaveAsync();
+        return delete;
     }
 
     private async Task ItExistsOnIncusAsync(Guid networkId, string externalId)
     {
-        await ReportAsync(networkId, new UpdateNetworkStatusCommand(networkId, "Created", ExternalId: externalId, Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"));
-        await ReportAsync(networkId, new UpdateNetworkStatusCommand(networkId, "Observed", Exists: true, Status: "Created"));
+        await EndAsync(networkId, await WaitingRequestAsync(networkId), "Done", externalId, "10.0.0.0/24", "10.0.0.1");
+        await using TitanDbContext db = pg.NewDbContext();
+        await new ObserveNetworkCommandHandler(new NetworkRepository(db)).HandleAsync(new ObserveNetworkCommand(networkId, true, "Created"));
     }
 
     [Fact]
@@ -92,12 +102,12 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         Guid keptAfterGiveUp = await CreateAsync(tenant.Id, cluster, "kept-one");
 
         await ItExistsOnIncusAsync(deleted, "net-deleted");
-        await AskForDeleteAsync(deleted);
-        await ReportAsync(deleted, new UpdateNetworkStatusCommand(deleted, "Deleted"));
-        await ReportAsync(gaveUp, new UpdateNetworkStatusCommand(gaveUp, "RequestFailed", Reason: "Network creation failed.", Detail: "raw incus error"));
-        await ReportAsync(keptAfterGiveUp, new UpdateNetworkStatusCommand(keptAfterGiveUp, "RequestFailed",
-            ExternalId: "net-kept", Cidr: "10.1.0.0/24", Gateway: "10.1.0.1", Reason: "Network creation failed.", Detail: "raw incus error"));
-        await ReportAsync(deleted, new UpdateNetworkStatusCommand(deleted, "Deleted")); // a repeated report
+        Guid delete = await AskForDeleteAsync(deleted);
+        await EndAsync(deleted, delete, "Done");
+        await EndAsync(gaveUp, await WaitingRequestAsync(gaveUp), "Failed", reason: "Network creation failed.");
+        await EndAsync(keptAfterGiveUp, await WaitingRequestAsync(keptAfterGiveUp), "Failed",
+            "net-kept", "10.1.0.0/24", "10.1.0.1", "Network creation failed.");
+        await EndAsync(deleted, delete, "Done"); // a repeated report
 
         await using TitanDbContext read = pg.NewDbContext();
         List<Guid> liveWithASubnet = await read.Networks
@@ -112,27 +122,6 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         // The two routes that went back carry the time they went back; the next network gets a route never used.
         Assert.Equal(2, routes.Count(r => r.IsFree && r.ReleasedAt != null));
         Assert.Equal(5, await CreateNumberAsync(tenant.Id, cluster));
-    }
-
-    // The columns the route table replaces are still on networks until a later migration drops them. A number left in
-    // them, with the route free, is not held: the route table is the only place that says who holds a route.
-    [Fact]
-    public async Task ANumberLeftInTheNetworksOwnColumn_IsNotHeld_WhenTheRouteIsFree()
-    {
-        string cluster = $"cluster-{Guid.NewGuid():N}";
-        Tenant tenant = TestTenant.Active($"route-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "route@titan.local", maxNetworks: 10);
-        var legacy = TestAggregates.Network(tenant, "legacy-one", cluster);
-        await using (TitanDbContext seed = pg.NewDbContext())
-        {
-            seed.Tenants.Add(tenant);
-            seed.Networks.Add(legacy);
-            await seed.SaveChangesAsync();
-            await new ClusterIpv6RouteRepository(seed).EnsureRoutesAsync(cluster);
-            await seed.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE core.networks SET public_ipv6_index = 1, public_ipv6_subnet = {"2001:db8::/64"} WHERE id = {legacy.Id}");
-        }
-
-        Assert.Equal(1, await CreateNumberAsync(tenant.Id, cluster));
     }
 
     private async Task<int> CreateNumberAsync(Guid tenantId, string cluster)

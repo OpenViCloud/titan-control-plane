@@ -56,8 +56,8 @@ public class FirewallServiceTests
             => new DeleteFirewallRuleCommandHandler(networkRepo, currentUser, commands, activity)
                 .HandleAsync(new DeleteFirewallRuleCommand(networkId, ruleId), ct);
 
-        public Task ReportAsync(UpdateFirewallRuleStatusCommand report, CancellationToken ct = default)
-            => new UpdateFirewallRuleStatusCommandHandler(networkRepo, activity).HandleAsync(report, ct);
+        public Task EndRequestAsync(EndFirewallRuleRequestCommand report, CancellationToken ct = default)
+            => new EndFirewallRuleRequestCommandHandler(networkRepo, activity).HandleAsync(report, ct);
     }
 
     // ── CreateAsync ───────────────────────────────────────────────────────
@@ -414,7 +414,8 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         FirewallRule rule = MakeRule(network, Seed.DeleteRequested);
         // the failed delete gives the rule back
-        await CreateService().ReportAsync(new UpdateFirewallRuleStatusCommand(NetworkId, rule.Id, "RequestFailed", Reason: "Firewall rule deletion failed."));
+        await CreateService().EndRequestAsync(new EndFirewallRuleRequestCommand(NetworkId, rule.Id, rule.Pending!.Id, "Failed",
+            Reason: "Firewall rule deletion failed."));
         Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);

@@ -10,7 +10,7 @@ namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a template in one cluster, at the
 // handler: a report ends the sync it names; an observation writes current and ends nothing; the template's row is
-// locked (the fake finds a template only through the locked read). TemplateServiceTests keeps the old route and sync-all.
+// locked (the fake finds a template only through the locked read). TemplateServiceTests keeps sync-all and what customers see.
 public class TemplateRequestHandlerTests
 {
     private const string Mock = "mock", Singapore = "singapore01";

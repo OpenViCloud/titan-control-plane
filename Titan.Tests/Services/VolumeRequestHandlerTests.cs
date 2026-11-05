@@ -15,8 +15,7 @@ namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a volume and its snapshots, at the
 // handler: a report ends the request it names and records its outcome once; an observation writes current and ends
-// nothing, but for the temporary exception pinned at the end of this file. The old route's mapping onto the same shape is
-// in VolumeServiceTests and VolumeSnapshotServiceTests (UpdateStatus_*).
+// nothing.
 public class VolumeRequestHandlerTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
@@ -34,7 +33,7 @@ public class VolumeRequestHandlerTests
     }
 
     private EndVolumeRequestCommandHandler EndHandler() => new(_repo.Object, _vmRepo.Object, _activity);
-    private ObserveVolumeCommandHandler ObserveHandler() => new(_repo.Object, _vmRepo.Object, _activity);
+    private ObserveVolumeCommandHandler ObserveHandler() => new(_repo.Object, _vmRepo.Object);
     private EndVolumeSnapshotRequestCommandHandler EndSnapshotHandler() => new(_repo.Object, _activity);
     private ObserveVolumeSnapshotCommandHandler ObserveSnapshotHandler() => new(_repo.Object);
 
@@ -236,15 +235,20 @@ public class VolumeRequestHandlerTests
         Assert.Empty(_activity.Events);
     }
 
-    // TEMPORARY, rollout phase 6 removes it (VolumeReports.EndAttachOrDetachTheObservationReached): an observation showing
-    // what a waiting attach asked for ends it, once; the command's own Done arriving later is ignored.
+    // An observation never ends a request, even one showing what a waiting attach asked for: only the report carrying
+    // the request's id does (titan-ops architecture/resource-lifecycle.md#invariants).
     [Fact]
-    public async Task AnObservation_ReachingAWaitingAttach_EndsIt_AndTheLaterDone_IsIgnored()
+    public async Task AnObservation_ReachingAWaitingAttach_LeavesItWaiting_AndTheLaterDone_EndsIt()
     {
         Volume volume = Given(RestingVolume());
         VolumeAttachProviderIds attach = volume.Attach(_vm);
 
         await ObserveHandler().HandleAsync(new ObserveVolumeCommand(volume.Id, true, ["vm-ext"]));
+
+        Assert.Equal(_vm.Id, volume.CurrentAttachedVmId);
+        Assert.Equal(attach.OperationId, volume.Pending!.Id);
+        Assert.Empty(_activity.Events);
+
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, attach.OperationId, "Done", AttachedTo: ["vm-ext"]));
 
         Assert.Null(volume.Pending);

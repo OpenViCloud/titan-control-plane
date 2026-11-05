@@ -12,7 +12,7 @@ namespace Titan.Application.Services.Compute;
 /// <summary>
 /// What every VM and VM snapshot callback handler does with a worker's report, in one place: parse the outcome and the
 /// Incus status, record the outcome of a request that ended once (titan-ops features/activity/design.md#request-and-outcome-names), and release
-/// the volumes of a VM whose delete was done, or keep them attached if it gave up. The new routes and the old ones share it, so they cannot drift apart
+/// the volumes of a VM whose delete was done, or keep them attached if it gave up
 /// (titan-ops architecture/resource-lifecycle.md#callback-routes).
 /// </summary>
 public static class VmReports
@@ -34,15 +34,6 @@ public static class VmReports
         [VmOperationKind.Delete] = "vm.delete_failed",
     };
 
-    // The tenant-facing reason when a give-up arrives on the old intents route, which carries none.
-    private static readonly Dictionary<VmOperationKind, string> FixedFailureReason = new()
-    {
-        [VmOperationKind.Create] = "VM provisioning failed due to a system error. Please try again or contact support.",
-        [VmOperationKind.Start] = "The VM could not be started. Please try again or contact support.",
-        [VmOperationKind.Stop] = "The VM could not be stopped. Please try again or contact support.",
-        [VmOperationKind.Delete] = "The VM could not be deleted. Please try again or contact support.",
-    };
-
     private static readonly Dictionary<VmSnapshotOperationKind, string> SnapshotDoneAction = new()
     {
         [VmSnapshotOperationKind.Create] = "vm_snapshot.created",
@@ -55,8 +46,6 @@ public static class VmReports
         [VmSnapshotOperationKind.Revert] = "vm_snapshot.revert_failed",
         [VmSnapshotOperationKind.Delete] = "vm_snapshot.delete_failed",
     };
-
-    public static string ReasonFor(VmOperationKind kind) => FixedFailureReason[kind];
 
     public static OperationOutcome ParseOutcome(string outcome)
     {
@@ -170,27 +159,5 @@ public static class VmReports
         {
             activity.StageOutcome(snapshot.TenantId, action, "vm_snapshot", snapshot.Id, snapshot.Name);
         }
-    }
-
-    /// TEMPORARY, removed in rollout phase 6 (titan-ops architecture/resource-lifecycle.md#rollout): while a worker that
-    /// reports nothing when a stop or start succeeds may still run, an observation that reaches what a waiting stop or
-    /// start asked for ends it, as before this rollout. With the new worker the command's own Done and this race; the
-    /// later one finds nothing waiting and is ignored, so the outcome is recorded once. A create is never ended here.
-    public static async Task<PendingOperation<VmOperationKind>?> EndStopOrStartTheObservationReachedAsync(VmAggregate vm,
-        IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
-    {
-        PendingOperation<VmOperationKind>? waiting = vm.Pending;
-        if (waiting == null)
-        {
-            return null;
-        }
-        bool runs = vm.CurrentState == VmState.Running || vm.CurrentState == VmState.Ready;
-        bool reached = (waiting.Kind == VmOperationKind.Stop && vm.CurrentState == VmState.Stopped)
-                       || (waiting.Kind == VmOperationKind.Start && runs);
-        if (!reached)
-        {
-            return null;
-        }
-        return await FinishOperationAsync(vm, waiting.Id, null, null, activity, volumes, ct);
     }
 }

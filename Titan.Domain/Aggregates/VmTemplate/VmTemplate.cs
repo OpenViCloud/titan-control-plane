@@ -163,13 +163,6 @@ public class VmTemplate : IAggregateRoot
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
-    /// The alias seen, by its name: what the old route's Created records with no sync waiting.
-    public void MarkAliasObservedIn(string clusterId, string externalTemplateId)
-    {
-        RowFor(clusterId).MarkAliasObserved(externalTemplateId);
-        UpdatedAt = DateTimeOffset.UtcNow;
-    }
-
     public void MarkNotFoundIn(string clusterId)
     {
         RowFor(clusterId).MarkNotFound();

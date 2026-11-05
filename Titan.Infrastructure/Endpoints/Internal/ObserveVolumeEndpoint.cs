@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one volume (titan-ops architecture/resource-lifecycle.md#callback-routes): whether Incus
-// has it and what uses it. Writes current; ends a request only by the handler's temporary exception.
+// has it and what uses it. Writes current only.
 public class ObserveVolumeEndpoint(ObserveVolumeCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVolumeBody>
 {
@@ -25,11 +25,19 @@ public class ObserveVolumeEndpoint(ObserveVolumeCommandHandler handler, IConfigu
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         Guid volumeId = Route<Guid>("volumeId");
-        await handler.HandleAsync(new ObserveVolumeCommand(volumeId, body.Exists, body.Observed?.AttachedTo), ct);
+        await handler.HandleAsync(new ObserveVolumeCommand(volumeId, body.Exists.Value, body.Observed?.AttachedTo), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; ObserveVolumeCommand additionally carries the route id.
-public record ObserveVolumeBody(bool Exists, VolumeObservedBody? Observed = null);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveVolumeBody(bool? Exists, VolumeObservedBody? Observed = null);

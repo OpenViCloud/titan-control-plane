@@ -153,8 +153,7 @@ public class ProviderCommandQueueTests
     }
 
     // A load balancer's keys carry the request id, as the network's: each request its own row, and the payload names the
-    // request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The update's
-    // payload also carries it as intentId, for a worker that still reports on the old route.
+    // request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
     public async Task LoadBalancerRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
@@ -183,11 +182,8 @@ public class ProviderCommandQueueTests
             using JsonDocument payload = JsonDocument.Parse(_repo.Rows[i].Payload);
             Assert.Equal(requests[i].ToString(), payload.RootElement.GetProperty("requestId").GetString());
             Assert.Equal(lb.Id.ToString(), payload.RootElement.GetProperty("loadBalancerId").GetString());
+            Assert.False(payload.RootElement.TryGetProperty("intentId", out _));
         }
-        using JsonDocument createPayload = JsonDocument.Parse(_repo.Rows[0].Payload);
-        using JsonDocument updatePayload = JsonDocument.Parse(_repo.Rows[1].Payload);
-        Assert.Equal(JsonValueKind.Null, createPayload.RootElement.GetProperty("intentId").ValueKind);
-        Assert.Equal(update.ToString(), updatePayload.RootElement.GetProperty("intentId").GetString());
     }
 
     // Two deletes under two request ids while the first row is open: two rows, never a 409 on the load balancer's key; a
@@ -274,9 +270,9 @@ public class ProviderCommandQueueTests
     }
 
     // The worker's report names the request (titan-ops architecture/resource-lifecycle.md#callback-routes): the id travels in the
-    // payload as requestId, and as intentId for a worker from before the request routes (removed in rollout phase 6).
+    // payload as requestId, under no other name.
     [Fact]
-    public async Task StopAndStart_CarryTheRequestId_AsRequestIdAndIntentId()
+    public async Task StopAndStart_CarryTheRequestId_AsRequestIdOnly()
     {
         Guid vmId = Guid.NewGuid();
         Guid stopRequest = Guid.NewGuid();
@@ -288,9 +284,10 @@ public class ProviderCommandQueueTests
 
         using JsonDocument stop = JsonDocument.Parse(_repo.Rows[0].Payload);
         Assert.Equal(stopRequest.ToString(), stop.RootElement.GetProperty("requestId").GetString());
-        Assert.Equal(stopRequest.ToString(), stop.RootElement.GetProperty("intentId").GetString());
+        Assert.False(stop.RootElement.TryGetProperty("intentId", out _));
         using JsonDocument start = JsonDocument.Parse(_repo.Rows[1].Payload);
         Assert.Equal(startRequest.ToString(), start.RootElement.GetProperty("requestId").GetString());
+        Assert.False(start.RootElement.TryGetProperty("intentId", out _));
         Assert.Equal($"vm-start-{vmId}-{startRequest}", _repo.Rows[1].Key);
     }
 

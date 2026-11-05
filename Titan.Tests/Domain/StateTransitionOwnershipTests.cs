@@ -31,14 +31,6 @@ public class StateTransitionOwnershipTests
         // --- Payload / parse validation: NOT transition legality. These reject a malformed request
         // before any aggregate is consulted ("what is 'Frobnicated'?"), which is the adapter layer's
         // job. They are BadRequestException (400), not BusinessException (422).
-        ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|Unknown network report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the network exists",
-        ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|Unknown firewall rule report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the rule exists",
-        ["UpdateFirewallRuleStatusCommandHandler.cs|INVALID_STATUS|ExternalRuleId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-        ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|Unknown template report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the alias exists",
-        ["UpdateTemplateStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the alias is missing from the sync command's report",
         ["EndTemplateSyncRequestCommandHandler.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's template sync report",
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|Invalid status"] = "parse: unknown enum value from the admin request",
         // PendingApproval parses as TenantStatus but is not an admin target.
@@ -46,29 +38,12 @@ public class StateTransitionOwnershipTests
         ["VmReports.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback, shared by every VM callback handler",
         ["VmReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's VM or VM snapshot request report",
         ["ObserveVmCommandHandler.cs|INVALID_STATUS|Observed is required when the instance exists"] = "payload: an observation of an existing instance that does not say its status",
-        ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Unknown VM report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the instance exists",
-        ["UpdateVmStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-        ["UpdateNetworkStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-        ["UpdateVolumeStatusCommandHandler.cs|INVALID_STATUS|Unknown volume report"] = "parse: unknown report kind from the worker callback",
         ["VolumeReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's volume or volume snapshot request report",
         ["NetworkReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's network or firewall rule request report",
         ["NetworkReports.cs|INVALID_STATUS|Unknown network status"] = "parse: unknown enum value from the worker callback, shared by every network callback handler",
         ["NetworkReports.cs|INVALID_STATUS|Unknown firewall rule state"] = "parse: unknown enum value from the worker callback, shared by every firewall rule callback handler",
-        ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|Unknown load balancer report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the load balancer exists",
-        ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the VIP is missing from the create command's report",
-        ["UpdateLoadBalancerStatusCommandHandler.cs|INVALID_STATUS|IntentId is required when report is Updated"] = "payload: an update report that does not say which update it ends",
         ["LoadBalancerReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's load balancer request report",
         ["CreateLoadBalancerCommandHandler.cs|LOAD_BALANCER_INVALID_STATE|This network has no free load balancer address left"] = "capacity: every VIP number of the network is taken, a count over many aggregates, not one's state",
-        ["UpdateVolumeStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the volume exists",
-        ["UpdateVolumeStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-        ["UpdateVolumeSnapshotStatusCommandHandler.cs|INVALID_STATUS|Unknown volume snapshot report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateVolumeSnapshotStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the snapshot exists",
-        ["UpdateVolumeSnapshotStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
-        ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|Unknown VM snapshot report"] = "parse: unknown report kind from the worker callback",
-        ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|Exists is required when report is Observed"] = "payload: an observation that does not say whether the snapshot exists",
-        ["UpdateVmSnapshotStatusCommandHandler.cs|INVALID_STATUS|ExternalId is required when report is Created"] = "payload: the provider id is missing from the create command's report",
     };
 
     // Mark* is the OBSERVATION vocabulary (titan-ops architecture/intent-and-observation.md#observation-converges): a report

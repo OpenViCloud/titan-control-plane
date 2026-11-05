@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one VM (titan-ops architecture/resource-lifecycle.md#callback-routes): whether Incus has
-// the instance and what it read. Writes current; ends a request only by the handler's temporary exception.
+// the instance and what it read. Writes current; ends no request.
 public class ObserveVmEndpoint(ObserveVmCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVmBody>
 {
@@ -25,14 +25,22 @@ public class ObserveVmEndpoint(ObserveVmCommandHandler handler, IConfiguration c
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         Guid vmId = Route<Guid>("vmId");
         VmObservationReport? observed = body.Observed == null
             ? null
             : new VmObservationReport(body.Observed.Status, body.Observed.IpAddress, body.Observed.PublicIpv6Address);
-        await handler.HandleAsync(new ObserveVmCommand(vmId, body.Exists, observed), ct);
+        await handler.HandleAsync(new ObserveVmCommand(vmId, body.Exists.Value, observed), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; ObserveVmCommand additionally carries the route id.
-public record ObserveVmBody(bool Exists, VmObservedBody? Observed = null);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveVmBody(bool? Exists, VmObservedBody? Observed = null);

@@ -19,7 +19,7 @@ public class CommandHttpContractTests(OpenApiSpecTests.ApiFactory factory)
 {
     // Pinned so a PUT/PATCH that disappears from the scan (renamed verb, endpoint not registered) fails
     // loudly instead of shrinking the checked set. A new route raises it on purpose.
-    private const int PutAndPatchRoutes = 38; // +2: the request report and observation routes of a template in one cluster (titan-ops architecture/resource-lifecycle.md#callback-routes)
+    private const int PutAndPatchRoutes = 29; // -9: the old report routes, gone once every command carries its request id (titan-ops architecture/resource-lifecycle.md#callback-routes)
 
     private static readonly Regex SendsABody = new(@"\bSend(Ok|)Async\(", RegexOptions.Compiled);
 

@@ -25,11 +25,19 @@ public class ObserveNetworkEndpoint(ObserveNetworkCommandHandler handler, IConfi
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         Guid networkId = Route<Guid>("networkId");
-        await handler.HandleAsync(new ObserveNetworkCommand(networkId, body.Exists, body.Observed?.Status), ct);
+        await handler.HandleAsync(new ObserveNetworkCommand(networkId, body.Exists.Value, body.Observed?.Status), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; ObserveNetworkCommand additionally carries the route id.
-public record ObserveNetworkBody(bool Exists, NetworkObservedBody? Observed = null);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveNetworkBody(bool? Exists, NetworkObservedBody? Observed = null);

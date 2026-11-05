@@ -294,21 +294,15 @@ namespace Titan.Domain.Aggregates.VmTemplate
 {
     /// A template's sync in a cluster ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
     /// these replay the worker's reports under the one-call names test setups used before, through the real
-    /// FinishSyncOperation and FailSyncOperation. A replay for a sync not waiting does what the old route does with that
-    /// report.
+    /// FinishSyncOperation and FailSyncOperation. A replay for a sync not waiting ends nothing.
     public static class VmTemplateProvisionedOnTheProvider
     {
-        /// The sync command's Done with the alias. True when it ended a waiting sync; with none waiting it records the
-        /// alias seen, as the old route's Created does.
+        /// The sync command's Done with the alias. True when it ended a waiting sync; with none waiting there is no
+        /// request to end, so nothing changes.
         public static bool MarkCreatedIn(this VmTemplate template, string clusterId, string externalTemplateId)
         {
             Values.PendingOperation<VmTemplateOperationKind>? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Pending;
-            if (waiting != null)
-            {
-                return template.FinishSyncOperation(clusterId, waiting.Id, externalTemplateId) != null;
-            }
-            template.MarkAliasObservedIn(clusterId, externalTemplateId);
-            return false;
+            return waiting != null && template.FinishSyncOperation(clusterId, waiting.Id, externalTemplateId) != null;
         }
 
         /// The sync command's give-up, before Incus had the alias. True when a sync was waiting.

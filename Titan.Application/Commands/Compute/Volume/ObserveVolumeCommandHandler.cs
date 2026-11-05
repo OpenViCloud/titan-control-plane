@@ -1,4 +1,3 @@
-using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Volume.Contracts;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Volume;
@@ -9,13 +8,12 @@ using Titan.Domain.Values;
 namespace Titan.Application.Commands.Compute.Volume;
 
 // The reconciler's observation of one volume (titan-ops architecture/resource-lifecycle.md#callback-routes): what Incus has,
-// written to current (titan-ops architecture/resource-lifecycle.md#invariants), and until rollout phase 6 the one
-// temporary exception below. Authenticated by X-Internal-Token at the endpoint, acting for no tenant. Locked like every
-// lifecycle handler, so an observation and a request on the same volume take turns.
+// written to current; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated by
+// X-Internal-Token at the endpoint, acting for no tenant. Locked like every lifecycle handler, so an observation and a
+// request on the same volume take turns.
 public class ObserveVolumeCommandHandler(
     IVolumeRepository repo,
-    IVmRepository vmRepo,
-    IActivityRecorder activity)
+    IVmRepository vmRepo)
 {
     public async Task HandleAsync(ObserveVolumeCommand command, CancellationToken ct = default)
     {
@@ -31,9 +29,6 @@ public class ObserveVolumeCommandHandler(
         {
             volume.MarkNotFound();
         }
-
-        // Temporary allowlist, rollout phase 6 removes it (VolumeReports.EndAttachOrDetachTheObservationReached).
-        VolumeReports.EndAttachOrDetachTheObservationReached(volume, activity);
 
         await repo.SaveAsync(ct);
     }

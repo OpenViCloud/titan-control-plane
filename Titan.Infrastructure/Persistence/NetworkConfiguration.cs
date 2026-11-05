@@ -48,11 +48,6 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             .HasDefaultValue(FirewallPolicy.Allow);
         builder.Property(n => n.PublicIpv6Subnet).HasColumnName("public_ipv6_subnet");
         builder.Ignore(n => n.HasPublicIpv6);
-        // Columns the route table replaces, kept in the model without a property until a later migration drops them: the
-        // image that runs before a release carries the route table still reads and writes them. Nothing here writes them.
-        builder.Property<string?>("PublicIpv6RouterAddress").HasColumnName("public_ipv6_router_address");
-        builder.Property<int?>("PublicIpv6Index").HasColumnName("public_ipv6_index");
-        builder.Property<DateTimeOffset?>("PublicIpv6ReleasedAt").HasColumnName("public_ipv6_released_at");
 
         // The rules are the network's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
         // through the backing field so EF never needs a setter on the collection. Restrict, not cascade: no row of
@@ -69,13 +64,5 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             // The name stays taken until the delete command confirms the network gone: a delete in flight still
             // holds it (titan-ops features/network/design.md#network-name-reuse). Same filter as ExistsByNameAsync.
             .HasFilter("current_existence <> 'Deleted'");
-
-        // Guard of the columns above, dropped with them.
-        builder.HasIndex(nameof(Network.ClusterId), "PublicIpv6Index")
-            .IsUnique()
-            .HasDatabaseName(PublicIpv6IndexName)
-            .HasFilter("public_ipv6_index IS NOT NULL AND current_existence <> 'Deleted'");
     }
-
-    public const string PublicIpv6IndexName = "ix_networks_cluster_id_public_ipv6_index";
 }

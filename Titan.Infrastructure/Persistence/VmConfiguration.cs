@@ -26,8 +26,6 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
         builder.Property(v => v.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
-        // has_been_running and create_finished stay in the table with DEFAULT false until rollout phase 6
-        // (titan-ops architecture/resource-lifecycle.md#rollout); the model no longer reads them.
         builder.Property(v => v.IpAddress).HasColumnName("ip_address");
         builder.Property(v => v.VmOfferingId).HasColumnName("vm_offering_id").IsRequired();
         // titan-ops features/catalog/design.md#resources-reference-their-offering. No navigation: Compute holds no Catalog type.

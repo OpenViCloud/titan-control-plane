@@ -57,8 +57,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
 
     // VM: one row per request, the key carries the request id, so no key is ever reused
     // (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The payload carries requestId for the
-    // worker's report; stop and start also carry it as intentId, which a worker from before the request routes reads
-    // for its give-up (titan-ops architecture/resource-lifecycle.md#rollout, removed in phase 6).
+    // worker's report.
     public Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId, decimal cpuUnits,
         int vcpuCount, int memoryMb, string templateId, string clusterId, string externalNetworkId, string projectName,
         int diskSizeGb, string? userData, string? vendorData, CancellationToken ct = default) =>
@@ -77,12 +76,12 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     public Task EnqueueVmStopAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
         EnqueueAsync(VmStopKey(vmId, requestId), ProviderCommandKinds.VmStop, clusterId,
-            new { vmId, requestId, intentId = requestId, externalVmId, projectName, clusterId }, ct);
+            new { vmId, requestId, externalVmId, projectName, clusterId }, ct);
 
     public Task EnqueueVmStartAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
         CancellationToken ct = default) =>
         EnqueueAsync(VmStartKey(vmId, requestId), ProviderCommandKinds.VmStart, clusterId,
-            new { vmId, requestId, intentId = requestId, externalVmId, projectName, clusterId }, ct);
+            new { vmId, requestId, externalVmId, projectName, clusterId }, ct);
 
     // `vm-{kind}-{vmId}-{requestId}`: the stuck-request query rebuilds the key from the VM's waiting request
     // (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
@@ -177,14 +176,12 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>
         EnqueueAsync(LoadBalancerCreateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerCreate,
-            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, intentId: null, projectName), ct);
+            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
 
-    // intentId carries the request id too, for a worker that still reports the update on the old route with it (removed
-    // in rollout phase 6, titan-ops architecture/resource-lifecycle.md#rollout).
     public Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>
         EnqueueAsync(LoadBalancerUpdateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerUpdate,
-            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, intentId: requestId, projectName), ct);
+            loadBalancer.ClusterId, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
 
     public Task EnqueueLoadBalancerDeleteAsync(Guid loadBalancerId, Guid requestId, string externalNetworkId, string vip,
         string projectName, string clusterId, CancellationToken ct = default) =>
@@ -198,12 +195,11 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     internal static string LoadBalancerDeleteKey(Guid loadBalancerId, Guid requestId) => $"load-balancer-delete-{loadBalancerId}-{requestId}";
 
     // The asked configuration (titan-ops features/load-balancer/design.md#lb-resource-model); protocol in Incus's spelling.
-    private static object LoadBalancerPayload(LoadBalancer lb, Guid requestId, Guid? intentId, string projectName) =>
+    private static object LoadBalancerPayload(LoadBalancer lb, Guid requestId, string projectName) =>
         new
         {
             loadBalancerId = lb.Id,
             requestId,
-            intentId,
             projectName,
             clusterId = lb.ClusterId,
             externalNetworkId = lb.ExternalNetworkId,

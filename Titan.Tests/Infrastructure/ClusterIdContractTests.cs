@@ -1,7 +1,6 @@
 using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Options;
@@ -90,23 +89,25 @@ public class ClusterIdContractTests
     }
 
     [Fact]
-    public async Task ATemplateReport_WithItsClusterId_IsRecorded()
+    public async Task ATemplateReport_ForAConfiguredCluster_PassesTheClusterCheck()
     {
         var templates = new Mock<IVmTemplateRepository>();
         var clusters = new ClusterOptions { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
-        var handler = new UpdateTemplateStatusCommandHandler(templates.Object, clusters, NullLogger<UpdateTemplateStatusCommandHandler>.Instance);
-        var ep = Factory.Create<UpdateTemplateStatusEndpoint>(
+        var handler = new EndTemplateSyncRequestCommandHandler(templates.Object, clusters);
+        var ep = Factory.Create<EndTemplateSyncRequestEndpoint>(
             ctx =>
             {
                 ctx.Request.Headers["X-Internal-Token"] = "secret";
                 ctx.Request.RouteValues["templateId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["clusterId"] = "mock";
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
             },
             handler, ConfigWithToken("secret"));
 
         var notFound = await Assert.ThrowsAsync<Titan.Domain.Exceptions.NotFoundException>(() =>
-            ep.HandleAsync(new UpdateTemplateStatusRequest(Report: "Created", ClusterId: "mock", ExternalId: "tpl-205"), CancellationToken.None));
+            ep.HandleAsync(new EndTemplateSyncRequestBody("Done", ExternalId: "tpl-205"), CancellationToken.None));
 
-        // Past the body check and the cluster check: the handler looked the template up, and found none.
+        // Past the cluster check: the handler looked the template up, and found none.
         Assert.Equal("TEMPLATE_NOT_FOUND", notFound.Code);
         templates.Verify(t => t.FindByIdForUpdateAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Once);
     }

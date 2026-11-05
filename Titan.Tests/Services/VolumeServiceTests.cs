@@ -9,6 +9,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Values;
 using Titan.Tests.Fakes;
 using Titan.Application.Exceptions;
 
@@ -74,17 +75,15 @@ public class VolumeServiceTests
         public Task<List<VolumeQueryResult>> ListAsync(CancellationToken ct = default)
             => new VolumeQry.ListVolumesQueryHandler(repo, currentUser).HandleAsync(new ListVolumesQuery(), ct);
 
-        public Task UpdateStatusAsync(Guid volumeId, UpdateVolumeStatusBody body, CancellationToken ct = default)
-            => new VolumeCmd.UpdateVolumeStatusCommandHandler(repo, vmRepo, activity)
-                .HandleAsync(new UpdateVolumeStatusCommand(volumeId, body.Report, body.Exists, body.AttachedTo,
-                    body.ExternalId, body.Reason, body.Detail), ct);
+        public Task EndRequestAsync(EndVolumeRequestCommand report, CancellationToken ct = default)
+            => new VolumeCmd.EndVolumeRequestCommandHandler(repo, vmRepo, activity).HandleAsync(report, ct);
+
+        public Task ObserveAsync(ObserveVolumeCommand observation, CancellationToken ct = default)
+            => new VolumeCmd.ObserveVolumeCommandHandler(repo, vmRepo).HandleAsync(observation, ct);
     }
 
     // Test-local request bodies, not contracts; the facade unpacks them into commands.
     private record AttachVolumeBody(Guid VmId);
-    private record UpdateVolumeStatusBody(
-        string Report, bool? Exists = null, List<string>? AttachedTo = null, string? ExternalId = null,
-        string? Reason = null, string? Detail = null);
 
     // ── CreateAsync ───────────────────────────────────────────────────────
 
@@ -538,22 +537,23 @@ public class VolumeServiceTests
     [InlineData(VolumeSeed.Attaching, "volume.attached")]
     [InlineData(VolumeSeed.Detaching, "volume.detached")]
     [InlineData(VolumeSeed.Deleting, "volume.deleted")]
-    public async Task UpdateStatus_CompletingARequest_RecordsItsOutcomeOnce(VolumeSeed from, string action)
+    public async Task EndRequest_DoneOfARequest_RecordsItsOutcomeOnce(VolumeSeed from, string action)
     {
         Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
         var volume = MakeVolume(from, attachTo: vm);
         SetupVolume(volume);
         SetupTenantVms(vm);
-        UpdateVolumeStatusBody report = from switch
+        Guid requestId = volume.Pending!.Id;
+        EndVolumeRequestCommand report = from switch
         {
-            VolumeSeed.Creating => new UpdateVolumeStatusBody("Created", ExternalId: "cs-vol-default"),
-            VolumeSeed.Attaching => new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: ["vm-attached"]),
-            VolumeSeed.Detaching => new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: []),
-            _ => new UpdateVolumeStatusBody("Deleted"),
+            VolumeSeed.Creating => new EndVolumeRequestCommand(volume.Id, requestId, "Done", "cs-vol-default"),
+            VolumeSeed.Attaching => new EndVolumeRequestCommand(volume.Id, requestId, "Done", AttachedTo: ["vm-attached"]),
+            VolumeSeed.Detaching => new EndVolumeRequestCommand(volume.Id, requestId, "Done", AttachedTo: []),
+            _ => new EndVolumeRequestCommand(volume.Id, requestId, "Done"),
         };
 
-        await CreateService().UpdateStatusAsync(volume.Id, report);
-        await CreateService().UpdateStatusAsync(volume.Id, report);
+        await CreateService().EndRequestAsync(report);
+        await CreateService().EndRequestAsync(report);
 
         var e = Assert.Single(_activity.Events);
         Assert.Equal(action, e.Action);
@@ -563,13 +563,13 @@ public class VolumeServiceTests
 
     // An observation writes current only: the create waits for its own command's report, so nothing is recorded.
     [Fact]
-    public async Task UpdateStatus_ObservedOnAWaitingCreate_WritesCurrentOnly_AndTheCreateKeepsWaiting()
+    public async Task Observe_ExistsOnAWaitingCreate_WritesCurrentOnly_AndTheCreateKeepsWaiting()
     {
         var volume = MakeVolume(VolumeSeed.Creating);
         Guid createId = volume.Pending!.Id;
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Observed", Exists: true));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true));
 
         Assert.Equal("Exists/Exists/-/-/Creating", Shape(volume));
         Assert.Equal(createId, volume.Pending!.Id);
@@ -578,15 +578,14 @@ public class VolumeServiceTests
 
     // P3-1: an instance that is no Titan VM of this tenant — another tenant's VM of the same name included.
     [Fact]
-    public async Task UpdateStatus_UsedByAnInstanceThatIsNoVmOfTheTenant_IsAttachedElsewhere()
+    public async Task Observe_UsedByAnInstanceThatIsNoVmOfTheTenant_IsAttachedElsewhere()
     {
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
         Vm othersVm = MakeVm(VmState.Running, externalVmId: "vm-shared-name", owner: TestTenant.WithRoomToSpare());
         SetupTenantVms(othersVm);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: ["vm-shared-name"]));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true, ["vm-shared-name"]));
 
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.True(volume.CurrentAttachedElsewhere);
@@ -594,42 +593,40 @@ public class VolumeServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_UsedByATitanVmAndAnInstanceOutsideTitan_IsBoth()
+    public async Task Observe_UsedByATitanVmAndAnInstanceOutsideTitan_IsBoth()
     {
         Vm vm = MakeVm(VmState.Running, externalVmId: "vm-mine");
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
         SetupTenantVms(vm);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: ["foreign", "vm-mine"]));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true, ["foreign", "vm-mine"]));
 
         Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
         Assert.True(volume.CurrentAttachedElsewhere);
     }
 
     [Fact] // attached outside Titan to a Titan VM, nothing waiting: current follows Incus, desired stays — drift, no outcome
-    public async Task UpdateStatus_AttachedOutsideTitan_IsDrift_AndRecordsNothing()
+    public async Task Observe_AttachedOutsideTitan_IsDrift_AndRecordsNothing()
     {
         Vm vm = MakeVm(VmState.Running, externalVmId: "vm-mine");
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
         SetupTenantVms(vm);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: ["vm-mine"]));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true, ["vm-mine"]));
 
         Assert.Equal("Exists/Exists/vm/-/-", Shape(volume));
         Assert.Empty(_activity.Events);
     }
 
     [Fact] // drift the other way: detached outside Titan
-    public async Task UpdateStatus_DetachedOutsideTitan_IsDrift_AndRecordsNothing()
+    public async Task Observe_DetachedOutsideTitan_IsDrift_AndRecordsNothing()
     {
         var volume = MakeVolume(VolumeSeed.Attached);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Observed", Exists: true, AttachedTo: []));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, true, []));
 
         Assert.Equal("Exists/Exists/-/vm/-", Shape(volume));
         Assert.Empty(_activity.Events);
@@ -637,13 +634,13 @@ public class VolumeServiceTests
 
     // The attach command gave up, reporting what Incus showed: not attached, so the request is withdrawn with why.
     [Fact]
-    public async Task UpdateStatus_AFailedAttach_WithdrawsTheRequest_WithTheReason_AndRecordsAttachFailed()
+    public async Task EndRequest_AFailedAttach_WithdrawsTheRequest_WithTheReason_AndRecordsAttachFailed()
     {
         var volume = MakeVolume(VolumeSeed.Attaching);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: [], Reason: "Attaching failed.", Detail: "raw"));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed",
+            AttachedTo: [], Reason: "Attaching failed.", Detail: "raw"));
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("Attaching failed.", volume.OperationFailureReason);
@@ -652,33 +649,16 @@ public class VolumeServiceTests
         Assert.Equal(TenantId, e.OutcomeTenantId);
     }
 
-    // The attach happened, only its report failed: the give-up's observation fulfils it, and nothing is withdrawn.
     [Fact]
-    public async Task UpdateStatus_AGiveUpShowingTheAttachDone_IsTheAttachDone()
-    {
-        Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
-        var volume = MakeVolume(VolumeSeed.Attaching, attachTo: vm);
-        SetupVolume(volume);
-        SetupTenantVms(vm);
-
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: ["vm-attached"], Reason: "Attaching failed."));
-
-        Assert.Equal("Exists/Exists/vm/vm/-", Shape(volume));
-        Assert.Null(volume.OperationFailureReason);
-        Assert.Equal("volume.attached", Assert.Single(_activity.Events).Action);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_AFailedDetach_LeavesItAttached_WithTheReason_AndRecordsDetachFailed()
+    public async Task EndRequest_AFailedDetach_LeavesItAttached_WithTheReason_AndRecordsDetachFailed()
     {
         Vm vm = MakeVm(VmState.Running, externalVmId: "vm-attached");
         var volume = MakeVolume(VolumeSeed.Detaching, attachTo: vm);
         SetupVolume(volume);
         SetupTenantVms(vm);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", Exists: true, AttachedTo: ["vm-attached"], Reason: "Detaching failed."));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed",
+            AttachedTo: ["vm-attached"], Reason: "Detaching failed."));
 
         Assert.Equal("Exists/Exists/vm/vm/-", Shape(volume));
         Assert.Equal("Detaching failed.", volume.OperationFailureReason);
@@ -686,13 +666,13 @@ public class VolumeServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_RequestFailed_OnAWaitingCreate_RecordsWhy_AndLeavesItNotCreated()
+    public async Task EndRequest_FailedCreate_RecordsWhy_AndLeavesItNotCreated()
     {
         var volume = MakeVolume(VolumeSeed.Creating);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", Reason: "Volume creation failed.", Detail: "raw"));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed",
+            Reason: "Volume creation failed.", Detail: "raw"));
 
         Assert.Equal("NotCreated/Exists/-/-/-", Shape(volume));
         Assert.Equal("Volume creation failed.", volume.OperationFailureReason);
@@ -703,13 +683,13 @@ public class VolumeServiceTests
     // The give-up found the volume on Incus: the id and existence are kept, so a delete reaches Incus, but the create
     // still failed — it records why, and a failed create has no outcome.
     [Fact]
-    public async Task UpdateStatus_RequestFailedCarryingTheId_RecordsTheIdAndWhy_WithoutVolumeCreated()
+    public async Task EndRequest_FailedCreateCarryingTheId_RecordsTheIdAndWhy_WithoutVolumeCreated()
     {
         var volume = MakeVolume(VolumeSeed.Creating);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", ExternalId: "vol9", Reason: "Volume creation failed."));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed", "vol9",
+            Reason: "Volume creation failed."));
 
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("vol9", volume.ExternalId);
@@ -718,14 +698,14 @@ public class VolumeServiceTests
     }
 
     [Fact]
-    public async Task UpdateStatus_RequestFailed_WhileADeleteWaits_GivesTheVolumeBack_AndItCanBeDeletedAgain()
+    public async Task EndRequest_FailedDelete_GivesTheVolumeBack_AndItCanBeDeletedAgain()
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Deleting, externalVolumeId: "cs-vol-3");
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id,
-            new UpdateVolumeStatusBody("RequestFailed", Reason: "Volume deletion failed.", Detail: "refused"));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed",
+            Reason: "Volume deletion failed.", Detail: "refused"));
         Assert.Equal("Exists/Exists/-/-/-", Shape(volume));
         Assert.Equal("Volume deletion failed.", volume.OperationFailureReason);
         Assert.Equal("volume.delete_failed", Assert.Single(_activity.Events).Action);
@@ -739,25 +719,25 @@ public class VolumeServiceTests
 
     // Only the delete command ends a delete: the reconciler not finding the volume is NotFound.
     [Fact]
-    public async Task UpdateStatus_NotFound_WhileADeleteWaits_IsNotFound_AndTheDeleteKeepsWaiting()
+    public async Task Observe_NotFound_WhileADeleteWaits_IsNotFound_AndTheDeleteKeepsWaiting()
     {
         var volume = MakeVolume(VolumeSeed.Deleting);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Observed", Exists: false));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, false));
 
         Assert.Equal("NotFound/Deleted/-/-/Deleting", Shape(volume));
         Assert.Empty(_activity.Events);
     }
 
     [Fact]
-    public async Task UpdateStatus_NotFound_OnAVolumeStillWanted_IsNotFound_AndItCanBeDeleted()
+    public async Task Observe_NotFound_OnAVolumeStillWanted_IsNotFound_AndItCanBeDeleted()
     {
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Attached);
         SetupVolume(volume);
 
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Observed", Exists: false));
+        await CreateService().ObserveAsync(new ObserveVolumeCommand(volume.Id, false));
 
         Assert.Equal("NotFound/Exists/-/vm/-", Shape(volume));
         await CreateService().DeleteAsync(volume.Id, default);
@@ -765,10 +745,10 @@ public class VolumeServiceTests
     }
 
     // Incus deletes a volume's snapshots with it (titan-ops features/volume/design.md#delete-refused-with-snapshots): the
-    // volume's Deleted report marks every one not yet Deleted, and records the outcome of a snapshot whose own delete
+    // volume's delete Done marks every one not yet Deleted, and records the outcome of a snapshot whose own delete
     // was waiting — its delete command will only find it already Deleted.
     [Fact]
-    public async Task UpdateStatus_Deleted_MarksTheVolumesSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
+    public async Task EndRequest_DoneOfTheDelete_MarksTheVolumesSnapshotsDeleted_AndRecordsAWaitingSnapshotDeleteOnly()
     {
         var volume = MakeVolume(VolumeSeed.Available);
         SetupVolume(volume);
@@ -778,9 +758,9 @@ public class VolumeServiceTests
         var leaving = volume.WithSnapshot("leaving");
         leaving.MarkCreated("vol/s2");
         leaving.Delete();
-        volume.Delete();
+        OperationTicket delete = volume.Delete()!;
 
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Deleted"));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, delete.OperationId, "Done"));
 
         Assert.True(lost.IsTerminal);
         Assert.True(leaving.IsTerminal);
@@ -788,40 +768,13 @@ public class VolumeServiceTests
         Assert.Equal(new[] { "volume.deleted:vol-01", "volume_snapshot.deleted:leaving" }, actions);
     }
 
-    [Theory] // reports the worker never sends, the old words included
-    [InlineData("Allocated")]
-    [InlineData("Attached")]
-    [InlineData("Absent")]
-    [InlineData("Error")]
-    [InlineData("Attaching")]
-    public async Task UpdateStatus_UnknownReport_Is400_AndSavesNothing(string report)
-    {
-        var volume = MakeVolume(VolumeSeed.Available);
-        SetupVolume(volume);
-
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody(report)));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-    }
-
     [Fact]
-    public async Task UpdateStatus_ObservedWithoutExists_Is400()
-    {
-        var ex = await Assert.ThrowsAsync<BadRequestException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), new UpdateVolumeStatusBody("Observed")));
-
-        Assert.Equal("INVALID_STATUS", ex.Code);
-    }
-
-    [Fact]
-    public async Task UpdateStatus_VolumeNotFound_ThrowsNotFoundException()
+    public async Task Observe_VolumeNotFound_ThrowsNotFoundException()
     {
         _repo.Setup(r => r.FindByIdForUpdateAsync(It.IsAny<Guid>(), default)).ReturnsAsync((Volume?)null);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().UpdateStatusAsync(Guid.NewGuid(), new UpdateVolumeStatusBody("Deleted")));
+            () => CreateService().ObserveAsync(new ObserveVolumeCommand(Guid.NewGuid(), true)));
 
         Assert.Equal("VOLUME_NOT_FOUND", ex.Code);
     }
@@ -834,7 +787,7 @@ public class VolumeServiceTests
         SetupCurrentUser(TenantId);
         var volume = MakeVolume(VolumeSeed.Creating);
         SetupVolume(volume);
-        await CreateService().UpdateStatusAsync(volume.Id, new UpdateVolumeStatusBody("Created", ExternalId: "vol7"));
+        await CreateService().EndRequestAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Done", "vol7"));
 
         await CreateService().DeleteAsync(volume.Id, default);
 

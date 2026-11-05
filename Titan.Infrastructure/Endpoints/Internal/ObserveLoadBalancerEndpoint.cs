@@ -25,11 +25,19 @@ public class ObserveLoadBalancerEndpoint(ObserveLoadBalancerCommandHandler handl
             return;
         }
 
+        // A body without exists would read as "gone" and record the resource missing; nothing is written.
+        if (body.Exists == null)
+        {
+            await SendErrorsAsync(400, ct);
+            return;
+        }
+
         Guid loadBalancerId = Route<Guid>("loadBalancerId");
-        await handler.HandleAsync(new ObserveLoadBalancerCommand(loadBalancerId, body.Exists), ct);
+        await handler.HandleAsync(new ObserveLoadBalancerCommand(loadBalancerId, body.Exists.Value), ct);
         await SendNoContentAsync(ct);
     }
 }
 
 // The worker's JSON body; ObserveLoadBalancerCommand additionally carries the route id.
-public record ObserveLoadBalancerBody(bool Exists);
+// Exists is required; nullable so a body without it reaches the 400 above.
+public record ObserveLoadBalancerBody(bool? Exists);

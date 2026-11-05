@@ -40,6 +40,37 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         return vm;
     }
 
+    // Every command carries the id of its request, so the routes that matched a report to whatever waited are gone
+    // (titan-ops architecture/resource-lifecycle.md#callback-routes): with the right token they are unknown routes.
+    [Theory]
+    [InlineData("/internal/vms/{0}/status")]
+    [InlineData("/internal/vms/{0}/intents/{1}/failed")]
+    [InlineData("/internal/vms/{0}/snapshots/{1}/status")]
+    [InlineData("/internal/volumes/{0}/status")]
+    [InlineData("/internal/volumes/{0}/snapshots/{1}/status")]
+    [InlineData("/internal/networks/{0}/status")]
+    [InlineData("/internal/networks/{0}/firewall-rules/{1}")]
+    [InlineData("/internal/load-balancers/{0}/status")]
+    [InlineData("/internal/templates/{0}/status")]
+    public async Task AnOldReportRoute_IsNotFound(string route)
+    {
+        HttpResponseMessage response = await PatchAsync(string.Format(route, Guid.NewGuid(), Guid.NewGuid()), "{}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("", await response.Content.ReadAsStringAsync());
+    }
+
+    // What makes the test above tell a missing route from a handler's 404: a live route answers an unknown resource with
+    // an error body.
+    [Fact]
+    public async Task ALiveReportRoute_AnswersAnUnknownVm_WithAnErrorBody()
+    {
+        HttpResponseMessage response = await PatchAsync($"/internal/vms/{Guid.NewGuid()}/observation", """{"exists":false}""");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotEqual("", await response.Content.ReadAsStringAsync());
+    }
+
     private async Task<Vm> ReloadAsync(Guid vmId)
     {
         using IServiceScope scope = factory.Services.CreateScope();
