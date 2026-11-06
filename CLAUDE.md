@@ -182,7 +182,7 @@ Khoá lệnh = chuỗi id workflow cũ, trừ VM, volume, volume snapshot, netwo
 | `TEMPLATE_NOT_SYNCED` | 422 | Template chưa sync sang **cluster của VM** (cluster đó chưa có `ExternalTemplateId`, kể cả khi cluster khác đã có) |
 | `TEMPLATE_UNAVAILABLE` | 422 | Cluster còn `ExternalTemplateId` nhưng không `Exists` (image alias `tpl-<templateId>` vắng trên cluster ⇒ reconciler báo `NotFound`) — kiểm **sau** `TEMPLATE_NOT_SYNCED` |
 | `VM_NAME_TAKEN` | 409 | |
-| `VM_INVALID_STATUS` | 422 | Start, stop, delete, snapshot, revert hay gắn volume khi VM không ở trạng thái nhận thao tác đó (đang chờ lệnh, kể cả `Snapshotting`, hay không phải chữ Incus nhận nó); mở phiên SSH khi VM không `Running`/`Ready` |
+| `VM_INVALID_STATUS` | 422 | Start, stop, delete, snapshot, revert hay gắn volume khi VM không ở trạng thái nhận thao tác đó (đang chờ lệnh, kể cả `Snapshotting`, hay không phải chữ Incus nhận nó; gắn volume nhận `Starting`); mở phiên SSH khi VM không `Running`/`Ready` |
 | `VM_AGENT_NOT_READY` | 422 | Mở phiên SSH khi agent trong guest chưa chạy (VM vừa khởi động) — thử lại sau |
 | `VM_SESSION_LIMIT_REACHED` | 422 | Tenant đã mở 5 phiên SSH cùng lúc |
 | `WEBSOCKET_REQUIRED` | 400 | Gọi route phiên SSH bằng GET thường, không upgrade websocket |

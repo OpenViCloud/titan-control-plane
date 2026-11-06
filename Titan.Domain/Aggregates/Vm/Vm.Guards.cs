@@ -53,7 +53,7 @@ public partial class Vm
 
     /// A shell session execs inside the guest, which needs its agent, which runs only while Incus reports Running
     /// or Ready (titan-ops features/vm/design.md#ssh-session). A waiting stop or delete would cut the session, and its
-    /// status is then Stopping or Deleting; a Snapshotting VM is refused by the same list of two.
+    /// status is then Stopping or Deleting; Snapshotting is refused too: only Running and Ready pass.
     public void EnsureShellCanOpen()
     {
         bool guestRuns = Status == VmStatus.Running || Status == VmStatus.Ready;
