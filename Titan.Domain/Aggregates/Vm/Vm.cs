@@ -107,15 +107,14 @@ public partial class Vm : IAggregateRoot
     /// (null) is a report that read none, not a foreign one.
     private static bool IsForeignStatus(VmStatus? word) => word != null && !IsIncusStatus(word.Value);
 
-    /// An operation waits on its command: only the report carrying its id moves the status on.
+    /// An operation waits on its command: only the report carrying its id moves the status on. A snapshot create or
+    /// revert waits on its own command, whose id the snapshot holds (titan-ops features/vm/design.md#vm-snapshot).
     private bool IsTransitionStatus =>
         Status == VmStatus.Creating
         || Status == VmStatus.Starting
         || Status == VmStatus.Stopping
-        || Status == VmStatus.Deleting;
-
-    /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
-    private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);
+        || Status == VmStatus.Deleting
+        || Status == VmStatus.Snapshotting;
 
     private Vm() { }
 

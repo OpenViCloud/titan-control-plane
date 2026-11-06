@@ -46,9 +46,9 @@ public class DeleteAdminVmCommandHandler(
             return;
         }
 
-        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), or while a
-        // load balancer still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
-        // (titan-ops architecture/code-structure.md#child-entity · titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        // The VM refuses while a snapshot is being created or reverted (it is Snapshotting), or while a load balancer
+        // still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
+        // (titan-ops features/vm/design.md#vm-snapshot · titan-ops architecture/domain-services.md#cross-aggregate-lock).
         Guid operationId = Guid.NewGuid();
         await deletion.DeleteAsync(vm, operationId, ct);
 
