@@ -36,11 +36,12 @@ public class VmSnapshotFirewallRepositoryStateTests
         return s;
     }
 
-    // A VM holding one snapshot in every situation: creating, ready, reverting, deleting, deleted, lost, failed.
+    // A VM holding one snapshot in every situation: creating, ready, reverting, deleting, deleted, lost, failed. The VM
+    // never holds a create and a revert at once (it is Snapshotting for one), so the revert is put on the snapshot alone
+    // and the create goes last: this builds what the repository queries read, snapshot by snapshot.
     private static Vm VmWithEverySnapshotSituation(string cluster = "vn-hcm-1")
     {
         var vm = RunningVm(cluster);
-        vm.WithSnapshot("creating");
         Ready(vm, "ready");
         Ready(vm, "reverting").Revert(Guid.NewGuid());
         Ready(vm, "deleting").Delete(Guid.NewGuid());
@@ -49,6 +50,7 @@ public class VmSnapshotFirewallRepositoryStateTests
         deleted.MarkDeleted();
         Ready(vm, "lost").MarkNotFound();
         vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
+        vm.WithSnapshot("creating");
         return vm;
     }
 

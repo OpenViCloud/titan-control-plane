@@ -194,18 +194,25 @@ public class VmSnapshotRequestLifecycleTests
     {
         Vm vm = RunningVm();
         VmSnapshot creating = Creating(vm);
+
+        Assert.Null(vm.FinishSnapshotOperation(creating.Id, Guid.NewGuid(), "vm42/s9"));
+        Assert.Equal("NotCreated/Exists/Creating", Shape(creating));
+        Assert.Null(creating.ExternalId);
+        Assert.Equal(VmStatus.Snapshotting, vm.Status);
+        Failed(vm, creating.Id, creating.Pending!.Id); // the create gives up: the VM is at rest for the revert below
+
+        VmSnapshot other = Ready(vm);
         VmSnapshot reverting = Ready(vm);
         vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
 
-        Assert.Null(vm.FinishSnapshotOperation(creating.Id, Guid.NewGuid(), "vm42/s9"));
         Assert.Null(Failed(vm, reverting.Id, Guid.NewGuid()));
         // The other snapshot's request id is not this one's.
-        Assert.Null(vm.FinishSnapshotOperation(creating.Id, reverting.Pending!.Id, "vm42/s9"));
+        Assert.Null(vm.FinishSnapshotOperation(other.Id, reverting.Pending!.Id, "vm42/s9"));
 
-        Assert.Equal("NotCreated/Exists/Creating", Shape(creating));
-        Assert.Null(creating.ExternalId);
+        Assert.Equal("Exists/Exists/-", Shape(other));
         Assert.Equal("Exists/Exists/Reverting", Shape(reverting));
         Assert.Null(reverting.OperationFailureReason);
+        Assert.Equal(VmStatus.Snapshotting, vm.Status);
     }
 
     // A snapshot's request is its own: the VM's report ends the VM's request and leaves the snapshot's waiting.
@@ -228,19 +235,21 @@ public class VmSnapshotRequestLifecycleTests
     public void Observations_WriteExistence_AndEndNoRequest()
     {
         Vm vm = RunningVm();
-        VmSnapshot creating = Creating(vm);
-        VmSnapshot reverting = Ready(vm);
-        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
         VmSnapshot deleting = Ready(vm);
         vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
+        VmSnapshot reverting = Ready(vm);
+        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
 
-        vm.MarkSnapshotObserved(creating.Id);
         vm.MarkSnapshotObserved(reverting.Id);
         vm.MarkSnapshotNotFound(deleting.Id);
 
-        Assert.Equal("Exists/Exists/Creating", Shape(creating));
         Assert.Equal("Exists/Exists/Reverting", Shape(reverting));
         Assert.Equal("NotFound/Deleted/Deleting", Shape(deleting));
+
+        Failed(vm, reverting.Id, reverting.Pending!.Id); // the revert gives up: the VM is at rest for the create below
+        VmSnapshot creating = Creating(vm);
+        vm.MarkSnapshotObserved(creating.Id);
+        Assert.Equal("Exists/Exists/Creating", Shape(creating));
 
         vm.MarkSnapshotNotFound(creating.Id);
         Assert.Equal("NotFound/Exists/Creating", Shape(creating));
@@ -265,29 +274,25 @@ public class VmSnapshotRequestLifecycleTests
 
     // ---------- the VM's delete ----------
 
-    // A create or revert in flight touches the instance; a delete waiting does not (titan-ops features/vm/design.md#vm-snapshot-counting).
+    // A create or revert in flight touches the instance, so the VM is Snapshotting and its delete is refused like any
+    // other waiting operation; a delete of a snapshot waiting does not (titan-ops features/vm/design.md#vm-snapshot-counting).
     [Fact]
-    public void BlocksVmDelete_WhileACreateOrARevertWaits_NotWhileADeleteWaits_NorOnceTheyEnded()
+    public void TheVmsDelete_WaitsForACreateAndARevert_NotForASnapshotsDelete()
     {
         Vm vm = RunningVm();
-        VmSnapshot creating = Creating(vm);
+        VmSnapshot deleting = Ready(vm);
+        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
         VmSnapshot reverting = Ready(vm);
         Guid revert = Guid.NewGuid();
         vm.RevertSnapshot(reverting.Id, revert);
-        VmSnapshot deleting = Ready(vm);
-        vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
 
-        Assert.True(creating.BlocksVmDelete);
-        Assert.True(reverting.BlocksVmDelete);
-        Assert.False(deleting.BlocksVmDelete);
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
-
-        Failed(vm, creating.Id, creating.Pending!.Id);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
         Failed(vm, reverting.Id, revert);
+        VmSnapshot creating = Creating(vm);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
+        Failed(vm, creating.Id, creating.Pending!.Id);
 
-        Assert.False(creating.BlocksVmDelete);
-        Assert.False(reverting.BlocksVmDelete);
-        vm.Delete(Guid.NewGuid());
+        vm.Delete(Guid.NewGuid()); // the delete of a snapshot still waits and does not block
         Assert.Equal(VmStatus.Deleting, vm.Status);
     }
 

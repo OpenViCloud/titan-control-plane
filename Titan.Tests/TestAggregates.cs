@@ -1,6 +1,7 @@
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Tests.Fakes;
 using Titan.Domain.Aggregates.Volume;
 using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
@@ -30,7 +31,9 @@ internal static class TestAggregates
     {
         Guid snapshotId = Guid.NewGuid();
         vm.AddSnapshot(snapshotId, Guid.NewGuid(), name);
-        return vm.Snapshots.Single(s => s.Id == snapshotId);
+        VmSnapshot snapshot = vm.Snapshots.Single(s => s.Id == snapshotId);
+        snapshot.HeldBy(vm);
+        return snapshot;
     }
 
     internal static VolumeSnapshot WithSnapshot(this VolumeAggregate volume, string name)

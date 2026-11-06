@@ -23,13 +23,13 @@ public class VmSnapshotChildTests
 
     // The seven situations the repository count once measured (titan-ops features/vm/design.md#vm-snapshot-counting):
     // creating, held by Incus and reverting count; a delete in flight, a snapshot Incus lost, a Deleted row and a
-    // failed create do not.
+    // failed create do not. The VM never holds a create and a revert at once (it is Snapshotting for one), so the revert
+    // is put on the snapshot alone: this builds what the counting rule reads, snapshot by snapshot.
     private static Vm VmWithEverySnapshotSituation()
     {
         var vm = RunningVm();
-        vm.WithSnapshot("creating"); // counts
         vm.WithSnapshot("ready").MarkCreated("vm42/s1"); // counts
-        var reverting = vm.WithSnapshot("reverting"); // counts, and blocks the VM's delete
+        var reverting = vm.WithSnapshot("reverting"); // counts
         reverting.MarkCreated("vm42/s2");
         reverting.Revert(Guid.NewGuid());
         var leaving = vm.WithSnapshot("leaving");
@@ -43,6 +43,7 @@ public class VmSnapshotChildTests
         gone.Delete(Guid.NewGuid());
         gone.MarkDeleted();
         vm.WithSnapshot("failed").MarkRequestFailed("could not create", "raw");
+        vm.WithSnapshot("creating"); // counts; last, because the VM is Snapshotting from here
         return vm;
     }
 
@@ -58,7 +59,9 @@ public class VmSnapshotChildTests
     [Fact]
     public void AddSnapshot_OneBelowTheCap_AddsASnapshotWaitingForItsCreate()
     {
-        var vm = VmWithEverySnapshotSituation(); // usage 3
+        var vm = RunningVm();
+        vm.WithSnapshot("one").MarkCreated("vm42/s1");
+        vm.WithSnapshot("two").MarkCreated("vm42/s2"); // usage 2, one below the cap of 3
 
         VmSnapshot snapshot = vm.WithSnapshot("nightly");
 
@@ -66,7 +69,7 @@ public class VmSnapshotChildTests
         Assert.Equal(vm.Id, snapshot.VmId);
         Assert.Equal(TenantId, snapshot.TenantId);
         Assert.Equal(VmSnapshotTransition.Creating, snapshot.Transition);
-        Assert.Equal(4, vm.SnapshotQuotaUsage);
+        Assert.Equal(3, vm.SnapshotQuotaUsage);
     }
 
     [Theory]
@@ -99,8 +102,8 @@ public class VmSnapshotChildTests
         Assert.Empty(vm.Snapshots);
     }
 
-    // A snapshot command still touching the instance (create or revert) races the VM's delete on Incus
-    // (titan-ops features/vm/design.md#vm-snapshot-counting): the VM refuses, with nothing changed.
+    // A snapshot command still touching the instance (create or revert) makes the VM Snapshotting, and a Snapshotting
+    // VM refuses its delete (titan-ops features/vm/design.md#vm-snapshot-counting), with nothing changed.
     [Theory]
     [InlineData("creating")]
     [InlineData("reverting")]
@@ -111,14 +114,14 @@ public class VmSnapshotChildTests
         if (blocking == "reverting")
         {
             snapshot.MarkCreated("vm42/s1");
-            snapshot.Revert(Guid.NewGuid());
+            vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
         }
 
         var ex = Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid()));
 
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Null(vm.PendingOperationId);
-        Assert.Equal(VmStatus.Running, vm.Status);
+        Assert.Equal(VmStatus.Snapshotting, vm.Status);
     }
 
     // The instance Incus lost (reconciler reported NotFound) still has a revert command waiting: the delete waits too.
@@ -131,7 +134,7 @@ public class VmSnapshotChildTests
         vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
         vm.MarkNotFound();
 
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
         Assert.Equal(VmSnapshotTransition.Reverting, reverting.Transition);
     }
 
@@ -245,8 +248,13 @@ public class VmSnapshotChildTests
         Assert.Null(snapshot.Transition);
 
         var resting = RunningVm();
+        var leaving = resting.WithSnapshot("leaving");
+        leaving.MarkCreated("vm42/s0");
+        leaving.Delete(Guid.NewGuid());
+        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => resting.RevertSnapshot(leaving.Id, Guid.NewGuid())).Code);
         var creating = resting.WithSnapshot("creating");
-        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => resting.RevertSnapshot(creating.Id, Guid.NewGuid())).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => resting.RevertSnapshot(creating.Id, Guid.NewGuid())).Code);
+        creating.MarkCreated("vm42/s9");
 
         var ready = resting.WithSnapshot("ready");
         ready.MarkCreated("vm42/s2");
@@ -262,8 +270,9 @@ public class VmSnapshotChildTests
     public void SnapshotCalls_ReachTheSnapshotNamed_AndReturnItsAnswer()
     {
         var vm = RunningVm();
+        var untouched = vm.WithSnapshot("u"); // at rest: the VM takes one create or revert at a time
+        untouched.MarkCreated("vm42/s0");
         var snapshot = vm.WithSnapshot("s");
-        var untouched = vm.WithSnapshot("u");
 
         Assert.Equal(VmSnapshotOperationKind.Create,
             vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1"));
@@ -290,8 +299,8 @@ public class VmSnapshotChildTests
         Assert.NotNull(vm.FinishSnapshotOperation(snapshot.Id, again, null));
         Assert.True(snapshot.IsDeleted);
 
-        Assert.Equal(VmSnapshotTransition.Creating, untouched.Transition);
-        Assert.Null(untouched.ExternalId);
+        Assert.Null(untouched.Transition);
+        Assert.Equal("vm42/s0", untouched.ExternalId);
     }
 
     [Fact]
