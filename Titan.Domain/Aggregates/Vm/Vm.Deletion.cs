@@ -8,11 +8,11 @@ public partial class Vm
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => Status == VmStatus.Deleting || IsDeleted;
 
-    /// A VM with a provider id is refused while an operation runs, while a snapshot create or revert runs, and once it
-    /// is deleted. Otherwise its status says how it goes: Deleting, the worker force-stops whatever
-    /// status Incus reports and deletes the instance (an instance already gone counts as deleted); or Deleted at once,
-    /// for a VM that never reached the provider, which has no command and no observation coming
-    /// (titan-ops architecture/desired-and-current.md#delete-locally). A create still waiting without a provider id may
+    /// A VM is refused once it is deleted, while a delete is already running, and while a snapshot create or revert
+    /// runs. With a provider id it is also refused while another operation runs; otherwise it goes Deleting: the worker
+    /// force-stops whatever status Incus reports and deletes the instance (an instance already gone counts as deleted).
+    /// Without a provider id there is no command and no observation coming, so it is Deleted at once
+    /// (titan-ops architecture/desired-and-current.md#delete-locally); a create still waiting without a provider id may
     /// yet instantiate, so it is refused. Internal: VmDeletion is the only way in
     /// (titan-ops architecture/domain-services.md#cross-aggregate-lock).
     internal void Delete(Guid operationId)
