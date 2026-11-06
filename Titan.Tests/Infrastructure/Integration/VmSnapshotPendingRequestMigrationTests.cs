@@ -156,7 +156,7 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, "vm-after/s1");
         Guid revert = Guid.NewGuid();
-        reverting.Revert(revert); // on the snapshot alone: a VM takes one create or revert at a time, a row from before holds both
+        reverting.Revert(revert); // on the snapshot alone, so the view shows both kinds: a VM itself takes one create or revert at a time
         VmSnapshot creating = vm.WithSnapshot("creating");
         await using (TitanDbContext db = NewDbContext())
         {

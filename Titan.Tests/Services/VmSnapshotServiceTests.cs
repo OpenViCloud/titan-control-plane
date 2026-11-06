@@ -179,7 +179,7 @@ public class VmSnapshotServiceTests
     }
 
     // A second create while the first still runs: the VM is Snapshotting, so it answers VM_INVALID_STATUS below the cap
-    // and the quota once the cap is reached (the gate is asked first, D-8 of VM-SNAPSHOTTING-STATUS).
+    // and the quota once the cap is reached (the gate is asked first, titan-ops architecture/code-structure.md#quota-gate).
     [Fact]
     public async Task Create_WhileTheVmIsSnapshotting_IsRefused_BelowTheCap_AndAnswersTheQuotaAtIt()
     {

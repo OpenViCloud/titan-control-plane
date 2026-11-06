@@ -135,7 +135,7 @@ namespace Titan.Domain.Aggregates.Vm
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id, reported through the VM that holds it:
-        /// the VM leaves Snapshotting with it, which a replay on the snapshot alone does not do.
+        /// the VM leaves Snapshotting with it, which the snapshot's own FinishOperation does not do.
         public static void MarkSnapshotCreated(this Vm vm, Guid snapshotId, string externalId)
         {
             VmSnapshot snapshot = vm.Snapshots.Single(s => s.Id == snapshotId);

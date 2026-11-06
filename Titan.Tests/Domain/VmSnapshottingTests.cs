@@ -259,7 +259,7 @@ public class VmSnapshottingTests
         Assert.Equal(VmSnapshotTransition.Creating, next.Transition);
     }
 
-    [Fact] // a snapshot command waiting from before this status existed ends without touching a status it did not set
+    [Fact] // a snapshot command ends without touching a status it did not set (the VM here is Stopped, not Snapshotting)
     public void ASnapshotCommandWaitingOnAVmThatIsNotSnapshotting_EndsWithoutChangingTheStatus()
     {
         Vm vm = SnapshottingVm(out VmSnapshot snapshot);

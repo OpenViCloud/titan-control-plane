@@ -7,7 +7,7 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The VM snapshot and firewall rule read-side queries: the customer's list, billing and the reconciler's pool, one row
-// per situation. Quota and "what blocks a VM delete" are the VM's own count now (VmSnapshotChildTests): a snapshot is
+// per situation. Quota is the VM's own count (VmSnapshotChildTests), and a snapshot create or revert makes the VM Snapshotting: a snapshot is
 // the VM's child entity (titan-ops architecture/code-structure.md#child-entity), seeded through it. A revert in flight
 // still bills, a delete in flight too, until Incus deleted it.
 //

@@ -28,7 +28,8 @@ public partial class Vm : IAggregateRoot
     /// are Incus words (IsIncusStatus). Not on /v1: billing reads it, and the reconciler compares the instance with it.
     public VmStatus? ObservedState { get; private set; }
     /// The operation waiting on its command's report, or null. The aggregate only compares a report's id with it; the
-    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants).
+    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants). A snapshot
+    /// create or revert is not this id: the snapshot holds it, and the VM is Snapshotting with this one null.
     public Guid? PendingOperationId { get; private set; }
     public DateTimeOffset? PendingOperationAskedAt { get; private set; }
     // An operation that failed (titan-ops architecture/desired-and-current.md#operation-failure): a fixed reason and the

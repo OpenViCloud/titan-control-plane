@@ -60,7 +60,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
 
     // Two below the cap the quota cannot tell the requests apart: the status can. The first create makes the VM
     // Snapshotting under the row lock, and the second finds it so (titan-ops features/vm/design.md#vm-snapshot). The
-    // stored status is the one the database round-trips.
+    // stored status is read back through a new context.
     [Fact]
     public async Task TwoCreatesTwoBelowTheCap_OneIs202_TheOtherIsInvalidStatus_AndTheVmIsStoredSnapshotting()
     {

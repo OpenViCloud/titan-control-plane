@@ -43,8 +43,8 @@ public partial class Vm
         || Status == VmStatus.Frozen
         || Status == VmStatus.Starting;
 
-    /// A snapshot or revert takes the same statuses, except Starting: its report would find the VM Snapshotting and be
-    /// dropped, leaving the VM there (titan-ops features/vm/design.md#vm-snapshot).
+    /// A snapshot or revert takes the same statuses, except Starting: the Start's report would find the VM Snapshotting
+    /// and be ignored, so the Start would never end (titan-ops features/vm/design.md#vm-snapshot).
     private bool IncusCanSnapshot() =>
         Status == VmStatus.Running
         || Status == VmStatus.Ready
@@ -53,7 +53,7 @@ public partial class Vm
 
     /// A shell session execs inside the guest, which needs its agent, which runs only while Incus reports Running
     /// or Ready (titan-ops features/vm/design.md#ssh-session). A waiting stop or delete would cut the session, and its
-    /// status is then Stopping or Deleting.
+    /// status is then Stopping or Deleting; a Snapshotting VM is refused by the same list of two.
     public void EnsureShellCanOpen()
     {
         bool guestRuns = Status == VmStatus.Running || Status == VmStatus.Ready;
