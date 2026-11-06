@@ -7,8 +7,8 @@ using Titan.Infrastructure.Repositories;
 namespace Titan.Tests.Infrastructure;
 
 // The VM snapshot and firewall rule read-side queries: the customer's list, billing and the reconciler's pool, one row
-// per situation. Quota is the VM's own count (VmSnapshotChildTests): a snapshot is
-// the VM's child entity (titan-ops architecture/code-structure.md#child-entity), seeded through it. A revert in flight
+// per situation. Quota is the VM's own count (VmSnapshotChildTests), and a snapshot is the VM's child entity
+// (titan-ops architecture/code-structure.md#child-entity), seeded through it. A revert in flight
 // still bills, a delete in flight too, until Incus deleted it.
 //
 // Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it).
