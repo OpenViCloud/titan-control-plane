@@ -145,9 +145,9 @@ public class QueryRuleDbTests(PostgresFixture pg)
     {
         string offering = await OfferingAsync();
         Vm vm = SeenVm(offering, "vm", VmStatus.Running);
-        vm.WithSnapshot("vm-creating");
         VmSnapshot vmReady = vm.WithSnapshot("vm-ready");
         vmReady.MarkCreated($"{vm.ExternalId}/s1");
+        vm.WithSnapshot("vm-creating"); // last: the VM is Snapshotting from here
         Volume volume = OnIncus("vol");
         volume.WithSnapshot("vol-creating");
         VolumeSnapshot volumeReady = volume.WithSnapshot("vol-ready");

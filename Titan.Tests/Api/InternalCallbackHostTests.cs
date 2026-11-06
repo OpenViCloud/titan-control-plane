@@ -441,13 +441,15 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     // ---------- the VM's snapshots' routes ----------
 
     // A running VM with a snapshot waiting on its create, and two Incus holds: one waiting on its revert, one on its delete.
+    // The VM takes one create or revert at a time (it is Snapshotting for it), so the revert is put on the snapshot
+    // alone: each route test reads one snapshot, and a row written before the status existed holds both.
     private async Task<Vm> StoredVmWithSnapshotsWaitingAsync()
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, $"ext-{vm.Id:N}/s1");
-        vm.RevertSnapshot(reverting.Id, Guid.NewGuid());
+        reverting.Revert(Guid.NewGuid());
         VmSnapshot deleting = vm.WithSnapshot("deleting");
         vm.FinishSnapshotOperation(deleting.Id, deleting.Pending!.Id, $"ext-{vm.Id:N}/s2");
         vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
