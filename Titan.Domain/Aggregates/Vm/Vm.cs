@@ -28,7 +28,8 @@ public partial class Vm : IAggregateRoot
     /// are Incus words (IsIncusStatus). Not on /v1: billing reads it, and the reconciler compares the instance with it.
     public VmStatus? ObservedState { get; private set; }
     /// The operation waiting on its command's report, or null. The aggregate only compares a report's id with it; the
-    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants).
+    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants). A snapshot
+    /// create or revert is not this id: the snapshot holds it, and the VM is Snapshotting with this one null.
     public Guid? PendingOperationId { get; private set; }
     public DateTimeOffset? PendingOperationAskedAt { get; private set; }
     // An operation that failed (titan-ops architecture/desired-and-current.md#operation-failure): a fixed reason and the
@@ -107,15 +108,14 @@ public partial class Vm : IAggregateRoot
     /// (null) is a report that read none, not a foreign one.
     private static bool IsForeignStatus(VmStatus? word) => word != null && !IsIncusStatus(word.Value);
 
-    /// An operation waits on its command: only the report carrying its id moves the status on.
+    /// An operation waits on its command: only the report carrying its id moves the status on. A snapshot create or
+    /// revert waits on its own command, whose id the snapshot holds (titan-ops features/vm/design.md#vm-snapshot).
     private bool IsTransitionStatus =>
         Status == VmStatus.Creating
         || Status == VmStatus.Starting
         || Status == VmStatus.Stopping
-        || Status == VmStatus.Deleting;
-
-    /// A snapshot command (create or revert) still touching the instance: the VM's delete waits for it.
-    private bool ASnapshotCommandIsRunning => _snapshots.Any(s => s.BlocksVmDelete);
+        || Status == VmStatus.Deleting
+        || Status == VmStatus.Snapshotting;
 
     private Vm() { }
 

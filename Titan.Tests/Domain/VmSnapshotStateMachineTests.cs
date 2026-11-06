@@ -85,10 +85,8 @@ public class VmSnapshotStateMachineTests
     public void CreateAndRevert_OfAStoppedVm_AreAccepted()
     {
         Vm stopped = VmIn(VmStatus.Stopped);
-        var created = stopped.WithSnapshot("s");
-        Assert.Equal(VmSnapshotTransition.Creating, created.Transition);
-
         var s = stopped.WithSnapshot("ready");
+        Assert.Equal(VmSnapshotTransition.Creating, s.Transition);
         s.MarkCreated("vm42/s7");
         stopped.RevertSnapshot(s.Id, Guid.NewGuid());
         Assert.Equal("Exists/Exists/Reverting", Shape(s));

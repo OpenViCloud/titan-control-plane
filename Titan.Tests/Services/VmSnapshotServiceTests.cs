@@ -178,6 +178,28 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", ex.Code);
     }
 
+    // A second create while the first still runs: the VM is Snapshotting, so it answers VM_INVALID_STATUS below the cap
+    // and the quota once the cap is reached (the gate is asked first, titan-ops architecture/code-structure.md#quota-gate).
+    [Fact]
+    public async Task Create_WhileTheVmIsSnapshotting_IsRefused_BelowTheCap_AndAnswersTheQuotaAtIt()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = Given(MakeRunningVm());
+        vm.WithSnapshot("running"); // its create still waits: the VM is Snapshotting
+
+        var below = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("second"), default));
+        Assert.Equal("VM_INVALID_STATUS", below.Code);
+        Assert.Single(vm.Snapshots);
+
+        vm.Snapshots.Single().MarkCreated("cs-vm-id/s0");
+        vm.WithSnapshot("a").MarkCreated("cs-vm-id/s1");
+        vm.WithSnapshot("b"); // three counted, the last still creating
+        var atCap = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().CreateAsync(vm.Id, new CreateSnapshotBody("fourth"), default));
+        Assert.Equal("VM_SNAPSHOT_QUOTA_EXCEEDED", atCap.Code);
+    }
+
     // ── What does not count toward the cap ──────────────────
 
     [Fact]
@@ -303,12 +325,26 @@ public class VmSnapshotServiceTests
     {
         SetupCurrentUser(TenantId);
         var vm = Given(MakeRunningVm());
-        var snap = MakeSnapshot(vm, Snap.Creating);
+        var snap = MakeSnapshot(vm, Snap.DeleteRequested);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateService().RevertAsync(vm.Id, snap.Id, default));
 
         Assert.Equal("VM_SNAPSHOT_INVALID_STATE", ex.Code);
+    }
+
+    // The VM's own rule comes first: a snapshot being created makes the VM Snapshotting.
+    [Fact]
+    public async Task Revert_WhileASnapshotIsBeingCreated_ThrowsInvalidStatus()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = Given(MakeRunningVm());
+        var snap = MakeSnapshot(vm, Snap.Creating);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().RevertAsync(vm.Id, snap.Id, default));
+
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
     // ── Revert VM not Running ───────────────────────────────

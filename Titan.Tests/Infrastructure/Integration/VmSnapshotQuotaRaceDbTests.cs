@@ -58,6 +58,45 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
         Assert.Equal(cap, stored.Snapshots.Count);
     }
 
+    // Two below the cap the quota cannot tell the requests apart: the status can. The first create makes the VM
+    // Snapshotting under the row lock, and the second finds it so (titan-ops features/vm/design.md#vm-snapshot). The
+    // stored status is read back through a new context.
+    [Fact]
+    public async Task TwoCreatesTwoBelowTheCap_OneIs202_TheOtherIsInvalidStatus_AndTheVmIsStoredSnapshotting()
+    {
+        Tenant tenant = TestTenant.Active($"vms-snap-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vms-snap@titan.local");
+        string offeringId = await SeedOfferingAsync();
+        Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
+        vm.MarkCreated($"vm{Guid.NewGuid():N}"[..20]);
+        vm.MarkObserved(VmStatus.Running, "10.0.0.5");
+        int cap = tenant.Quota.MaxVmSnapshotsPerVm;
+        for (int i = 0; i < cap - 2; i++)
+        {
+            vm.WithSnapshot($"snap-{i}").MarkCreated($"{vm.ExternalId}/s{i}");
+        }
+        await using (TitanDbContext seed = pg.NewDbContext())
+        {
+            seed.Tenants.Add(tenant);
+            seed.Vms.Add(vm);
+            await seed.SaveChangesAsync();
+        }
+
+        await using TitanDbContext first = pg.NewDbContext();
+        await using TitanDbContext second = pg.NewDbContext();
+        Exception?[] outcomes = await Task.WhenAll(
+            TryCreateAsync(first, tenant.Id, vm.Id, "race-a"),
+            TryCreateAsync(second, tenant.Id, vm.Id, "race-b"));
+
+        Exception? refused = Assert.Single(outcomes, o => o != null);
+        Assert.Single(outcomes, o => o == null);
+        Assert.Equal("VM_INVALID_STATUS", Assert.IsType<BusinessException>(refused).Code);
+
+        await using TitanDbContext read = pg.NewDbContext();
+        Vm stored = (await new VmRepository(read).FindByIdAsync(vm.Id))!;
+        Assert.Equal(VmStatus.Snapshotting, stored.Status);
+        Assert.Equal(cap - 1, stored.Snapshots.Count);
+    }
+
     // The foreign key is the database's half of "a snapshot is the VM's": a row pointing at no VM is refused.
     [Fact]
     public async Task ASnapshotWhoseVmDoesNotExist_IsRefusedByTheDatabase()

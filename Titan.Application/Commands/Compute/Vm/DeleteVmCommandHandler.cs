@@ -41,8 +41,8 @@ public class DeleteVmCommandHandler(
             return;
         }
 
-        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS): the
-        // snapshot command would act on an instance being deleted (titan-ops architecture/code-structure.md#child-entity).
+        // The VM refuses while a snapshot is being created or reverted (it is Snapshotting): the snapshot command would
+        // act on an instance being deleted (titan-ops features/vm/design.md#vm-snapshot).
         // A load balancer still sending to it refuses too, rather than editing the load balancer behind the customer's
         // back (titan-ops features/load-balancer/design.md#lb-and-vm-network).
         Guid operationId = Guid.NewGuid();

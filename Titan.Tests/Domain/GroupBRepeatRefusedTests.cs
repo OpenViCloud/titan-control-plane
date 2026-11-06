@@ -96,7 +96,7 @@ public class GroupBRepeatRefusedTests
         Guid revert = Guid.NewGuid();
         vm.RevertSnapshot(snapshot.Id, revert);
 
-        Assert.Equal("VM_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => vm.RevertSnapshot(snapshot.Id, Guid.NewGuid())).Code);
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RevertSnapshot(snapshot.Id, Guid.NewGuid())).Code);
         Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
         Assert.Equal(revert, snapshot.PendingOperationId);
     }

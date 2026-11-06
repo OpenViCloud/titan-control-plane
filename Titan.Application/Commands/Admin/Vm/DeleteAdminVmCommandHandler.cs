@@ -15,7 +15,7 @@ namespace Titan.Application.Commands.Admin.Vm;
 
 // The only cross-tenant write on a tenant resource (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write):
 // a platform admin deletes any tenant's VM. Bypasses tenant scope but not lifecycle rules — the same
-// deletable-state, snapshot-in-progress and load-balancer-backend guards as DeleteVmCommandHandler apply here (VmDeletion).
+// status and load-balancer-backend guards as DeleteVmCommandHandler apply here (VmDeletion).
 //
 // A separate admin handler, not a flag on the tenant one (titan-ops architecture/tenancy-and-admin.md#no-bypass-flag),
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.
@@ -46,9 +46,9 @@ public class DeleteAdminVmCommandHandler(
             return;
         }
 
-        // The VM refuses while one of its snapshots is being created or reverted (VM_SNAPSHOT_IN_PROGRESS), or while a
-        // load balancer still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
-        // (titan-ops architecture/code-structure.md#child-entity · titan-ops architecture/domain-services.md#cross-aggregate-lock).
+        // The VM refuses while a snapshot is being created or reverted (it is Snapshotting), or while a load balancer
+        // still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
+        // (titan-ops features/vm/design.md#vm-snapshot · titan-ops architecture/domain-services.md#cross-aggregate-lock).
         Guid operationId = Guid.NewGuid();
         await deletion.DeleteAsync(vm, operationId, ct);
 

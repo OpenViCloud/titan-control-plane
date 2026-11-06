@@ -59,7 +59,6 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
     }
 
     private bool CreateIsWaiting => PendingOperationKind == VmSnapshotOperationKind.Create;
-    private bool RevertIsWaiting => PendingOperationKind == VmSnapshotOperationKind.Revert;
     private bool DeleteIsWaiting => PendingOperationKind == VmSnapshotOperationKind.Delete;
     /// A delete was asked and still waits, or the snapshot is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -72,11 +71,6 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         DesiredExistence == DesiredExistence.Exists
         && (CurrentExistence == CurrentExistence.Exists
             || (CurrentExistence == CurrentExistence.NotCreated && CreateIsWaiting));
-
-    /// A create or a revert still waiting touches the instance on Incus, so the VM's delete would race it
-    /// (titan-ops features/vm/design.md#vm-snapshot-counting). A waiting delete does not block: the worker's snapshot
-    /// delete no-ops once the VM is gone.
-    public bool BlocksVmDelete => CreateIsWaiting || RevertIsWaiting;
 
     /// Called by Vm.AddSnapshot after the VM checked itself, with the ids the handler chose: the snapshot's and its
     /// create's.

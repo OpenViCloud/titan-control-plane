@@ -63,7 +63,7 @@ public class VmDeletionTests
         Assert.Null(vm.PendingOperationId);
     }
 
-    // The VM's own refusal comes before the load balancer's: a snapshot being created answers that, as before.
+    // The VM's own refusal comes before the load balancer's: a snapshot being created makes the VM Snapshotting.
     [Fact]
     public async Task AVmWithASnapshotBeingCreated_IsRefusedForThat_First()
     {
@@ -73,7 +73,7 @@ public class VmDeletionTests
 
         BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(vm, Guid.NewGuid()));
 
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
 
     // The compiler keeps Titan.Application off these two, so VmDeletion is the only way to delete a VM.

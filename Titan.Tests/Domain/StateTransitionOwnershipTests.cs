@@ -318,7 +318,9 @@ public class StateTransitionOwnershipTests
                              || body.Contains("IsDeleted")
                              || body.Contains("IsTerminal")
                              || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)")
-                             || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| PendingOperationId != operationId\)\s*\{\s*return false;");
+                             || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| PendingOperationId != operationId\)\s*\{\s*return false;")
+                             // A snapshot's report moves only a VM still Snapshotting: the status check is the guard.
+                             || Regex.IsMatch(body, @"if \(Status == VmStatus\.Snapshotting && ");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");
             }
         }

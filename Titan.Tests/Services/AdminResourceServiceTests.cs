@@ -286,12 +286,12 @@ public class AdminResourceServiceTests
     public async Task DeleteVm_SnapshotInProgress_Throws_NoCommand()
     {
         var vm = RunningVm(TenantBOwner, "busy");
-        vm.WithSnapshot("creating"); // a snapshot command still touching the instance: the VM's own child
+        vm.WithSnapshot("creating"); // a snapshot command still touching the instance: the VM is Snapshotting
         var repo = new StubVmRepo(vm);
         var (svc, wf, audit) = Build(repo);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() => svc.DeleteVmAsync(vm.Id));
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
         wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         // Guard rejected before the destructive call — no audit row.
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Never);

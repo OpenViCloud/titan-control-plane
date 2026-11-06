@@ -8,7 +8,7 @@ public partial class Vm
     /// answers VM_INVALID_STATUS even when the clusters also differ. An allowlist: a new status is refused.
     public void EnsureVolumeCanAttach()
     {
-        if (!IncusCanAttachOrSnapshot())
+        if (!IncusCanAttach())
             throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped or Frozen to attach a volume.");
     }
 
@@ -24,27 +24,36 @@ public partial class Vm
                                || Status == VmStatus.Frozen
                                || Status == VmStatus.Error
                                || Status == VmStatus.Starting
-                               || Status == VmStatus.Stopping;
+                               || Status == VmStatus.Stopping
+                               || Status == VmStatus.Snapshotting;
         bool usable = NetworkId == networkId && instanceIsThere && ExternalId != null;
         if (!usable)
             throw new BusinessException("LOAD_BALANCER_BACKEND_INVALID",
                 $"VM '{Id}' must be on Incus, on the load balancer's network, and not being deleted.");
     }
 
-    /// Incus attaches a volume to, and snapshots, an instance that is Running, Ready, Stopped or Frozen
+    /// Incus attaches a volume to an instance that is Running, Ready, Stopped or Frozen
     /// (titan-ops features/vm/design.md#operations-follow-incus); Error is not offered. A waiting start still leaves the
-    /// instance Stopped on Incus; a waiting stop or delete would race the command
+    /// instance Stopped on Incus, so Starting is accepted; a waiting stop, delete or snapshot would race the command
     /// (titan-ops features/vm/design.md#conflict-and-delete-wins).
-    private bool IncusCanAttachOrSnapshot() =>
+    private bool IncusCanAttach() =>
         Status == VmStatus.Running
         || Status == VmStatus.Ready
         || Status == VmStatus.Stopped
         || Status == VmStatus.Frozen
         || Status == VmStatus.Starting;
 
+    /// A snapshot or revert takes the same statuses, except Starting: the Start's report would find the VM Snapshotting
+    /// and be ignored, so the Start would never end (titan-ops features/vm/design.md#vm-snapshot).
+    private bool IncusCanSnapshot() =>
+        Status == VmStatus.Running
+        || Status == VmStatus.Ready
+        || Status == VmStatus.Stopped
+        || Status == VmStatus.Frozen;
+
     /// A shell session execs inside the guest, which needs its agent, which runs only while Incus reports Running
     /// or Ready (titan-ops features/vm/design.md#ssh-session). A waiting stop or delete would cut the session, and its
-    /// status is then Stopping or Deleting.
+    /// status is then Stopping or Deleting; Snapshotting is refused too: only Running and Ready pass.
     public void EnsureShellCanOpen()
     {
         bool guestRuns = Status == VmStatus.Running || Status == VmStatus.Ready;

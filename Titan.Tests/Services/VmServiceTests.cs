@@ -635,8 +635,8 @@ public class VmServiceTests
     }
 
     // A snapshot operation in flight (Creating/Reverting) races the VM delete: the snapshot command would act on
-    // an instance being deleted. The VM refuses with 422 VM_SNAPSHOT_IN_PROGRESS until it settles, counting the
-    // snapshots it holds (titan-ops architecture/code-structure.md#child-entity).
+    // an instance being deleted. The VM is Snapshotting and refuses with 422 VM_INVALID_STATUS until the report
+    // settles it (titan-ops features/vm/design.md#vm-snapshot).
     [Fact]
     public async Task Delete_SnapshotInProgress_ThrowsBusinessException_NoCommand()
     {
@@ -651,7 +651,7 @@ public class VmServiceTests
         var ex = await Assert.ThrowsAsync<BusinessException>(
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
 
-        Assert.Equal("VM_SNAPSHOT_IN_PROGRESS", ex.Code);
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -783,6 +783,33 @@ public class VmServiceTests
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         _commands.Verify(w => w.EnqueueVmStopAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // A snapshot create or revert runs on the instance: start and stop wait for its report, VM_INVALID_STATUS, no
+    // command (titan-ops features/vm/design.md#conflict-and-delete-wins). A stopped VM is no exception: it is
+    // Snapshotting, not Stopped.
+    [Theory]
+    [InlineData(VmSeed.Running)]
+    [InlineData(VmSeed.Stopped)]
+    public async Task StartAndStop_WhileASnapshotRuns_AreRefused_AndSendNothing(VmSeed seed)
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(seed);
+        vm.WithSnapshot("running");
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        var stop = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default));
+        var start = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default));
+
+        Assert.Equal("VM_INVALID_STATUS", stop.Code);
+        Assert.Equal("VM_INVALID_STATUS", start.Code);
+        Assert.Equal(VmStatus.Snapshotting, vm.Status);
+        _commands.Verify(w => w.EnqueueVmStopAsync(
+            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStartAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

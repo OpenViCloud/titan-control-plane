@@ -8,8 +8,8 @@ public partial class Vm
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => Status == VmStatus.Deleting || IsDeleted;
 
-    /// A VM is refused once it is deleted, while a delete is already running, and while a snapshot create or revert
-    /// runs. With a provider id it is also refused while another operation runs; otherwise it goes Deleting: the worker
+    /// A VM is refused once it is deleted and while a delete is already running. With a provider id it is also refused
+    /// while another operation runs, a snapshot create or revert included; otherwise it goes Deleting: the worker
     /// force-stops whatever status Incus reports and deletes the instance (an instance already gone counts as deleted).
     /// Without a provider id there is no command and no observation coming, so it is Deleted at once
     /// (titan-ops architecture/desired-and-current.md#delete-locally); a create still waiting without a provider id may
@@ -29,13 +29,6 @@ public partial class Vm
         {
             throw new BusinessException("VM_INVALID_STATUS", "A delete is already in progress for this VM.");
         }
-        // A snapshot create or revert in flight would act on an instance being deleted
-        // (titan-ops features/vm/design.md#vm-snapshot-counting): refused until it settles.
-        if (ASnapshotCommandIsRunning)
-        {
-            throw new BusinessException("VM_SNAPSHOT_IN_PROGRESS", "A snapshot operation is in progress for this VM.");
-        }
-
         bool reachedTheProvider = ExternalId != null;
         if (!reachedTheProvider)
         {
@@ -47,7 +40,7 @@ public partial class Vm
             return;
         }
 
-        // A stop or start still waiting finishes first: its report ends it, and only then is a delete asked
+        // A start, stop or snapshot still waiting finishes first: its report ends it, and only then is a delete asked
         // (titan-ops features/vm/design.md#conflict-and-delete-wins).
         EnsureNotInTransition();
         EnsureOnTheProvider();
