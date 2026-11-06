@@ -28,6 +28,8 @@ public class CreateVmCommandHandler(
     {
         var req = command;   // the command IS the request shape (titan-ops architecture/code-structure.md#contracts)
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVmName(req.Name);
+        ComputeInput.EnsureDiskSize(req.DiskSizeGb ?? VmAggregate.ImageDiskSize);
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");

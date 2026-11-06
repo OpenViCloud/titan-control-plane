@@ -69,15 +69,15 @@ public sealed record TenantQuota : ValueObject
         int maxLoadBalancers)
     {
         // Zero is a valid cap — it means "none allowed", not "unlimited". Only negative is impossible.
-        Require(maxVms, nameof(maxVms));
-        Require(maxNetworks, nameof(maxNetworks));
-        Require(maxVolumes, nameof(maxVolumes));
-        Require(maxVmSnapshotsPerVm, nameof(maxVmSnapshotsPerVm));
-        Require(maxVolumeSnapshotsPerVolume, nameof(maxVolumeSnapshotsPerVolume));
-        Require(maxFirewallRulesPerNetwork, nameof(maxFirewallRulesPerNetwork));
-        Require(maxPublicIpv6, nameof(maxPublicIpv6));
-        Require(maxSshKeys, nameof(maxSshKeys));
-        Require(maxLoadBalancers, nameof(maxLoadBalancers));
+        string? negative = FindNegativeCap(
+            (nameof(maxVms), maxVms), (nameof(maxNetworks), maxNetworks), (nameof(maxVolumes), maxVolumes),
+            (nameof(maxVmSnapshotsPerVm), maxVmSnapshotsPerVm),
+            (nameof(maxVolumeSnapshotsPerVolume), maxVolumeSnapshotsPerVolume),
+            (nameof(maxFirewallRulesPerNetwork), maxFirewallRulesPerNetwork),
+            (nameof(maxPublicIpv6), maxPublicIpv6), (nameof(maxSshKeys), maxSshKeys),
+            (nameof(maxLoadBalancers), maxLoadBalancers));
+        if (negative != null)
+            throw new BusinessException("INVALID_QUOTA", $"Quota value '{negative}' must be non-negative.");
 
         return new TenantQuota
         {
@@ -97,14 +97,19 @@ public sealed record TenantQuota : ValueObject
     // caps is how the rest silently become 0 (TenantQuotaTests.WithVmAndNetworkCaps_PreservesTheOtherCaps).
     public TenantQuota WithVmAndNetworkCaps(int maxVms, int maxNetworks)
     {
-        Require(maxVms, nameof(maxVms));
-        Require(maxNetworks, nameof(maxNetworks));
+        string? negative = FindNegativeCap((nameof(maxVms), maxVms), (nameof(maxNetworks), maxNetworks));
+        if (negative != null)
+            throw new BusinessException("INVALID_QUOTA", $"Quota value '{negative}' must be non-negative.");
         return this with { MaxVms = maxVms, MaxNetworks = maxNetworks };
     }
 
-    private static void Require(int value, string name)
+    private static string? FindNegativeCap(params (string Name, int Value)[] caps)
     {
-        if (value < 0)
-            throw new BusinessException("INVALID_QUOTA", $"Quota value '{name}' must be non-negative.");
+        foreach ((string name, int value) in caps)
+        {
+            if (value < 0)
+                return name;
+        }
+        return null;
     }
 }

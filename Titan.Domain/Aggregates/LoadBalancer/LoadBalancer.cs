@@ -99,7 +99,6 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         string networkSubnet, string clusterId, LoadBalancerVip vip, IReadOnlyList<LoadBalancerListenerSpec> listeners,
         IReadOnlyList<Vm.Vm> backends)
     {
-        RequireName(name);
         var loadBalancer = new LoadBalancer
         {
             Id = Guid.NewGuid(),
@@ -166,20 +165,14 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsDeleted;
         if (beingOrBeenDeleted)
             throw new BusinessException("LOAD_BALANCER_INVALID_STATE", "Cannot rename a load balancer that is being or has been deleted.");
-        RequireName(name);
         Name = name;
     }
 
     private static readonly System.Text.RegularExpressions.Regex NameShape = new(NamePattern, System.Text.RegularExpressions.RegexOptions.Compiled);
 
-    private static void RequireName(string? name)
-    {
-        if (name == null || name.Length == 0 || name.Length > NameMaxLength || !NameShape.IsMatch(name))
-        {
-            throw new BusinessException("INVALID_LOAD_BALANCER_NAME",
-                $"A load balancer name is 1 to {NameMaxLength} letters, digits, hyphens or underscores, starting with a letter or digit.");
-        }
-    }
+    /// The shape rule of a load balancer name (titan-ops architecture/domain-methods.md#names-and-sizes).
+    public static bool IsAName(string? name) =>
+        name != null && name.Length > 0 && name.Length <= NameMaxLength && NameShape.IsMatch(name);
 
     /// A delete replaces a waiting update: the update's report then names an operation no longer waiting, and is ignored.
     /// A load balancer with a provider id is deleted through Incus, even one Incus no longer has
@@ -224,7 +217,7 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalId, externalId);
+        EnsureProviderIdOnDone(ExternalId, externalId);
         RecordWhatTheWorkerSaw(externalId);
 
         ClearFailure();
@@ -327,7 +320,12 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
     /// the validator refuses the same first, so INVALID_LOAD_BALANCER_SPEC does not reach HTTP.
     private void Ask(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
     {
-        RequireSpec(listeners, backends);
+        if (!SpecFits(listeners, backends))
+        {
+            throw new BusinessException("INVALID_LOAD_BALANCER_SPEC",
+                $"A load balancer has 1 to {MaxListeners} listeners on distinct protocol and port, ports 1 to 65535, " +
+                $"and 1 to {MaxBackends} distinct VMs.");
+        }
         var asked = new List<(Guid VmId, string ExternalVmId)>();
         foreach (Vm.Vm vm in backends)
         {
@@ -397,20 +395,14 @@ public class LoadBalancer : ProviderResource<LoadBalancerOperationKind>, IAggreg
         }
     }
 
-    private static void RequireSpec(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
+    private static bool SpecFits(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Vm.Vm> backends)
     {
         bool listenerCountFits = listeners.Count >= 1 && listeners.Count <= MaxListeners;
         bool backendCountFits = backends.Count >= 1 && backends.Count <= MaxBackends;
         bool portsFit = listeners.All(l => IsPort(l.Port) && IsPort(l.TargetPort));
         bool listenersDistinct = listeners.Select(l => (l.Protocol, l.Port)).Distinct().Count() == listeners.Count;
         bool backendsDistinct = backends.Select(vm => vm.Id).Distinct().Count() == backends.Count;
-        bool valid = listenerCountFits && backendCountFits && portsFit && listenersDistinct && backendsDistinct;
-        if (!valid)
-        {
-            throw new BusinessException("INVALID_LOAD_BALANCER_SPEC",
-                $"A load balancer has 1 to {MaxListeners} listeners on distinct protocol and port, ports 1 to 65535, " +
-                $"and 1 to {MaxBackends} distinct VMs.");
-        }
+        return listenerCountFits && backendCountFits && portsFit && listenersDistinct && backendsDistinct;
     }
 
     private static bool IsPort(int port) => port >= 1 && port <= 65535;

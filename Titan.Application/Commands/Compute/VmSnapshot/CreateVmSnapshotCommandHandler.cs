@@ -22,6 +22,7 @@ public class CreateVmSnapshotCommandHandler(
     public async Task<CreateVmSnapshotCommandResult> HandleAsync(CreateVmSnapshotCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVmSnapshotName(command.Name);
         var vmId = command.VmId;
 
         // Locked: the per-VM cap is counted on the snapshots loaded with the VM, so a second request at the cap waits

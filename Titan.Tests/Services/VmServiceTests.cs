@@ -953,6 +953,36 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    // The name is checked before the VM is read (titan-ops architecture/domain-methods.md#names-and-sizes): a name outside
+    // the rule on a VM that is not there answers 422, and renaming to the VM's own name does not skip the check.
+    [Fact]
+    public async Task Rename_ANameOutsideTheRule_Is422_BeforeTheVmIsRead()
+    {
+        SetupCurrentUser(TenantId);
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateRenameHandler().HandleAsync(new RenameVmCommand(Guid.NewGuid(), "a_b"), default));
+
+        Assert.Equal("INVALID_VM_NAME", refused.Code);
+        _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Create_ANameOrADiskOutsideTheRule_Is422_BeforeAnythingIsRead()
+    {
+        SetupCurrentUser(TenantId);
+        var networkId = Guid.NewGuid();
+
+        var badName = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("a_b", networkId, "offering-1", _templateId, "cluster-1", null), default));
+        var badDisk = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("web-01", networkId, "offering-1", _templateId, "cluster-1", -1), default));
+
+        Assert.Equal("INVALID_VM_NAME", badName.Code);
+        Assert.Equal("INVALID_VM_DISK_SIZE", badDisk.Code);
+        _tenantRepo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
     [Fact]
     public async Task Rename_DeletedVm_ThrowsInvalidStatus()
     {

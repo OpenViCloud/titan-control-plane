@@ -58,7 +58,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Networks.AnyAsync(
             n => n.TenantId == tenantId && n.Name == name && n.CurrentExistence != CurrentExistence.Deleted, ct);
 
-    // Vm.HoldsItsNetwork, asked of the network's VMs.
+    // Vm.HasNetwork, asked of the network's VMs.
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
             v => v.NetworkId == networkId

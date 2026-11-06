@@ -1,3 +1,4 @@
+using Titan.Application.Services.Compute;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.VolumeSnapshot.Contracts;
@@ -19,6 +20,7 @@ public class CreateVolumeSnapshotCommandHandler(
     public async Task<CreateVolumeSnapshotCommandResult> HandleAsync(CreateVolumeSnapshotCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVolumeSnapshotName(command.Name);
         var volumeId = command.VolumeId;
 
         // Locked: the per-volume cap is counted on the snapshots loaded with the volume, so a second request at the

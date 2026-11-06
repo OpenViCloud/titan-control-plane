@@ -185,7 +185,7 @@ public class VmRepositoryStateTests
     }
 
     [Fact]
-    public async Task NetworkIsHeld_AgreesWithHoldsItsNetwork_ForEveryShape()
+    public async Task NetworkIsHeld_AgreesWithHasNetwork_ForEveryShape()
     {
         foreach (Vm vm in EveryShape())
         {
@@ -193,7 +193,7 @@ public class VmRepositoryStateTests
             db.Vms.Add(vm);
             await db.SaveChangesAsync();
 
-            Assert.True(vm.HoldsItsNetwork == await new NetworkRepository(db).HasActiveVmsAsync(NetworkId), vm.Name);
+            Assert.True(vm.HasNetwork == await new NetworkRepository(db).HasActiveVmsAsync(NetworkId), vm.Name);
         }
     }
 }

@@ -67,7 +67,7 @@ public static class VmReports
     {
         foreach (VmStatus known in Enum.GetValues<VmStatus>())
         {
-            if (VmAggregate.IsAnIncusWord(known) && known.ToString() == status)
+            if (VmAggregate.IsIncusStatus(known) && known.ToString() == status)
             {
                 return known;
             }

@@ -156,7 +156,7 @@ public class FirewallRule : ProviderResource<FirewallRuleOperationKind>, IEntity
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalId, externalId);
+        EnsureProviderIdOnDone(ExternalId, externalId);
         RecordWhatTheWorkerSaw(externalId, observedState);
 
         ClearFailure();

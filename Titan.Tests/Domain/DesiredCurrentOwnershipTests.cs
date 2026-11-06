@@ -116,7 +116,7 @@ public class DesiredCurrentOwnershipTests
         foreach (var (file, src) in ReadSources(AggregatesDir()))
         {
             var type = Path.GetFileNameWithoutExtension(file);
-            bool isTheAggregateRoot = Regex.IsMatch(src, $@"public class {type}\b");
+            bool isTheAggregateRoot = Regex.IsMatch(src, $@"public (?:partial )?class {type}\b");
             bool carriesAProviderId = Regex.IsMatch(src, @"public string\? External\w*Id \{");
             if (!isTheAggregateRoot || !carriesAProviderId)
             {
@@ -204,11 +204,11 @@ public class DesiredCurrentOwnershipTests
     private static string AggregatesDir() => Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates");
 
     private static List<(string File, string Source)> ReadSources(string root) =>
-        Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+        PartialTypeSources.Merge(Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Select(f => (f, File.ReadAllText(f)))
-            .ToList();
+            .ToList());
 
     private static string FindRepoDir()
     {

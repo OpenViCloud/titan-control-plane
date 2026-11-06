@@ -51,6 +51,9 @@ public class StateTransitionOwnershipTests
     // error; each exception below says why it does.
     private static readonly Dictionary<string, string> MarkThrowAllowlist = new()
     {
+        ["Vm.MarkObserved"] = "refuses a status that is not an Incus word: the aggregate keeps ObservedState to those five. " +
+                              "ObserveVmCommandHandler parses the report with Vm.IsIncusStatus before it loads the VM, so no " +
+                              "reconciler callback reaches this throw",
         ["Invoice.MarkPaid"] = "intent (an admin presses Mark Paid) named as observation — it DOES " +
                                "validate internally, which is what Tôn Chủ's rule asks; only the name " +
                                "is wrong. Rename to SettleOutsideTitan() when Billing gets a story",
@@ -366,11 +369,11 @@ public class StateTransitionOwnershipTests
     }
 
     private static List<(string File, string Source)> ReadSources(string root) =>
-        Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+        PartialTypeSources.Merge(Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
                      && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
             .Select(f => (f, File.ReadAllText(f)))
-            .ToList();
+            .ToList());
 
     private static string FindRepoDir()
     {

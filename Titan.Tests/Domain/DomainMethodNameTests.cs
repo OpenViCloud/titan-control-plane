@@ -4,12 +4,12 @@ using Titan.Domain.Model;
 namespace Titan.Tests.Domain;
 
 /// The verb at the front of a Domain method says what it hands back (titan-ops architecture/domain-methods.md#method-verbs):
-/// Get* returns the thing or throws, Find* returns it or null, Require* checks an input and Ensure* checks the
-/// state, both returning nothing. A lookup named Require*, or a Find* that never answers null, reads as something it
-/// is not.
+/// Get* returns the thing or throws, Find* returns it or null, Ensure* is a guard of the aggregate and returns
+/// nothing. An input is checked where it arrives: a predicate (IsAName) and a throw at the call site, so no method is
+/// named Require*: the word promised that something must be present, and what these checked was a shape or a ban.
 ///
-/// Silent about: whether a Get* throws when the thing is missing (only the return type is read), whether a Require*
-/// reads an input rather than the state, the repository interfaces (Titan.Domain.Repositories, not yet named this
+/// Silent about: whether a Get* throws when the thing is missing (only the return type is read), whether an Ensure*
+/// reads the state rather than an input, the repository interfaces (Titan.Domain.Repositories, not yet named this
 /// way), and code outside Titan.Domain.
 public class DomainMethodNameTests
 {
@@ -63,11 +63,23 @@ public class DomainMethodNameTests
         return info.ReadState;
     }
 
-    [Theory]
-    [InlineData("Require")]
-    [InlineData("Ensure")]
-    public void EveryCheck_ReturnsNothing(string verb)
+    [Fact]
+    public void NoMethod_IsNamedRequire()
     {
+        List<string> offenders = DomainMethodsStartingWith("Require")
+            .Select(NameOf)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "An input is checked where it arrives, with a predicate and a throw; a state check is Ensure*:\n  "
+            + string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void EveryEnsure_ReturnsNothing()
+    {
+        const string verb = "Ensure";
         List<MethodInfo> methods = DomainMethodsStartingWith(verb);
         Assert.NotEmpty(methods); // 0 offenders out of 0 methods reads identical to a clean scan
 

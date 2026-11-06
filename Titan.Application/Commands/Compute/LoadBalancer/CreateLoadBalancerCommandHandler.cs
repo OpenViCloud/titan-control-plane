@@ -1,3 +1,4 @@
+using Titan.Application.Services.Compute;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
@@ -23,6 +24,7 @@ public class CreateLoadBalancerCommandHandler(
     public async Task<CreateLoadBalancerCommandResult> HandleAsync(CreateLoadBalancerCommand req, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureLoadBalancerName(req.Name);
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 

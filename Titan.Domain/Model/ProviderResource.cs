@@ -37,7 +37,7 @@ public abstract class ProviderResource<TKind> where TKind : struct, Enum
     /// A Done must leave the resource named on the provider, or nothing would be left to delete it through. Without
     /// a stored id the pending operation can only be the one that makes it. Checked before the report writes anything;
     /// a worker that sends it has a bug, and does not retry a 422.
-    protected void RequireProviderIdOnDone(string? storedId, string? reportedId)
+    protected void EnsureProviderIdOnDone(string? storedId, string? reportedId)
     {
         bool doneWithoutAnId = storedId == null && string.IsNullOrEmpty(reportedId);
         if (doneWithoutAnId)

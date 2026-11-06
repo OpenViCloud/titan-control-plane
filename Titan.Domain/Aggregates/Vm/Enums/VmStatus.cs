@@ -1,7 +1,7 @@
 namespace Titan.Domain.Aggregates.Vm;
 
 /// The one status of a VM, the only one the API shows (titan-ops features/vm/design.md#vm-status). Four say an operation
-/// is waiting; five are the Incus word the VM rests in (Vm.IsAnIncusWord, the only ones Vm.ObservedState holds); the
+/// is waiting; five are the Incus word the VM rests in (Vm.IsIncusStatus, the only ones Vm.ObservedState holds); the
 /// last four say what is not a resting instance.
 public enum VmStatus
 {

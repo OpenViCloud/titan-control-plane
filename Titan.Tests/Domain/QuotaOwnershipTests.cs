@@ -208,7 +208,7 @@ public class QuotaOwnershipTests
         return offenders;
     }
 
-    private static CSharpCompilation ApplicationCompilation()
+    internal static CSharpCompilation ApplicationCompilation()
     {
         var trees = new List<SyntaxTree>();
         foreach (string project in new[] { "Titan.Domain", ApplicationDir })
@@ -244,7 +244,7 @@ public class QuotaOwnershipTests
         return compilation;
     }
 
-    private static CSharpCompilation Compile(List<SyntaxTree> trees)
+    internal static CSharpCompilation Compile(List<SyntaxTree> trees)
     {
         var implicitUsings = CSharpSyntaxTree.ParseText(
             "global using System; global using System.Collections.Generic; global using System.IO; global using System.Linq; "

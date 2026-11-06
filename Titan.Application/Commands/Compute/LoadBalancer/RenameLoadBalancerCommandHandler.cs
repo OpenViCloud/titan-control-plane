@@ -11,7 +11,9 @@ public class RenameLoadBalancerCommandHandler(ILoadBalancerRepository repo, ICur
 {
     public async Task HandleAsync(RenameLoadBalancerCommand command, CancellationToken ct = default)
     {
-        var loadBalancer = await ComputeOwnership.RequireLoadBalancerAsync(repo, currentUser.RequireTenantId(), command.LoadBalancerId, ct);
+        Guid tenantId = currentUser.RequireTenantId();
+        ComputeInput.EnsureLoadBalancerName(command.Name);
+        var loadBalancer = await ComputeOwnership.RequireLoadBalancerAsync(repo, tenantId, command.LoadBalancerId, ct);
 
         // Its own name: no conflict with itself, nothing to write.
         bool sameName = string.Equals(loadBalancer.Name, command.Name, StringComparison.Ordinal);

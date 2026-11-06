@@ -92,17 +92,52 @@ public class VmStatusTests
         Assert.Equal(VmStatus.Stopping, vm.Status);
     }
 
+    // An operation that changes the instance's status waits for the one already running: only that operation's own
+    // report moves the status on (titan-ops features/vm/design.md#conflict-and-delete-wins).
+    [Theory]
+    [InlineData(VmStatus.Running)]  // a waiting stop
+    [InlineData(VmStatus.Stopped)]  // a waiting start
+    public void Delete_WhileAnOperationWaits_IsRefused_AndTheOperationStillEnds(VmStatus resting)
+    {
+        Vm vm = VmThat(resting);
+        Guid waiting = resting == VmStatus.Running ? Stop(vm) : Start(vm);
+        VmStatus waitingStatus = vm.Status;
+
+        var refused = Assert.Throws<BusinessException>(() => Delete(vm));
+
+        Assert.Equal("VM_INVALID_STATUS", refused.Code);
+        Assert.Equal(waitingStatus, vm.Status);
+        Assert.Equal(waiting, vm.PendingOperationId);
+        bool ended = resting == VmStatus.Running
+            ? vm.StopSucceeded(waiting, VmStatus.Stopped, null, null)
+            : vm.StartSucceeded(waiting, VmStatus.Running, null, null);
+        Assert.True(ended);
+        Assert.Null(vm.PendingOperationId);
+    }
+
+    // The refusal says why: another operation is running, not that the status is wrong for this move.
     [Fact]
-    public void Delete_ReplacesAWaitingStop_WithANewRequest()
+    public void Start_WhileAStopWaits_SaysAnotherOperationIsRunning()
     {
         Vm vm = VmThat(VmStatus.Running);
-        Guid stop = Stop(vm);
+        Stop(vm);
 
-        Guid delete = Delete(vm);
+        var refused = Assert.Throws<BusinessException>(() => vm.Start(Guid.NewGuid()));
 
-        Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.NotEqual(stop, delete);
-        Assert.Equal(delete, vm.PendingOperationId);
+        Assert.Equal("VM_INVALID_STATUS", refused.Code);
+        Assert.Equal("Another operation for this VM is still in progress.", refused.Message);
+    }
+
+    [Fact]
+    public void Stop_WhileAStartWaits_SaysAnotherOperationIsRunning()
+    {
+        Vm vm = VmThat(VmStatus.Stopped);
+        vm.Start(Guid.NewGuid());
+
+        var refused = Assert.Throws<BusinessException>(() => vm.Stop(Guid.NewGuid()));
+
+        Assert.Equal("VM_INVALID_STATUS", refused.Code);
+        Assert.Equal("Another operation for this VM is still in progress.", refused.Message);
     }
 
     [Fact]
@@ -128,20 +163,6 @@ public class VmStatusTests
         Assert.Equal(VmStatus.Stopped, vm.Status);
         Assert.Equal(VmStatus.Stopped, vm.ObservedState);
         Assert.Null(vm.PendingOperationId);
-    }
-
-    [Fact]
-    public void Done_OfAStopThatADeleteReplaced_IsIgnored()
-    {
-        Vm vm = VmThat(VmStatus.Running);
-        Guid stop = Stop(vm);
-        Delete(vm);
-
-        bool ended = vm.StopSucceeded(stop, VmStatus.Stopped, null, null);
-
-        Assert.False(ended);
-        Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
     }
 
     [Fact]
@@ -324,6 +345,13 @@ public class VmStatusTests
 
         Assert.Equal(VmStatus.Deleted, vm.Status);
         Assert.True(vm.IsDeleted);
+    }
+
+    private static Guid Start(Vm vm)
+    {
+        Guid start = Guid.NewGuid();
+        vm.Start(start);
+        return start;
     }
 
     private static Guid Stop(Vm vm)
