@@ -10,7 +10,8 @@ namespace Titan.Tests.Domain;
 // compiler, as QuotaOwnershipTests does for the quota gate.
 //
 // What it does NOT see: a check inside a branch counts as asked; a creator in Titan.Infrastructure; a check on another
-// value than the one passed on (it matches the call, not the argument).
+// value than the one passed on (it matches the call, not the argument); the order against a repository load (it only
+// asks that the check comes before the creator call); a check made in a helper method of the handler (it reads per method).
 public class InputOwnershipTests
 {
     // A creator or rename adds a row here, with the checks its input needs asked before it.

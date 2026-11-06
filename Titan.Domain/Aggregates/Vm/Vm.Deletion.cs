@@ -8,7 +8,7 @@ public partial class Vm
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => Status == VmStatus.Deleting || IsDeleted;
 
-    /// Any VM with a provider id can be deleted, and its status says how: Deleting, the worker force-stops whatever
+    /// A VM with a provider id can be deleted while no operation and no snapshot command is running, and its status says how: Deleting, the worker force-stops whatever
     /// status Incus reports and deletes the instance (an instance already gone counts as deleted); or Deleted at once,
     /// for a VM that never reached the provider, which has no command and no observation coming
     /// (titan-ops architecture/desired-and-current.md#delete-locally). A create still waiting without a provider id may

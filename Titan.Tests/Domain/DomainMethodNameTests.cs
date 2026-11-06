@@ -4,7 +4,7 @@ using Titan.Domain.Model;
 namespace Titan.Tests.Domain;
 
 /// The verb at the front of a Domain method says what it hands back (titan-ops architecture/domain-methods.md#method-verbs):
-/// Get* returns the thing or throws, Find* returns it or null, Ensure* checks the aggregate's own state and returns
+/// Get* returns the thing or throws, Find* returns it or null, Ensure* is a guard of the aggregate and returns
 /// nothing. An input is checked where it arrives: a predicate (IsAName) and a throw at the call site, so no method is
 /// named Require*: the word promised that something must be present, and what these checked was a shape or a ban.
 ///

@@ -97,7 +97,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
-    /// The shape rule of a volume name: 1 to {NameMaxLength} characters, not blank, any characters.
+    /// The shape rule of a volume name: 1 to 100 characters, not blank, any characters.
     public static bool IsAName(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= NameMaxLength;
 
     /// The shape rule of the name of one of this volume's snapshots: 1 to 100 characters, not blank.

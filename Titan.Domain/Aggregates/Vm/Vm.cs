@@ -20,7 +20,7 @@ public partial class Vm : IAggregateRoot
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
     /// The one status the API shows (titan-ops features/vm/design.md#vm-status). Only an operation, a report ending it, or
-    /// an observation at rest writes it, each through the table of moves below.
+    /// an observation at rest writes it, each through the moves of Vm.Creation.cs, Vm.Start.cs, Vm.Stop.cs, Vm.Deletion.cs and Vm.Observation.cs.
     public VmStatus Status { get; private set; }
     /// The Incus word the worker read last, word for word, null while none is known
     /// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim): one of the five statuses whose names
@@ -168,8 +168,9 @@ public partial class Vm : IAggregateRoot
     /// The image's own size (0) or a positive number of GB.
     public static bool IsADiskSize(int diskSizeGb) => diskSizeGb >= ImageDiskSize;
 
-    // ---- The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
-    // ends an operation. One method per move: each checks the VM waits in that move's status under the reported id, and
-    // returns false, changing nothing, for any other report (a Done that arrived twice, the report of another
-    // operation, a VM already Deleted). The handler picks the method by the status and the outcome.
+    // The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape) is the one thing that
+    // ends an operation. One method per move, in the partial file of its operation (CreateSucceeded and CreateFailed in
+    // Vm.Creation.cs, and so on): each checks the VM waits in that move's status under the reported id, and returns
+    // false, changing nothing, for any other report (a Done that arrived twice, the report of another operation, a VM
+    // already Deleted). The handler picks the method by the status and the outcome.
 }
