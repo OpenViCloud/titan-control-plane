@@ -9,7 +9,7 @@ namespace Titan.Tests.Services;
 // The name and size a customer sends are checked by the command handler before it builds or renames the aggregate
 // (titan-ops architecture/domain-methods.md#names-and-sizes). The endpoint validators answer 400 first from the same
 // Domain constants (CreateVmValidatorTests); this is the 422 behind them, for a caller that did not come through HTTP.
-// Each creator or rename call listed in InputOwnershipTests is preceded by its check.
+// Each call InputOwnershipTests lists (creator, rename, add-snapshot) is preceded by its check in the same method.
 public class ComputeInputTests
 {
     private static string Code(Action act) => Assert.Throws<BusinessException>(act).Code;
