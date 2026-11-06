@@ -73,9 +73,9 @@ public partial class Vm
     }
 
     /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
-    /// when it names another operation than the one the snapshot waits on. A create or revert that ends takes the VM out
-    /// of Snapshotting, but only a VM that still is Snapshotting: a snapshot whose command waits on the snapshot alone leaves
-    /// the VM's status as it is.
+    /// when it names another operation than the one the snapshot waits on. A create or revert that ends takes the VM
+    /// out of Snapshotting, but only for a VM that still is Snapshotting: a VM at rest has nothing to leave, so its
+    /// status does not change.
     public VmSnapshotOperationKind? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId)
     {
         VmSnapshotOperationKind? ended = GetSnapshot(snapshotId).FinishOperation(operationId, externalId);
@@ -87,8 +87,7 @@ public partial class Vm
     }
 
     /// The report that the snapshot's own command gave up; null when it names another operation than the one the
-    /// snapshot waits on. A create or revert that ends takes the VM out of Snapshotting, only while it still is: the VM's status is
-    /// left alone otherwise.
+    /// snapshot waits on. A create or revert that ends takes the VM out of Snapshotting, only for a VM that still is.
     public VmSnapshotOperationKind? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
         string? reason, string? detail)
     {
