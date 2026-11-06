@@ -20,6 +20,7 @@ public class RestoreVolumeSnapshotCommandHandler(
     public async Task<RestoreVolumeSnapshotCommandResult> HandleAsync(RestoreVolumeSnapshotCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVolumeName(command.Name);
         var volumeId = command.VolumeId;
 
         // The source volume, whatever Incus holds of it: only the snapshot must rest on Incus
@@ -43,6 +44,8 @@ public class RestoreVolumeSnapshotCommandHandler(
         // A snapshot that cannot be restored answers that first, whatever the quota.
         var externalSnapshotId = sourceVolume.ProviderIdForSnapshotRestore(snapshot.Id);
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Volume, activeVolumeCount);
+        // The size is the source volume's own; a row that broke the rule still answers as the aggregate once did.
+        ComputeInput.EnsureVolumeSize(sourceVolume.SizeGb);
         var newVolume = VolumeAggregate.Create(
             tenant.Id, command.Name, sourceVolume.ClusterId,
             sourceVolume.VolumeOfferingId, sourceVolume.SizeGb, snapshot);

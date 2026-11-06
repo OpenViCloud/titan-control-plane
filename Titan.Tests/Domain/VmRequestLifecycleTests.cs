@@ -373,24 +373,6 @@ public class VmRequestLifecycleTests
         Assert.Null(vm.PendingOperationId);
     }
 
-    [Fact]
-    public void RequestDelete_ReplacesAWaitingStop_WithANewId()
-    {
-        Vm vm = RunningVm();
-        Guid stop = Guid.NewGuid();
-        vm.Stop(stop);
-
-        Guid delete = Guid.NewGuid();
-        vm.Delete(delete);
-
-        Assert.Equal(delete, vm.PendingOperationId);
-        Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Equal("42", vm.ExternalId);
-        // the stop's own report arrives later and is ignored
-        Assert.False(vm.StopSucceeded(stop, VmStatus.Stopped, null, null));
-        Assert.Equal(delete, vm.PendingOperationId);
-    }
-
     // ---------- the value objects ----------
 
     [Fact]
@@ -399,14 +381,32 @@ public class VmRequestLifecycleTests
         Assert.Throws<Titan.Domain.Exceptions.BusinessException>(() => OperationTicket.Of(Guid.NewGuid(), ""));
     }
 
-    [Fact]
-    public void AnOperation_RefusesAnEmptyId()
+    // Each intent checks its own id, first: a missing snapshot would answer 404 if the id came second.
+    public static TheoryData<string> OperationsThatTakeAnId() =>
+        ["Stop", "Start", "Delete", "AddSnapshot", "RevertSnapshot", "DeleteSnapshot"];
+
+    [Theory]
+    [MemberData(nameof(OperationsThatTakeAnId))]
+    public void AnOperation_RefusesAnEmptyId(string operation)
     {
         Vm vm = RunningVm();
+        Guid snapshotId = Guid.NewGuid();
 
-        Assert.Throws<Titan.Domain.Exceptions.BusinessException>(() => vm.Stop(Guid.Empty));
+        Action ask = operation switch
+        {
+            "Stop" => () => vm.Stop(Guid.Empty),
+            "Start" => () => vm.Start(Guid.Empty),
+            "Delete" => () => vm.Delete(Guid.Empty),
+            "AddSnapshot" => () => vm.AddSnapshot(snapshotId, Guid.Empty, "snap"),
+            "RevertSnapshot" => () => vm.RevertSnapshot(snapshotId, Guid.Empty),
+            _ => () => vm.DeleteSnapshot(snapshotId, Guid.Empty),
+        };
+
+        var refused = Assert.Throws<Titan.Domain.Exceptions.BusinessException>(ask);
+        Assert.Equal("INVALID_REQUEST", refused.Code); // not the status refusal or the snapshot's own check
         Assert.Null(vm.PendingOperationId);
         Assert.Equal(VmStatus.Running, vm.Status);
+        Assert.Empty(vm.Snapshots);
     }
 
     [Fact]

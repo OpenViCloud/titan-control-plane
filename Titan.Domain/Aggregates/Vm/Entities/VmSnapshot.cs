@@ -86,10 +86,6 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         {
             throw new BusinessException("INVALID_REQUEST", "A snapshot needs an id.");
         }
-        if (string.IsNullOrWhiteSpace(name) || name.Length > NameMaxLength)
-        {
-            throw new BusinessException("INVALID_SNAPSHOT_NAME", $"A snapshot name is 1 to {NameMaxLength} characters, not blank.");
-        }
         var snapshot = new VmSnapshot
         {
             Id = id,
@@ -173,7 +169,7 @@ public class VmSnapshot : ProviderResource<VmSnapshotOperationKind>, IEntity
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalId, externalId);
+        EnsureProviderIdOnDone(ExternalId, externalId);
         RecordWhatTheWorkerSaw(externalId);
 
         ClearFailure();

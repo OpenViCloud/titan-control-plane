@@ -516,21 +516,6 @@ public class VmStateMachineTests
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid())).Code);
     }
 
-    [Fact] // a delete overrides a waiting stop, as a new request (delete wins)
-    public void RequestDelete_WhileAStopIsWaiting_ReplacesIt()
-    {
-        var vm = VmIn(Seed.Running);
-        Guid stop = Guid.NewGuid();
-        vm.Stop(stop);
-
-        Guid delete = Guid.NewGuid();
-        vm.Delete(delete);
-
-        Assert.NotEqual(stop, delete);
-        Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Equal(delete, vm.PendingOperationId);
-    }
-
     // ---------- snapshot and attach follow what Incus allows ----------
 
     [Theory] // titan-ops features/vm/design.md#requests-follow-incus

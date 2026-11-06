@@ -21,7 +21,7 @@ public class DomainRoleFolderTests
     private static readonly string[] RoleFolders = [Entities, ValueObjects, Enums, Inputs, Results];
 
     [Fact]
-    public void AggregateRoot_IsTheOnlyFileAtTheTopOfItsFolder()
+    public void TheRootAndItsPartialFiles_AreTheOnlyFilesAtTheTopOfItsFolder()
     {
         var folders = AggregateFolders();
         Assert.True(folders.Count >= 20, $"Only {folders.Count} aggregate folders found.");
@@ -29,14 +29,67 @@ public class DomainRoleFolderTests
         var offenders = new List<string>();
         foreach (var folder in folders)
         {
-            var aggregate = Path.GetFileName(folder);
-            var files = Directory.GetFiles(folder, "*.cs").Select(Path.GetFileName).ToList();
-            if (files.Count != 1 || files[0] != aggregate + ".cs")
-                offenders.Add($"{aggregate}: {string.Join(", ", files)}");
+            var files = new Dictionary<string, string>();
+            foreach (var path in Directory.GetFiles(folder, "*.cs"))
+                files[Path.GetFileName(path)] = File.ReadAllText(path);
+            offenders.AddRange(TopFileOffenders(Path.GetFileName(folder), files));
         }
 
         Assert.True(offenders.Count == 0,
-            "An aggregate folder must show its root and nothing else at the top: " + string.Join(" | ", offenders));
+            "An aggregate folder must show its root, and the root's partial files, and nothing else at the top: "
+            + string.Join(" | ", offenders));
+    }
+
+    // The top of an aggregate folder holds <Root>.cs, and <Root>.<Part>.cs files that declare partial class <Root>,
+    // read from the code outside comments.
+    private static List<string> TopFileOffenders(string aggregate, Dictionary<string, string> files)
+    {
+        var offenders = new List<string>();
+        string rootFile = aggregate + ".cs";
+        if (!files.ContainsKey(rootFile))
+            offenders.Add($"{aggregate}: {rootFile} is missing");
+
+        var partName = new Regex($@"^{aggregate}\.[A-Z][A-Za-z]*\.cs$");
+        var partOfTheRoot = new Regex($@"\bpartial\s+class\s+{aggregate}\b");
+        foreach (var name in files.Keys.Order(StringComparer.Ordinal))
+        {
+            if (name == rootFile)
+                continue;
+            if (!partName.IsMatch(name))
+            {
+                offenders.Add($"{aggregate}: {name} is not named {aggregate}.<Part>.cs");
+                continue;
+            }
+            var code = string.Join('\n', files[name].Split('\n')
+                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+            if (!partOfTheRoot.IsMatch(code))
+                offenders.Add($"{aggregate}: {name} is not a partial file of {aggregate}");
+        }
+        return offenders;
+    }
+
+    [Fact]
+    public void TopFileOffenders_AcceptsOnlyTheRootAndItsPartialFiles()
+    {
+        var files = new Dictionary<string, string>
+        {
+            ["Vm.cs"] = "public partial class Vm : IAggregateRoot { }",
+            ["Vm.Start.cs"] = "namespace X;\npublic partial class Vm\n{\n}",
+            ["Vm.Helper.cs"] = "// public partial class Vm\ninternal static class VmHelper { }",
+            ["VmStart.cs"] = "public partial class Vm { }",
+        };
+
+        Assert.Equal(
+            ["Vm: Vm.Helper.cs is not a partial file of Vm", "Vm: VmStart.cs is not named Vm.<Part>.cs"],
+            TopFileOffenders("Vm", files));
+    }
+
+    [Fact]
+    public void TopFileOffenders_NamesAMissingRoot()
+    {
+        var files = new Dictionary<string, string> { ["Vm.Start.cs"] = "public partial class Vm { }" };
+
+        Assert.Equal(["Vm: Vm.cs is missing"], TopFileOffenders("Vm", files));
     }
 
     [Fact]

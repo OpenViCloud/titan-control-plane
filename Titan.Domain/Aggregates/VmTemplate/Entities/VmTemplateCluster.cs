@@ -84,7 +84,7 @@ public class VmTemplateCluster : ProviderResource<VmTemplateOperationKind>, IEnt
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalTemplateId, externalId);
+        EnsureProviderIdOnDone(ExternalTemplateId, externalId);
         RecordWhatTheWorkerSaw(externalId);
 
         CurrentExistence = CurrentExistence.Exists;

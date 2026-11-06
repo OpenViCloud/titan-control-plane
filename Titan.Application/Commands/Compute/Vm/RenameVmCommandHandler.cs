@@ -16,6 +16,7 @@ public class RenameVmCommandHandler(IVmRepository repo, ICurrentUser currentUser
     public async Task HandleAsync(RenameVmCommand command, CancellationToken ct = default)
     {
         Guid tenantId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVmName(command.Name);
         Domain.Aggregates.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, command.VmId, ct);
 
         // The name asked for is already the name — done, nothing to write

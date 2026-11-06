@@ -97,6 +97,16 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         && CurrentExistence == CurrentExistence.Exists
         && DesiredExistence == DesiredExistence.Exists;
 
+    /// The shape rule of a volume name: 1 to {NameMaxLength} characters, not blank, any characters.
+    public static bool IsAName(string? name) => !string.IsNullOrWhiteSpace(name) && name.Length <= NameMaxLength;
+
+    /// The shape rule of the name of one of this volume's snapshots: 1 to 100 characters, not blank.
+    public static bool IsASnapshotName(string? name) =>
+        !string.IsNullOrWhiteSpace(name) && name.Length <= VolumeSnapshot.NameMaxLength;
+
+    /// A volume is at least 1 GB.
+    public static bool IsASize(int sizeGb) => sizeGb > 0;
+
     /// A volume restored from a snapshot: the snapshot's readiness is an invariant of the creation (titan-ops features/volume/design.md#volume-restore-is-a-new-volume);
     /// sizing and cluster come from the source volume, which the caller resolves.
     public static Volume Create(
@@ -104,14 +114,6 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         string name, string clusterId, string volumeOfferingId, int sizeGb,
         VolumeSnapshot? restoredFrom = null)
     {
-        if (string.IsNullOrWhiteSpace(name) || name.Length > NameMaxLength)
-        {
-            throw new BusinessException("INVALID_VOLUME_NAME", $"A volume name is 1 to {NameMaxLength} characters, not blank.");
-        }
-        if (sizeGb <= 0)
-        {
-            throw new BusinessException("INVALID_VOLUME_SIZE", "A volume is at least 1 GB.");
-        }
         if (restoredFrom != null)
         {
             restoredFrom.EnsureRestorable();
@@ -320,7 +322,7 @@ public class Volume : ProviderResource<VolumeOperationKind>, IAggregateRoot
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalId, externalId);
+        EnsureProviderIdOnDone(ExternalId, externalId);
         RecordWhatTheWorkerSaw(externalId, sawTheVolume, attachedVmId, attachedElsewhere);
 
         ClearFailure();

@@ -216,7 +216,7 @@ public class Network : ProviderResource<NetworkOperationKind>, IAggregateRoot
         {
             return null;
         }
-        RequireProviderIdOnDone(ExternalId, externalId);
+        EnsureProviderIdOnDone(ExternalId, externalId);
         RecordWhatTheWorkerSaw(externalId, status, cidr, gateway);
 
         ClearFailure();

@@ -1,3 +1,4 @@
+using Titan.Application.Services.Compute;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Options;
@@ -21,6 +22,8 @@ public class CreateVolumeCommandHandler(
     public async Task<CreateVolumeCommandResult> HandleAsync(CreateVolumeCommand req, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
+        ComputeInput.EnsureVolumeName(req.Name);
+        ComputeInput.EnsureVolumeSize(req.SizeGb);
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
