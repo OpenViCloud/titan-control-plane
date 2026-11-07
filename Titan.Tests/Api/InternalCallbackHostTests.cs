@@ -95,15 +95,15 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     public async Task ADoneNamingTheWaitingRequest_InTheWorkersJson_EndsIt_AndAnswers204()
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
-        Guid requestId = vm.PendingOperationId!.Value;
+        Guid requestId = vm.Operation.PendingId!.Value;
 
         HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{requestId}",
             """{"outcome":"Done","observed":{"status":"Stopped","ipAddress":null}}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Null(stored.PendingOperationId);
-        Assert.Equal(VmStatus.Stopped, stored.ObservedState);
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(VmStatus.Stopped, stored.InstanceStatus);
         Assert.Equal(VmStatus.Stopped, stored.Status);
     }
 
@@ -111,16 +111,16 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     public async Task AFailedWithItsReason_InTheWorkersJson_PutsTheStatusBackToTheLastIncusWord_AndKeepsTheReason()
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
-        Guid requestId = vm.PendingOperationId!.Value;
+        Guid requestId = vm.Operation.PendingId!.Value;
 
         HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{requestId}",
             """{"outcome":"Failed","reason":"The stop could not be completed.","detail":"incus: timeout"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Null(stored.PendingOperationId);
+        Assert.Null(stored.Operation.PendingId);
         Assert.Equal(VmStatus.Running, stored.Status);
-        Assert.Equal(("The stop could not be completed.", "incus: timeout"), (stored.OperationFailureReason, stored.OperationFailureDetail));
+        Assert.Equal(("The stop could not be completed.", "incus: timeout"), (stored.Operation.FailureReason, stored.Operation.FailureDetail));
     }
 
     [Fact]
@@ -133,8 +133,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Equal((VmStatus.Frozen, "10.0.0.9", "2001:db8::9"), (stored.ObservedState, stored.IpAddress, stored.PublicIpv6Address));
-        Assert.Equal(vm.PendingOperationId, stored.PendingOperationId);
+        Assert.Equal((VmStatus.Frozen, "10.0.0.9", "2001:db8::9"), (stored.InstanceStatus, stored.IpAddress, stored.PublicIpv6Address));
+        Assert.Equal(vm.Operation.PendingId, stored.Operation.PendingId);
         Assert.Equal(VmStatus.Stopping, stored.Status);
     }
 
@@ -145,7 +145,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.PendingOperationId!.Value}", json);
+        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.Operation.PendingId!.Value}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -162,7 +162,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Vm stored = await ReloadAsync(vm.Id);
-        Assert.Equal(VmStatus.Running, stored.ObservedState);
+        Assert.Equal(VmStatus.Running, stored.InstanceStatus);
         Assert.Equal(VmStatus.Stopping, stored.Status);
     }
 
@@ -173,7 +173,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Vm vm = await StoredVmWaitingOnAStopAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.PendingOperationId!.Value}",
+        HttpResponseMessage response = await PatchAsync($"/internal/vms/{vm.Id}/requests/{vm.Operation.PendingId!.Value}",
             """{"outcome":"Done","observed":{"status":"Stopped"}}""", token);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);

@@ -34,9 +34,7 @@ public partial class Vm
         {
             EnsureNoCreateWaiting();
             Status = VmStatus.Deleted;
-            ObservedState = null;
-            PendingOperationId = null;
-            PendingOperationAskedAt = null;
+            Operation = Operation.ReturnedToRest();
             return;
         }
 
@@ -44,9 +42,9 @@ public partial class Vm
         // (titan-ops features/vm/design.md#conflict-and-delete-wins).
         EnsureNotInTransition();
         EnsureOnTheProvider();
+        VmStatus? seen = InstanceStatus;
         Status = VmStatus.Deleting;
-        PendingOperationId = operationId;
-        PendingOperationAskedAt = DateTimeOffset.UtcNow;
+        Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
     }
 
     /// A create still waiting without a provider id may yet instantiate on the provider, so there is nothing safe
@@ -63,47 +61,32 @@ public partial class Vm
     /// (titan-ops features/vm/design.md#vm-snapshot), so every snapshot not yet Deleted goes with it.
     public bool DeleteSucceeded(Guid operationId)
     {
-        if (Status != VmStatus.Deleting || PendingOperationId != operationId)
+        if (Status != VmStatus.Deleting || Operation.PendingId != operationId)
         {
             return false;
         }
-        OperationFailureReason = null;
-        OperationFailureDetail = null;
-        OperationFailedAt = null;
+        Operation = Operation.Done();
         Status = VmStatus.Deleted;
-        ObservedState = null;
         IpAddress = null;
         PublicIpv6Address = null;
         foreach (VmSnapshot snapshot in _snapshots)
         {
             snapshot.EndWithItsVm();
         }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
         return true;
     }
 
-    /// The delete command gave up: back to the Incus word the VM holds (Unknown without one), with the reason; the
+    /// The delete command gave up: back to the Incus status the VM holds (Unknown without one), with the reason; the
     /// next delete is a new operation (titan-ops architecture/desired-and-current.md#abandoned-operation).
     public bool DeleteFailed(Guid operationId, string? reason, string? detail)
     {
-        if (Status != VmStatus.Deleting || PendingOperationId != operationId)
+        if (Status != VmStatus.Deleting || Operation.PendingId != operationId)
         {
             return false;
         }
-        OperationFailureReason = reason;
-        OperationFailureDetail = detail;
-        OperationFailedAt = DateTimeOffset.UtcNow;
-        if (ObservedState == null)
-        {
-            Status = VmStatus.Unknown;
-        }
-        else
-        {
-            Status = ObservedState.Value;
-        }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
+        VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
+        Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
+        Status = resting;
         return true;
     }
 }

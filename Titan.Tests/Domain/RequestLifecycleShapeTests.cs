@@ -53,7 +53,7 @@ public class RequestLifecycleShapeTests
         [typeof(VmSnapshot)] = () =>
         {
             Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
-            vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
+            vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
             return vm.WithSnapshot("shape");
         },
         [typeof(Network)] = () => ANetwork(),
@@ -63,7 +63,7 @@ public class RequestLifecycleShapeTests
             Guid tenantId = TestTenant.WithRoomToSpare().Id;
             Guid networkId = Guid.NewGuid();
             Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
-            backend.CreateSucceeded(backend.PendingOperationId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
+            backend.CreateSucceeded(backend.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
             lb.FinishOperation(lb.Pending!.Id, lb.Vip);
@@ -111,16 +111,18 @@ public class RequestLifecycleShapeTests
     }
 
     // A type named without Pending must still be invisible to the scan (or it would be counted twice) and still keep the
-    // waiting request's id, the one thing a report is compared with.
+    // waiting operation's id, the one thing a report is compared with, in its Operation.
     [Fact]
-    public void ATypeNamedWithoutPending_HasNoPendingProperty_AndKeepsTheWaitingRequestsId()
+    public void ATypeNamedWithoutPending_HasNoPendingProperty_AndKeepsTheWaitingOperationsId()
     {
         List<Type> scanned = WithAPendingProperty();
         foreach (Type type in OnTheShapeWithoutPending)
         {
             Assert.DoesNotContain(type, scanned);
-            PropertyInfo? id = type.GetProperty("PendingOperationId", BindingFlags.Public | BindingFlags.Instance);
-            Assert.True(id != null, $"{type.Name} keeps no PendingOperationId");
+            PropertyInfo? operation = type.GetProperty("Operation", BindingFlags.Public | BindingFlags.Instance);
+            Assert.True(operation != null, $"{type.Name} keeps no Operation");
+            PropertyInfo? id = operation.PropertyType.GetProperty("PendingId", BindingFlags.Public | BindingFlags.Instance);
+            Assert.True(id != null, $"{type.Name}.Operation keeps no PendingId");
             Assert.Equal(typeof(Guid?), id.PropertyType);
         }
     }
@@ -180,7 +182,7 @@ public class RequestLifecycleShapeTests
             return vm;
         }
         bool fromStopped = move.StartsWith("Start", StringComparison.Ordinal);
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-shape", fromStopped ? VmStatus.Stopped : VmStatus.Running, null, null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-shape", fromStopped ? VmStatus.Stopped : VmStatus.Running, null, null);
         if (move.StartsWith("Start", StringComparison.Ordinal)) vm.Start(Guid.NewGuid());
         else if (move.StartsWith("Stop", StringComparison.Ordinal)) vm.Stop(Guid.NewGuid());
         else vm.Delete(Guid.NewGuid());

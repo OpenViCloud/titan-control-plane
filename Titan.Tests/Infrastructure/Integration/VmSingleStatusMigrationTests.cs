@@ -89,7 +89,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
     }
 
     [Fact]
-    public async Task EveryOldCombination_BecomesTheStatusTheCaseNames_AndObservedStateKeepsTheOldWord()
+    public async Task EveryOldCombination_BecomesTheStatusTheCaseNames_AndTheObservedStateColumnKeepsTheOldWord()
     {
         await MigrateToAsync(MigrationBefore);
         // One row per branch of the CASE, in its order.
@@ -152,9 +152,9 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await using TitanDbContext read = NewDbContext();
         Vm vm = await read.Vms.SingleAsync(v => v.Id == stopping.Id);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
-        Assert.Equal(stopping.RequestId, vm.PendingOperationId);
-        Assert.NotNull(vm.PendingOperationAskedAt);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
+        Assert.Equal(stopping.RequestId, vm.Operation.PendingId);
+        Assert.NotNull(vm.Operation.AskedAt);
     }
 
     // The view of waiting requests reads a VM's kind off its status once the kind column is gone.

@@ -30,7 +30,7 @@ public class ProviderResourceTests
                         && p.GetGenericTypeDefinition() == typeof(PendingOperation<>))
             .ToList();
         Assert.True(withPending.Count >= 7, $"the scan found only {withPending.Count} types with a pending operation");
-        // Vm has no Pending, so this scan does not reach it: OnlyVm_KeepsTheBasesStateItself holds it.
+        // Vm has no Pending, so this scan does not reach it: Vm_KeepsItsOperationInOneVmOperation_AndNoTypeCopiesTheBasesState holds it.
         Assert.DoesNotContain(typeof(Vm), withPending);
 
         HashSet<string> baseNames = BaseNames();
@@ -40,13 +40,15 @@ public class ProviderResourceTests
         Assert.True(declaringItThemselves.Count == 0, "Declares the base's state again: " + string.Join(", ", declaringItThemselves));
     }
 
-    // Outside ProviderResource, a type that writes the request or failure state again is Vm and nothing else: a second
-    // type doing so has copied Vm instead of deriving from the base.
+    // Outside ProviderResource, no type writes the request or failure state again: Vm keeps its operation, its last failure
+    // and the Incus status seen in one VmOperation under other names, and a type declaring the base's names is a copy of the
+    // base instead of deriving from it.
     [Fact]
-    public void OnlyVm_KeepsTheBasesStateItself()
+    public void Vm_KeepsItsOperationInOneVmOperation_AndNoTypeCopiesTheBasesState()
     {
         Assert.False(DerivesFromProviderResource(typeof(Vm)));
         Assert.Null(typeof(Vm).GetProperty("Pending"));
+        Assert.Equal(typeof(VmOperation), typeof(Vm).GetProperty("Operation")?.PropertyType);
 
         HashSet<string> baseNames = BaseNames();
         List<string> keepingItThemselves = typeof(ProviderResource<>).Assembly.GetTypes()
@@ -54,7 +56,7 @@ public class ProviderResourceTests
             .Where(t => t.GetMembers(Declared).Any(m => baseNames.Contains(m.Name)))
             .Select(t => t.Name)
             .ToList();
-        Assert.Equal(new[] { nameof(Vm) }, keepingItThemselves);
+        Assert.Empty(keepingItThemselves);
     }
 
     private static bool DerivesFromProviderResource(Type type)

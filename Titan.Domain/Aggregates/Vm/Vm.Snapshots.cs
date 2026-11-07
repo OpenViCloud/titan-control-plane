@@ -29,6 +29,7 @@ public partial class Vm
         EnsureOnTheProvider();
         VmSnapshot snapshot = VmSnapshot.Create(snapshotId, Id, TenantId, name, operationId);
         _snapshots.Add(snapshot);
+        Operation = Operation.Asked(null, null, InstanceStatus);
         Status = VmStatus.Snapshotting;
     }
 
@@ -58,6 +59,7 @@ public partial class Vm
         VmSnapshot snapshot = GetSnapshot(snapshotId);
         EnsureSnapshottable();
         snapshot.Revert(operationId);
+        Operation = Operation.Asked(null, null, InstanceStatus);
         Status = VmStatus.Snapshotting;
     }
 
@@ -81,7 +83,7 @@ public partial class Vm
         VmSnapshotOperationKind? ended = GetSnapshot(snapshotId).FinishOperation(operationId, externalId);
         if (Status == VmStatus.Snapshotting && IsACreateOrARevert(ended))
         {
-            Status = StatusOfTheInstance();
+            Status = RestingStatusAfterTheSnapshot();
         }
         return ended;
     }
@@ -94,7 +96,7 @@ public partial class Vm
         VmSnapshotOperationKind? ended = GetSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
         if (Status == VmStatus.Snapshotting && IsACreateOrARevert(ended))
         {
-            Status = StatusOfTheInstance();
+            Status = RestingStatusAfterTheSnapshot();
         }
         return ended;
     }
@@ -104,15 +106,13 @@ public partial class Vm
     private static bool IsACreateOrARevert(VmSnapshotOperationKind? ended) =>
         ended == VmSnapshotOperationKind.Create || ended == VmSnapshotOperationKind.Revert;
 
-    /// The status of a VM no operation waits on: the Incus word it holds, Unknown without one, as a Start or Stop that
-    /// gave up goes back to it.
-    private VmStatus StatusOfTheInstance()
+    /// The status a VM goes back to when its snapshot create or revert ends: the Incus status it holds, Unknown without
+    /// one, as a Start or Stop that gave up goes back to it. It keeps no status seen afterwards: it is at rest.
+    private VmStatus RestingStatusAfterTheSnapshot()
     {
-        if (ObservedState == null)
-        {
-            return VmStatus.Unknown;
-        }
-        return ObservedState.Value;
+        VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
+        Operation = Operation.ReturnedToRest();
+        return resting;
     }
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.

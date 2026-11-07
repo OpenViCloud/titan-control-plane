@@ -23,6 +23,6 @@ public record AdminVmQueryResult(
 {
     public static AdminVmQueryResult From(VmAggregate v) =>
         new(v.Id, v.TenantId, v.Name, v.Status.ToString(), v.IpAddress, v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.CreatedAt,
-            v.OperationFailureReason, v.OperationFailureDetail, v.OperationFailedAt);
+            v.Operation.FailureReason, v.Operation.FailureDetail, v.Operation.FailedAt);
 
 }

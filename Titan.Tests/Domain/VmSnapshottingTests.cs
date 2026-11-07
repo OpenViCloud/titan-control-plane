@@ -10,20 +10,20 @@ namespace Titan.Tests.Domain;
 // snapshot, a volume attach and a shell wait, all through VM_INVALID_STATUS.
 public class VmSnapshottingTests
 {
-    private static Vm RestingVm(VmStatus word = VmStatus.Running)
+    private static Vm RestingVm(VmStatus status = VmStatus.Running)
     {
         var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
         vm.MarkRunning("vm42", "10.0.0.5");
-        if (word != VmStatus.Running)
+        if (status != VmStatus.Running)
         {
-            vm.MarkObserved(word, "10.0.0.5", null);
+            vm.MarkObserved(status, "10.0.0.5", null);
         }
         return vm;
     }
 
-    private static Vm SnapshottingVm(out VmSnapshot snapshot, VmStatus word = VmStatus.Running)
+    private static Vm SnapshottingVm(out VmSnapshot snapshot, VmStatus status = VmStatus.Running)
     {
-        Vm vm = RestingVm(word);
+        Vm vm = RestingVm(status);
         snapshot = vm.WithSnapshot("s");
         return vm;
     }
@@ -44,13 +44,13 @@ public class VmSnapshottingTests
     [InlineData(VmStatus.Ready)]
     [InlineData(VmStatus.Stopped)]
     [InlineData(VmStatus.Frozen)]
-    public void AddSnapshot_FromAnIncusWordIncusSnapshotsFrom_MakesTheVmSnapshotting_WithoutAnOperationOfItsOwn(VmStatus word)
+    public void AddSnapshot_FromAnIncusWordIncusSnapshotsFrom_MakesTheVmSnapshotting_WithoutAnOperationOfItsOwn(VmStatus status)
     {
-        Vm vm = SnapshottingVm(out VmSnapshot snapshot, word);
+        Vm vm = SnapshottingVm(out VmSnapshot snapshot, status);
 
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        Assert.Null(vm.PendingOperationId);
-        Assert.Equal(word, vm.ObservedState);
+        Assert.Null(vm.Operation.PendingId);
+        Assert.Equal(status, vm.InstanceStatus);
         Assert.Equal(VmSnapshotTransition.Creating, snapshot.Transition);
     }
 
@@ -59,17 +59,17 @@ public class VmSnapshottingTests
     [InlineData(VmStatus.Ready)]
     [InlineData(VmStatus.Stopped)]
     [InlineData(VmStatus.Frozen)]
-    public void RevertSnapshot_FromAnIncusWordIncusSnapshotsFrom_MakesTheVmSnapshotting(VmStatus word)
+    public void RevertSnapshot_FromAnIncusWordIncusSnapshotsFrom_MakesTheVmSnapshotting(VmStatus status)
     {
-        Vm vm = RestingVm(word);
+        Vm vm = RestingVm(status);
         VmSnapshot snapshot = vm.WithSnapshot("s");
         vm.MarkSnapshotCreated(snapshot.Id, "vm42/s1");
-        Assert.Equal(word, vm.Status);
+        Assert.Equal(status, vm.Status);
 
         vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
 
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
     }
 
@@ -132,11 +132,11 @@ public class VmSnapshottingTests
 
         vm.MarkObserved(VmStatus.Stopped, null, null);
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        Assert.Equal(VmStatus.Stopped, vm.ObservedState);
+        Assert.Equal(VmStatus.Stopped, vm.InstanceStatus);
 
         vm.MarkNotFound();
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        Assert.Null(vm.ObservedState);
+        Assert.Null(vm.InstanceStatus);
     }
 
     [Fact]
@@ -167,7 +167,7 @@ public class VmSnapshottingTests
         Assert.Single(vm.Snapshots);
     }
 
-    [Theory] // the word the reconciler read last is the word the VM goes back to, Done or Failed
+    [Theory] // the status the reconciler read last is the status the VM goes back to, Done or Failed
     [InlineData(VmStatus.Running, true)]
     [InlineData(VmStatus.Ready, true)]
     [InlineData(VmStatus.Stopped, true)]

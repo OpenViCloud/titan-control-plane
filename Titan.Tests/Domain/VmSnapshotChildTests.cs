@@ -120,7 +120,7 @@ public class VmSnapshotChildTests
         var ex = Assert.Throws<BusinessException>(() => vm.Delete(Guid.NewGuid()));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
     }
 
@@ -160,7 +160,7 @@ public class VmSnapshotChildTests
         Guid delete = Guid.NewGuid();
         vm.Delete(delete);
 
-        Assert.Equal(delete, vm.PendingOperationId);
+        Assert.Equal(delete, vm.Operation.PendingId);
         Assert.Equal(VmStatus.Deleting, vm.Status);
     }
 

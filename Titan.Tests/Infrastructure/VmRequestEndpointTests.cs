@@ -66,8 +66,8 @@ public class VmRequestEndpointTests
 
         await ep.HandleAsync(new EndVmRequestBody("Done", null, new VmObservedBody("Stopped")), CancellationToken.None);
 
-        Assert.Null(vm.PendingOperationId);
-        Assert.Equal(VmStatus.Stopped, vm.ObservedState);
+        Assert.Null(vm.Operation.PendingId);
+        Assert.Equal(VmStatus.Stopped, vm.InstanceStatus);
         Assert.Equal(VmStatus.Stopped, vm.Status);
         Assert.Equal(StatusCodes.Status204NoContent, ep.HttpContext.Response.StatusCode);
     }
@@ -80,9 +80,9 @@ public class VmRequestEndpointTests
 
         await ep.HandleAsync(new EndVmRequestBody("Failed", Reason: "stale"), CancellationToken.None);
 
-        Assert.Equal(requestId, vm.PendingOperationId!.Value);
+        Assert.Equal(requestId, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Null(vm.OperationFailureReason);
+        Assert.Null(vm.Operation.FailureReason);
         Assert.Equal(StatusCodes.Status204NoContent, ep.HttpContext.Response.StatusCode);
     }
 
@@ -94,9 +94,9 @@ public class VmRequestEndpointTests
 
         await ep.HandleAsync(new EndVmRequestBody("Done", null, new VmObservedBody("Stopped")), CancellationToken.None);
 
-        Assert.Equal(requestId, vm.PendingOperationId!.Value);
+        Assert.Equal(requestId, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
         Assert.Equal(StatusCodes.Status401Unauthorized, ep.HttpContext.Response.StatusCode);
     }
 
@@ -108,9 +108,9 @@ public class VmRequestEndpointTests
 
         await ep.HandleAsync(new ObserveVmBody(true, new VmObservedBody("Frozen", "10.0.0.7")), CancellationToken.None);
 
-        Assert.Equal(requestId, vm.PendingOperationId!.Value);
+        Assert.Equal(requestId, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Frozen, vm.ObservedState);
+        Assert.Equal(VmStatus.Frozen, vm.InstanceStatus);
         Assert.Equal("10.0.0.7", vm.IpAddress);
         Assert.Equal(StatusCodes.Status204NoContent, ep.HttpContext.Response.StatusCode);
     }
@@ -123,8 +123,8 @@ public class VmRequestEndpointTests
 
         await ep.HandleAsync(new ObserveVmBody(false), CancellationToken.None);
 
-        // A not-found observation would have forgotten the Incus word; the waiting stop keeps the status either way.
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
+        // A not-found observation would have forgotten the Incus status; the waiting stop keeps the status either way.
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
         Assert.Equal(StatusCodes.Status401Unauthorized, ep.HttpContext.Response.StatusCode);
     }
 }

@@ -22,7 +22,6 @@ public partial class Vm
             NetworkId = networkId,
             Name = name,
             Status = VmStatus.Creating,
-            ObservedState = null,
             VmOfferingId = vmOfferingId,
             TemplateId = templateId,
             ClusterId = clusterId,
@@ -31,18 +30,17 @@ public partial class Vm
             CreatedAt = now,
         };
         // The create is an operation like the others: the create command's Done ends it.
-        vm.PendingOperationId = Guid.NewGuid();
-        vm.PendingOperationAskedAt = now;
+        vm.Operation = VmOperation.None.Asked(Guid.NewGuid(), now, null);
         return vm;
     }
 
-    /// The create command's Done: Incus holds the instance under externalId. Without a word the worker did not read
+    /// The create command's Done: Incus holds the instance under externalId. Without a status the worker did not read
     /// it, so the status is Unknown until the next observation. A Done must name the instance, or nothing would be
     /// left to delete it through; a worker that sends none has a bug, and does not retry a 422.
-    public bool CreateSucceeded(Guid operationId, string? externalId, VmStatus? word, string? ipAddress,
+    public bool CreateSucceeded(Guid operationId, string? externalId, VmStatus? status, string? ipAddress,
         string? publicIpv6Address)
     {
-        if (Status != VmStatus.Creating || PendingOperationId != operationId)
+        if (Status != VmStatus.Creating || Operation.PendingId != operationId)
         {
             return false;
         }
@@ -50,35 +48,30 @@ public partial class Vm
         {
             throw new BusinessException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
         }
-        if (IsForeignStatus(word))
+        if (IsForeignStatus(status))
         {
-            throw new BusinessException("INVALID_STATUS", $"'{word}' is not an Incus status.");
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus status.");
         }
         ExternalId = externalId;
-        ObservedState = word;
         IpAddress = ipAddress;
         PublicIpv6Address = publicIpv6Address;
-        OperationFailureReason = null;
-        OperationFailureDetail = null;
-        OperationFailedAt = null;
-        if (word == null)
+        Operation = Operation.Done();
+        if (status == null)
         {
             Status = VmStatus.Unknown;
         }
         else
         {
-            Status = word.Value;
+            Status = status.Value;
         }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
         return true;
     }
 
     /// The create command gave up. Before Incus held an instance the VM is Failed; after (the report names it) it
-    /// rests in the Incus word it holds, Unknown when it holds none.
+    /// rests in the Incus status it holds, Unknown when it holds none.
     public bool CreateFailed(Guid operationId, string? externalId, string? reason, string? detail)
     {
-        if (Status != VmStatus.Creating || PendingOperationId != operationId)
+        if (Status != VmStatus.Creating || Operation.PendingId != operationId)
         {
             return false;
         }
@@ -86,23 +79,16 @@ public partial class Vm
         {
             ExternalId = externalId;
         }
-        OperationFailureReason = reason;
-        OperationFailureDetail = detail;
-        OperationFailedAt = DateTimeOffset.UtcNow;
+        VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
+        Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
         if (ExternalId == null)
         {
             Status = VmStatus.Failed;
         }
-        else if (ObservedState == null)
-        {
-            Status = VmStatus.Unknown;
-        }
         else
         {
-            Status = ObservedState.Value;
+            Status = resting;
         }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
         return true;
     }
 }

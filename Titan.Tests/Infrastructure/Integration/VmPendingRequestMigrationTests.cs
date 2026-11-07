@@ -61,7 +61,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
     {
         await using TitanDbContext db = NewDbContext();
         Vm vm = await db.Vms.SingleAsync(v => v.Id == vmId);
-        return (vm.PendingOperationId, vm.Status, vm.PendingOperationAskedAt);
+        return (vm.Operation.PendingId, vm.Status, vm.Operation.AskedAt);
     }
 
     [Fact]
@@ -106,13 +106,13 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
         await using TitanDbContext read = NewDbContext();
         Vm ended = await read.Vms.SingleAsync(v => v.Id == gaveUp);
-        Assert.Null(ended.PendingOperationId);
-        // The delete is over and the instance is still there: the VM rests on its last Incus word.
+        Assert.Null(ended.Operation.PendingId);
+        // The delete is over and the instance is still there: the VM rests on its last Incus status.
         Assert.Equal(VmStatus.Running, ended.Status);
-        Assert.NotNull(ended.OperationFailureReason);
-        Assert.NotNull(ended.OperationFailedAt);
+        Assert.NotNull(ended.Operation.FailureReason);
+        Assert.NotNull(ended.Operation.FailedAt);
         Vm waiting = await read.Vms.SingleAsync(v => v.Id == stillOpen);
-        Assert.NotNull(waiting.PendingOperationId);
+        Assert.NotNull(waiting.Operation.PendingId);
         Assert.Equal(VmStatus.Deleting, waiting.Status);
     }
 
@@ -129,10 +129,10 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
 
         await using TitanDbContext read = NewDbContext();
         Vm over = await read.Vms.SingleAsync(v => v.Id == named);
-        Assert.Null(over.PendingOperationId);
+        Assert.Null(over.Operation.PendingId);
         Assert.Equal(VmStatus.Running, over.Status);
         Assert.Equal("ext", over.ExternalId);
-        Assert.Null(over.OperationFailureReason);
+        Assert.Null(over.Operation.FailureReason);
         Assert.Equal(VmStatus.Creating, (await PendingColumnsAsync(unnamed)).Status);
     }
 
@@ -165,7 +165,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await using TitanDbContext read = NewDbContext();
         async Task AssertCarried(Guid vmId, string kind)
         {
-            Guid requestId = (await read.Vms.SingleAsync(v => v.Id == vmId)).PendingOperationId!.Value;
+            Guid requestId = (await read.Vms.SingleAsync(v => v.Id == vmId)).Operation.PendingId!.Value;
             ProviderCommand row = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-{kind}-{vmId}-{requestId}");
             using var payload = System.Text.Json.JsonDocument.Parse(row.Payload);
             Assert.Equal(requestId.ToString(), payload.RootElement.GetProperty("requestId").GetString());
@@ -174,7 +174,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         await AssertCarried(creating, "create");
         await AssertCarried(deleting, "delete");
         await AssertCarried(stopping, "stop");
-        Assert.Equal(stopIntent, (await read.Vms.SingleAsync(v => v.Id == stopping)).PendingOperationId!.Value);
+        Assert.Equal(stopIntent, (await read.Vms.SingleAsync(v => v.Id == stopping)).Operation.PendingId!.Value);
         ProviderCommand untouched = await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{resting}");
         Assert.DoesNotContain("requestId", untouched.Payload);
     }

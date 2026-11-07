@@ -209,7 +209,7 @@ public class ProviderCommandQueueTests
         Guid tenantId = TestTenant.WithRoomToSpare().Id;
         Guid networkId = Guid.NewGuid();
         Vm vm = Vm.Create(tenantId, networkId, "vm-q", "m", "tpl", "cluster-a", 20);
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vmq", VmStatus.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vmq", VmStatus.Running, "10.0.0.5", null);
         return LoadBalancer.Create(tenantId, "web", networkId, "net-x", subnet, "cluster-a", LoadBalancerVip.For(subnet, 1),
             [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [vm]);
     }

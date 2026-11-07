@@ -51,7 +51,7 @@ public class StateTransitionOwnershipTests
     // error; each exception below says why it does.
     private static readonly Dictionary<string, string> MarkThrowAllowlist = new()
     {
-        ["Vm.MarkObserved"] = "refuses a status that is not an Incus word: the aggregate keeps ObservedState to those five. " +
+        ["Vm.MarkObserved"] = "refuses a status that is not an Incus status: InstanceStatus can only be one of those five. " +
                               "ObserveVmCommandHandler parses the report with Vm.IsIncusStatus before it loads the VM, so no " +
                               "reconciler callback reaches this throw",
         ["Invoice.MarkPaid"] = "intent (an admin presses Mark Paid) named as observation — it DOES " +
@@ -308,7 +308,8 @@ public class StateTransitionOwnershipTests
                 // DesiredState/CurrentState too: without them every split aggregate's mutation would drop out
                 // of this scan while the count stayed above 20 — green and blind.
                 // The existence pair too (titan-ops architecture/desired-and-current.md#existence-axis).
-                if (!Regex.IsMatch(body, @"(?:Status|CurrentState|DesiredState|CurrentExistence|DesiredExistence)\s*=(?!=)")) continue;
+                // \b: the aggregate's own Status, not a member of a value object that ends in Status (VmOperation.LastSeenStatus).
+                if (!Regex.IsMatch(body, @"\b(?:Status|CurrentState|DesiredState|CurrentExistence|DesiredExistence)\s*=(?!=)")) continue;
                 if (body.Contains("static ")) continue;              // Create() sets initial state
                 scanned++;
 
@@ -318,7 +319,7 @@ public class StateTransitionOwnershipTests
                              || body.Contains("IsDeleted")
                              || body.Contains("IsTerminal")
                              || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)")
-                             || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| PendingOperationId != operationId\)\s*\{\s*return false;")
+                             || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| Operation\.PendingId != operationId\)\s*\{\s*return false;")
                              // A snapshot's report moves only a VM still Snapshotting: the status check is the guard.
                              || Regex.IsMatch(body, @"if \(Status == VmStatus\.Snapshotting && ");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");

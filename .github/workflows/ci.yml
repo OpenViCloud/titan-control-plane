@@ -76,6 +76,9 @@ jobs:
       # (Testcontainers, as integration). Own process
       # so they never share the FastEndpoints global ServiceResolver pool with Factory.Create tests.
       - name: Test (full-host — WebApplicationFactory)
+        # Runs after a red test step before it too, so one run shows every red test step; a red build adds a failure of its
+        # own here (--no-build), and a cancelled run still stops.
+        if: ${{ !cancelled() }}
         run: dotnet test --no-build --configuration Release --verbosity normal --filter "Category=FullHost"
         env:
           ConnectionStrings__Titan: "Host=localhost;Database=titan_test;Username=titan;Password=titan"
@@ -83,6 +86,8 @@ jobs:
       # Postgres-backed integration tests. Testcontainers starts its own
       # postgres:16 via the runner's Docker daemon — independent of the service container above.
       - name: Test (integration — Testcontainers)
+        # As the full-host step: a red test step before it does not hide this one.
+        if: ${{ !cancelled() }}
         run: dotnet test --no-build --configuration Release --verbosity normal --filter "Category=Integration"
 
   # The control plane enqueues only kinds the worker on main already routes: the worker ships a new kind first

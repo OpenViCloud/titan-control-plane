@@ -85,12 +85,12 @@ public class VmReconcilerTests
         db.Vms.Add(refused);
         await db.SaveChangesAsync();
         var handler = new EndVmRequestCommandHandler(new VmRepository(db), new VolumeRepository(db), new FakeActivityRecorder());
-        await handler.HandleAsync(new EndVmRequestCommand(refused.Id, refused.PendingOperationId!.Value, "Failed", ExternalId: "45",
+        await handler.HandleAsync(new EndVmRequestCommand(refused.Id, refused.Operation.PendingId!.Value, "Failed", ExternalId: "45",
             Reason: "The VM could not be created."));
 
         List<Vm> listed = await new VmRepository(db).ListReconcilableAsync(Cluster);
 
-        Assert.Equal("The VM could not be created.", refused.OperationFailureReason);
+        Assert.Equal("The VM could not be created.", refused.Operation.FailureReason);
         Assert.Equal("45", refused.ExternalId);
         Assert.Contains(listed, v => v.Id == refused.Id);
     }
@@ -118,15 +118,15 @@ public class VmReconcilerTests
         Assert.NotNull(heartbeat.Snapshot()[$"vms/{Cluster}"].LastPollAt);
     }
 
-    // The worker contract keeps CurrentExistence, now read off the status and the Incus word
+    // The worker contract keeps CurrentExistence, now read off the status and the Incus status
     // (titan-ops features/vm/design.md#vm-status): NotFound stops the worker repeating an absent instance, Exists with a
-    // word stops it repeating a status Titan already has, and anything else makes it report next cycle.
+    // status stops it repeating a status Titan already has, and anything else makes it report next cycle.
     [Theory]
     [InlineData("not-found", "NotFound", null)]
     [InlineData("running", "Exists", "Running")]
     [InlineData("created-without-a-word", "NotCreated", null)]
     [InlineData("delete-waiting-not-found", "NotCreated", null)]
-    public void Row_GivesCurrentExistence_FromTheStatusAndTheIncusWord(string history, string existence, string? word)
+    public void Row_GivesCurrentExistence_FromTheStatusAndTheIncusWord(string history, string existence, string? status)
     {
         Vm vm = VmIn(Cluster, "vm-1");
         if (history == "created-without-a-word")
@@ -152,7 +152,7 @@ public class VmReconcilerTests
         ReconcilableVmQueryResult row = ReconcilableVmQueryResult.From(vm);
 
         Assert.Equal(existence, row.CurrentExistence);
-        Assert.Equal(word, row.CurrentState);
+        Assert.Equal(status, row.CurrentState);
         Assert.Equal("41", row.ExternalId);
     }
 

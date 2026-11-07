@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one VM (titan-ops architecture/resource-lifecycle.md#callback-routes): whether Incus has
-// the instance and what it read. Records the Incus word (the status follows it only while nothing waits); ends no request.
+// the instance and what it read. Records the Incus status (the status follows it only while nothing waits); ends no request.
 public class ObserveVmEndpoint(ObserveVmCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVmBody>
 {

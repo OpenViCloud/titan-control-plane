@@ -28,5 +28,5 @@ public record VmQueryResult(
     public static VmQueryResult From(VmAggregate v) =>
         new(v.Id, v.Name, v.Status, v.IpAddress,
             v.NetworkId, v.VmOfferingId, v.TemplateId, v.ClusterId, v.DiskSizeGb, v.UserData, v.CreatedAt,
-            v.PublicIpv6Address, v.OperationFailureReason, v.OperationFailedAt);
+            v.PublicIpv6Address, v.Operation.FailureReason, v.Operation.FailedAt);
 }
