@@ -8,7 +8,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// A VM's status and Incus status, and a network's and rule's desired/current state and existence pair, as Postgres stores them: what InMemory cannot show — filtered unique
+/// A VM's, a network's and a rule's status and the Incus status seen while an operation waits, as Postgres stores them: what InMemory cannot show — filtered unique
 /// indexes and the column spelling (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
@@ -84,7 +84,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     }
 
     [Fact]
-    public async Task FirewallRuleState_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
+    public async Task FirewallRuleStatus_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
     {
         Network network = TestAggregates.Network(TestTenant.WithRoomToSpare(), $"rt-net-{Guid.NewGuid():N}"[..12], "cluster-a");
         network.MarkActive("net-1", "10.0.0.0/24", "10.0.0.1");
@@ -107,13 +107,13 @@ public class StateRoundTripDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             List<string> stored = await db.Database
-                .SqlQueryRaw<string>("SELECT desired_existence AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
+                .SqlQueryRaw<string>("SELECT status AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
                 .ToListAsync();
-            Assert.Equal("Deleted", stored.Single());
+            Assert.Equal("Deleting", stored.Single());
             // Incus spells the ACL rule state in lower case, and so does the column
             // (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
             List<string> state = await db.Database
-                .SqlQueryRaw<string>("SELECT current_state AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
+                .SqlQueryRaw<string>("SELECT observed_state AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
                 .ToListAsync();
             Assert.Equal("enabled", state.Single());
 

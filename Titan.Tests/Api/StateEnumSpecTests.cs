@@ -21,14 +21,8 @@ public class StateEnumSpecTests(OpenApiSpecTests.ApiFactory factory) : IClassFix
     public static TheoryData<string, string, Type, bool> StateFields => new()
     {
         { "VmQueryResult", "status", typeof(VmStatus), false },
-        { "NetworkQueryResult", "currentState", typeof(NetworkStatus), true },
-        { "NetworkQueryResult", "currentExistence", typeof(CurrentExistence), false },
-        { "NetworkQueryResult", "desiredExistence", typeof(DesiredExistence), false },
-        { "NetworkQueryResult", "transition", typeof(NetworkTransition), true },
-        { "FirewallRuleQueryResult", "currentState", typeof(FirewallRuleState), true },
-        { "FirewallRuleQueryResult", "currentExistence", typeof(CurrentExistence), false },
-        { "FirewallRuleQueryResult", "desiredExistence", typeof(DesiredExistence), false },
-        { "FirewallRuleQueryResult", "transition", typeof(FirewallRuleTransition), true },
+        { "NetworkQueryResult", "status", typeof(NetworkStatus), false },
+        { "FirewallRuleQueryResult", "status", typeof(FirewallRuleStatus), false },
         { "VolumeQueryResult", "currentExistence", typeof(CurrentExistence), false },
         { "VolumeQueryResult", "desiredExistence", typeof(DesiredExistence), false },
         { "VolumeQueryResult", "transition", typeof(VolumeTransition), true },

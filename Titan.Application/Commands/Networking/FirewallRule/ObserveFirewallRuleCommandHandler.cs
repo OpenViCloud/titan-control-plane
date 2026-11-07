@@ -15,7 +15,7 @@ public class ObserveFirewallRuleCommandHandler(INetworkRepository networkRepo)
     public async Task HandleAsync(ObserveFirewallRuleCommand command, CancellationToken ct = default)
     {
         // Parsed before the rule is loaded: a malformed report is the worker's bug, whatever the rule.
-        FirewallRuleState? state = null;
+        FirewallRuleStatus? state = null;
         if (command.Exists)
         {
             state = NetworkReports.ParseState(command.State);

@@ -33,7 +33,7 @@ public class EndNetworkRequestCommandHandler(
         Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
-        NetworkOperationKind? ended;
+        NetworkStatus? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = await NetworkReports.FinishOperationAsync(routes, network, command.RequestId, command.ExternalId,

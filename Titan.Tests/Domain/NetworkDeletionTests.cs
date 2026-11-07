@@ -35,7 +35,7 @@ public class NetworkDeletionTests
         BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(network));
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.False(network.IsDeletedOrDeleting);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class NetworkDeletionTests
         BusinessException ex = await Assert.ThrowsAsync<BusinessException>(() => Deletion().DeleteAsync(network));
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.False(network.IsDeletedOrDeleting);
     }
 
     [Fact]
@@ -58,9 +58,9 @@ public class NetworkDeletionTests
         OperationTicket? ticket = await Deletion().DeleteAsync(network);
 
         Assert.Equal("net-ext", ticket!.ProviderId);
-        Assert.Equal((NetworkOperationKind.Delete, ticket.OperationId), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal((NetworkStatus.Deleting, ticket.OperationId), (network.Status, network.Operation.PendingId!.Value));
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Fact]

@@ -108,8 +108,8 @@ public class NetworkServiceTests
 
         Assert.NotNull(added);
         Assert.Equal(added!.Id, result.NetworkId);
-        Assert.Null(added.CurrentState);
-        Assert.Equal(CurrentExistence.NotCreated, added.CurrentExistence);
+        Assert.Null(added.InstanceStatus);
+        Assert.True(added.Status == NetworkStatus.Creating || added.Status == NetworkStatus.Failed);
         Assert.Equal("my-net", added.Name.Value);
         Assert.Null(added.Cidr);
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
@@ -251,8 +251,9 @@ public class NetworkServiceTests
     {
         Assert.Null(typeof(NetworkQueryResult).GetProperty("RequestFailureDetail"));
         Assert.Null(typeof(NetworkQueryResult).GetProperty("DesiredState"));
+        Assert.Null(typeof(NetworkQueryResult).GetProperty("CurrentExistence"));
         Assert.NotNull(typeof(NetworkQueryResult).GetProperty("RequestFailureReason"));
-        Assert.NotNull(typeof(NetworkQueryResult).GetProperty("CurrentExistence"));
+        Assert.NotNull(typeof(NetworkQueryResult).GetProperty("Status"));
     }
 
     // ── GetAsync ──────────────────────────────────────────────────────────
@@ -294,8 +295,8 @@ public class NetworkServiceTests
 
         await CreateService().DeleteAsync(network.Id, default);
 
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
@@ -315,10 +316,10 @@ public class NetworkServiceTests
 
         await CreateService().DeleteAsync(network.Id, default);
 
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
-        Assert.Null(rule.Transition);
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.True(FirewallRule.IsIncusStatus(rule.Status));
+        Assert.False(rule.IsDeletedOrDeleting);
+        Assert.True(rule.Status != FirewallRuleStatus.Creating && rule.Status != FirewallRuleStatus.Deleting);
     }
 
     [Fact]
@@ -380,8 +381,8 @@ public class NetworkServiceTests
 
         await CreateService().DeleteAsync(network.Id, default);
 
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
             network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
@@ -399,7 +400,7 @@ public class NetworkServiceTests
 
         await CreateService().DeleteAsync(network.Id, default);
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -420,7 +421,7 @@ public class NetworkServiceTests
         await CreateService().RenameAsync(network.Id, new RenameNetworkRequest("renamed-net"), default);
 
         Assert.Equal("renamed-net", network.Name.Value);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState); // status untouched
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.VerifyNoOtherCalls(); // no provider command for a rename
     }
@@ -514,8 +515,8 @@ public class NetworkServiceTests
         await DoneAsync(network, "cs-net-id", "10.0.0.0/24", "10.0.0.1");
         await ObserveAsync(network.Id, true, "Created");
 
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
+        Assert.True(Network.IsIncusStatus(network.Status));
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Equal("10.0.0.0/24", network.Cidr);
         Assert.Equal("10.0.0.1", network.Gateway);
@@ -536,7 +537,7 @@ public class NetworkServiceTests
 
         await ObserveAsync(network.Id, true, word);
 
-        Assert.Equal(expected, network.CurrentState);
+        Assert.Equal(expected, network.Status);
         Assert.Equal("10.0.0.0/24", network.Cidr);
     }
 
@@ -554,7 +555,7 @@ public class NetworkServiceTests
         var ex = await Assert.ThrowsAsync<BadRequestException>(() => ObserveAsync(network.Id, true, word));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
     }
 
     [Fact]
@@ -566,8 +567,8 @@ public class NetworkServiceTests
 
         await DoneAsync(network);
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
+        Assert.Null(network.InstanceStatus);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
@@ -584,8 +585,8 @@ public class NetworkServiceTests
 
         await DoneAsync(network);
 
-        Assert.Equal(CurrentExistence.Deleted, enabled.CurrentExistence);
-        Assert.Equal(CurrentExistence.Deleted, deleting.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Deleted, enabled.Status);
+        Assert.Equal(FirewallRuleStatus.Deleted, deleting.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
@@ -614,7 +615,7 @@ public class NetworkServiceTests
     // The reconciler never reports the delete done (titan-ops architecture/desired-and-current.md#existence-axis): the
     // network not found keeps its delete waiting for the delete command.
     [Fact]
-    public async Task Observation_NotFound_WhenADeleteWasAsked_IsNotFound_AndTheDeleteKeepsWaiting()
+    public async Task Observation_NotFound_WhenADeleteWasAsked_SeesNoStatus_AndTheDeleteKeepsWaiting()
     {
         var network = MakeActiveNetwork();
         network.Delete();
@@ -622,8 +623,8 @@ public class NetworkServiceTests
 
         await ObserveAsync(network.Id, false);
 
-        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
+        Assert.Null(network.Operation.LastSeenStatus);
         Assert.Empty(_activity.Events);
     }
 
@@ -635,9 +636,9 @@ public class NetworkServiceTests
 
         await ObserveAsync(network.Id, false);
 
-        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.Equal(NetworkStatus.NotFound, network.Status);
+        Assert.Null(network.InstanceStatus);
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Empty(_activity.Events);
     }
 
@@ -653,11 +654,11 @@ public class NetworkServiceTests
         await DoneAsync(network, "cs-net-9");
         await ObserveAsync(network.Id, true, "Created");
 
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
         Assert.Equal("cs-net-9", network.ExternalId);
         Assert.Null(network.Cidr);
         Assert.Null(network.Gateway);
-        Assert.Null(network.Transition);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
         Assert.Single(_activity.Events, e => e.Action == "network.created");
     }
 
@@ -696,7 +697,7 @@ public class NetworkServiceTests
 
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
             network.Id, It.IsAny<Guid>(), "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -780,13 +781,13 @@ public class NetworkServiceTests
 
         await ObserveAsync(network.Id, true, "Errored");
 
-        Assert.Equal(NetworkStatus.Errored, network.CurrentState);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Errored, network.InstanceStatus);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
 
         await FailedAsync(network, "Network deletion failed.");
 
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Null(network.Transition);
+        Assert.False(network.IsDeletedOrDeleting);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
         Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
     }
 
@@ -801,8 +802,7 @@ public class NetworkServiceTests
 
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Equal("10.0.0.0/24", network.Cidr);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.Unknown, network.Status);
         Assert.Null(network.Operation.PendingId);
         Assert.Equal("network.created", Assert.Single(_activity.Events).Action);
         _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
@@ -821,7 +821,7 @@ public class NetworkServiceTests
         await CreateService().DeleteAsync(network.Id, default);
 
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        Assert.NotEqual(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.NotEqual(NetworkStatus.Deleted, network.Status);
     }
 
     [Fact]
@@ -836,11 +836,11 @@ public class NetworkServiceTests
 
         await FailedAsync(network, "Network deletion failed.");
 
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
         Assert.Equal("raw incus error", network.Operation.FailureDetail);
-        Assert.Null(network.Transition);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
         var outcome = Assert.Single(_activity.Events);
         Assert.Equal(("network.delete_failed", TenantId), (outcome.Action, outcome.OutcomeTenantId));
     }
@@ -853,7 +853,7 @@ public class NetworkServiceTests
 
         await FailedAsync(network, "Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1");
 
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.True(Network.IsIncusStatus(network.Status));
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Equal("10.0.0.0/24", network.Cidr);
         Assert.Equal("Network creation failed.", network.Operation.FailureReason);
@@ -902,7 +902,7 @@ public class NetworkServiceTests
         await CreateService().DeleteAsync(network.Id, default);
 
         Assert.Empty(_activity.Events);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -1161,7 +1161,7 @@ public class NetworkServiceTests
 
         await DoneAsync(network);
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
         TheRouteRowsHoldNothing();
     }
 

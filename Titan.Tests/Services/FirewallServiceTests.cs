@@ -82,7 +82,7 @@ public class FirewallServiceTests
         Assert.Equal(80, added.EndPort);
         Assert.Equal("0.0.0.0/0", added.Cidr.Value);
         Assert.Null(added.ExternalId);
-        Assert.Equal("null/NotCreated/Exists/Creating", Shape(added));
+        Assert.Equal("Creating", Shape(added));
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
@@ -243,8 +243,9 @@ public class FirewallServiceTests
     {
         Assert.Null(typeof(FirewallRuleQueryResult).GetProperty("RequestFailureDetail"));
         Assert.Null(typeof(FirewallRuleQueryResult).GetProperty("DesiredState"));
+        Assert.Null(typeof(FirewallRuleQueryResult).GetProperty("CurrentExistence"));
         Assert.NotNull(typeof(FirewallRuleQueryResult).GetProperty("RequestFailureReason"));
-        Assert.NotNull(typeof(FirewallRuleQueryResult).GetProperty("CurrentExistence"));
+        Assert.NotNull(typeof(FirewallRuleQueryResult).GetProperty("Status"));
     }
 
     [Fact]
@@ -307,7 +308,7 @@ public class FirewallServiceTests
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
-        Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
+        Assert.Equal("Deleting", Shape(rule));
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
@@ -384,7 +385,7 @@ public class FirewallServiceTests
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
-        Assert.Equal("null/Exists/Deleted/Deleting", Shape(rule));
+        Assert.Equal("Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
             rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -399,7 +400,7 @@ public class FirewallServiceTests
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
-        Assert.Equal("null/Deleted/Deleted/-", Shape(rule));
+        Assert.Equal("Deleted", Shape(rule));
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _activity.Verify(a => a.StageOutcome(TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
@@ -416,11 +417,11 @@ public class FirewallServiceTests
         // the failed delete gives the rule back
         await CreateService().EndRequestAsync(new EndFirewallRuleRequestCommand(NetworkId, rule.Id, rule.Operation.PendingId!.Value, "Failed",
             Reason: "Firewall rule deletion failed."));
-        Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
+        Assert.Equal("enabled", Shape(rule));
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
-        Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
+        Assert.Equal("Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
             rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -466,7 +467,7 @@ public class FirewallServiceTests
             () => CreateService().DeleteAsync(NetworkId, rule.Id, default));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", ex.Code);
-        Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
+        Assert.Equal("enabled", Shape(rule));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -512,20 +513,7 @@ public class FirewallServiceTests
         return rule;
     }
 
-    private static string Shape(FirewallRule r)
-    {
-        string state = "null";
-        if (r.CurrentState != null)
-        {
-            state = r.CurrentState.Value.ToString();
-        }
-        string transition = "-";
-        if (r.Transition != null)
-        {
-            transition = r.Transition.Value.ToString();
-        }
-        return $"{state}/{r.CurrentExistence}/{r.DesiredExistence}/{transition}";
-    }
+    private static string Shape(FirewallRule r) => r.Status.ToString();
 
     /// The factory picks the network's own id: the repository mock answers the route id NetworkId with this network,
     /// and a rule it adds carries the network's real id.

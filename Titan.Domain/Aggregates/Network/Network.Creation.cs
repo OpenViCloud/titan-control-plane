@@ -29,14 +29,12 @@ public partial class Network
             Name = name,
             ChosenCidr = chosenCidr,
             ClusterId = clusterId,
-            CurrentState = null,
-            CurrentExistence = CurrentExistence.NotCreated,
-            DesiredExistence = DesiredExistence.Exists,
+            Status = NetworkStatus.Creating,
             DefaultIngressPolicy = defaultIngressPolicy,
             DefaultEgressPolicy = defaultEgressPolicy,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        network.Operation = network.Operation.Asked(Guid.NewGuid(), NetworkOperationKind.Create, DateTimeOffset.UtcNow);
+        network.Operation = network.Operation.Asked(Guid.NewGuid(), DateTimeOffset.UtcNow, null);
         return network;
     }
 
@@ -55,39 +53,53 @@ public partial class Network
         PublicIpv6Subnet = subnet;
     }
 
-    /// The create command ended Done: records what the worker saw, the id first, and the network waits on nothing. A report
-    /// that names another operation than the create the network waits on is ignored and returns false: a Done that arrived
-    /// twice, a report for a network already Deleted. A null status, cidr or gateway: the worker did not read it.
+    /// The create command ended Done: records the id and the addresses the worker saw, and the network waits on nothing. Its
+    /// status is the Incus status the report carries, Unknown when the worker read none (the next observation writes the
+    /// real one). A report that names another operation than the create the network waits on is ignored and returns false:
+    /// a Done that arrived twice, a report for a network already Deleted.
     internal bool CreateSucceeded(Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway)
     {
-        if (!IsWaitingOn(operationId, NetworkOperationKind.Create))
+        if (!IsWaitingOn(operationId, NetworkStatus.Creating))
         {
             return false;
         }
         EnsureTheDoneLeavesAnId(externalId);
-        RecordWhatTheWorkerSaw(externalId, status, cidr, gateway);
+        EnsureNotForeign(status);
+        RecordTheIdAndAddresses(externalId, cidr, gateway);
         Operation = Operation.Done();
+        Status = status ?? NetworkStatus.Unknown;
         return true;
     }
 
-    /// The create command gave up: records what the worker saw and the reason; desired stays, since a failed create may be
-    /// deleted, not retried. Incus never had the network when the report brings no id, so nothing holds the /64 there;
-    /// keeping it here would hold one of the cluster's 255 for as long as the network lives. Ignored, returning false, when
-    /// it names another operation than the create the network waits on.
+    /// The create command gave up: records the reason. Before Incus held a network (the report brings no id) it is Failed, and
+    /// nothing holds the /64 any more: keeping it would hold one of the cluster's 255 for as long as the network lives.
+    /// After (the report names it), the network rests in the Incus status the report carries, else the one it held, else
+    /// Unknown; a failed create may be deleted, not retried. Ignored, returning false, when it names
+    /// another operation than the create the network waits on.
     internal bool CreateFailed(Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
         string? reason, string? detail)
     {
-        if (!IsWaitingOn(operationId, NetworkOperationKind.Create))
+        if (!IsWaitingOn(operationId, NetworkStatus.Creating))
         {
             return false;
         }
-        RecordWhatTheWorkerSaw(externalId, status, cidr, gateway);
+        EnsureNotForeign(status);
+        RecordTheIdAndAddresses(externalId, cidr, gateway);
+        NetworkStatus resting = status ?? InstanceStatus ?? NetworkStatus.Unknown;
         bool incusNeverHadIt = ExternalId is null;
         if (incusNeverHadIt && HasPublicIpv6)
         {
             PublicIpv6Subnet = null;
         }
         Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
+        if (incusNeverHadIt)
+        {
+            Status = NetworkStatus.Failed;
+        }
+        else
+        {
+            Status = resting;
+        }
         return true;
     }
 }

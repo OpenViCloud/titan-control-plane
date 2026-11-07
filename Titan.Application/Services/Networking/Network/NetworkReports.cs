@@ -17,28 +17,28 @@ namespace Titan.Application.Services.Networking.Network;
 /// </summary>
 public static class NetworkReports
 {
-    private static readonly Dictionary<NetworkOperationKind, string> DoneAction = new()
+    private static readonly Dictionary<NetworkStatus, string> DoneAction = new()
     {
-        [NetworkOperationKind.Create] = "network.created",
-        [NetworkOperationKind.Delete] = "network.deleted",
+        [NetworkStatus.Creating] = "network.created",
+        [NetworkStatus.Deleting] = "network.deleted",
     };
 
     // A failed create records nothing: the request was the create, and a failure is not its outcome
     // (titan-ops architecture/resource-lifecycle.md#kinds).
-    private static readonly Dictionary<NetworkOperationKind, string> FailedAction = new()
+    private static readonly Dictionary<NetworkStatus, string> FailedAction = new()
     {
-        [NetworkOperationKind.Delete] = "network.delete_failed",
+        [NetworkStatus.Deleting] = "network.delete_failed",
     };
 
-    private static readonly Dictionary<FirewallRuleOperationKind, string> RuleDoneAction = new()
+    private static readonly Dictionary<FirewallRuleStatus, string> RuleDoneAction = new()
     {
-        [FirewallRuleOperationKind.Create] = "firewall_rule.created",
-        [FirewallRuleOperationKind.Delete] = "firewall_rule.deleted",
+        [FirewallRuleStatus.Creating] = "firewall_rule.created",
+        [FirewallRuleStatus.Deleting] = "firewall_rule.deleted",
     };
 
-    private static readonly Dictionary<FirewallRuleOperationKind, string> RuleFailedAction = new()
+    private static readonly Dictionary<FirewallRuleStatus, string> RuleFailedAction = new()
     {
-        [FirewallRuleOperationKind.Delete] = "firewall_rule.delete_failed",
+        [FirewallRuleStatus.Deleting] = "firewall_rule.delete_failed",
     };
 
     public static OperationOutcome ParseOutcome(string outcome)
@@ -55,12 +55,13 @@ public static class NetworkReports
     }
 
     // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-    // Matched by name, exactly: Enum.TryParse would also take "1" or "created".
+    // Matched by name, exactly: Enum.TryParse would also take "1" or "created". Only the five words of Incus pass: Creating,
+    // NotFound and the like are Titan's, never a worker's.
     public static NetworkStatus ParseStatus(string? status)
     {
         foreach (NetworkStatus known in Enum.GetValues<NetworkStatus>())
         {
-            if (known.ToString() == status)
+            if (NetworkAggregate.IsIncusStatus(known) && known.ToString() == status)
             {
                 return known;
             }
@@ -69,11 +70,11 @@ public static class NetworkReports
     }
 
     // The worker sends the Incus ACL rule state word for word; matched by name, exactly, like the status.
-    public static FirewallRuleState ParseState(string? state)
+    public static FirewallRuleStatus ParseState(string? state)
     {
-        foreach (FirewallRuleState known in Enum.GetValues<FirewallRuleState>())
+        foreach (FirewallRuleStatus known in Enum.GetValues<FirewallRuleStatus>())
         {
-            if (known.ToString() == state)
+            if (FirewallRuleEntity.IsIncusStatus(known) && known.ToString() == state)
             {
                 return known;
             }
@@ -84,7 +85,7 @@ public static class NetworkReports
     /// Ends the network's waiting operation with a Done through NetworkRoutes, so a route the network lets go of goes
     /// back in the same save, and records its outcome once, with the rules a delete took along whose own delete was
     /// waiting. Null when the report names no waiting operation: nothing is recorded.
-    public static async Task<NetworkOperationKind?> FinishOperationAsync(NetworkRoutes routes,
+    public static async Task<NetworkStatus?> FinishOperationAsync(NetworkRoutes routes,
         NetworkAggregate network, Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
         IActivityRecorder activity, CancellationToken ct)
     {
@@ -99,7 +100,7 @@ public static class NetworkReports
             }
         }
 
-        NetworkOperationKind? ended = await routes.FinishOperationAsync(network, operationId, externalId,
+        NetworkStatus? ended = await routes.FinishOperationAsync(network, operationId, externalId,
             status: status, cidr: cidr, gateway: gateway, ct);
         if (ended == null)
         {
@@ -109,7 +110,7 @@ public static class NetworkReports
         {
             activity.StageOutcome(network.TenantId, action, "network", network.Id, network.Name.Value);
         }
-        if (ended == NetworkOperationKind.Delete)
+        if (ended == NetworkStatus.Deleting)
         {
             foreach (FirewallRuleEntity rule in rulesWaitingOnTheirDelete)
             {
@@ -123,11 +124,11 @@ public static class NetworkReports
     /// Ends the network's waiting operation with a give-up through NetworkRoutes, so a /64 the network lets go of goes
     /// back with its route in the same save, and records its outcome once. Null when the report names no waiting
     /// operation: nothing is recorded.
-    public static async Task<NetworkOperationKind?> FailOperationAsync(NetworkRoutes routes,
+    public static async Task<NetworkStatus?> FailOperationAsync(NetworkRoutes routes,
         NetworkAggregate network, Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
         string? reason, string? detail, IActivityRecorder activity, CancellationToken ct)
     {
-        NetworkOperationKind? ended = await routes.FailOperationAsync(network, operationId, externalId,
+        NetworkStatus? ended = await routes.FailOperationAsync(network, operationId, externalId,
             status: status, cidr: cidr, gateway: gateway, reason: reason, detail: detail, ct);
         if (ended == null)
         {
@@ -140,10 +141,10 @@ public static class NetworkReports
         return ended;
     }
 
-    public static void RecordRuleEnded(FirewallRuleEntity rule, FirewallRuleOperationKind ended,
+    public static void RecordRuleEnded(FirewallRuleEntity rule, FirewallRuleStatus ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<FirewallRuleOperationKind, string> actions = outcome == OperationOutcome.Done ? RuleDoneAction : RuleFailedAction;
+        Dictionary<FirewallRuleStatus, string> actions = outcome == OperationOutcome.Done ? RuleDoneAction : RuleFailedAction;
         if (actions.TryGetValue(ended, out string? action))
         {
             activity.StageOutcome(rule.TenantId, action, "firewall_rule", rule.Id, FirewallRuleLabel.Describe(rule));

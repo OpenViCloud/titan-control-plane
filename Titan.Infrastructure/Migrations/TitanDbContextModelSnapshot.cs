@@ -631,20 +631,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
                     b.Property<string>("Direction")
                         .IsRequired()
                         .HasColumnType("text")
@@ -670,6 +656,11 @@ namespace Titan.Infrastructure.Migrations
                     b.Property<int?>("StartPort")
                         .HasColumnType("integer")
                         .HasColumnName("start_port");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -706,15 +697,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("CurrentState")
-                        .HasColumnType("text")
-                        .HasColumnName("current_state");
-
                     b.Property<string>("DefaultEgressPolicy")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -728,11 +710,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasDefaultValue("Allow")
                         .HasColumnName("default_ingress_policy");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
 
                     b.Property<string>("ExternalId")
                         .HasColumnType("text")
@@ -751,6 +728,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_subnet");
 
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
@@ -759,7 +741,7 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasIndex("TenantId", "Name")
                         .IsUnique()
-                        .HasFilter("current_existence <> 'Deleted'");
+                        .HasFilter("status <> 'Deleted'");
 
                     b.ToTable("networks", "core");
                 });
@@ -2059,9 +2041,9 @@ namespace Titan.Infrastructure.Migrations
                                 .HasColumnType("text")
                                 .HasColumnName("request_failure_reason");
 
-                            b1.Property<string>("Kind")
+                            b1.Property<string>("LastSeenStatus")
                                 .HasColumnType("text")
-                                .HasColumnName("pending_request_kind");
+                                .HasColumnName("observed_state");
 
                             b1.Property<Guid?>("PendingId")
                                 .HasColumnType("uuid")
@@ -2102,9 +2084,9 @@ namespace Titan.Infrastructure.Migrations
                                 .HasColumnType("text")
                                 .HasColumnName("request_failure_reason");
 
-                            b1.Property<string>("Kind")
+                            b1.Property<string>("LastSeenStatus")
                                 .HasColumnType("text")
-                                .HasColumnName("pending_request_kind");
+                                .HasColumnName("observed_state");
 
                             b1.Property<Guid?>("PendingId")
                                 .HasColumnType("uuid")

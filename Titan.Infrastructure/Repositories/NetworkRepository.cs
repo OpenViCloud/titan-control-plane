@@ -31,7 +31,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     // !Network.IsDeleted
     public async Task<List<Network>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks
-            .Where(n => n.TenantId == tenantId && n.CurrentExistence != CurrentExistence.Deleted)
+            .Where(n => n.TenantId == tenantId && n.Status != NetworkStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -40,23 +40,25 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks.CountAsync(
             n => n.TenantId == tenantId
-                 && n.DesiredExistence == DesiredExistence.Exists
-                 && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)), ct);
+                 && n.Status != NetworkStatus.Deleting
+                 && n.Status != NetworkStatus.Deleted
+                 && n.Status != NetworkStatus.NotFound
+                 && n.Status != NetworkStatus.Failed, ct);
 
     // Network.OccupiesPublicIpv6Quota
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Networks.CountAsync(
             n => n.TenantId == tenantId
                  && n.PublicIpv6Subnet != null
-                 && n.DesiredExistence == DesiredExistence.Exists
-                 && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)), ct);
+                 && n.Status != NetworkStatus.Deleting
+                 && n.Status != NetworkStatus.Deleted
+                 && n.Status != NetworkStatus.NotFound
+                 && n.Status != NetworkStatus.Failed, ct);
 
     // !Network.IsDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
         await db.Networks.AnyAsync(
-            n => n.TenantId == tenantId && n.Name == name && n.CurrentExistence != CurrentExistence.Deleted, ct);
+            n => n.TenantId == tenantId && n.Name == name && n.Status != NetworkStatus.Deleted, ct);
 
     // Vm.HasNetwork, asked of the network's VMs.
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
@@ -79,8 +81,13 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     {
         List<Network> holding = await db.Networks
             .Where(n => n.TenantId == tenantId
-                        && (n.CurrentExistence == CurrentExistence.Exists
-                            || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)))
+                        && (n.Status == NetworkStatus.Creating
+                            || n.Status == NetworkStatus.Pending
+                            || n.Status == NetworkStatus.Created
+                            || n.Status == NetworkStatus.Errored
+                            || n.Status == NetworkStatus.Unavailable
+                            || n.Status == NetworkStatus.Unknown
+                            || (n.Status == NetworkStatus.Deleting && n.Operation.LastSeenStatus != null)))
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -98,7 +105,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     // !Network.IsDeleted. titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-read: tenantId == null spans all tenants.
     public async Task<List<Network>> ListAllAsync(Guid? tenantId, CancellationToken ct = default) =>
         await db.Networks
-            .Where(n => n.CurrentExistence != CurrentExistence.Deleted && (tenantId == null || n.TenantId == tenantId))
+            .Where(n => n.Status != NetworkStatus.Deleted && (tenantId == null || n.TenantId == tenantId))
             .OrderBy(n => n.TenantId).ThenBy(n => n.Name)
             .AsNoTracking()
             .ToListAsync(ct);
@@ -108,7 +115,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Networks
             .Where(n => n.ClusterId == clusterId
                         && n.ExternalId != null
-                        && n.CurrentExistence != CurrentExistence.Deleted)
+                        && n.Status != NetworkStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 

@@ -21,8 +21,8 @@ public class NetworkTests
     {
         var network = MakeActiveNetwork();
         Assert.Equal("cs-net-id", network.ProviderIdForVm("cluster-1"));
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
+        Assert.False(network.IsDeletedOrDeleting);
     }
 
     // DeleteRequested: Incus still shows the network Created, and a VM must still not land on it.
@@ -103,14 +103,14 @@ public class NetworkTests
     // ── Create: nothing on Incus yet, a create waiting ────
 
     [Fact]
-    public void Create_HasNoIncusStatus_IsNotCreated_AndWaitsForItsCreate()
+    public void Create_IsCreating_AndWaitsForItsCreate()
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
-        Assert.Null(network.CurrentState);
-        Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
+        Assert.Null(network.InstanceStatus);
+        Assert.True(network.Status == NetworkStatus.Creating || network.Status == NetworkStatus.Failed);
+        Assert.False(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
     }
 
     // The report's cidr and gateway are optional (omitempty; today the worker leaves them out only on a give-up that
@@ -127,7 +127,7 @@ public class NetworkTests
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Null(network.Cidr);
         Assert.Null(network.Gateway);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Unknown, network.Status);
     }
 
     // Every word Incus reports is recorded as it is (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
@@ -143,8 +143,8 @@ public class NetworkTests
 
         network.MarkObserved(status);
 
-        Assert.Equal(status, network.CurrentState);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.Equal(status, network.Status);
+        Assert.True(Network.IsIncusStatus(network.Status));
         Assert.Equal("10.0.0.0/24", network.Cidr);
     }
 
@@ -159,8 +159,8 @@ public class NetworkTests
 
         network.MarkObserved(status);
 
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
+        Assert.True(network.IsDeletedOrDeleting);
     }
 
     // ── Not found: the reconciler never reports Deleted (titan-ops architecture/desired-and-current.md#existence-axis) ──
@@ -172,10 +172,10 @@ public class NetworkTests
 
         network.MarkNotFound();
 
-        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.NotFound, network.Status);
+        Assert.Null(network.InstanceStatus);
         Assert.Equal("cs-net-id", network.ExternalId);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.False(network.IsDeletedOrDeleting);
     }
 
     [Fact]
@@ -186,7 +186,7 @@ public class NetworkTests
 
         network.MarkNotFound();
 
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
         Assert.False(network.IsDeleted);
         Assert.NotNull(network.MarkDeleted());
     }
@@ -199,14 +199,14 @@ public class NetworkTests
 
         network.MarkObserved(NetworkStatus.Created);
 
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.True(Network.IsIncusStatus(network.Status));
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
     }
 
     // ── Request failure is a field, not a state (titan-ops architecture/desired-and-current.md#request-failure) ──
 
     [Fact]
-    public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItNotCreated()
+    public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItFailed()
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
@@ -215,9 +215,9 @@ public class NetworkTests
         Assert.Equal("Network creation failed.", network.Operation.FailureReason);
         Assert.Equal("raw incus error", network.Operation.FailureDetail);
         Assert.NotNull(network.Operation.FailedAt);
-        Assert.Null(network.Transition);
-        Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
+        Assert.True(network.Status == NetworkStatus.Creating || network.Status == NetworkStatus.Failed);
+        Assert.Null(network.InstanceStatus);
     }
 
     [Fact]
@@ -228,22 +228,21 @@ public class NetworkTests
         network.MarkRequestFailed("late", "late");
 
         Assert.Null(network.Operation.FailureReason);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
     }
 
     // ── Delete: follows Incus — whatever its word, a network Incus may hold is deleted through Incus ──
 
     [Fact]
-    public void RequestDelete_WritesDesiredExistence_AndLeavesTheObservationAlone()
+    public void RequestDelete_MakesTheNetworkDeleting_AndRemembersTheWordIncusHeld()
     {
         var network = MakeActiveNetwork();
 
         network.Delete();
 
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Theory]
@@ -257,7 +256,7 @@ public class NetworkTests
         network.MarkObserved(status);
 
         Assert.Equal("cs-net-id", network.Delete()!.ProviderId);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Fact]
@@ -266,7 +265,7 @@ public class NetworkTests
         var network = NetworkIn(Seed.NotFound);
 
         Assert.Equal("cs-net-id", network.Delete()!.ProviderId);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Fact]
@@ -288,7 +287,7 @@ public class NetworkTests
         var ex = Assert.Throws<BusinessException>(() => network.Delete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
-        Assert.Equal((NetworkOperationKind.Delete, first), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
+        Assert.Equal((NetworkStatus.Deleting, first), (network.Status, network.Operation.PendingId!.Value));
     }
 
     [Fact]
@@ -307,15 +306,15 @@ public class NetworkTests
         var network = MakeActiveNetwork();
         network.Delete();
 
-        NetworkOperationKind? first = network.MarkDeleted();
-        NetworkOperationKind? repeat = network.MarkDeleted();
+        NetworkStatus? first = network.MarkDeleted();
+        NetworkStatus? repeat = network.MarkDeleted();
 
-        Assert.Equal(NetworkOperationKind.Delete, first);
+        Assert.Equal(NetworkStatus.Deleting, first);
         Assert.Null(repeat);
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
+        Assert.Null(network.InstanceStatus);
         Assert.True(network.IsDeleted);
-        Assert.Null(network.Transition);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
     }
 
     // ── Terminal state absorbs (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs) ──
@@ -330,8 +329,8 @@ public class NetworkTests
         network.MarkCreated("other", "10.9.0.0/24", "10.9.0.1");
         network.MarkRequestFailed("late", "late");
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
+        Assert.Null(network.InstanceStatus);
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Null(network.Operation.FailureReason);
     }
@@ -400,9 +399,9 @@ public class NetworkTests
 
         Assert.Null(network.Delete());
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Null(network.Transition);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
+        Assert.True(network.IsDeletedOrDeleting);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
     }
 
     [Theory]
@@ -503,5 +502,42 @@ public class NetworkTests
         Assert.Null(gaveUp.HeldRange);
         Assert.Null(notFound.HeldRange);
         Assert.Null(deleted.HeldRange);
+    }
+
+    // A network being deleted keeps its range while Incus still shows it, and holds none once Incus did not find it.
+    [Fact]
+    public void ADeletingNetwork_HoldsItsRange_OnlyWhileIncusLastShowedIt()
+    {
+        var showing = MakeActiveNetwork();
+        showing.Delete();
+        var notFound = MakeActiveNetwork();
+        notFound.MarkNotFound();
+        notFound.Delete();
+        var seenGoneWhileDeleting = MakeActiveNetwork();
+        seenGoneWhileDeleting.Delete();
+        seenGoneWhileDeleting.MarkNotFound();
+
+        Assert.True(showing.HoldsARange);
+        Assert.Equal("10.0.0.0/24", showing.HeldRange!.Value);
+        Assert.False(notFound.HoldsARange);
+        Assert.Null(notFound.HeldRange);
+        Assert.False(seenGoneWhileDeleting.HoldsARange);
+        Assert.Null(seenGoneWhileDeleting.HeldRange);
+        Assert.False(showing.OccupiesQuota);
+    }
+
+    // Nothing is observed on a network whose create gave up before Incus had it: the reconciler never lists one.
+    [Fact]
+    public void AFailedNetwork_IgnoresEveryObservation()
+    {
+        var network = Network.Create(Guid.NewGuid(), NetworkName.Parse("failed-net"), "cluster-1", null, wantsPublicIpv6: false);
+        network.MarkRequestFailed("reason", "raw");
+
+        network.MarkObserved(NetworkStatus.Created);
+        network.MarkNotFound();
+
+        Assert.Equal(NetworkStatus.Failed, network.Status);
+        Assert.Null(network.InstanceStatus);
+        Assert.False(network.OccupiesQuota);
     }
 }

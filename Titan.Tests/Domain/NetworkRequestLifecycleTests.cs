@@ -5,8 +5,9 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/resource-lifecycle.md#invariants for a network and its firewall rules: one waiting request each
-// (the rule's independent of the network's), ended only by the report carrying its id; an observation writes current
-// and ends nothing; a failure puts desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
+// (the rule's independent of the network's), ended only by the report carrying its id; an observation writes the status
+// at rest and only the status seen while a request waits, and ends nothing; a failure gives the status back as the move
+// says (titan-ops architecture/resource-lifecycle.md#kinds).
 // NetworkTests keeps what a request may do from each situation; this file is about how a request ends.
 public class NetworkRequestLifecycleTests
 {
@@ -29,7 +30,7 @@ public class NetworkRequestLifecycleTests
         return network;
     }
 
-    private static NetworkOperationKind? Failed(Network network, Guid operationId,
+    private static NetworkStatus? Failed(Network network, Guid operationId,
         string? externalId = null) =>
         network.ReportFailed(operationId, externalId, null, null, null, "The network request could not be completed.", "raw");
 
@@ -40,11 +41,11 @@ public class NetworkRequestLifecycleTests
     private static FirewallRule ActiveRule(Network network, int port)
     {
         FirewallRule rule = NewRule(network, port);
-        network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, $"acl-net/{port}", FirewallRuleState.enabled);
+        network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, $"acl-net/{port}", FirewallRuleStatus.enabled);
         return rule;
     }
 
-    private static FirewallRuleOperationKind? RuleFailed(Network network, Guid ruleId, Guid operationId,
+    private static FirewallRuleStatus? RuleFailed(Network network, Guid ruleId, Guid operationId,
         string? externalId = null) =>
         network.ReportRuleFailed(ruleId, operationId, externalId, null,
             "The firewall rule request could not be completed.", "raw");
@@ -52,46 +53,44 @@ public class NetworkRequestLifecycleTests
     // ---------- the network's create ----------
 
     [Fact]
-    public void ANewNetwork_WaitsOnItsCreate_WithAnIdAKindAndATime()
+    public void ANewNetwork_WaitsOnItsCreate_WithAnIdAndATime()
     {
         Network network = NewNetwork();
 
-        Assert.Equal(NetworkOperationKind.Create, network.Operation.Kind!.Value);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
         Assert.NotEqual(Guid.Empty, network.Operation.PendingId!.Value);
         Assert.True(network.Operation.AskedAt <= DateTimeOffset.UtcNow);
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
     }
 
     [Fact]
-    public void Done_OfTheCreate_RecordsTheIdExistenceAddressAndStatus_AndEndsIt()
+    public void Done_OfTheCreate_RecordsTheIdAddressAndStatus_AndEndsIt()
     {
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
 
-        NetworkOperationKind? ended = network.ReportDone(createId, "net-ext", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        NetworkStatus? ended = network.ReportDone(createId, "net-ext", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
 
-        Assert.Equal(NetworkOperationKind.Create, ended);
+        Assert.Equal(NetworkStatus.Creating, ended);
         Assert.Null(network.Operation.PendingId);
-        Assert.Null(network.Transition);
-        Assert.Equal(("net-ext", CurrentExistence.Exists, NetworkStatus.Created),
-            (network.ExternalId, network.CurrentExistence, network.CurrentState));
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
+        Assert.Equal(("net-ext", NetworkStatus.Created), (network.ExternalId, network.Status));
         Assert.Equal(("10.0.0.0/24", "10.0.0.1"), (network.Cidr, network.Gateway));
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Equal("net-ext", network.ProviderIdForVm("cluster-1"));
     }
 
     // A worker from before the request routes reports the create's Done with no status (the old Created): the network
     // exists, and is usable only once the reconciler reads it Created.
     [Fact]
-    public void Done_OfTheCreate_WithoutAStatus_LeavesTheStateNull_AndTheNetworkNotUsable_UntilTheReconcilerReadsCreated()
+    public void Done_OfTheCreate_WithoutAStatus_LeavesTheStatusUnknown_AndTheNetworkNotUsable_UntilTheReconcilerReadsCreated()
     {
         Network network = NewNetwork();
 
         network.ReportDone(network.Operation.PendingId!.Value, "net-ext", null, "10.0.0.0/24", "10.0.0.1");
 
         Assert.Null(network.Operation.PendingId);
-        Assert.Null(network.CurrentState);
-        Assert.Equal(("net-ext", CurrentExistence.Exists), (network.ExternalId, network.CurrentExistence));
+        Assert.Equal(("net-ext", NetworkStatus.Unknown), (network.ExternalId, network.Status));
         Assert.Equal("FIREWALL_NETWORK_NOT_READY", Assert.Throws<BusinessException>(() => NewRule(network, 22)).Code);
         Assert.Equal("NETWORK_NOT_ACTIVE",
             Assert.Throws<BusinessException>(() => network.ProviderIdForVm("cluster-1")).Code);
@@ -111,16 +110,16 @@ public class NetworkRequestLifecycleTests
     [InlineData(NetworkStatus.Unavailable)]
     [InlineData(NetworkStatus.Pending)]
     [InlineData(NetworkStatus.Unknown)]
-    public void AnObservation_WritesCurrentOnly_AndLeavesAWaitingCreateWaiting(NetworkStatus status)
+    public void AnObservation_WhileTheCreateWaits_RecordsOnlyTheStatusSeen_AndLeavesTheCreateWaiting(NetworkStatus status)
     {
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
 
         network.MarkObserved(status);
 
-        Assert.Equal((NetworkOperationKind.Create, createId), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
-        Assert.Equal((CurrentExistence.Exists, (NetworkStatus?)status), (network.CurrentExistence, network.CurrentState));
+        Assert.Equal((NetworkStatus.Creating, createId), (network.Status, network.Operation.PendingId!.Value));
+        Assert.Equal(NetworkStatus.Creating, network.Status);
+        Assert.Equal((NetworkStatus?)status, network.Operation.LastSeenStatus);
         Assert.Null(network.ExternalId);
         Assert.Null(network.Operation.FailureReason);
         // A network still waiting on its create is not usable, even read Created.
@@ -128,7 +127,7 @@ public class NetworkRequestLifecycleTests
     }
 
     [Fact]
-    public void NotFound_WritesCurrentOnly_AndLeavesAWaitingCreateWaiting()
+    public void NotFound_WhileTheCreateWaits_RecordsNoStatus_AndLeavesTheCreateWaiting()
     {
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
@@ -136,8 +135,8 @@ public class NetworkRequestLifecycleTests
         network.MarkNotFound();
 
         Assert.Equal(createId, network.Operation.PendingId!.Value);
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
-        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
+        Assert.Null(network.Operation.LastSeenStatus);
         Assert.Null(network.Operation.FailureReason);
     }
 
@@ -149,14 +148,14 @@ public class NetworkRequestLifecycleTests
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
 
-        NetworkOperationKind? ended = network.ReportDone(Guid.NewGuid(), "net-ext", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        NetworkStatus? ended = network.ReportDone(Guid.NewGuid(), "net-ext", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
 
         Assert.Null(ended);
         Assert.Equal(createId, network.Operation.PendingId!.Value);
         Assert.Null(network.ExternalId);
         Assert.Null(network.Cidr);
-        Assert.Null(network.CurrentState);
-        Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
+        Assert.Null(network.InstanceStatus);
+        Assert.True(network.Status == NetworkStatus.Creating || network.Status == NetworkStatus.Failed);
     }
 
     [Fact]
@@ -171,8 +170,8 @@ public class NetworkRequestLifecycleTests
 
         Assert.Equal("net-ext", network.ExternalId);
         Assert.Null(network.Operation.FailureReason);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal(NetworkStatus.Created, network.CurrentState);
+        Assert.False(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Created, network.InstanceStatus);
     }
 
     [Fact]
@@ -187,8 +186,8 @@ public class NetworkRequestLifecycleTests
         network.MarkObserved(NetworkStatus.Created);
         network.MarkNotFound();
 
-        Assert.Equal((CurrentExistence.Deleted, (NetworkStatus?)null), (network.CurrentExistence, network.CurrentState));
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
+        Assert.Equal((NetworkStatus.Deleted, (NetworkStatus?)null), (network.Status, network.InstanceStatus));
+        Assert.True(network.IsDeletedOrDeleting);
         Assert.Equal("net-ext", network.ExternalId);
         Assert.Null(network.Operation.FailureReason);
         Assert.Null(network.Operation.PendingId);
@@ -202,7 +201,7 @@ public class NetworkRequestLifecycleTests
         Network network = UsableNetwork();
 
         OperationTicket first = network.Delete()!;
-        Assert.Equal((NetworkOperationKind.Delete, first.OperationId), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
+        Assert.Equal((NetworkStatus.Deleting, first.OperationId), (network.Status, network.Operation.PendingId!.Value));
         Failed(network, first.OperationId);
         OperationTicket second = network.Delete()!;
 
@@ -218,13 +217,13 @@ public class NetworkRequestLifecycleTests
         Network network = UsableNetwork();
         Guid firstDelete = network.Delete()!.OperationId;
 
-        NetworkOperationKind? ended = Failed(network, firstDelete);
+        NetworkStatus? ended = Failed(network, firstDelete);
 
-        Assert.Equal(NetworkOperationKind.Delete, ended);
+        Assert.Equal(NetworkStatus.Deleting, ended);
         Assert.Null(network.Operation.PendingId);
-        Assert.Null(network.Transition);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal((CurrentExistence.Exists, (NetworkStatus?)NetworkStatus.Created), (network.CurrentExistence, network.CurrentState));
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
+        Assert.False(network.IsDeletedOrDeleting);
+        Assert.Equal(NetworkStatus.Created, network.Status);
         Assert.Equal(("The network request could not be completed.", "raw"),
             (network.Operation.FailureReason, network.Operation.FailureDetail));
         Assert.NotNull(network.Operation.FailedAt);
@@ -233,7 +232,7 @@ public class NetworkRequestLifecycleTests
 
         Assert.NotEqual(firstDelete, secondDelete);
         Assert.Null(Failed(network, firstDelete)); // the first delete's late report is stale
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Fact]
@@ -264,16 +263,16 @@ public class NetworkRequestLifecycleTests
         network.ReportRuleDone(alreadyGone.Id, network.DeleteFirewallRule(alreadyGone.Id)!.OperationId, null, null);
         Guid deleteId = network.Delete()!.OperationId;
 
-        NetworkOperationKind? ended = network.ReportDone(deleteId, null, null, null, null);
+        NetworkStatus? ended = network.ReportDone(deleteId, null, null, null, null);
 
-        Assert.Equal(NetworkOperationKind.Delete, ended);
+        Assert.Equal(NetworkStatus.Deleting, ended);
         Assert.True(network.IsDeleted);
-        Assert.Null(network.CurrentState);
+        Assert.Null(network.InstanceStatus);
         Assert.Null(network.Operation.PendingId);
         foreach (FirewallRule rule in new[] { creating, active, deleting, failedCreate, alreadyGone })
         {
-            Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-            Assert.Null(rule.CurrentState);
+            Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
+            Assert.Null(rule.InstanceStatus);
             Assert.Null(rule.Operation.PendingId);
         }
     }
@@ -286,31 +285,30 @@ public class NetworkRequestLifecycleTests
     {
         Network network = WantingPublicIpv6();
 
-        NetworkOperationKind? ended = Failed(network, network.Operation.PendingId!.Value);
+        NetworkStatus? ended = Failed(network, network.Operation.PendingId!.Value);
 
-        Assert.Equal(NetworkOperationKind.Create, ended);
+        Assert.Equal(NetworkStatus.Creating, ended);
         Assert.Null(network.PublicIpv6Subnet);
         Assert.Null(network.Operation.PendingId);
         Assert.Null(network.ExternalId);
-        Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.True(network.Status == NetworkStatus.Creating || network.Status == NetworkStatus.Failed);
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Equal("The network request could not be completed.", network.Operation.FailureReason);
     }
 
     // Incus made the network, router and all, before the command gave up: it exists and keeps its /64 until the delete.
     [Fact]
-    public void Failed_OfTheCreate_WithAnId_KeepsTheSubnet_TheIdAndExistence()
+    public void Failed_OfTheCreate_WithAnId_KeepsTheSubnet_TheIdAndTheWord()
     {
         Network network = WantingPublicIpv6();
 
-        NetworkOperationKind? ended = network.ReportFailed(network.Operation.PendingId!.Value, "net-ext", NetworkStatus.Errored, "10.0.0.0/24", "10.0.0.1", "Network creation failed.", "raw");
+        NetworkStatus? ended = network.ReportFailed(network.Operation.PendingId!.Value, "net-ext", NetworkStatus.Errored, "10.0.0.0/24", "10.0.0.1", "Network creation failed.", "raw");
 
-        Assert.Equal(NetworkOperationKind.Create, ended);
+        Assert.Equal(NetworkStatus.Creating, ended);
         Assert.Equal(Subnet, network.PublicIpv6Subnet);
-        Assert.Equal(("net-ext", CurrentExistence.Exists, (NetworkStatus?)NetworkStatus.Errored),
-            (network.ExternalId, network.CurrentExistence, network.CurrentState));
+        Assert.Equal(("net-ext", NetworkStatus.Errored), (network.ExternalId, network.Status));
         Assert.Equal("10.0.0.0/24", network.Cidr);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Equal("Network creation failed.", network.Operation.FailureReason);
         Assert.Equal("net-ext", network.Delete()!.ProviderId);
     }
@@ -324,40 +322,39 @@ public class NetworkRequestLifecycleTests
         Assert.False(network.HasPublicIpv6);
     }
 
-    // ---------- Transition follows the kind ----------
+    // ---------- The status says what the waiting request is ----------
 
     [Fact]
-    public void Transition_FollowsTheKindOfTheWaitingRequest()
+    public void Status_SaysWhatTheWaitingRequestIs()
     {
         Network network = NewNetwork();
-        Assert.Equal((NetworkOperationKind.Create, NetworkTransition.Creating), (network.Operation.Kind!.Value, network.Transition));
+        Assert.Equal((NetworkStatus.Creating, NetworkStatus.Creating), (network.Status, network.Status));
 
         network.ReportDone(network.Operation.PendingId!.Value, "net-ext", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
-        Assert.Null(network.Transition);
+        Assert.True(network.Status != NetworkStatus.Creating && network.Status != NetworkStatus.Deleting);
 
         network.Delete();
-        Assert.Equal((NetworkOperationKind.Delete, NetworkTransition.Deleting), (network.Operation.Kind!.Value, network.Transition));
+        Assert.Equal((NetworkStatus.Deleting, NetworkStatus.Deleting), (network.Status, network.Status));
 
         FirewallRule rule = NewRule(UsableNetwork(), 22);
-        Assert.Equal((FirewallRuleOperationKind.Create, FirewallRuleTransition.Creating), (rule.Operation.Kind!.Value, rule.Transition));
+        Assert.Equal((FirewallRuleStatus.Creating, FirewallRuleStatus.Creating), (rule.Status, rule.Status));
     }
 
     // ---------- a firewall rule's requests, through the network ----------
 
     [Fact]
-    public void RuleDone_OfTheCreate_RecordsTheIdExistenceAndState_AndEndsIt()
+    public void RuleDone_OfTheCreate_RecordsTheIdAndState_AndEndsIt()
     {
         Network network = UsableNetwork();
         FirewallRule rule = NewRule(network, 22);
         Guid createId = rule.Operation.PendingId!.Value;
 
-        FirewallRuleOperationKind? ended = network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleState.logged);
+        FirewallRuleStatus? ended = network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleStatus.logged);
 
-        Assert.Equal(FirewallRuleOperationKind.Create, ended);
+        Assert.Equal(FirewallRuleStatus.Creating, ended);
         Assert.Null(rule.Operation.PendingId);
-        Assert.Null(rule.Transition);
-        Assert.Equal(("acl-net/22", CurrentExistence.Exists, (FirewallRuleState?)FirewallRuleState.logged),
-            (rule.ExternalId, rule.CurrentExistence, rule.CurrentState));
+        Assert.True(rule.Status != FirewallRuleStatus.Creating && rule.Status != FirewallRuleStatus.Deleting);
+        Assert.Equal(("acl-net/22", FirewallRuleStatus.logged), (rule.ExternalId, rule.Status));
         Assert.Equal(1, network.FirewallRuleQuotaUsage);
     }
 
@@ -370,8 +367,7 @@ public class NetworkRequestLifecycleTests
         network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, "acl-net/22", null);
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Null(rule.CurrentState);
-        Assert.Equal(("acl-net/22", CurrentExistence.Exists), (rule.ExternalId, rule.CurrentExistence));
+        Assert.Equal(("acl-net/22", FirewallRuleStatus.Unknown), (rule.ExternalId, rule.Status));
     }
 
     [Fact]
@@ -381,11 +377,11 @@ public class NetworkRequestLifecycleTests
         FirewallRule rule = ActiveRule(network, 22);
         OperationTicket delete = network.DeleteFirewallRule(rule.Id)!;
 
-        FirewallRuleOperationKind? ended = network.ReportRuleDone(rule.Id, delete.OperationId, null, null);
+        FirewallRuleStatus? ended = network.ReportRuleDone(rule.Id, delete.OperationId, null, null);
 
-        Assert.Equal(FirewallRuleOperationKind.Delete, ended);
+        Assert.Equal(FirewallRuleStatus.Deleting, ended);
         Assert.True(rule.IsDeleted);
-        Assert.Null(rule.CurrentState);
+        Assert.Null(rule.InstanceStatus);
         Assert.Null(rule.Operation.PendingId);
         Assert.Equal(0, network.FirewallRuleQuotaUsage);
         Assert.False(network.IsDeleted);
@@ -402,8 +398,8 @@ public class NetworkRequestLifecycleTests
         RuleFailed(network, rule.Id, first.OperationId);
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
-        Assert.Equal((CurrentExistence.Exists, (FirewallRuleState?)FirewallRuleState.enabled), (rule.CurrentExistence, rule.CurrentState));
+        Assert.False(rule.IsDeletedOrDeleting);
+        Assert.Equal(FirewallRuleStatus.enabled, rule.Status);
         Assert.Equal(("The firewall rule request could not be completed.", "raw"), (rule.Operation.FailureReason, rule.Operation.FailureDetail));
         Assert.NotNull(rule.Operation.FailedAt);
         Assert.Equal(1, network.FirewallRuleQuotaUsage);
@@ -424,8 +420,8 @@ public class NetworkRequestLifecycleTests
         RuleFailed(network, rule.Id, rule.Operation.PendingId!.Value, "acl-net/22");
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Equal(("acl-net/22", CurrentExistence.Exists), (rule.ExternalId, rule.CurrentExistence));
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
+        Assert.Equal(("acl-net/22", FirewallRuleStatus.Unknown), (rule.ExternalId, rule.Status));
+        Assert.False(rule.IsDeletedOrDeleting);
         Assert.Equal("The firewall rule request could not be completed.", rule.Operation.FailureReason);
         Assert.Equal("acl-net/22", network.DeleteFirewallRule(rule.Id)!.ProviderId);
     }
@@ -441,7 +437,7 @@ public class NetworkRequestLifecycleTests
         Assert.Equal(createId, rule.Operation.PendingId!.Value);
         Assert.Null(rule.ExternalId);
 
-        network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleState.enabled);
+        network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleStatus.enabled);
 
         Assert.Null(RuleFailed(network, rule.Id, createId, "acl-net/other"));
         Assert.Equal("acl-net/22", rule.ExternalId);
@@ -449,10 +445,10 @@ public class NetworkRequestLifecycleTests
     }
 
     [Theory]
-    [InlineData(FirewallRuleState.enabled)]
-    [InlineData(FirewallRuleState.disabled)]
-    [InlineData(FirewallRuleState.logged)]
-    public void ARuleObservation_WritesCurrentOnly_AndNeverEndsTheRulesCreate(FirewallRuleState state)
+    [InlineData(FirewallRuleStatus.enabled)]
+    [InlineData(FirewallRuleStatus.disabled)]
+    [InlineData(FirewallRuleStatus.logged)]
+    public void ARuleObservation_WhileItsCreateWaits_RecordsOnlyTheStateSeen_AndNeverEndsTheCreate(FirewallRuleStatus state)
     {
         Network network = UsableNetwork();
         FirewallRule rule = NewRule(network, 22);
@@ -460,14 +456,14 @@ public class NetworkRequestLifecycleTests
 
         network.MarkFirewallRuleObserved(rule.Id, state);
 
-        Assert.Equal((FirewallRuleOperationKind.Create, createId), (rule.Operation.Kind!.Value, rule.Operation.PendingId!.Value));
-        Assert.Equal(FirewallRuleTransition.Creating, rule.Transition);
-        Assert.Equal((CurrentExistence.Exists, (FirewallRuleState?)state), (rule.CurrentExistence, rule.CurrentState));
+        Assert.Equal((FirewallRuleStatus.Creating, createId), (rule.Status, rule.Operation.PendingId!.Value));
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
+        Assert.Equal((FirewallRuleStatus?)state, rule.Operation.LastSeenStatus);
         Assert.Null(rule.ExternalId);
     }
 
     [Fact]
-    public void ARuleNotFound_WritesCurrentOnly_AndNeverEndsTheRulesCreate()
+    public void ARuleNotFound_WhileItsCreateWaits_RecordsNoState_AndNeverEndsTheCreate()
     {
         Network network = UsableNetwork();
         FirewallRule rule = NewRule(network, 22);
@@ -476,7 +472,8 @@ public class NetworkRequestLifecycleTests
         network.MarkFirewallRuleNotFound(rule.Id);
 
         Assert.Equal(createId, rule.Operation.PendingId!.Value);
-        Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
+        Assert.Null(rule.Operation.LastSeenStatus);
         Assert.Null(rule.Operation.FailureReason);
     }
 
@@ -489,12 +486,12 @@ public class NetworkRequestLifecycleTests
         Guid createId = rule.Operation.PendingId!.Value;
         network.ReportDone(network.Delete()!.OperationId, null, null, null, null);
 
-        Assert.Null(network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleState.enabled));
-        network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.enabled);
+        Assert.Null(network.ReportRuleDone(rule.Id, createId, "acl-net/22", FirewallRuleStatus.enabled));
+        network.MarkFirewallRuleObserved(rule.Id, FirewallRuleStatus.enabled);
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
         Assert.Null(rule.ExternalId);
-        Assert.Null(rule.CurrentState);
+        Assert.Null(rule.InstanceStatus);
     }
 
     // The rule's request is its own: ending it leaves the network's alone, and the network's leaves the rule's.
@@ -529,8 +526,8 @@ public class NetworkRequestLifecycleTests
         Assert.False(creating.DeleteFailed(createId, null, "reason", "raw"));
 
         Assert.Equal(createId, creating.Operation.PendingId);
-        Assert.Equal(NetworkOperationKind.Create, creating.Operation.Kind);
-        Assert.Equal(CurrentExistence.NotCreated, creating.CurrentExistence);
+        Assert.Equal(NetworkStatus.Creating, creating.Status);
+        Assert.True(creating.Status == NetworkStatus.Creating || creating.Status == NetworkStatus.Failed);
         Assert.Null(creating.Operation.FailureReason);
 
         Network deleting = UsableNetwork();
@@ -541,8 +538,8 @@ public class NetworkRequestLifecycleTests
         Assert.False(deleting.CreateFailed(deleteId, null, null, null, null, "reason", "raw"));
 
         Assert.Equal(deleteId, deleting.Operation.PendingId);
-        Assert.Equal(NetworkOperationKind.Delete, deleting.Operation.Kind);
-        Assert.Equal(DesiredExistence.Deleted, deleting.DesiredExistence);
+        Assert.Equal(NetworkStatus.Deleting, deleting.Status);
+        Assert.True(deleting.IsDeletedOrDeleting);
         Assert.Equal("net-ext", deleting.ExternalId);
         Assert.Null(deleting.Operation.FailureReason);
     }
@@ -558,21 +555,83 @@ public class NetworkRequestLifecycleTests
         Assert.False(network.FirewallRuleDeleteFailed(creating.Id, createId, null, "reason", "raw"));
 
         Assert.Equal(createId, creating.Operation.PendingId);
-        Assert.Equal(FirewallRuleOperationKind.Create, creating.Operation.Kind);
-        Assert.Equal(CurrentExistence.NotCreated, creating.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Creating, creating.Status);
+        Assert.True(creating.Status == FirewallRuleStatus.Creating || creating.Status == FirewallRuleStatus.Failed);
         Assert.Null(creating.Operation.FailureReason);
 
         FirewallRule deleting = ActiveRule(network, 81);
         network.DeleteFirewallRule(deleting.Id);
         Guid deleteId = deleting.Operation.PendingId!.Value;
 
-        Assert.False(network.FirewallRuleCreateSucceeded(deleting.Id, deleteId, "other", FirewallRuleState.enabled));
+        Assert.False(network.FirewallRuleCreateSucceeded(deleting.Id, deleteId, "other", FirewallRuleStatus.enabled));
         Assert.False(network.FirewallRuleCreateFailed(deleting.Id, deleteId, null, null, "reason", "raw"));
 
         Assert.Equal(deleteId, deleting.Operation.PendingId);
-        Assert.Equal(FirewallRuleOperationKind.Delete, deleting.Operation.Kind);
-        Assert.Equal(DesiredExistence.Deleted, deleting.DesiredExistence);
+        Assert.Equal(FirewallRuleStatus.Deleting, deleting.Status);
+        Assert.True(deleting.IsDeletedOrDeleting);
         Assert.Equal("acl-net/81", deleting.ExternalId);
         Assert.Null(deleting.Operation.FailureReason);
+    }
+
+    // What a give-up rests in: the word the worker read, else the word Titan held, else Unknown.
+    [Fact]
+    public void Failed_OfTheDelete_RestsInTheWordTheWorkerReported_BeforeTheOneItHeld()
+    {
+        Network network = UsableNetwork();
+        network.Delete();
+
+        network.ReportFailed(network.Operation.PendingId!.Value, null, NetworkStatus.Errored, null, null, "reason", "raw");
+
+        Assert.Equal(NetworkStatus.Errored, network.Status);
+        Assert.Null(network.Operation.LastSeenStatus);
+    }
+
+    [Fact]
+    public void Failed_OfTheDelete_RestsInTheWordASeenObservationLeft_WhenTheReportBringsNone()
+    {
+        Network network = UsableNetwork();
+        network.Delete();
+        network.MarkObserved(NetworkStatus.Unavailable);
+
+        network.ReportFailed(network.Operation.PendingId!.Value, null, null, null, null, "reason", "raw");
+
+        Assert.Equal(NetworkStatus.Unavailable, network.Status);
+    }
+
+    [Fact]
+    public void Failed_OfTheDelete_OfANetworkNotFoundWhenAsked_RestsInUnknownUntilTheNextObservation()
+    {
+        Network network = UsableNetwork();
+        network.MarkNotFound();
+        network.Delete();
+
+        network.ReportFailed(network.Operation.PendingId!.Value, null, null, null, null, "reason", "raw");
+
+        Assert.Equal(NetworkStatus.Unknown, network.Status);
+    }
+
+    [Fact]
+    public void RuleFailed_OfTheDelete_RestsInTheStateTheWorkerReported_BeforeTheOneItHeld()
+    {
+        Network network = UsableNetwork();
+        FirewallRule rule = ActiveRule(network, 22);
+        network.DeleteFirewallRule(rule.Id);
+
+        network.ReportRuleFailed(rule.Id, rule.Operation.PendingId!.Value, null, FirewallRuleStatus.logged, "reason", "raw");
+
+        Assert.Equal(FirewallRuleStatus.logged, rule.Status);
+    }
+
+    [Fact]
+    public void RuleFailed_OfTheDelete_RestsInTheStateASeenObservationLeft_WhenTheReportBringsNone()
+    {
+        Network network = UsableNetwork();
+        FirewallRule rule = ActiveRule(network, 22);
+        network.DeleteFirewallRule(rule.Id);
+        network.MarkFirewallRuleObserved(rule.Id, FirewallRuleStatus.disabled);
+
+        network.ReportRuleFailed(rule.Id, rule.Operation.PendingId!.Value, null, null, "reason", "raw");
+
+        Assert.Equal(FirewallRuleStatus.disabled, rule.Status);
     }
 }

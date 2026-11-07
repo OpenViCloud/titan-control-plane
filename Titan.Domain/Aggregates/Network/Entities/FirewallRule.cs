@@ -20,13 +20,52 @@ public partial class FirewallRule : IEntity
     public int? EndPort { get; private set; }
     public FirewallCidr Cidr { get; private set; } = default!;
     public string? ExternalId { get; private set; }
-    // Same split as Network (titan-ops architecture/desired-and-current.md#desired-and-current): CurrentState is the Incus
-    // ACL rule state, null while the rule is not in the ACL.
-    public FirewallRuleState? CurrentState { get; private set; }
-    public CurrentExistence CurrentExistence { get; private set; }
-    public DesiredExistence DesiredExistence { get; private set; }
-    /// The rule's own operation waiting on Incus, independent of its network's, and the last one that failed.
+    /// The one status the API shows (titan-ops features/network/design.md#firewall-rule-status). Only an operation, a report
+    /// ending it, or an observation at rest writes it, each through the moves of FirewallRule.Creation.cs,
+    /// FirewallRule.Deletion.cs and FirewallRule.Observation.cs.
+    public FirewallRuleStatus Status { get; private set; }
+    /// The rule's own operation waiting on Incus, independent of its network's, the last one that failed, and the Incus state
+    /// seen while one waits.
     public FirewallRuleOperation Operation { get; private set; } = FirewallRuleOperation.None;
+
+    /// The Incus state the rule holds as far as Titan last knew, null when none is known: the state seen while an operation
+    /// waits, else Status when it is one of the three Incus states (IsIncusStatus). Worked out, never stored, and not on /v1.
+    public FirewallRuleStatus? InstanceStatus
+    {
+        get
+        {
+            if (Operation.LastSeenStatus != null)
+            {
+                return Operation.LastSeenStatus;
+            }
+            if (IsIncusStatus(Status))
+            {
+                return Status;
+            }
+            return null;
+        }
+    }
+
+    /// The three states Incus gives an ACL rule: the only ones a worker reports, and the only ones InstanceStatus can be.
+    public static bool IsIncusStatus(FirewallRuleStatus status) =>
+        status == FirewallRuleStatus.enabled
+        || status == FirewallRuleStatus.disabled
+        || status == FirewallRuleStatus.logged;
+
+    /// A worker reports only the three Incus states; any other status in a report is the worker's bug. No state at all (null)
+    /// is a report that read none, not a foreign one.
+    private static bool IsForeignStatus(FirewallRuleStatus? status) => status != null && !IsIncusStatus(status.Value);
+
+    private static void EnsureNotForeign(FirewallRuleStatus? status)
+    {
+        if (IsForeignStatus(status))
+        {
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus firewall rule state.");
+        }
+    }
+
+    /// An operation waits on its command: only the report carrying its id moves the status on.
+    private bool IsTransitionStatus => Status == FirewallRuleStatus.Creating || Status == FirewallRuleStatus.Deleting;
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// Deleted absorbs every later observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs):
@@ -34,7 +73,7 @@ public partial class FirewallRule : IEntity
     /// under its network and still observed, and one whose delete is waiting is still in force on Incus;
     /// FirewallRuleRepository's list and reconciler queries write !IsDeleted in SQL
     /// (titan-ops architecture/domain-methods.md#plain-code).
-    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
+    public bool IsDeleted => Status == FirewallRuleStatus.Deleted;
 
     private FirewallRule() { }
 
@@ -52,25 +91,8 @@ public partial class FirewallRule : IEntity
         }
     }
 
-    /// The move the waiting operation makes, for display.
-    public FirewallRuleTransition? Transition
-    {
-        get
-        {
-            switch (Operation.Kind)
-            {
-                case FirewallRuleOperationKind.Create:
-                    return FirewallRuleTransition.Creating;
-                case FirewallRuleOperationKind.Delete:
-                    return FirewallRuleTransition.Deleting;
-                default:
-                    return null;
-            }
-        }
-    }
-
-    private bool CreateIsWaiting => Operation.Kind == FirewallRuleOperationKind.Create;
-    private bool DeleteIsWaiting => Operation.Kind == FirewallRuleOperationKind.Delete;
+    private bool CreateIsWaiting => Status == FirewallRuleStatus.Creating;
+    private bool DeleteIsWaiting => Status == FirewallRuleStatus.Deleting;
     /// A delete was asked and still waits, or the rule is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
@@ -79,17 +101,18 @@ public partial class FirewallRule : IEntity
     /// what Incus holds or is about to hold. A delete asked for stops counting at once; a failed create with nothing
     /// on Incus, and a rule Incus lost, do not count.
     public bool CountsTowardQuota =>
-        DesiredExistence == DesiredExistence.Exists
-        && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && CreateIsWaiting));
+        Status != FirewallRuleStatus.Deleting
+        && Status != FirewallRuleStatus.Deleted
+        && Status != FirewallRuleStatus.NotFound
+        && Status != FirewallRuleStatus.Failed;
 
     // ---- The report of the rule's own command (titan-ops features/network/design.md#network-operation): the one thing that
     // ends its operation; CreateSucceeded and CreateFailed are in FirewallRule.Creation.cs, DeleteSucceeded and DeleteFailed
     // in FirewallRule.Deletion.cs.
 
-    /// The report names the operation of this kind the rule waits on. A rule already Deleted waits on nothing.
-    private bool IsWaitingOn(Guid operationId, FirewallRuleOperationKind kind) =>
-        !IsDeleted && Operation.PendingId == operationId && Operation.Kind == kind;
+    /// The report names the operation the rule waits on, which its status says.
+    private bool IsWaitingOn(Guid operationId, FirewallRuleStatus waiting) =>
+        Status == waiting && Operation.PendingId == operationId;
 
     /// A Done must leave the rule named on Incus, or nothing would be left to delete it through. Without a stored id the
     /// waiting operation can only be the one that makes it. Checked before the report writes anything; a worker that
@@ -99,23 +122,17 @@ public partial class FirewallRule : IEntity
         bool doneWithoutAnId = ExternalId == null && string.IsNullOrEmpty(reportedId);
         if (doneWithoutAnId)
         {
-            string operation = Operation.Kind!.Value.ToString().ToLowerInvariant();
-            throw new BusinessException("INVALID_STATUS", $"ExternalId is required when a {operation} ends Done.");
+            throw new BusinessException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
         }
     }
 
-    private void RecordWhatTheWorkerSaw(string? externalId, FirewallRuleState? observedState)
+    /// A report brings the provider id with it, once.
+    private void RecordTheId(string? externalId)
     {
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
             ExternalId = externalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-        if (observedState != null)
-        {
-            CurrentExistence = CurrentExistence.Exists;
-            CurrentState = observedState;
         }
     }
 

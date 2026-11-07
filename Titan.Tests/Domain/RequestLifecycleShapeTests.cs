@@ -209,7 +209,7 @@ public class RequestLifecycleShapeTests
     private static object? ForeignArgument(ParameterInfo parameter)
     {
         if (parameter.ParameterType == typeof(NetworkStatus?)) return NetworkStatus.Created;
-        if (parameter.ParameterType == typeof(FirewallRuleState?)) return FirewallRuleState.enabled;
+        if (parameter.ParameterType == typeof(FirewallRuleStatus?)) return FirewallRuleStatus.enabled;
         if (parameter.Name == "externalId") return "foreign";
         return "late";
     }
@@ -276,7 +276,7 @@ public class RequestLifecycleShapeTests
         object?[] seen;
         if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
         else if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
-        else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleState.enabled];
+        else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleStatus.enabled];
         else if (type == typeof(VolumeSnapshot) || type == typeof(VmSnapshot) || type == typeof(LoadBalancer)
                  || type == typeof(VmTemplateCluster)) seen = ["foreign"];
         else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");

@@ -90,8 +90,7 @@ public class NetworkRequestHandlerTests
             Status: "Created", Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"));
 
         Assert.Null(network.Operation.PendingId);
-        Assert.Equal(("net-ext", CurrentExistence.Exists, NetworkStatus.Created),
-            (network.ExternalId, network.CurrentExistence, network.CurrentState));
+        Assert.Equal(("net-ext", NetworkStatus.Created), (network.ExternalId, network.Status));
         Assert.Equal(("10.0.0.0/24", "10.0.0.1"), (network.Cidr, network.Gateway));
         var created = Assert.Single(_activity.Events);
         Assert.Equal(("network.created", Owner.Id, network.Id), (created.Action, created.OutcomeTenantId, created.ResourceId));
@@ -123,7 +122,7 @@ public class NetworkRequestHandlerTests
             EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", externalId)));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(NetworkOperationKind.Create, network.Operation.Kind!.Value);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
         Assert.Empty(_activity.Events);
         NothingSaved();
     }
@@ -139,8 +138,8 @@ public class NetworkRequestHandlerTests
             Reason: "Network creation failed.", Detail: "raw"));
 
         Assert.Null(network.Operation.PendingId);
-        Assert.Equal(("net-ext", CurrentExistence.Exists), (network.ExternalId, network.CurrentExistence));
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
+        Assert.Equal(("net-ext", NetworkStatus.Unknown), (network.ExternalId, network.Status));
+        Assert.False(network.IsDeletedOrDeleting);
         Assert.Equal(("Network creation failed.", "raw"), (network.Operation.FailureReason, network.Operation.FailureDetail));
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -188,9 +187,9 @@ public class NetworkRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.OperationId, "Done"));
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
         Assert.Null(network.Operation.PendingId);
-        Assert.Equal((CurrentExistence.Deleted, CurrentExistence.Deleted), (staying.CurrentExistence, leaving.CurrentExistence));
+        Assert.Equal((FirewallRuleStatus.Deleted, FirewallRuleStatus.Deleted), (staying.Status, leaving.Status));
         Assert.Equal(["firewall_rule.deleted", "network.deleted"], Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "firewall_rule.deleted").ResourceId);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -210,7 +209,7 @@ public class NetworkRequestHandlerTests
     }
 
     [Fact]
-    public async Task Failed_OfTheDelete_PutsDesiredBack_RecordsTheReason_AndNetworkDeleteFailedOnce_KeepingTheRoute()
+    public async Task Failed_OfTheDelete_GivesTheNetworkBack_RecordsTheReason_AndNetworkDeleteFailedOnce_KeepingTheRoute()
     {
         Network network = CreatingNetworkHoldingARoute();
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
@@ -220,8 +219,8 @@ public class NetworkRequestHandlerTests
             Reason: "Network deletion failed.", Detail: "raw"));
 
         Assert.Null(network.Operation.PendingId);
-        Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
+        Assert.False(network.IsDeletedOrDeleting);
+        Assert.True(Network.IsIncusStatus(network.Status));
         Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
         Assert.Equal(["network.delete_failed"], Outcomes());
         Assert.Equal(network.Id, RouteRow(1).NetworkId);
@@ -236,7 +235,7 @@ public class NetworkRequestHandlerTests
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
         Assert.Equal(delete.OperationId, network.Operation.PendingId!.Value);
-        Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
+        Assert.True(network.IsDeletedOrDeleting);
         Assert.Null(network.Operation.FailureReason);
         Assert.Empty(_activity.Events);
         NothingSaved();
@@ -272,14 +271,15 @@ public class NetworkRequestHandlerTests
     [Theory]
     [InlineData("Created", NetworkStatus.Created)]
     [InlineData("Errored", NetworkStatus.Errored)]
-    public async Task AnObservation_WhileTheCreateWaits_WritesCurrent_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
+    public async Task AnObservation_WhileTheCreateWaits_RecordsTheStatusSeen_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
     {
         Network network = Given(NewNetwork());
         Guid create = network.Operation.PendingId!.Value;
 
         await ObserveHandler().HandleAsync(new ObserveNetworkCommand(network.Id, true, word));
 
-        Assert.Equal((CurrentExistence.Exists, expected), (network.CurrentExistence, network.CurrentState));
+        Assert.Equal(NetworkStatus.Creating, network.Status);
+        Assert.Equal((NetworkStatus?)expected, network.Operation.LastSeenStatus);
         Assert.Equal(create, network.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -287,15 +287,15 @@ public class NetworkRequestHandlerTests
 
     // The reconciler never reports the delete done (titan-ops architecture/desired-and-current.md#existence-axis).
     [Fact]
-    public async Task AnObservation_NotFound_WritesNotFound_AndLeavesTheDeleteWaiting()
+    public async Task AnObservation_NotFound_WhileTheDeleteWaits_SeesNoStatus_AndLeavesTheDeleteWaiting()
     {
         Network network = Given(ActiveNetwork());
         OperationTicket delete = network.Delete()!;
 
         await ObserveHandler().HandleAsync(new ObserveNetworkCommand(network.Id, false));
 
-        Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
-        Assert.Null(network.CurrentState);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
+        Assert.Null(network.InstanceStatus);
         Assert.Equal(delete.OperationId, network.Operation.PendingId!.Value);
     }
 
@@ -334,8 +334,7 @@ public class NetworkRequestHandlerTests
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, create, "Done", "rule-ext", "enabled"));
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Equal(("rule-ext", CurrentExistence.Exists, FirewallRuleState.enabled),
-            (rule.ExternalId, rule.CurrentExistence, rule.CurrentState));
+        Assert.Equal(("rule-ext", FirewallRuleStatus.enabled), (rule.ExternalId, rule.Status));
         var created = Assert.Single(_activity.Events);
         Assert.Equal(("firewall_rule.created", Owner.Id, rule.Id), (created.Action, created.OutcomeTenantId, created.ResourceId));
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -351,7 +350,7 @@ public class NetworkRequestHandlerTests
             new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(FirewallRuleOperationKind.Create, rule.Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
         NothingSaved();
     }
 
@@ -381,7 +380,7 @@ public class NetworkRequestHandlerTests
             "rule-ext", Reason: "Firewall rule creation failed."));
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Equal(("rule-ext", CurrentExistence.Exists), (rule.ExternalId, rule.CurrentExistence));
+        Assert.Equal(("rule-ext", FirewallRuleStatus.Unknown), (rule.ExternalId, rule.Status));
         Assert.Equal("Firewall rule creation failed.", rule.Operation.FailureReason);
         Assert.Empty(_activity.Events);
     }
@@ -396,7 +395,7 @@ public class NetworkRequestHandlerTests
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.OperationId, "Done"));
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.OperationId, "Done"));
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
         Assert.Equal("rule-ext", rule.ExternalId);
         Assert.Equal(["firewall_rule.deleted"], Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -414,7 +413,7 @@ public class NetworkRequestHandlerTests
             Reason: "Firewall rule deletion failed.", Detail: "acl write refused"));
 
         Assert.Null(rule.Operation.PendingId);
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
+        Assert.False(rule.IsDeletedOrDeleting);
         Assert.Equal("Firewall rule deletion failed.", rule.Operation.FailureReason);
         Assert.Equal("acl write refused", rule.Operation.FailureDetail);
         Assert.NotNull(providerId);
@@ -470,12 +469,12 @@ public class NetworkRequestHandlerTests
             new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Done", "rule-ext")));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", refused.Code);
-        Assert.Equal(FirewallRuleOperationKind.Create, rule.Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
         NothingSaved();
     }
 
     [Fact]
-    public async Task ARuleObservation_WhileTheCreateWaits_WritesCurrent_AndTheCreateKeepsWaiting()
+    public async Task ARuleObservation_WhileTheCreateWaits_RecordsTheStateSeen_AndTheCreateKeepsWaiting()
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
@@ -483,14 +482,15 @@ public class NetworkRequestHandlerTests
 
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, true, "enabled"));
 
-        Assert.Equal((CurrentExistence.Exists, FirewallRuleState.enabled), (rule.CurrentExistence, rule.CurrentState));
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
+        Assert.Equal(FirewallRuleStatus.enabled, rule.Operation.LastSeenStatus);
         Assert.Equal(create, rule.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ARuleObservation_NotFound_WritesNotFound_AndLeavesTheDeleteWaiting()
+    public async Task ARuleObservation_NotFound_WhileTheDeleteWaits_SeesNoState_AndLeavesTheDeleteWaiting()
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
@@ -498,7 +498,8 @@ public class NetworkRequestHandlerTests
 
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, false));
 
-        Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Deleting, rule.Status);
+        Assert.Null(rule.InstanceStatus);
         Assert.Equal(delete.OperationId, rule.Operation.PendingId!.Value);
     }
 
@@ -512,22 +513,22 @@ public class NetworkRequestHandlerTests
             ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, false)));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", refused.Code);
-        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
+        Assert.True(FirewallRule.IsIncusStatus(rule.Status));
     }
 
     // titan-ops architecture/desired-and-current.md#provider-state-is-verbatim
     [Theory]
-    [InlineData("enabled", FirewallRuleState.enabled)]
-    [InlineData("disabled", FirewallRuleState.disabled)]
-    [InlineData("logged", FirewallRuleState.logged)]
-    public async Task ARuleObservation_RecordsTheIncusStateAsIs(string word, FirewallRuleState expected)
+    [InlineData("enabled", FirewallRuleStatus.enabled)]
+    [InlineData("disabled", FirewallRuleStatus.disabled)]
+    [InlineData("logged", FirewallRuleStatus.logged)]
+    public async Task ARuleObservation_RecordsTheIncusStateAsIs(string word, FirewallRuleStatus expected)
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = ActiveRule(network);
 
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, true, word));
 
-        Assert.Equal(expected, rule.CurrentState);
+        Assert.Equal(expected, rule.Status);
     }
 
     // Incus spells the state in lower case; anything else is not an Incus word.

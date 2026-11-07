@@ -145,7 +145,7 @@ public class NetworkPublicIpv6Tests
 
         Assert.Null(network.Delete());
 
-        Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
+        Assert.Equal(NetworkStatus.Deleted, network.Status);
         Assert.False(network.HasPublicIpv6);
     }
 }

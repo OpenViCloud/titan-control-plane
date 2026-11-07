@@ -63,7 +63,7 @@ public class NetworkRoutesTests
         Assert.False(network.HasPublicIpv6);
     }
 
-    private Task<NetworkOperationKind?> CreateFailed(Network network, Guid operationId,
+    private Task<NetworkStatus?> CreateFailed(Network network, Guid operationId,
         string? externalId = null) =>
         Routes().FailOperationAsync(network, operationId, externalId, null, null, null, "Network creation failed.", "raw");
 
@@ -74,9 +74,9 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
 
-        NetworkOperationKind? ended = await CreateFailed(network, network.Operation.PendingId!.Value);
+        NetworkStatus? ended = await CreateFailed(network, network.Operation.PendingId!.Value);
 
-        Assert.Equal(NetworkOperationKind.Create, ended);
+        Assert.Equal(NetworkStatus.Creating, ended);
         Assert.False(network.HasPublicIpv6);
         Assert.Equal("Network creation failed.", network.Operation.FailureReason);
         Assert.True(route.IsFree);
@@ -90,9 +90,9 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        NetworkOperationKind? ended = await CreateFailed(network, network.Operation.PendingId!.Value, "net-x");
+        NetworkStatus? ended = await CreateFailed(network, network.Operation.PendingId!.Value, "net-x");
 
-        Assert.Equal(NetworkOperationKind.Create, ended);
+        Assert.Equal(NetworkStatus.Creating, ended);
         Assert.True(network.HasPublicIpv6);
         Assert.False(RouteOf(network).IsFree);
     }
@@ -117,10 +117,10 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        NetworkOperationKind? ended = await CreateFailed(network, Guid.NewGuid());
+        NetworkStatus? ended = await CreateFailed(network, Guid.NewGuid());
 
         Assert.Null(ended);
-        Assert.Equal(NetworkTransition.Creating, network.Transition);
+        Assert.Equal(NetworkStatus.Creating, network.Status);
         Assert.True(network.HasPublicIpv6);
         Assert.False(RouteOf(network).IsFree);
     }
@@ -134,15 +134,15 @@ public class NetworkRoutesTests
         network.MarkActive("net-x", "10.0.0.0/24", "10.0.0.1");
         Guid deleteId = network.Delete()!.OperationId;
 
-        NetworkOperationKind? first = await Routes().FinishOperationAsync(network, deleteId, null, null, null, null);
+        NetworkStatus? first = await Routes().FinishOperationAsync(network, deleteId, null, null, null, null);
         DateTimeOffset? releasedAt = route.ReleasedAt;
-        NetworkOperationKind? second = await Routes().FinishOperationAsync(network, deleteId, null, null, null, null);
+        NetworkStatus? second = await Routes().FinishOperationAsync(network, deleteId, null, null, null, null);
 
         Assert.True(network.IsDeleted);
         Assert.True(route.IsFree);
         Assert.NotNull(releasedAt);
         Assert.Equal(releasedAt, route.ReleasedAt);
-        Assert.Equal(NetworkOperationKind.Delete, first);
+        Assert.Equal(NetworkStatus.Deleting, first);
         Assert.Null(second);
     }
 

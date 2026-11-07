@@ -48,26 +48,26 @@ public partial class Network
     public OperationTicket? DeleteFirewallRule(Guid ruleId) => GetFirewallRule(ruleId).Delete();
 
     /// The reports of the rule's own commands (titan-ops features/network/design.md#network-operation); each is false when it
-    /// names another operation than the one of its kind the rule waits on. A rule that is not on this network answers
+    /// names another operation than the one the rule waits on, which its status says. A rule that is not on this network answers
     /// like a missing one.
     public bool FirewallRuleCreateSucceeded(Guid ruleId, Guid operationId, string? externalId,
-        FirewallRuleState? observedState) =>
+        FirewallRuleStatus? observedState) =>
         GetFirewallRule(ruleId).CreateSucceeded(operationId, externalId, observedState);
 
     public bool FirewallRuleCreateFailed(Guid ruleId, Guid operationId, string? externalId,
-        FirewallRuleState? observedState, string? reason, string? detail) =>
+        FirewallRuleStatus? observedState, string? reason, string? detail) =>
         GetFirewallRule(ruleId).CreateFailed(operationId, externalId, observedState, reason, detail);
 
     public bool FirewallRuleDeleteSucceeded(Guid ruleId, Guid operationId) =>
         GetFirewallRule(ruleId).DeleteSucceeded(operationId);
 
-    public bool FirewallRuleDeleteFailed(Guid ruleId, Guid operationId, FirewallRuleState? observedState,
+    public bool FirewallRuleDeleteFailed(Guid ruleId, Guid operationId, FirewallRuleStatus? observedState,
         string? reason, string? detail) =>
         GetFirewallRule(ruleId).DeleteFailed(operationId, observedState, reason, detail);
 
-    // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
+    // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): the status at rest, or the state seen while an operation waits.
 
-    public void MarkFirewallRuleObserved(Guid ruleId, FirewallRuleState state) =>
+    public void MarkFirewallRuleObserved(Guid ruleId, FirewallRuleStatus state) =>
         GetFirewallRule(ruleId).MarkObserved(state);
 
     public void MarkFirewallRuleNotFound(Guid ruleId) => GetFirewallRule(ruleId).MarkNotFound();
