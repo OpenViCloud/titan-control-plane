@@ -212,9 +212,9 @@ public class NetworkTests
 
         network.MarkRequestFailed("Network creation failed.", "raw incus error");
 
-        Assert.Equal("Network creation failed.", network.OperationFailureReason);
-        Assert.Equal("raw incus error", network.OperationFailureDetail);
-        Assert.NotNull(network.OperationFailedAt);
+        Assert.Equal("Network creation failed.", network.Operation.FailureReason);
+        Assert.Equal("raw incus error", network.Operation.FailureDetail);
+        Assert.NotNull(network.Operation.FailedAt);
         Assert.Null(network.Transition);
         Assert.Equal(CurrentExistence.NotCreated, network.CurrentExistence);
         Assert.Null(network.CurrentState);
@@ -227,7 +227,7 @@ public class NetworkTests
 
         network.MarkRequestFailed("late", "late");
 
-        Assert.Null(network.OperationFailureReason);
+        Assert.Null(network.Operation.FailureReason);
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
     }
 
@@ -288,7 +288,7 @@ public class NetworkTests
         var ex = Assert.Throws<BusinessException>(() => network.Delete());
 
         Assert.Equal("NETWORK_INVALID_STATE", ex.Code);
-        Assert.Equal((NetworkOperationKind.Delete, first), (network.Pending!.Kind, network.Pending.Id));
+        Assert.Equal((NetworkOperationKind.Delete, first), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
     }
 
     [Fact]
@@ -333,7 +333,7 @@ public class NetworkTests
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.Null(network.CurrentState);
         Assert.Equal("cs-net-id", network.ExternalId);
-        Assert.Null(network.OperationFailureReason);
+        Assert.Null(network.Operation.FailureReason);
     }
 
     // ── Rename ─────────────────────────────────────────────────────────────

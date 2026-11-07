@@ -99,7 +99,7 @@ public class NetworkFirewallRuleTests
         Assert.Equal(NetworkOperationKind.Delete, outcome);
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
         Assert.All(network.FirewallRules, r => Assert.Equal(CurrentExistence.Deleted, r.CurrentExistence));
-        Assert.All(network.FirewallRules, r => Assert.Null(r.Pending));
+        Assert.All(network.FirewallRules, r => Assert.Null(r.Operation.PendingId));
         Assert.Null(creating.Transition);
     }
 
@@ -125,9 +125,9 @@ public class NetworkFirewallRuleTests
         deleting.MarkActive("sg-23");
         deleting.Delete();
         Guid deleteId = network.Delete()!.OperationId;
-        network.FinishOperation(deleteId, null, null, null, null);
+        network.ReportDone(deleteId, null, null, null, null);
 
-        NetworkOperationKind? repeat = network.FinishOperation(deleteId, null, null, null, null);
+        NetworkOperationKind? repeat = network.ReportDone(deleteId, null, null, null, null);
 
         Assert.Null(repeat);
         Assert.Equal(CurrentExistence.Deleted, deleting.CurrentExistence);
@@ -145,7 +145,7 @@ public class NetworkFirewallRuleTests
         Assert.DoesNotContain(network.FirewallRules, r => r.Id == foreign.Id);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.DeleteFirewallRule(foreign.Id)).Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(
-            () => network.FinishFirewallRuleOperation(foreign.Id, foreign.Pending!.Id, "sg-22", null)).Code);
+            () => network.ReportRuleDone(foreign.Id, foreign.Operation.PendingId!.Value, "sg-22", null)).Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(
             () => network.MarkFirewallRuleObserved(foreign.Id, FirewallRuleState.enabled)).Code);
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", Assert.Throws<NotFoundException>(() => network.MarkFirewallRuleNotFound(foreign.Id)).Code);
@@ -161,23 +161,23 @@ public class NetworkFirewallRuleTests
         var rule = Rule(network, 22);
         var untouched = Rule(network, 23);
 
-        Guid createId = rule.Pending!.Id;
-        Assert.Equal(FirewallRuleOperationKind.Create, network.FinishFirewallRuleOperation(rule.Id, createId, "sg-22", null));
+        Guid createId = rule.Operation.PendingId!.Value;
+        Assert.Equal(FirewallRuleOperationKind.Create, network.ReportRuleDone(rule.Id, createId, "sg-22", null));
         network.MarkFirewallRuleObserved(rule.Id, FirewallRuleState.disabled);
         Assert.Equal(FirewallRuleState.disabled, rule.CurrentState);
 
         OperationTicket delete = network.DeleteFirewallRule(rule.Id)!;
         Assert.Equal("sg-22", delete.ProviderId);
         Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
-        network.FailFirewallRuleOperation(rule.Id, delete.OperationId, null, null, "refused", "raw");
+        network.ReportRuleFailed(rule.Id, delete.OperationId, null, null, "refused", "raw");
         Assert.Null(rule.Transition);
-        Assert.Equal("refused", rule.OperationFailureReason);
+        Assert.Equal("refused", rule.Operation.FailureReason);
 
         network.MarkFirewallRuleNotFound(rule.Id);
         Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
         OperationTicket again = network.DeleteFirewallRule(rule.Id)!;
         Assert.Equal(FirewallRuleOperationKind.Delete,
-            network.FinishFirewallRuleOperation(rule.Id, again.OperationId, null, null));
+            network.ReportRuleDone(rule.Id, again.OperationId, null, null));
         Assert.True(rule.IsDeleted);
 
         Assert.Equal(FirewallRuleTransition.Creating, untouched.Transition);
@@ -189,7 +189,7 @@ public class NetworkFirewallRuleTests
     {
         var network = UsableNetwork();
         var failed = Rule(network, 22);
-        network.FailFirewallRuleOperation(failed.Id, failed.Pending!.Id, null, null, "reason", "detail");
+        network.ReportRuleFailed(failed.Id, failed.Operation.PendingId!.Value, null, null, "reason", "detail");
 
         Assert.Null(network.DeleteFirewallRule(failed.Id));
 

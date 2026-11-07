@@ -94,13 +94,13 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
 
         Network delete = await NetworkAsync(deleting);
-        Assert.Equal(NetworkOperationKind.Delete, delete.Pending!.Kind);
-        Assert.True(delete.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(creating)).Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, delete.Operation.Kind!.Value);
+        Assert.True(delete.Operation.AskedAt > DateTimeOffset.UnixEpoch);
+        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(creating)).Operation.Kind!.Value);
         Network rest = await NetworkAsync(resting);
-        Assert.Null(rest.Pending);
-        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
-        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleCreating).Pending!.Kind);
+        Assert.Null(rest.Operation.PendingId);
+        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleCreating).Operation.Kind!.Value);
     }
 
     // A create whose command already reported the provider id waited only for the reconciler's Created, which no longer
@@ -121,14 +121,14 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
 
         Network ended = await NetworkAsync(reported);
-        Assert.Null(ended.Pending);
+        Assert.Null(ended.Operation.PendingId);
         Assert.Equal($"net-{reported:N}", ended.ExternalId);
-        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(notReported)).Pending!.Kind);
-        Assert.Equal(NetworkOperationKind.Delete, (await NetworkAsync(deleting)).Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(notReported)).Operation.Kind!.Value);
+        Assert.Equal(NetworkOperationKind.Delete, (await NetworkAsync(deleting)).Operation.Kind!.Value);
         Network rest = await NetworkAsync(resting);
-        Assert.Null(rest.FirewallRules.Single(r => r.Id == ruleReported).Pending);
-        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Pending!.Kind);
-        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Kind);
+        Assert.Null(rest.FirewallRules.Single(r => r.Id == ruleReported).Operation.PendingId);
+        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Operation.Kind!.Value);
     }
 
     [Fact]
@@ -147,11 +147,11 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
 
         await MigrateToLatestAsync();
 
-        Guid deleteRequest = (await NetworkAsync(deleting)).Pending!.Id;
-        Guid createRequest = (await NetworkAsync(creating)).Pending!.Id;
+        Guid deleteRequest = (await NetworkAsync(deleting)).Operation.PendingId!.Value;
+        Guid createRequest = (await NetworkAsync(creating)).Operation.PendingId!.Value;
         Network rest = await NetworkAsync(resting);
-        Guid ruleDeleteRequest = rest.FirewallRules.Single(r => r.Id == ruleDeleting).Pending!.Id;
-        Guid ruleCreateRequest = rest.FirewallRules.Single(r => r.Id == ruleCreating).Pending!.Id;
+        Guid ruleDeleteRequest = rest.FirewallRules.Single(r => r.Id == ruleDeleting).Operation.PendingId!.Value;
+        Guid ruleCreateRequest = rest.FirewallRules.Single(r => r.Id == ruleCreating).Operation.PendingId!.Value;
         await using TitanDbContext read = NewDbContext();
         Dictionary<string, string> payloadByKey = await read.ProviderCommands.ToDictionaryAsync(c => c.Key, c => c.Payload);
         Assert.Equal(4, payloadByKey.Count);
@@ -175,7 +175,7 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Network withARule = Network.Create(tenantId, NetworkName.Parse("after"), "cluster-a", null, wantsPublicIpv6: false);
-        withARule.FinishOperation(withARule.Pending!.Id, "net-after", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        withARule.ReportDone(withARule.Operation.PendingId!.Value, "net-after", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
         withARule.AddFirewallRule(Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         Network creating = Network.Create(tenantId, NetworkName.Parse("creating"), "cluster-a", null, wantsPublicIpv6: false);
         await using (TitanDbContext db = NewDbContext())

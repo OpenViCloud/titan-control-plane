@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states, except the VM, which keeps one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
-// (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
+// (FinishOperation, FailOperation; the Succeeded and Failed moves of a VM, a network and a firewall rule), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -32,7 +32,7 @@ public class DesiredCurrentOwnershipTests
         ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["FirewallRule.EndWithItsNetwork"] = "part of Network.FinishOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.EndWithItsNetwork"] = "part of Network.DeleteSucceeded: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
@@ -73,18 +73,21 @@ public class DesiredCurrentOwnershipTests
     // The report of a request's own command (FinishOperation for a Done, FailOperation for a give-up,
     // titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the worker
     // saw is current, and a failed request puts desired back. They are neither intents nor observations, so both scans
-    // skip them and the private RecordWhatTheWorkerSaw they share; every aggregate on the new shape gets the pair, and a
-    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation.
+    // skip them and the private RecordWhatTheWorkerSaw they share. A type that keeps its operation in an Operation
+    // (the VM, the network, the firewall rule) has one Succeeded and one Failed move per kind instead of the pair, and a
+    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation or Network.FirewallRule<Operation>Succeeded/Failed.
     [Fact]
     public void ReportMethods_AreOnlyFinishAndFail()
     {
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
         string[] expected =
         [
-            "FirewallRule.FailOperation", "FirewallRule.FinishOperation", "FirewallRule.RecordWhatTheWorkerSaw",
+            "FirewallRule.CreateFailed", "FirewallRule.CreateSucceeded", "FirewallRule.DeleteFailed", "FirewallRule.DeleteSucceeded",
+            "FirewallRule.RecordWhatTheWorkerSaw",
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
-            "Network.FailFirewallRuleOperation", "Network.FailOperation", "Network.FinishFirewallRuleOperation",
-            "Network.FinishOperation", "Network.RecordWhatTheWorkerSaw",
+            "Network.CreateFailed", "Network.CreateSucceeded", "Network.DeleteFailed", "Network.DeleteSucceeded",
+            "Network.FirewallRuleCreateFailed", "Network.FirewallRuleCreateSucceeded", "Network.FirewallRuleDeleteFailed",
+            "Network.FirewallRuleDeleteSucceeded", "Network.RecordWhatTheWorkerSaw",
             "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
             "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
@@ -144,9 +147,10 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        // Finish<Child>Operation and Fail<Child>Operation: a root's way in to its child's pair
-        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part both share.
-        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|RecordWhatTheWorkerSaw)$");
+        // Finish<Child>Operation and Fail<Child>Operation, or the <Child><Create|Delete><Succeeded|Failed> of a type that
+        // ends an operation by its kind: a root's way in to its child's reports
+        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part they share.
+        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|(?:FirewallRule)?(?:Create|Delete)(?:Succeeded|Failed)|RecordWhatTheWorkerSaw)$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

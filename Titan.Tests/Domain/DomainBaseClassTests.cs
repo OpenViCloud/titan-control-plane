@@ -16,7 +16,7 @@ public class DomainBaseClassTests
     private static readonly Dictionary<string, string> NoRole = new(StringComparer.Ordinal)
     {
         ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, Update and HasDesiredSpec; the listener it becomes is the child entity",
-        ["VolumeAttachProviderIds"] = "result of Volume.Attach: the request id and the provider ids the attach command carries",
+        ["VolumeAttachProviderIds"] = "result of Volume.Attach: the operation id and the provider ids the attach command carries",
     };
 
     [Fact]

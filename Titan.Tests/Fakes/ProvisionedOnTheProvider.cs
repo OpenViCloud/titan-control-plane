@@ -10,17 +10,84 @@ namespace Titan.Domain.Aggregates.Network
 {
     /// A network's and a firewall rule's requests end by their own command's report
     /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
-    /// test setups used before, through the real FinishOperation, FailOperation and MarkObserved. A replay for a request
-    /// not waiting does nothing, like the report it stands for.
+    /// test setups used before, through the real CreateSucceeded, CreateFailed, DeleteSucceeded, DeleteFailed and MarkObserved. A
+    /// replay for a request not waiting does nothing, like the report it stands for.
     public static class NetworkProvisionedOnTheProvider
     {
+        /// The worker's Done for the operation the network waits on, in the one call tests used before the four methods
+        /// (CreateSucceeded, DeleteSucceeded): the kind it ended, or null when it names no waiting operation.
+        public static NetworkOperationKind? ReportDone(this Network network, Guid operationId, string? externalId = null,
+            NetworkStatus? status = null, string? cidr = null, string? gateway = null)
+        {
+            NetworkOperationKind? waiting = network.Operation.Kind;
+            bool ended;
+            switch (waiting)
+            {
+                case NetworkOperationKind.Create:
+                    ended = network.CreateSucceeded(operationId, externalId, status, cidr, gateway);
+                    break;
+                case NetworkOperationKind.Delete:
+                    ended = network.DeleteSucceeded(operationId);
+                    break;
+                default:
+                    ended = false;
+                    break;
+            }
+            return ended ? waiting : null;
+        }
+
+        /// The worker's give-up for the operation the network waits on (CreateFailed, DeleteFailed).
+        public static NetworkOperationKind? ReportFailed(this Network network, Guid operationId, string? externalId,
+            NetworkStatus? status, string? cidr, string? gateway, string? reason, string? detail)
+        {
+            NetworkOperationKind? waiting = network.Operation.Kind;
+            bool ended;
+            switch (waiting)
+            {
+                case NetworkOperationKind.Create:
+                    ended = network.CreateFailed(operationId, externalId, status, cidr, gateway, reason, detail);
+                    break;
+                case NetworkOperationKind.Delete:
+                    ended = network.DeleteFailed(operationId, status, reason, detail);
+                    break;
+                default:
+                    ended = false;
+                    break;
+            }
+            return ended ? waiting : null;
+        }
+
+        /// The Done of one rule's own command through the network; a rule that is not there answers like a missing one.
+        public static FirewallRuleOperationKind? ReportRuleDone(this Network network, Guid ruleId, Guid operationId,
+            string? externalId, FirewallRuleState? observedState)
+        {
+            FirewallRule? rule = network.FirewallRules.FirstOrDefault(r => r.Id == ruleId);
+            FirewallRuleOperationKind? waiting = rule?.Operation.Kind;
+            bool ended = waiting == FirewallRuleOperationKind.Delete
+                ? network.FirewallRuleDeleteSucceeded(ruleId, operationId)
+                : network.FirewallRuleCreateSucceeded(ruleId, operationId, externalId, observedState);
+            return ended ? waiting : null;
+        }
+
+        /// The give-up of one rule's own command through the network.
+        public static FirewallRuleOperationKind? ReportRuleFailed(this Network network, Guid ruleId, Guid operationId,
+            string? externalId, FirewallRuleState? observedState, string? reason, string? detail)
+        {
+            FirewallRule? rule = network.FirewallRules.FirstOrDefault(r => r.Id == ruleId);
+            FirewallRuleOperationKind? waiting = rule?.Operation.Kind;
+            bool ended = waiting == FirewallRuleOperationKind.Delete
+                ? network.FirewallRuleDeleteFailed(ruleId, operationId, observedState, reason, detail)
+                : network.FirewallRuleCreateFailed(ruleId, operationId, externalId, observedState, reason, detail);
+            return ended ? waiting : null;
+        }
+
         /// The create command's Done with the name and address, reading the network Created. True when it ended the
         /// create; with none waiting it is the reconciler's Created.
         public static bool MarkActive(this Network network, string externalId, string? cidr, string? gateway)
         {
-            if (network.Pending is { Kind: NetworkOperationKind.Create } create)
+            if (network.Operation.Kind == NetworkOperationKind.Create)
             {
-                return network.FinishOperation(create.Id, externalId, NetworkStatus.Created, cidr, gateway) != null;
+                return network.ReportDone(network.Operation.PendingId!.Value, externalId, NetworkStatus.Created, cidr, gateway) != null;
             }
             network.MarkObserved(NetworkStatus.Created);
             return false;
@@ -29,25 +96,25 @@ namespace Titan.Domain.Aggregates.Network
         /// The create command's Done with the name and address, before Incus shows a status.
         public static void MarkCreated(this Network network, string externalId, string? cidr, string? gateway)
         {
-            if (network.Pending is { Kind: NetworkOperationKind.Create } create)
+            if (network.Operation.Kind == NetworkOperationKind.Create)
             {
-                network.FinishOperation(create.Id, externalId, null, cidr, gateway);
+                network.ReportDone(network.Operation.PendingId!.Value, externalId, null, cidr, gateway);
             }
         }
 
         /// The delete command's Done.
         public static NetworkOperationKind? MarkDeleted(this Network network) =>
-            network.Pending is { Kind: NetworkOperationKind.Delete } delete
-                ? network.FinishOperation(delete.Id, null, null, null, null)
+            network.Operation.Kind == NetworkOperationKind.Delete
+                ? network.ReportDone(network.Operation.PendingId!.Value, null, null, null, null)
                 : null;
 
         /// The create command's give-up. True when the network let go of its /64.
         public static bool MarkRequestFailed(this Network network, string? reason, string? detail, string? externalId = null)
         {
-            if (network.Pending is { Kind: NetworkOperationKind.Create } create)
+            if (network.Operation.Kind == NetworkOperationKind.Create)
             {
                 bool heldAPublicIpv6 = network.HasPublicIpv6;
-                NetworkOperationKind? ended = network.FailOperation(create.Id, externalId, null, null, null, reason, detail);
+                NetworkOperationKind? ended = network.ReportFailed(network.Operation.PendingId!.Value, externalId, null, null, null, reason, detail);
                 return ended != null && heldAPublicIpv6 && !network.HasPublicIpv6;
             }
             return false;
@@ -56,12 +123,34 @@ namespace Titan.Domain.Aggregates.Network
 
     public static class FirewallRuleProvisionedOnTheProvider
     {
+        /// The Done of the rule's own command, in the one call tests used before the four methods.
+        public static FirewallRuleOperationKind? ReportDone(this FirewallRule rule, Guid operationId, string? externalId,
+            FirewallRuleState? observedState)
+        {
+            FirewallRuleOperationKind? waiting = rule.Operation.Kind;
+            bool ended = waiting == FirewallRuleOperationKind.Delete
+                ? rule.DeleteSucceeded(operationId)
+                : rule.CreateSucceeded(operationId, externalId, observedState);
+            return ended ? waiting : null;
+        }
+
+        /// The give-up of the rule's own command.
+        public static FirewallRuleOperationKind? ReportFailed(this FirewallRule rule, Guid operationId, string? externalId,
+            FirewallRuleState? observedState, string? reason, string? detail)
+        {
+            FirewallRuleOperationKind? waiting = rule.Operation.Kind;
+            bool ended = waiting == FirewallRuleOperationKind.Delete
+                ? rule.DeleteFailed(operationId, observedState, reason, detail)
+                : rule.CreateFailed(operationId, externalId, observedState, reason, detail);
+            return ended ? waiting : null;
+        }
+
         /// The create command's Done with the rule's id, reading it enabled in the ACL. True when it ended the create.
         public static bool MarkActive(this FirewallRule rule, string externalId)
         {
-            if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
+            if (rule.Operation.Kind == FirewallRuleOperationKind.Create)
             {
-                return rule.FinishOperation(create.Id, externalId, FirewallRuleState.enabled) != null;
+                return rule.ReportDone(rule.Operation.PendingId!.Value, externalId, FirewallRuleState.enabled) != null;
             }
             rule.MarkObserved(FirewallRuleState.enabled);
             return false;
@@ -70,25 +159,25 @@ namespace Titan.Domain.Aggregates.Network
         /// The create command's Done with the rule's id, before the rule's state is read.
         public static void MarkCreated(this FirewallRule rule, string externalId)
         {
-            if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
+            if (rule.Operation.Kind == FirewallRuleOperationKind.Create)
             {
-                rule.FinishOperation(create.Id, externalId, null);
+                rule.ReportDone(rule.Operation.PendingId!.Value, externalId, null);
             }
         }
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this FirewallRule rule, string? reason, string? detail, string? externalId = null)
         {
-            if (rule.Pending is { Kind: FirewallRuleOperationKind.Create } create)
+            if (rule.Operation.Kind == FirewallRuleOperationKind.Create)
             {
-                rule.FailOperation(create.Id, externalId, null, reason, detail);
+                rule.ReportFailed(rule.Operation.PendingId!.Value, externalId, null, reason, detail);
             }
         }
 
         /// The rule's own delete Done. True when its delete was waiting.
         public static bool MarkDeleted(this FirewallRule rule) =>
-            rule.Pending is { Kind: FirewallRuleOperationKind.Delete } delete
-            && rule.FinishOperation(delete.Id, null, null) != null;
+            rule.Operation.Kind == FirewallRuleOperationKind.Delete
+            && rule.ReportDone(rule.Operation.PendingId!.Value, null, null) != null;
     }
 }
 

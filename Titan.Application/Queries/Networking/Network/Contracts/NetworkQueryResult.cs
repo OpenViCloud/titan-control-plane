@@ -31,6 +31,6 @@ public record NetworkQueryResult(
     public static NetworkQueryResult From(NetworkAggregate n) =>
         new(n.Id, n.Name.Value, n.ClusterId, n.Cidr, n.Gateway, n.ExternalId, n.CurrentState,
             n.CurrentExistence, n.DesiredExistence, n.Transition,
-            n.OperationFailureReason, n.OperationFailedAt,
+            n.Operation.FailureReason, n.Operation.FailedAt,
             n.DefaultIngressPolicy.ToString(), n.DefaultEgressPolicy.ToString(), n.CreatedAt, n.PublicIpv6Subnet);
 }

@@ -86,10 +86,10 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(NewNetwork());
 
-        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Done", "net-ext",
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
             Status: "Created", Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"));
 
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.Equal(("net-ext", CurrentExistence.Exists, NetworkStatus.Created),
             (network.ExternalId, network.CurrentExistence, network.CurrentState));
         Assert.Equal(("10.0.0.0/24", "10.0.0.1"), (network.Cidr, network.Gateway));
@@ -103,7 +103,7 @@ public class NetworkRequestHandlerTests
     public async Task Done_OfTheCreate_Twice_TheSecondSavesNothing_AndRecordsNothing()
     {
         Network network = Given(NewNetwork());
-        Guid create = network.Pending!.Id;
+        Guid create = network.Operation.PendingId!.Value;
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext"));
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext"));
@@ -120,10 +120,10 @@ public class NetworkRequestHandlerTests
         Network network = Given(NewNetwork());
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() =>
-            EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Done", externalId)));
+            EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", externalId)));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(NetworkOperationKind.Create, network.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Create, network.Operation.Kind!.Value);
         Assert.Empty(_activity.Events);
         NothingSaved();
     }
@@ -135,13 +135,13 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(NewNetwork());
 
-        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Failed", "net-ext",
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Failed", "net-ext",
             Reason: "Network creation failed.", Detail: "raw"));
 
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.Equal(("net-ext", CurrentExistence.Exists), (network.ExternalId, network.CurrentExistence));
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal(("Network creation failed.", "raw"), (network.OperationFailureReason, network.OperationFailureDetail));
+        Assert.Equal(("Network creation failed.", "raw"), (network.Operation.FailureReason, network.Operation.FailureDetail));
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -153,7 +153,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = CreatingNetworkHoldingARoute();
 
-        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Failed",
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Failed",
             Reason: "Network creation failed."));
 
         Assert.False(network.HasPublicIpv6);
@@ -166,7 +166,7 @@ public class NetworkRequestHandlerTests
     {
         Network network = CreatingNetworkHoldingARoute();
 
-        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Pending!.Id, "Failed", "net-ext",
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Failed", "net-ext",
             Reason: "Network creation failed."));
 
         Assert.True(network.HasPublicIpv6);
@@ -183,13 +183,13 @@ public class NetworkRequestHandlerTests
         FirewallRule leaving = ActiveRule(network);
         network.DeleteFirewallRule(leaving.Id);
         FirewallRule gone = ActiveRule(network);
-        network.FinishFirewallRuleOperation(gone.Id, network.DeleteFirewallRule(gone.Id)!.OperationId, null, null);
+        network.ReportRuleDone(gone.Id, network.DeleteFirewallRule(gone.Id)!.OperationId, null, null);
         OperationTicket delete = network.Delete()!;
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.OperationId, "Done"));
 
         Assert.Equal(CurrentExistence.Deleted, network.CurrentExistence);
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.Equal((CurrentExistence.Deleted, CurrentExistence.Deleted), (staying.CurrentExistence, leaving.CurrentExistence));
         Assert.Equal(["firewall_rule.deleted", "network.deleted"], Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "firewall_rule.deleted").ResourceId);
@@ -219,10 +219,10 @@ public class NetworkRequestHandlerTests
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, delete.OperationId, "Failed",
             Reason: "Network deletion failed.", Detail: "raw"));
 
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
         Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
-        Assert.Equal("Network deletion failed.", network.OperationFailureReason);
+        Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
         Assert.Equal(["network.delete_failed"], Outcomes());
         Assert.Equal(network.Id, RouteRow(1).NetworkId);
     }
@@ -235,9 +235,9 @@ public class NetworkRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
-        Assert.Equal(delete.OperationId, network.Pending!.Id);
+        Assert.Equal(delete.OperationId, network.Operation.PendingId!.Value);
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
-        Assert.Null(network.OperationFailureReason);
+        Assert.Null(network.Operation.FailureReason);
         Assert.Empty(_activity.Events);
         NothingSaved();
     }
@@ -275,12 +275,12 @@ public class NetworkRequestHandlerTests
     public async Task AnObservation_WhileTheCreateWaits_WritesCurrent_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
     {
         Network network = Given(NewNetwork());
-        Guid create = network.Pending!.Id;
+        Guid create = network.Operation.PendingId!.Value;
 
         await ObserveHandler().HandleAsync(new ObserveNetworkCommand(network.Id, true, word));
 
         Assert.Equal((CurrentExistence.Exists, expected), (network.CurrentExistence, network.CurrentState));
-        Assert.Equal(create, network.Pending!.Id);
+        Assert.Equal(create, network.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -296,7 +296,7 @@ public class NetworkRequestHandlerTests
 
         Assert.Equal(CurrentExistence.NotFound, network.CurrentExistence);
         Assert.Null(network.CurrentState);
-        Assert.Equal(delete.OperationId, network.Pending!.Id);
+        Assert.Equal(delete.OperationId, network.Operation.PendingId!.Value);
     }
 
     [Theory]
@@ -328,12 +328,12 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
-        Guid create = rule.Pending!.Id;
+        Guid create = rule.Operation.PendingId!.Value;
 
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, create, "Done", "rule-ext", "enabled"));
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, create, "Done", "rule-ext", "enabled"));
 
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
         Assert.Equal(("rule-ext", CurrentExistence.Exists, FirewallRuleState.enabled),
             (rule.ExternalId, rule.CurrentExistence, rule.CurrentState));
         var created = Assert.Single(_activity.Events);
@@ -348,10 +348,10 @@ public class NetworkRequestHandlerTests
         FirewallRule rule = NewRule(network);
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => EndRuleHandler().HandleAsync(
-            new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Pending!.Id, "Done")));
+            new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(FirewallRuleOperationKind.Create, rule.Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Create, rule.Operation.Kind!.Value);
         NothingSaved();
     }
 
@@ -361,12 +361,12 @@ public class NetworkRequestHandlerTests
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
 
-        await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Pending!.Id, "Failed",
+        await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Failed",
             Reason: "Firewall rule creation failed.", Detail: "raw"));
 
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
         Assert.Null(rule.ExternalId);
-        Assert.Equal(("Firewall rule creation failed.", "raw"), (rule.OperationFailureReason, rule.OperationFailureDetail));
+        Assert.Equal(("Firewall rule creation failed.", "raw"), (rule.Operation.FailureReason, rule.Operation.FailureDetail));
         Assert.Empty(_activity.Events);
     }
 
@@ -377,12 +377,12 @@ public class NetworkRequestHandlerTests
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
 
-        await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Pending!.Id, "Failed",
+        await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Failed",
             "rule-ext", Reason: "Firewall rule creation failed."));
 
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
         Assert.Equal(("rule-ext", CurrentExistence.Exists), (rule.ExternalId, rule.CurrentExistence));
-        Assert.Equal("Firewall rule creation failed.", rule.OperationFailureReason);
+        Assert.Equal("Firewall rule creation failed.", rule.Operation.FailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -413,10 +413,10 @@ public class NetworkRequestHandlerTests
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, delete.OperationId, "Failed",
             Reason: "Firewall rule deletion failed.", Detail: "acl write refused"));
 
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
         Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
-        Assert.Equal("Firewall rule deletion failed.", rule.OperationFailureReason);
-        Assert.Equal("acl write refused", rule.OperationFailureDetail);
+        Assert.Equal("Firewall rule deletion failed.", rule.Operation.FailureReason);
+        Assert.Equal("acl write refused", rule.Operation.FailureDetail);
         Assert.NotNull(providerId);
         Assert.Equal(providerId, rule.ExternalId);
         Assert.Equal(["firewall_rule.delete_failed"], Outcomes());
@@ -431,7 +431,7 @@ public class NetworkRequestHandlerTests
 
         await EndRuleHandler().HandleAsync(new EndFirewallRuleRequestCommand(network.Id, rule.Id, Guid.NewGuid(), "Done"));
 
-        Assert.Equal(delete.OperationId, rule.Pending!.Id);
+        Assert.Equal(delete.OperationId, rule.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         NothingSaved();
     }
@@ -467,10 +467,10 @@ public class NetworkRequestHandlerTests
         FirewallRule rule = NewRule(other);
 
         var refused = await Assert.ThrowsAsync<NotFoundException>(() => EndRuleHandler().HandleAsync(
-            new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Pending!.Id, "Done", "rule-ext")));
+            new EndFirewallRuleRequestCommand(network.Id, rule.Id, rule.Operation.PendingId!.Value, "Done", "rule-ext")));
 
         Assert.Equal("FIREWALL_RULE_NOT_FOUND", refused.Code);
-        Assert.Equal(FirewallRuleOperationKind.Create, rule.Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Create, rule.Operation.Kind!.Value);
         NothingSaved();
     }
 
@@ -479,12 +479,12 @@ public class NetworkRequestHandlerTests
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);
-        Guid create = rule.Pending!.Id;
+        Guid create = rule.Operation.PendingId!.Value;
 
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, true, "enabled"));
 
         Assert.Equal((CurrentExistence.Exists, FirewallRuleState.enabled), (rule.CurrentExistence, rule.CurrentState));
-        Assert.Equal(create, rule.Pending!.Id);
+        Assert.Equal(create, rule.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -499,7 +499,7 @@ public class NetworkRequestHandlerTests
         await ObserveRuleHandler().HandleAsync(new ObserveFirewallRuleCommand(network.Id, rule.Id, false));
 
         Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
-        Assert.Equal(delete.OperationId, rule.Pending!.Id);
+        Assert.Equal(delete.OperationId, rule.Operation.PendingId!.Value);
     }
 
     [Fact]

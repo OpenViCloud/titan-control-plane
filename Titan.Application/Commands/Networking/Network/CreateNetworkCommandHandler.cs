@@ -74,7 +74,7 @@ public class CreateNetworkCommandHandler(
         {
             heldCidr = network.ChosenCidr.Value;
         }
-        await commands.EnqueueNetworkCreateAsync(network.Id, network.Pending!.Id, network.Name.Value, network.ClusterId, TenantAggregate.ProjectNameFor(tenant.Id), heldCidr,
+        await commands.EnqueueNetworkCreateAsync(network.Id, network.Operation.PendingId!.Value, network.Name.Value, network.ClusterId, TenantAggregate.ProjectNameFor(tenant.Id), heldCidr,
             network.DefaultIngressPolicy.ToString(), network.DefaultEgressPolicy.ToString(),
             network.PublicIpv6Subnet, routerAddress, ct);
         await repo.SaveAsync(ct);

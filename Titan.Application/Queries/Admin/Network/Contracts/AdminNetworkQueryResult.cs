@@ -25,7 +25,7 @@ public record AdminNetworkQueryResult(
     public static AdminNetworkQueryResult From(NetworkAggregate n) =>
         new(n.Id, n.TenantId, n.Name.Value, n.ClusterId, n.Cidr, StatusName(n.CurrentState), n.CurrentExistence.ToString(),
             n.DesiredExistence.ToString(), TransitionName(n.Transition),
-            n.OperationFailureReason, n.OperationFailureDetail, n.OperationFailedAt, n.CreatedAt, n.PublicIpv6Subnet);
+            n.Operation.FailureReason, n.Operation.FailureDetail, n.Operation.FailedAt, n.CreatedAt, n.PublicIpv6Subnet);
 
     private static string? StatusName(NetworkStatus? status)
     {

@@ -86,7 +86,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            added.Id, added.Pending!.Id, NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
+            added.Id, added.Operation.PendingId!.Value, NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
             "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -312,7 +312,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Locked, so two deletes of the rule take turns and the second sees the first waiting
@@ -339,11 +339,11 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         FirewallRule rule = MakeRule(network, Seed.Active);
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
-        Guid first = rule.Pending!.Id;
+        Guid first = rule.Operation.PendingId!.Value;
 
         await CreateService().DeleteAsync(NetworkId, rule.Id, default);
 
-        Assert.Equal(first, rule.Pending!.Id);
+        Assert.Equal(first, rule.Operation.PendingId!.Value);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Once);
@@ -386,7 +386,7 @@ public class FirewallServiceTests
 
         Assert.Equal("null/Exists/Deleted/Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -414,7 +414,7 @@ public class FirewallServiceTests
         Network network = SetupActiveNetwork();
         FirewallRule rule = MakeRule(network, Seed.DeleteRequested);
         // the failed delete gives the rule back
-        await CreateService().EndRequestAsync(new EndFirewallRuleRequestCommand(NetworkId, rule.Id, rule.Pending!.Id, "Failed",
+        await CreateService().EndRequestAsync(new EndFirewallRuleRequestCommand(NetworkId, rule.Id, rule.Operation.PendingId!.Value, "Failed",
             Reason: "Firewall rule deletion failed."));
         Assert.Equal("enabled/Exists/Exists/-", Shape(rule));
 
@@ -422,7 +422,7 @@ public class FirewallServiceTests
 
         Assert.Equal("enabled/Exists/Deleted/Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Pending!.Id, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
