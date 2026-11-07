@@ -18,7 +18,7 @@ public partial class Vm
 
     /// Intent: a new snapshot of this VM, with the ids the handler chose: the snapshot's and its create's. The VM must
     /// accept a snapshot (EnsureSnapshottable) and is Snapshotting until the create reports. The create is the
-    /// snapshot's own Pending, not the VM's; its command snapshots the instance ExternalId names.
+    /// snapshot's own operation, not the VM's; its command snapshots the instance ExternalId names.
     public void AddSnapshot(Guid snapshotId, Guid operationId, string name)
     {
         if (operationId == Guid.Empty)

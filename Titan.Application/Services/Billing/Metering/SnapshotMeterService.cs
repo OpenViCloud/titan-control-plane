@@ -26,8 +26,8 @@ public class SnapshotMeterService(
 {
     public string Name => "Snapshot";
 
-    // The repositories decide what bills: a snapshot seen on the provider (current existence Exists). A VM snapshot
-    // being reverted still exists and still bills.
+    // The repositories decide what bills: a snapshot Incus holds (VolumeSnapshot.IsBilled, VmSnapshot.IsBilled). A snapshot
+    // being reverted or deleted still bills while Incus holds it.
 
     public async Task<int> RunTickAsync(DateTimeOffset now, CancellationToken ct)
     {

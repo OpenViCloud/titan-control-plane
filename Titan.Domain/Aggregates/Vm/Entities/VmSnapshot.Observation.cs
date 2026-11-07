@@ -19,7 +19,7 @@ public partial class VmSnapshot
         }
     }
 
-    /// The reconciler did not find the snapshot on its VM. Never Deleted: only a delete's Done confirms that
+    /// The reconciler did not find the snapshot on its VM. Never Deleted: only a delete writes that, never an observation
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     internal void MarkNotFound()
     {

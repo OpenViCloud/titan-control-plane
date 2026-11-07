@@ -303,9 +303,8 @@ public class VmSnapshotStateMachineTests
         Assert.Equal("Available/Available", Shape(lost));
     }
 
-    // A changed rule (titan-ops features/vm/design.md#vm-snapshot-counting): a create waiting counts whatever the reconciler
-    // saw, since only the create's report says whether Incus holds the snapshot; before the one status, a create seen
-    // missing stopped counting.
+    // A create waiting counts whatever the reconciler saw (titan-ops features/vm/design.md#vm-snapshot-counting): only the
+    // create's report says whether Incus holds the snapshot.
     [Fact]
     public void NotFound_DuringACreate_OnlyRecordsWhatIsSeen_AndTheSnapshotStillCounts()
     {
@@ -333,7 +332,7 @@ public class VmSnapshotStateMachineTests
         Assert.Equal("Deleted/-", Shape(s));
     }
 
-    // A changed rule: a create that gave up before Incus held a snapshot leaves nothing to observe, and the reconciler
+    // A create that gave up before Incus held a snapshot leaves nothing to observe, and the reconciler
     // never lists a snapshot without an id; an observation that still arrives is ignored rather than written.
     [Fact]
     public void Failed_IgnoresEveryObservation_AndNeverThrows()

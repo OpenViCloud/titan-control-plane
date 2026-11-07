@@ -153,7 +153,7 @@ public class RequestLifecycleShapeTests
     // Network and FirewallRule end an operation by its kind too (titan-ops features/network/design.md#network-operation).
     private static readonly string[] NetworkReportMoves = ["CreateSucceeded", "CreateFailed", "DeleteSucceeded", "DeleteFailed"];
 
-    // A VM snapshot ends its create, revert or delete by its kind (titan-ops features/vm/design.md#vm-snapshot-reports).
+    // A VM snapshot ends its create, revert or delete by the status it waits in (titan-ops features/vm/design.md#vm-snapshot-reports).
     private static readonly string[] VmSnapshotReportMoves =
     [
         "CreateSucceeded", "CreateFailed", "RevertSucceeded", "RevertFailed", "DeleteSucceeded", "DeleteFailed",

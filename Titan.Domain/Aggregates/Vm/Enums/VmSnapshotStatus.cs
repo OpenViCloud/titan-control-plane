@@ -10,7 +10,7 @@ public enum VmSnapshotStatus
     Deleting,
     // Incus holds the snapshot and nothing waits: the only status a revert starts from.
     Available,
-    // The reconciler did not find the snapshot on its VM; never Deleted, which only the delete command's Done writes.
+    // The reconciler did not find the snapshot on its VM; never Deleted, which only a delete writes, never an observation.
     NotFound,
     // The create gave up before Incus held a snapshot.
     Failed,

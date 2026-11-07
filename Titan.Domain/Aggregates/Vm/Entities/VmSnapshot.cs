@@ -19,8 +19,8 @@ public partial class VmSnapshot : IEntity
     public Guid VmId { get; private set; }
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
-    /// The one status the API shows (titan-ops features/vm/design.md#vm-snapshot). Only an operation, a report ending it, or
-    /// an observation at rest writes it, each through the moves of VmSnapshot.Creation.cs, VmSnapshot.Revert.cs,
+    /// The one status the API shows (titan-ops features/vm/design.md#vm-snapshot). Only an operation, a report ending it, the
+    /// VM's delete taking it along, or an observation at rest writes it, each through the moves of VmSnapshot.Creation.cs, VmSnapshot.Revert.cs,
     /// VmSnapshot.Deletion.cs and VmSnapshot.Observation.cs.
     public VmSnapshotStatus Status { get; private set; }
     /// The snapshot's own operation, independent of its VM's, the last one that failed, and whether Incus was last seen
