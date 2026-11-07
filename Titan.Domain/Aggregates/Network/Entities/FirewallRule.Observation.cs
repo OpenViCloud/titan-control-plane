@@ -6,8 +6,8 @@ namespace Titan.Domain.Aggregates.Network;
 
 public partial class FirewallRule
 {
-    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
-    // ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
+    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): the status at rest or only the state seen while an
+    // operation waits; throws only for a state Incus does not give (the callback parser refuses it first), ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler read the rule in its ACL. While an operation waits the status stays and only the state seen is recorded.
     internal void MarkObserved(FirewallRuleStatus status)

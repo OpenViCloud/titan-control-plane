@@ -8,7 +8,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// A VM's status and Incus status, and a network's and rule's desired/current state and existence pair, as Postgres stores them: what InMemory cannot show — filtered unique
+/// A VM's, a network's and a rule's status and the Incus status seen while an operation waits, as Postgres stores them: what InMemory cannot show — filtered unique
 /// indexes and the column spelling (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]

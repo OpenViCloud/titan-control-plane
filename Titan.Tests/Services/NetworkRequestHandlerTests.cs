@@ -209,7 +209,7 @@ public class NetworkRequestHandlerTests
     }
 
     [Fact]
-    public async Task Failed_OfTheDelete_PutsDesiredBack_RecordsTheReason_AndNetworkDeleteFailedOnce_KeepingTheRoute()
+    public async Task Failed_OfTheDelete_GivesTheNetworkBack_RecordsTheReason_AndNetworkDeleteFailedOnce_KeepingTheRoute()
     {
         Network network = CreatingNetworkHoldingARoute();
         network.MarkActive("net-ext", "10.0.0.0/24", "10.0.0.1");
@@ -271,7 +271,7 @@ public class NetworkRequestHandlerTests
     [Theory]
     [InlineData("Created", NetworkStatus.Created)]
     [InlineData("Errored", NetworkStatus.Errored)]
-    public async Task AnObservation_WhileTheCreateWaits_WritesCurrent_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
+    public async Task AnObservation_WhileTheCreateWaits_RecordsTheStatusSeen_AndTheCreateKeepsWaiting(string word, NetworkStatus expected)
     {
         Network network = Given(NewNetwork());
         Guid create = network.Operation.PendingId!.Value;
@@ -474,7 +474,7 @@ public class NetworkRequestHandlerTests
     }
 
     [Fact]
-    public async Task ARuleObservation_WhileTheCreateWaits_WritesCurrent_AndTheCreateKeepsWaiting()
+    public async Task ARuleObservation_WhileTheCreateWaits_RecordsTheStateSeen_AndTheCreateKeepsWaiting()
     {
         Network network = Given(ActiveNetwork());
         FirewallRule rule = NewRule(network);

@@ -74,7 +74,7 @@ public partial class Network
     /// The create command gave up: records the reason. Before Incus held a network (the report brings no id) it is Failed, and
     /// nothing holds the /64 any more: keeping it would hold one of the cluster's 255 for as long as the network lives.
     /// After (the report names it), the network rests in the Incus status the report carries, else the one it held, else
-    /// Unknown; desired stays, since a failed create may be deleted, not retried. Ignored, returning false, when it names
+    /// Unknown; a failed create may be deleted, not retried. Ignored, returning false, when it names
     /// another operation than the create the network waits on.
     internal bool CreateFailed(Guid operationId, string? externalId, NetworkStatus? status, string? cidr, string? gateway,
         string? reason, string? detail)

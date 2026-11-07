@@ -48,7 +48,7 @@ public partial class Network
     public OperationTicket? DeleteFirewallRule(Guid ruleId) => GetFirewallRule(ruleId).Delete();
 
     /// The reports of the rule's own commands (titan-ops features/network/design.md#network-operation); each is false when it
-    /// names another operation than the one of its kind the rule waits on. A rule that is not on this network answers
+    /// names another operation than the one the rule waits on, which its status says. A rule that is not on this network answers
     /// like a missing one.
     public bool FirewallRuleCreateSucceeded(Guid ruleId, Guid operationId, string? externalId,
         FirewallRuleStatus? observedState) =>

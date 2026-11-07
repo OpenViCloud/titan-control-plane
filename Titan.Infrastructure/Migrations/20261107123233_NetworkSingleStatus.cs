@@ -134,6 +134,7 @@ UPDATE core.networks SET
     current_existence = CASE
         WHEN status = 'Deleted' THEN 'Deleted'
         WHEN status = 'NotFound' THEN 'NotFound'
+        WHEN status = 'Deleting' AND current_state IS NULL THEN 'NotFound'
         WHEN status IN ('Creating', 'Failed') THEN 'NotCreated'
         ELSE 'Exists' END,
     desired_existence = CASE WHEN status IN ('Deleting', 'Deleted') THEN 'Deleted' ELSE 'Exists' END,

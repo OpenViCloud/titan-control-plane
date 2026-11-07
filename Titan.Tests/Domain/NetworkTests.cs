@@ -103,7 +103,7 @@ public class NetworkTests
     // ── Create: nothing on Incus yet, a create waiting ────
 
     [Fact]
-    public void Create_HasNoIncusStatus_IsNotCreated_AndWaitsForItsCreate()
+    public void Create_IsCreating_AndWaitsForItsCreate()
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 
@@ -206,7 +206,7 @@ public class NetworkTests
     // ── Request failure is a field, not a state (titan-ops architecture/desired-and-current.md#request-failure) ──
 
     [Fact]
-    public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItNotCreated()
+    public void RequestFailed_OnAWaitingCreate_RecordsTheFailure_EndsTheCreate_AndLeavesItFailed()
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "my-net", "cluster-1");
 

@@ -4,12 +4,12 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// A rule's state is the Incus ACL rule state word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim),
-// with the existence axis beside it (titan-ops features/network/design.md#firewall-rule-status).
+// A rule's status is the Incus ACL rule state word for word while it rests (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim),
+// or says what is not a resting rule (titan-ops features/network/design.md#firewall-rule-status).
 public class FirewallRuleLifecycleTests
 {
     [Fact]
-    public void Create_HasNoIncusState_IsNotCreated_AndWaitsForItsCreate()
+    public void Create_IsCreating_AndWaitsForItsCreate()
     {
         var rule = NewRule();
 
@@ -125,7 +125,7 @@ public class FirewallRuleLifecycleTests
     // ── Delete ──
 
     [Fact]
-    public void RequestDelete_WritesDesiredExistence_AndYieldsTheId()
+    public void RequestDelete_MakesTheRuleDeleting_AndYieldsTheId()
     {
         var rule = ActiveRule();
 

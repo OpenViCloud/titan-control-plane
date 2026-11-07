@@ -5,8 +5,9 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/resource-lifecycle.md#invariants for a network and its firewall rules: one waiting request each
-// (the rule's independent of the network's), ended only by the report carrying its id; an observation writes current
-// and ends nothing; a failure puts desired back according to the kind (titan-ops architecture/resource-lifecycle.md#kinds).
+// (the rule's independent of the network's), ended only by the report carrying its id; an observation writes the status
+// at rest and only the status seen while a request waits, and ends nothing; a failure gives the status back as the move
+// says (titan-ops architecture/resource-lifecycle.md#kinds).
 // NetworkTests keeps what a request may do from each situation; this file is about how a request ends.
 public class NetworkRequestLifecycleTests
 {
@@ -52,7 +53,7 @@ public class NetworkRequestLifecycleTests
     // ---------- the network's create ----------
 
     [Fact]
-    public void ANewNetwork_WaitsOnItsCreate_WithAnIdAKindAndATime()
+    public void ANewNetwork_WaitsOnItsCreate_WithAnIdAndATime()
     {
         Network network = NewNetwork();
 
@@ -63,7 +64,7 @@ public class NetworkRequestLifecycleTests
     }
 
     [Fact]
-    public void Done_OfTheCreate_RecordsTheIdExistenceAddressAndStatus_AndEndsIt()
+    public void Done_OfTheCreate_RecordsTheIdAddressAndStatus_AndEndsIt()
     {
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
@@ -82,7 +83,7 @@ public class NetworkRequestLifecycleTests
     // A worker from before the request routes reports the create's Done with no status (the old Created): the network
     // exists, and is usable only once the reconciler reads it Created.
     [Fact]
-    public void Done_OfTheCreate_WithoutAStatus_LeavesTheStateNull_AndTheNetworkNotUsable_UntilTheReconcilerReadsCreated()
+    public void Done_OfTheCreate_WithoutAStatus_LeavesTheStatusUnknown_AndTheNetworkNotUsable_UntilTheReconcilerReadsCreated()
     {
         Network network = NewNetwork();
 
@@ -109,7 +110,7 @@ public class NetworkRequestLifecycleTests
     [InlineData(NetworkStatus.Unavailable)]
     [InlineData(NetworkStatus.Pending)]
     [InlineData(NetworkStatus.Unknown)]
-    public void AnObservation_WritesCurrentOnly_AndLeavesAWaitingCreateWaiting(NetworkStatus status)
+    public void AnObservation_WhileTheCreateWaits_RecordsOnlyTheStatusSeen_AndLeavesTheCreateWaiting(NetworkStatus status)
     {
         Network network = NewNetwork();
         Guid createId = network.Operation.PendingId!.Value;
@@ -297,7 +298,7 @@ public class NetworkRequestLifecycleTests
 
     // Incus made the network, router and all, before the command gave up: it exists and keeps its /64 until the delete.
     [Fact]
-    public void Failed_OfTheCreate_WithAnId_KeepsTheSubnet_TheIdAndExistence()
+    public void Failed_OfTheCreate_WithAnId_KeepsTheSubnet_TheIdAndTheWord()
     {
         Network network = WantingPublicIpv6();
 
@@ -321,10 +322,10 @@ public class NetworkRequestLifecycleTests
         Assert.False(network.HasPublicIpv6);
     }
 
-    // ---------- Transition follows the kind ----------
+    // ---------- The status says what the waiting request is ----------
 
     [Fact]
-    public void Transition_FollowsTheKindOfTheWaitingRequest()
+    public void Status_SaysWhatTheWaitingRequestIs()
     {
         Network network = NewNetwork();
         Assert.Equal((NetworkStatus.Creating, NetworkStatus.Creating), (network.Status, network.Status));
@@ -342,7 +343,7 @@ public class NetworkRequestLifecycleTests
     // ---------- a firewall rule's requests, through the network ----------
 
     [Fact]
-    public void RuleDone_OfTheCreate_RecordsTheIdExistenceAndState_AndEndsIt()
+    public void RuleDone_OfTheCreate_RecordsTheIdAndState_AndEndsIt()
     {
         Network network = UsableNetwork();
         FirewallRule rule = NewRule(network, 22);
@@ -447,7 +448,7 @@ public class NetworkRequestLifecycleTests
     [InlineData(FirewallRuleStatus.enabled)]
     [InlineData(FirewallRuleStatus.disabled)]
     [InlineData(FirewallRuleStatus.logged)]
-    public void ARuleObservation_WritesCurrentOnly_AndNeverEndsTheRulesCreate(FirewallRuleStatus state)
+    public void ARuleObservation_WhileItsCreateWaits_RecordsOnlyTheStateSeen_AndNeverEndsTheCreate(FirewallRuleStatus state)
     {
         Network network = UsableNetwork();
         FirewallRule rule = NewRule(network, 22);

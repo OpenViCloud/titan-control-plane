@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states, except the VM, which keeps one status (OneStatus below). A person's request writes DesiredState; only an
+// control plane provisions to the provider keeps two states, except the VM, the network and the firewall rule, which keep one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
 // (FinishOperation, FailOperation; the Succeeded and Failed moves of a VM, a network and a firewall rule), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
@@ -187,11 +187,10 @@ public class DesiredCurrentOwnershipTests
         return methods;
     }
 
-    // `?` in the type: a nullable current state (Network.CurrentState, null while Incus has no network) — a pattern
-    // without it would drop the type from every scan here, still green. The VM keeps one status and is out on purpose
-    // (OneStatus). Desired is DesiredState or, where Titan sets no Incus status
-    // (network, firewall rule), only DesiredExistence; current is CurrentState or, where Incus has no status word
-    // (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
+    // `?` in the type: a nullable current state — a pattern without it would drop the type from every scan here, still
+    // green. The VM, the network and the firewall rule keep one status and are out on purpose (OneStatus). Desired is
+    // DesiredState or, where Titan sets no Incus status, only DesiredExistence; current is CurrentState or, where Incus
+    // has no status word (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.
     private static bool DeclaresBothStates(string src) =>
         Regex.IsMatch(src, @"public [\w?]+ Desired(?:State|Existence) \{ get; private set; \}")

@@ -194,7 +194,7 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', '10.0.0.0/8', {cu
         Assert.Equal("Unknown|-", byId[existsWithoutAState]);
     }
 
-    // The view of waiting requests reads a network's and a rule's kind off the status, and the unique name index follows it.
+    // The view of waiting requests reads a network's and a rule's kind off the status.
     [Fact]
     public async Task TheViewOfWaitingRequests_NamesTheKindOfANetworkAndARule_FromTheirStatus()
     {
@@ -215,12 +215,43 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', '10.0.0.0/8', {cu
     }
 
     [Fact]
+    public async Task TheNameIndexAndTheView_FollowTheColumns_UpAndDown()
+    {
+        await MigrateToAsync(MigrationBefore);
+        Guid deleting = await SeedNetworkAsync("Exists", "Created", pendingKind: "Delete");
+        await MigrateToAsync(ThisMigration);
+
+        Assert.Contains("status <> 'Deleted'", await IndexDefinitionAsync());
+
+        await MigrateToAsync(MigrationBefore);
+
+        Assert.Contains("current_existence <> 'Deleted'", await IndexDefinitionAsync());
+        await using TitanDbContext db = NewDbContext();
+        List<string> rows = await db.Database
+            .SqlQueryRaw<string>("SELECT resource || '|' || id::text || '|' || kind AS \"Value\" FROM core.pending_requests WHERE resource = 'network'")
+            .ToListAsync();
+        Assert.Contains($"network|{deleting}|Delete", rows);
+    }
+
+    private async Task<string> IndexDefinitionAsync()
+    {
+        await using TitanDbContext db = NewDbContext();
+        return await db.Database
+            .SqlQueryRaw<string>("SELECT indexdef AS \"Value\" FROM pg_indexes WHERE schemaname = 'core' AND indexname = 'IX_networks_tenant_id_name'")
+            .SingleAsync();
+    }
+
+    [Fact]
     public async Task Down_PutsTheOldColumnsBackFromTheStatus()
     {
         await MigrateToAsync(MigrationBefore);
         Guid deleting = await SeedNetworkAsync("Exists", "Created", pendingKind: "Delete");
+        Guid deletingNotFound = await SeedNetworkAsync("NotFound", null, pendingKind: "Delete");
         Guid failed = await SeedNetworkAsync("NotCreated", null, namedOnIncus: false);
         Guid created = await SeedNetworkAsync("Exists", "Errored");
+        Guid ruleDeleting = await SeedRuleAsync("Exists", "enabled", pendingKind: "Delete");
+        Guid ruleCreating = await SeedRuleAsync("NotCreated", null, pendingKind: "Create", namedOnIncus: false);
+        Guid ruleLogged = await SeedRuleAsync("Exists", "logged");
         await MigrateToAsync(ThisMigration);
 
         await MigrateToAsync(MigrationBefore);
@@ -230,7 +261,14 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', '10.0.0.0/8', {cu
             "SELECT id::text || '|' || current_existence || '|' || desired_existence || '|' || coalesce(pending_request_kind, '-') || '|' || coalesce(current_state, '-') AS \"Value\" FROM core.networks")
             .ToListAsync();
         Assert.Contains($"{deleting}|Exists|Deleted|Delete|Created", rows);
+        Assert.Contains($"{deletingNotFound}|NotFound|Deleted|Delete|-", rows);
         Assert.Contains($"{failed}|NotCreated|Exists|-|-", rows);
         Assert.Contains($"{created}|Exists|Exists|-|Errored", rows);
+        List<string> ruleRows = await db.Database.SqlQueryRaw<string>(
+            "SELECT id::text || '|' || current_existence || '|' || desired_existence || '|' || coalesce(pending_request_kind, '-') || '|' || coalesce(current_state, '-') AS \"Value\" FROM core.firewall_rules")
+            .ToListAsync();
+        Assert.Contains($"{ruleDeleting}|Exists|Deleted|Delete|enabled", ruleRows);
+        Assert.Contains($"{ruleCreating}|NotCreated|Exists|Create|-", ruleRows);
+        Assert.Contains($"{ruleLogged}|Exists|Exists|-|logged", ruleRows);
     }
 }

@@ -7,7 +7,7 @@ namespace Titan.Domain.Aggregates.Network;
 public partial class Network
 {
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what Incus has,
-    // so no guard, and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants).
+    // so no guard on the move (only a status Incus does not give is refused: the callback parser refuses it first), and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 
     /// The reconciler read the network on Incus. Created, Errored or Unavailable after a create is the network's status, not
     /// the create's ending: only the create command's own report ends it. While an operation waits the status stays and
