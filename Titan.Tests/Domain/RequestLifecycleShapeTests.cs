@@ -142,7 +142,7 @@ public class RequestLifecycleShapeTests
     }
 
     // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule and
-    // the VM snapshot have one Succeeded and one Failed move per kind (NetworkReportMoves and VmSnapshotReportMoves below);
+    // the VM snapshot have one Succeeded and one Failed move per operation (NetworkReportMoves and VmSnapshotReportMoves below);
     // the other types end a request by FinishOperation and FailOperation.
     private static readonly string[] VmReportMoves =
     [
