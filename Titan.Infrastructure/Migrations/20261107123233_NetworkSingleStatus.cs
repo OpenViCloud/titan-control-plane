@@ -128,7 +128,9 @@ WHERE pending_request_id IS NOT NULL;";
 
 
         // Down puts the old columns back from the status (observed_state is current_state again by then); a resting row
-        // wanted what it has, so desired is Deleted only while a delete waits or after it.
+        // wanted what it has, so desired is Deleted only while a delete waits or after it. A network deleting with no word
+        // seen was not found when the delete was asked (Up wrote Unknown for a network Incus showed without a word), so it
+        // comes back NotFound; a rule has no such mark (its Unknown is Titan's), so one asked while not found comes back Exists.
         private const string NetworkOldColumnsFromTheStatusSql = @"
 UPDATE core.networks SET
     current_existence = CASE

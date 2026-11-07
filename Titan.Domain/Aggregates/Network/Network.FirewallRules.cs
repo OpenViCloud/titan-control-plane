@@ -65,7 +65,7 @@ public partial class Network
         string? reason, string? detail) =>
         GetFirewallRule(ruleId).DeleteFailed(operationId, observedState, reason, detail);
 
-    // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
+    // Observations of one rule (titan-ops architecture/intent-and-observation.md#observation-converges): the status at rest, or the state seen while an operation waits.
 
     public void MarkFirewallRuleObserved(Guid ruleId, FirewallRuleStatus state) =>
         GetFirewallRule(ruleId).MarkObserved(state);
