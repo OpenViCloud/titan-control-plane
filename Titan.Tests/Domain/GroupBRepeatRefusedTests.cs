@@ -38,7 +38,7 @@ public class GroupBRepeatRefusedTests
         network.Delete();
 
         Assert.Equal("NETWORK_INVALID_STATE", Assert.Throws<BusinessException>(() => network.Delete()).Code);
-        Assert.Equal(NetworkTransition.Deleting, network.Transition);
+        Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
     [Fact]

@@ -31,7 +31,7 @@ public class NetworkRequestsDbTests(PostgresFixture pg)
         network.ReportDone(network.Operation.PendingId!.Value, $"net-{network.Id:N}", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
         FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null,
             FirewallCidr.Parse("10.0.0.0/8"));
-        network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
+        network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, $"acl-{network.Id:N}/1", FirewallRuleStatus.enabled);
         await using TitanDbContext db = pg.NewDbContext();
         db.Networks.Add(network);
         await db.SaveChangesAsync();
@@ -70,7 +70,7 @@ public class NetworkRequestsDbTests(PostgresFixture pg)
 
         await using TitanDbContext db = pg.NewDbContext();
         Network stored = await db.Networks.Include(n => n.FirewallRules).SingleAsync(n => n.Id == network.Id);
-        Assert.Equal(FirewallRuleOperationKind.Delete, stored.FirewallRules.Single().Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleStatus.Deleting, stored.FirewallRules.Single().Status);
         int rows = await db.Set<ProviderCommand>().CountAsync(c => c.Key.StartsWith($"firewall-rule-delete-{rule.Id}-"));
         Assert.Equal(1, rows);
     }

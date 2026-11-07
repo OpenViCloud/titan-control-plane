@@ -20,14 +20,59 @@ public partial class Network : IAggregateRoot
     /// give-up report that carried the id), and after one that carried no address.
     public string? Cidr { get; private set; }
     public string? Gateway { get; private set; }
-    // Mark* and an operation's report write the current pair; an operation, and a report that it failed, write
-    // DesiredExistence (titan-ops architecture/desired-and-current.md#desired-and-current). CurrentState is the Incus word,
-    // null while Incus has no network (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-    public NetworkStatus? CurrentState { get; private set; }
-    public CurrentExistence CurrentExistence { get; private set; }
-    public DesiredExistence DesiredExistence { get; private set; }
-    /// The operation waiting on Incus and the last one that failed (titan-ops features/network/design.md#network-operation).
+    /// The one status the API shows (titan-ops features/network/design.md#network-lifecycle). Only an operation, a report ending
+    /// it, or an observation at rest writes it, each through the moves of Network.Creation.cs, Network.Deletion.cs and
+    /// Network.Observation.cs.
+    public NetworkStatus Status { get; private set; }
+    /// The operation waiting on its command's report, the last one that failed, and the Incus status seen while one waits
+    /// (titan-ops features/network/design.md#network-operation). The aggregate only compares a report's id with the pending
+    /// one; the status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants).
     public NetworkOperation Operation { get; private set; } = NetworkOperation.None;
+
+    /// The Incus status the network holds as far as Titan last knew, null when none is known (titan-ops
+    /// architecture/desired-and-current.md#provider-state-is-verbatim): the status seen while an operation waits, else
+    /// Status when it is one of the five Incus statuses (IsIncusStatus). Worked out, never stored, and not on /v1: a
+    /// delete that gives up returns to it, the range rule reads it, and the reconciler compares the network with it.
+    public NetworkStatus? InstanceStatus
+    {
+        get
+        {
+            if (Operation.LastSeenStatus != null)
+            {
+                return Operation.LastSeenStatus;
+            }
+            if (IsIncusStatus(Status))
+            {
+                return Status;
+            }
+            return null;
+        }
+    }
+
+    /// The five statuses Incus gives a network (the api.NetworkStatus* constants of Incus 7.0.1): the only ones a worker
+    /// reports, and the only ones InstanceStatus can be. `Unknown` is one of them.
+    public static bool IsIncusStatus(NetworkStatus status) =>
+        status == NetworkStatus.Pending
+        || status == NetworkStatus.Created
+        || status == NetworkStatus.Errored
+        || status == NetworkStatus.Unavailable
+        || status == NetworkStatus.Unknown;
+
+    /// A worker reports only the five Incus statuses; any other status in a report is the worker's bug. No status at all
+    /// (null) is a report that read none, not a foreign one.
+    private static bool IsForeignStatus(NetworkStatus? status) => status != null && !IsIncusStatus(status.Value);
+
+    /// A status in a report that Incus does not give a network is the worker's bug, and does not retry a 422.
+    private static void EnsureNotForeign(NetworkStatus? status)
+    {
+        if (IsForeignStatus(status))
+        {
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus network status.");
+        }
+    }
+
+    /// An operation waits on its command: only the report carrying its id moves the status on.
+    private bool IsTransitionStatus => Status == NetworkStatus.Creating || Status == NetworkStatus.Deleting;
     public DateTimeOffset CreatedAt { get; private set; }
     public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
     public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
@@ -51,21 +96,23 @@ public partial class Network : IAggregateRoot
     /// Incus had it do not count. NetworkRepository.CountActiveByTenantAsync writes the same test in SQL
     /// (titan-ops architecture/domain-methods.md#plain-code).
     public bool OccupiesQuota =>
-        DesiredExistence == DesiredExistence.Exists
-        && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && Operation.PendingId != null));
+        Status != NetworkStatus.Deleting
+        && Status != NetworkStatus.Deleted
+        && Status != NetworkStatus.NotFound
+        && Status != NetworkStatus.Failed;
 
     /// Counts toward MaxPublicIpv6 (titan-ops features/network/design.md#ipv6-quota): a network that counts toward
     /// MaxNetworks and holds a /64. NetworkRepository.CountPublicIpv6ActiveByTenantAsync writes the same test in SQL.
     public bool OccupiesPublicIpv6Quota => PublicIpv6Subnet != null && OccupiesQuota;
 
     /// Holds a range, whatever was asked of it (titan-ops features/network/design.md#network-lifecycle): Incus has the
-    /// network, a delete in flight included, or is about to. The third rule with this current clause, beside the two
-    /// quota rules, which also read desired: a network being deleted stops counting but keeps its range.
-    /// NetworkRepository.HasCidrOverlapAsync writes the same test in SQL and asks HeldRange of the rows it names.
+    /// network, a delete in flight included while Incus last showed it, or is about to. A network being deleted stops
+    /// counting toward the quota but keeps its range. NetworkRepository.HasCidrOverlapAsync writes the same test in SQL and
+    /// asks HeldRange of the rows it names.
     public bool HoldsARange =>
-        CurrentExistence == CurrentExistence.Exists
-        || (CurrentExistence == CurrentExistence.NotCreated && Operation.PendingId != null);
+        Status == NetworkStatus.Creating
+        || IsIncusStatus(Status)
+        || (Status == NetworkStatus.Deleting && InstanceStatus != null);
 
     /// The range this network holds, or null (titan-ops features/network/user-stories.md#us-net-intent-02): one Incus
     /// has keeps the address the worker reported, when that is an IPv4 CIDR (an address kept verbatim that is not one
@@ -74,18 +121,14 @@ public partial class Network : IAggregateRoot
     {
         get
         {
-            if (CurrentExistence == CurrentExistence.Exists)
-            {
-                if (Ipv4Cidr.IsValid(Cidr))
-                {
-                    return Ipv4Cidr.Parse(Cidr);
-                }
-                return null;
-            }
-            bool aboutToHold = CurrentExistence == CurrentExistence.NotCreated && Operation.PendingId != null;
-            if (aboutToHold)
+            if (Status == NetworkStatus.Creating)
             {
                 return ChosenCidr;
+            }
+            bool incusHasIt = IsIncusStatus(Status) || (Status == NetworkStatus.Deleting && InstanceStatus != null);
+            if (incusHasIt && Ipv4Cidr.IsValid(Cidr))
+            {
+                return Ipv4Cidr.Parse(Cidr);
             }
             return null;
         }
@@ -95,29 +138,12 @@ public partial class Network : IAggregateRoot
     /// its name is already free for reuse, so a revived network could collide with a live one. Until then the network
     /// is still listed, still holds its name and is still observed; the repository's list, name and reconciler queries
     /// write !IsDeleted in SQL (titan-ops architecture/domain-methods.md#plain-code).
-    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
+    public bool IsDeleted => Status == NetworkStatus.Deleted;
 
     private Network() { }
 
-    /// The move the waiting operation makes, for display.
-    public NetworkTransition? Transition
-    {
-        get
-        {
-            switch (Operation.Kind)
-            {
-                case NetworkOperationKind.Create:
-                    return NetworkTransition.Creating;
-                case NetworkOperationKind.Delete:
-                    return NetworkTransition.Deleting;
-                default:
-                    return null;
-            }
-        }
-    }
-
-    private bool CreateIsWaiting => Operation.Kind == NetworkOperationKind.Create;
-    private bool DeleteIsWaiting => Operation.Kind == NetworkOperationKind.Delete;
+    private bool CreateIsWaiting => Status == NetworkStatus.Creating;
+    private bool DeleteIsWaiting => Status == NetworkStatus.Deleting;
     /// A delete was asked and still waits, or the network is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
@@ -133,12 +159,14 @@ public partial class Network : IAggregateRoot
 
     // ---- The report of an operation's own command (titan-ops features/network/design.md#network-operation): the one thing that
     // ends an operation; CreateSucceeded and CreateFailed are in Network.Creation.cs, DeleteSucceeded and DeleteFailed in
-    // Network.Deletion.cs. They write both axes, so none is an intent or a Mark*. Internal: NetworkRoutes ends them, so a
-    // route the network lets go of goes back with it.
+    // Network.Deletion.cs. One method per move: each checks the network waits in that move's status under the reported id,
+    // and returns false, changing nothing, for any other report (a Done that arrived twice, the report of another
+    // operation, a network already Deleted). Internal: NetworkRoutes ends them, so a route the network lets go of goes back
+    // with it.
 
-    /// The report names the operation of this kind the network waits on. A network already Deleted waits on nothing.
-    private bool IsWaitingOn(Guid operationId, NetworkOperationKind kind) =>
-        !IsDeleted && Operation.PendingId == operationId && Operation.Kind == kind;
+    /// The report names the operation the network waits on, which its status says.
+    private bool IsWaitingOn(Guid operationId, NetworkStatus waiting) =>
+        Status == waiting && Operation.PendingId == operationId;
 
     /// A Done must leave the network named on Incus, or nothing would be left to delete it through. Without a stored id
     /// the waiting operation can only be the one that makes it. Checked before the report writes anything; a worker that
@@ -148,28 +176,20 @@ public partial class Network : IAggregateRoot
         bool doneWithoutAnId = ExternalId == null && string.IsNullOrEmpty(reportedId);
         if (doneWithoutAnId)
         {
-            string operation = Operation.Kind!.Value.ToString().ToLowerInvariant();
-            throw new BusinessException("INVALID_STATUS", $"ExternalId is required when a {operation} ends Done.");
+            throw new BusinessException("INVALID_STATUS", "ExternalId is required when a create ends Done.");
         }
     }
 
-    // What the worker saw, whatever the outcome: a create that failed after Incus made the network leaves a network whose
-    // delete still reaches Incus. The addresses come with the name: the ones the create asked for or Incus picked; an
-    // empty string is the same absence, and neither is stored.
-    private void RecordWhatTheWorkerSaw(string? externalId, NetworkStatus? status, string? cidr, string? gateway)
+    /// A report brings the provider id and the addresses with it, once: the ones the create asked for or Incus picked; an
+    /// empty string is the same absence, and neither is stored.
+    private void RecordTheIdAndAddresses(string? externalId, string? cidr, string? gateway)
     {
         bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
         if (bringsTheProviderId)
         {
             ExternalId = externalId;
-            CurrentExistence = CurrentExistence.Exists;
             Cidr = AddressOrNull(cidr);
             Gateway = AddressOrNull(gateway);
-        }
-        if (status != null)
-        {
-            CurrentExistence = CurrentExistence.Exists;
-            CurrentState = status;
         }
     }
 
@@ -199,11 +219,7 @@ public partial class Network : IAggregateRoot
 
     /// Incus reports it Created and nothing is waiting: a network being deleted is not usable, even while Incus still
     /// shows it.
-    private bool IsUsable =>
-        CurrentState == NetworkStatus.Created
-        && CurrentExistence == CurrentExistence.Exists
-        && DesiredExistence == DesiredExistence.Exists
-        && Operation.PendingId == null;
+    private bool IsUsable => Status == NetworkStatus.Created;
 
     /// Created implies the create's report set the id; this throws rather than let a caller assert it.
     private string GetExternalId()
@@ -219,8 +235,7 @@ public partial class Network : IAggregateRoot
     // changing.
     public void Rename(NetworkName name)
     {
-        bool beingOrBeenDeleted = DesiredExistence == DesiredExistence.Deleted || IsDeleted;
-        if (beingOrBeenDeleted)
+        if (IsDeletedOrDeleting)
         {
             throw new BusinessException("NETWORK_INVALID_STATE", "Cannot rename a network that is being or has been deleted.");
         }

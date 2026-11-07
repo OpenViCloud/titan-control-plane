@@ -156,8 +156,7 @@ public class AdminResourceServiceTests
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
 
         Assert.Equal("a-net", dto.Name);
-        Assert.Equal("Created", dto.CurrentState);
-        Assert.Equal("Exists", dto.CurrentExistence);
+        Assert.Equal("Created", dto.Status);
         Assert.Equal("10.0.0.0/24", dto.Cidr);
         Assert.Equal("vn-hcm-1", dto.ClusterId);
     }
@@ -171,8 +170,7 @@ public class AdminResourceServiceTests
 
         var dto = Assert.Single(await svc.ListNetworksAsync(null));
 
-        Assert.Null(dto.CurrentState);
-        Assert.Equal("NotCreated", dto.CurrentExistence);
+        Assert.Equal("Failed", dto.Status);
         Assert.Equal("Network creation failed.", dto.RequestFailureReason);
         Assert.Equal("create network: project t-1 not found", dto.RequestFailureDetail);
         Assert.NotNull(dto.RequestFailedAt);

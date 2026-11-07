@@ -39,11 +39,11 @@ public class StateFieldJsonTests
     {
         var rule = FirewallRule.Create(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), FirewallDirection.Ingress,
             FirewallProtocol.TCP, 22, 22, "0.0.0.0/0");
-        rule.MarkObserved(FirewallRuleState.enabled);
+        rule.MarkActive("acl-net/1");
 
         var json = Json(FirewallRuleQueryResult.From(rule));
-        Assert.Equal("enabled", json.GetProperty("currentState").GetString());
-        Assert.Equal("Exists", json.GetProperty("currentExistence").GetString());
+        Assert.Equal("enabled", json.GetProperty("status").GetString());
+        Assert.False(json.TryGetProperty("currentState", out _));
     }
 
     [Fact]

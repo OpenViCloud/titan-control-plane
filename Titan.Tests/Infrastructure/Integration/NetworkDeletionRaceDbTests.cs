@@ -60,7 +60,7 @@ public class NetworkDeletionRaceDbTests(PostgresFixture pg)
         await using TitanDbContext read = pg.NewDbContext();
         Network stored = (await new NetworkRepository(read).FindByIdAsync(network.Id))!;
         int vmsOnIt = await read.Vms.CountAsync(v => v.NetworkId == network.Id);
-        bool networkIsGoing = stored.DesiredExistence == DesiredExistence.Deleted;
+        bool networkIsGoing = stored.IsDeletedOrDeleting;
         Assert.False(networkIsGoing && vmsOnIt > 0, $"network going away with {vmsOnIt} VM on it");
     }
 

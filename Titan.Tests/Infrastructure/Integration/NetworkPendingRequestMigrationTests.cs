@@ -94,13 +94,13 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         await MigrateToLatestAsync();
 
         Network delete = await NetworkAsync(deleting);
-        Assert.Equal(NetworkOperationKind.Delete, delete.Operation.Kind!.Value);
+        Assert.Equal(NetworkStatus.Deleting, delete.Status);
         Assert.True(delete.Operation.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(creating)).Operation.Kind!.Value);
+        Assert.Equal(NetworkStatus.Creating, (await NetworkAsync(creating)).Status);
         Network rest = await NetworkAsync(resting);
         Assert.Null(rest.Operation.PendingId);
-        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Operation.Kind!.Value);
-        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleCreating).Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleStatus.Deleting, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Status);
+        Assert.Equal(FirewallRuleStatus.Creating, rest.FirewallRules.Single(r => r.Id == ruleCreating).Status);
     }
 
     // A create whose command already reported the provider id waited only for the reconciler's Created, which no longer
@@ -123,12 +123,12 @@ VALUES ({id}, {networkId}, {Guid.NewGuid()}, 'Ingress', 'TCP', 22, 22, '10.0.0.0
         Network ended = await NetworkAsync(reported);
         Assert.Null(ended.Operation.PendingId);
         Assert.Equal($"net-{reported:N}", ended.ExternalId);
-        Assert.Equal(NetworkOperationKind.Create, (await NetworkAsync(notReported)).Operation.Kind!.Value);
-        Assert.Equal(NetworkOperationKind.Delete, (await NetworkAsync(deleting)).Operation.Kind!.Value);
+        Assert.Equal(NetworkStatus.Creating, (await NetworkAsync(notReported)).Status);
+        Assert.Equal(NetworkStatus.Deleting, (await NetworkAsync(deleting)).Status);
         Network rest = await NetworkAsync(resting);
         Assert.Null(rest.FirewallRules.Single(r => r.Id == ruleReported).Operation.PendingId);
-        Assert.Equal(FirewallRuleOperationKind.Create, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Operation.Kind!.Value);
-        Assert.Equal(FirewallRuleOperationKind.Delete, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Operation.Kind!.Value);
+        Assert.Equal(FirewallRuleStatus.Creating, rest.FirewallRules.Single(r => r.Id == ruleNotReported).Status);
+        Assert.Equal(FirewallRuleStatus.Deleting, rest.FirewallRules.Single(r => r.Id == ruleDeleting).Status);
     }
 
     [Fact]

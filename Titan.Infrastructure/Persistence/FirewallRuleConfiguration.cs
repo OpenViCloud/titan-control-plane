@@ -22,23 +22,21 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.EndPort).HasColumnName("end_port");
         builder.Property(r => r.Cidr).HasColumnName("cidr").IsRequired();
         builder.Property(r => r.ExternalId).HasColumnName("external_id");
-        // The Incus ACL rule state as Incus spells it (enabled · disabled · logged): the enum member names are the
-        // words (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
-        builder.Property(r => r.CurrentState).HasColumnName("current_state").HasConversion<string>();
-        builder.Property(r => r.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(r => r.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        // The rule's own waiting operation and last failure, six columns the entity writes through one
-        // FirewallRuleOperation (titan-ops features/network/design.md#network-operation).
+        // titan-ops features/network/design.md#firewall-rule-status: status is the one status; the Incus ACL rule states are
+        // spelled as Incus spells them (enabled · disabled · logged): the enum member names are the words. The rule's own
+        // waiting operation and last failure are a value object kept in this table's columns, never null, with
+        // observed_state the Incus state seen while an operation waits (titan-ops features/network/design.md#network-operation).
+        builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.OwnsOne(r => r.Operation, o =>
         {
             o.Property(x => x.PendingId).HasColumnName("pending_request_id");
-            o.Property(x => x.Kind).HasColumnName("pending_request_kind").HasConversion<string>();
             o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
             o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
             o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
             o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+            o.Property(x => x.LastSeenStatus).HasColumnName("observed_state").HasConversion<string>();
         });
-        builder.Ignore(r => r.Transition);
+        builder.Ignore(r => r.InstanceStatus);
         builder.Ignore(r => r.Ports);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.HasIndex(r => r.NetworkId);

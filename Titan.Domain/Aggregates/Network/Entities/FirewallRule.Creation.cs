@@ -26,12 +26,10 @@ public partial class FirewallRule
             StartPort = startPort,
             EndPort = endPort,
             Cidr = FirewallCidr.Parse(cidr),
-            CurrentState = null,
-            CurrentExistence = CurrentExistence.NotCreated,
-            DesiredExistence = DesiredExistence.Exists,
+            Status = FirewallRuleStatus.Creating,
             CreatedAt = DateTimeOffset.UtcNow
         };
-        rule.Operation = rule.Operation.Asked(Guid.NewGuid(), FirewallRuleOperationKind.Create, DateTimeOffset.UtcNow);
+        rule.Operation = rule.Operation.Asked(Guid.NewGuid(), DateTimeOffset.UtcNow, null);
         return rule;
     }
 
@@ -39,7 +37,7 @@ public partial class FirewallRule
     /// network there: the ticket carries the network's provider id, which the network hands in after its own check.
     internal OperationTicket TicketForCreate(string networkProviderId)
     {
-        bool noCreateIsWaiting = Operation.PendingId == null || Operation.Kind != FirewallRuleOperationKind.Create;
+        bool noCreateIsWaiting = Operation.PendingId == null || !CreateIsWaiting;
         if (noCreateIsWaiting)
         {
             throw new BusinessException("FIREWALL_RULE_INVALID_STATE", "No create is waiting for this rule.");
@@ -47,31 +45,45 @@ public partial class FirewallRule
         return OperationTicket.Of(Operation.PendingId!.Value, networkProviderId);
     }
 
-    /// The create command ended Done: records the id and the state the worker read, and the rule waits on nothing. A report
-    /// that names another operation than the create the rule waits on is ignored and returns false.
-    internal bool CreateSucceeded(Guid operationId, string? externalId, FirewallRuleState? observedState)
+    /// The create command ended Done: records the id, and the rule waits on nothing. Its status is the state the worker read,
+    /// Unknown when it read none (the next observation writes the real one). A report that names another operation than the
+    /// create the rule waits on is ignored and returns false.
+    internal bool CreateSucceeded(Guid operationId, string? externalId, FirewallRuleStatus? status)
     {
-        if (!IsWaitingOn(operationId, FirewallRuleOperationKind.Create))
+        if (!IsWaitingOn(operationId, FirewallRuleStatus.Creating))
         {
             return false;
         }
         EnsureTheDoneLeavesAnId(externalId);
-        RecordWhatTheWorkerSaw(externalId, observedState);
+        EnsureNotForeign(status);
+        RecordTheId(externalId);
         Operation = Operation.Done();
+        Status = status ?? FirewallRuleStatus.Unknown;
         return true;
     }
 
-    /// The create command gave up: records the reason, and keeps an id and a state the worker found. Ignored, returning
-    /// false, when it names another operation than the create the rule waits on.
-    internal bool CreateFailed(Guid operationId, string? externalId, FirewallRuleState? observedState,
+    /// The create command gave up: records the reason. Before Incus held a rule (the report brings no id) it is Failed; after
+    /// (the report names it) it rests in the state the report carries, else the one it held, else Unknown. Ignored,
+    /// returning false, when it names another operation than the create the rule waits on.
+    internal bool CreateFailed(Guid operationId, string? externalId, FirewallRuleStatus? status,
         string? reason, string? detail)
     {
-        if (!IsWaitingOn(operationId, FirewallRuleOperationKind.Create))
+        if (!IsWaitingOn(operationId, FirewallRuleStatus.Creating))
         {
             return false;
         }
-        RecordWhatTheWorkerSaw(externalId, observedState);
+        EnsureNotForeign(status);
+        RecordTheId(externalId);
+        FirewallRuleStatus resting = status ?? InstanceStatus ?? FirewallRuleStatus.Unknown;
         Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
+        if (ExternalId is null)
+        {
+            Status = FirewallRuleStatus.Failed;
+        }
+        else
+        {
+            Status = resting;
+        }
         return true;
     }
 }

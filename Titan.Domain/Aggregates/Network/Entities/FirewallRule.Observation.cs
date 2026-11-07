@@ -9,20 +9,31 @@ public partial class FirewallRule
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
     // ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
 
-    /// The reconciler read the rule in its ACL.
-    internal void MarkObserved(FirewallRuleState state)
+    /// The reconciler read the rule in its ACL. While an operation waits the status stays and only the state seen is recorded.
+    internal void MarkObserved(FirewallRuleStatus status)
     {
-        if (IsDeleted) return;
-        CurrentExistence = CurrentExistence.Exists;
-        CurrentState = state;
+        EnsureNotForeign(status);
+        if (IsDeleted || Status == FirewallRuleStatus.Failed) return;
+        if (IsTransitionStatus)
+        {
+            Operation = Operation.Saw(status);
+        }
+        else
+        {
+            Operation = Operation.Saw(null);
+            Status = status;
+        }
     }
 
     /// The reconciler did not find the rule in its ACL. Never Deleted: only a delete's Done confirms that
     /// (titan-ops architecture/desired-and-current.md#existence-axis).
     internal void MarkNotFound()
     {
-        if (IsDeleted) return;
-        CurrentExistence = CurrentExistence.NotFound;
-        CurrentState = null;
+        if (IsDeleted || Status == FirewallRuleStatus.Failed) return;
+        Operation = Operation.Saw(null);
+        if (!IsTransitionStatus)
+        {
+            Status = FirewallRuleStatus.NotFound;
+        }
     }
 }

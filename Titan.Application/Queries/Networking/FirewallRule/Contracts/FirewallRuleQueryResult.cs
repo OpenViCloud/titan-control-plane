@@ -5,9 +5,10 @@ using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Networking.FirewallRule.Contracts;
 
-// CurrentState is the Incus ACL rule state word for word (enabled · disabled · logged), null while the rule is not
-// in the ACL; the existence pair and the request failure tell a rule being created from one whose create failed
-// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
+// Status is the one status of the rule (titan-ops features/network/design.md#firewall-rule-status): the Incus ACL rule state word
+// for word (enabled · disabled · logged) while the rule rests, or what is not a resting rule (Creating, Deleting, Unknown,
+// NotFound, Failed, Deleted). A command's give-up is the request failure, which tells a rule whose create failed from the
+// others (titan-ops architecture/desired-and-current.md#request-failure).
 public record FirewallRuleQueryResult(
     Guid Id,
     string Direction,
@@ -16,10 +17,7 @@ public record FirewallRuleQueryResult(
     int? EndPort,
     string Cidr,
     string? ExternalId,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] FirewallRuleState? CurrentState,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] CurrentExistence CurrentExistence,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] DesiredExistence DesiredExistence,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] FirewallRuleTransition? Transition,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] FirewallRuleStatus Status,
     string? RequestFailureReason,
     DateTimeOffset? RequestFailedAt,
     DateTimeOffset CreatedAt)
@@ -27,6 +25,5 @@ public record FirewallRuleQueryResult(
     public static FirewallRuleQueryResult From(FirewallRuleEntity r) =>
         new(r.Id, r.Direction.ToString(), r.Protocol.ToString(),
             r.StartPort, r.EndPort, r.Cidr.Value, r.ExternalId,
-            r.CurrentState, r.CurrentExistence, r.DesiredExistence,
-            r.Transition, r.Operation.FailureReason, r.Operation.FailedAt, r.CreatedAt);
+            r.Status, r.Operation.FailureReason, r.Operation.FailedAt, r.CreatedAt);
 }

@@ -13,10 +13,10 @@ public class FirewallRuleLifecycleTests
     {
         var rule = NewRule();
 
-        Assert.Null(rule.CurrentState);
-        Assert.Equal(CurrentExistence.NotCreated, rule.CurrentExistence);
-        Assert.Equal(DesiredExistence.Exists, rule.DesiredExistence);
-        Assert.Equal(FirewallRuleTransition.Creating, rule.Transition);
+        Assert.Null(rule.InstanceStatus);
+        Assert.True(rule.Status == FirewallRuleStatus.Creating || rule.Status == FirewallRuleStatus.Failed);
+        Assert.False(rule.IsDeletedOrDeleting);
+        Assert.Equal(FirewallRuleStatus.Creating, rule.Status);
     }
 
     [Fact]
@@ -28,24 +28,23 @@ public class FirewallRuleLifecycleTests
         rule.MarkCreated("acl-n/other");
 
         Assert.Equal("acl-n/rule-1", rule.ExternalId);
-        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
-        Assert.Null(rule.CurrentState);
-        Assert.Null(rule.Transition);
+        Assert.Equal(FirewallRuleStatus.Unknown, rule.Status);
+        Assert.Null(rule.InstanceStatus);
     }
 
     // Any word Incus holds for the rule is recorded as it is: disabled or logged set outside Titan is shown.
     [Theory]
-    [InlineData(FirewallRuleState.enabled)]
-    [InlineData(FirewallRuleState.disabled)]
-    [InlineData(FirewallRuleState.logged)]
-    public void MarkObserved_RecordsTheIncusWord(FirewallRuleState state)
+    [InlineData(FirewallRuleStatus.enabled)]
+    [InlineData(FirewallRuleStatus.disabled)]
+    [InlineData(FirewallRuleStatus.logged)]
+    public void MarkObserved_RecordsTheIncusWord(FirewallRuleStatus state)
     {
         var rule = ActiveRule();
 
         rule.MarkObserved(state);
 
-        Assert.Equal(state, rule.CurrentState);
-        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
+        Assert.Equal(state, rule.Status);
+        Assert.True(FirewallRule.IsIncusStatus(rule.Status));
     }
 
     [Fact]
@@ -54,10 +53,10 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.Delete();
 
-        rule.MarkObserved(FirewallRuleState.enabled);
+        rule.MarkObserved(FirewallRuleStatus.enabled);
 
-        Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
-        Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
+        Assert.True(rule.IsDeletedOrDeleting);
+        Assert.Equal(FirewallRuleStatus.Deleting, rule.Status);
     }
 
     // ── Not found: the reconciler never reports Deleted (titan-ops architecture/desired-and-current.md#existence-axis) ──
@@ -69,8 +68,8 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkNotFound();
 
-        Assert.Equal(CurrentExistence.NotFound, rule.CurrentExistence);
-        Assert.Null(rule.CurrentState);
+        Assert.Equal(FirewallRuleStatus.NotFound, rule.Status);
+        Assert.Null(rule.InstanceStatus);
         Assert.Equal("acl-n/rule-1", rule.ExternalId);
     }
 
@@ -82,7 +81,7 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkNotFound();
 
-        Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
+        Assert.Equal(FirewallRuleStatus.Deleting, rule.Status);
         Assert.True(rule.MarkDeleted());
     }
 
@@ -92,9 +91,9 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
         rule.MarkNotFound();
 
-        rule.MarkObserved(FirewallRuleState.enabled);
+        rule.MarkObserved(FirewallRuleStatus.enabled);
 
-        Assert.Equal(CurrentExistence.Exists, rule.CurrentExistence);
+        Assert.True(FirewallRule.IsIncusStatus(rule.Status));
     }
 
     // ── Request failure (titan-ops architecture/desired-and-current.md#request-failure) ──
@@ -109,8 +108,8 @@ public class FirewallRuleLifecycleTests
         Assert.Equal("Firewall rule creation failed.", rule.Operation.FailureReason);
         Assert.Equal("raw", rule.Operation.FailureDetail);
         Assert.NotNull(rule.Operation.FailedAt);
-        Assert.Null(rule.Transition);
-        Assert.Equal(CurrentExistence.NotCreated, rule.CurrentExistence);
+        Assert.True(rule.Status != FirewallRuleStatus.Creating && rule.Status != FirewallRuleStatus.Deleting);
+        Assert.True(rule.Status == FirewallRuleStatus.Creating || rule.Status == FirewallRuleStatus.Failed);
     }
 
     [Fact]
@@ -131,15 +130,15 @@ public class FirewallRuleLifecycleTests
         var rule = ActiveRule();
 
         Assert.Equal("acl-n/rule-1", rule.Delete()!.ProviderId);
-        Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
-        Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
-        Assert.Equal(FirewallRuleTransition.Deleting, rule.Transition);
+        Assert.True(rule.IsDeletedOrDeleting);
+        Assert.Equal(FirewallRuleStatus.enabled, rule.InstanceStatus);
+        Assert.Equal(FirewallRuleStatus.Deleting, rule.Status);
     }
 
     [Theory]
-    [InlineData(FirewallRuleState.disabled)]
-    [InlineData(FirewallRuleState.logged)]
-    public void RequestDelete_IsAccepted_WhateverItsState(FirewallRuleState state)
+    [InlineData(FirewallRuleStatus.disabled)]
+    [InlineData(FirewallRuleStatus.logged)]
+    public void RequestDelete_IsAccepted_WhateverItsState(FirewallRuleStatus state)
     {
         var rule = ActiveRule();
         rule.MarkObserved(state);
@@ -188,8 +187,8 @@ public class FirewallRuleLifecycleTests
         Assert.True(rule.MarkDeleted());
         Assert.False(rule.MarkDeleted());
         Assert.True(rule.IsDeleted);
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-        Assert.Null(rule.CurrentState);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
+        Assert.Null(rule.InstanceStatus);
     }
 
     // The network's delete takes its ACL, and the rule with it, whatever the rule waited on.
@@ -213,9 +212,9 @@ public class FirewallRuleLifecycleTests
         rule.EndWithItsNetwork();
         rule.EndWithItsNetwork();
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
         Assert.Null(rule.Operation.PendingId);
-        Assert.Null(rule.Transition);
+        Assert.True(rule.Status != FirewallRuleStatus.Creating && rule.Status != FirewallRuleStatus.Deleting);
     }
 
     [Fact]
@@ -226,7 +225,7 @@ public class FirewallRuleLifecycleTests
         rule.EndWithItsNetwork();
 
         Assert.True(rule.IsDeleted);
-        Assert.Null(rule.Transition);
+        Assert.True(rule.Status != FirewallRuleStatus.Creating && rule.Status != FirewallRuleStatus.Deleting);
     }
 
     [Fact]
@@ -236,13 +235,13 @@ public class FirewallRuleLifecycleTests
         rule.Delete();
         rule.MarkDeleted();
 
-        rule.MarkObserved(FirewallRuleState.enabled);
+        rule.MarkObserved(FirewallRuleStatus.enabled);
         rule.MarkNotFound();
         rule.MarkCreated("acl-n/other");
         rule.MarkRequestFailed("late", "late");
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-        Assert.Null(rule.CurrentState);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
+        Assert.Null(rule.InstanceStatus);
         Assert.Equal("acl-n/rule-1", rule.ExternalId);
     }
 
@@ -256,21 +255,22 @@ public class FirewallRuleLifecycleTests
 
         Assert.Null(rule.Delete());
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-        Assert.Equal(DesiredExistence.Deleted, rule.DesiredExistence);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
+        Assert.True(rule.IsDeletedOrDeleting);
     }
 
     [Fact]
     public void RequestDelete_OfAFailedCreateThatSawAState_WithNoId_LeavesNoStateBehind()
     {
         var rule = NewRule();
-        rule.ReportFailed(rule.Operation.PendingId!.Value, null, FirewallRuleState.enabled, "r", "d");
-        Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
+        rule.ReportFailed(rule.Operation.PendingId!.Value, null, FirewallRuleStatus.enabled, "r", "d");
+        Assert.Equal(FirewallRuleStatus.Failed, rule.Status);
+        Assert.Null(rule.InstanceStatus);
 
         Assert.Null(rule.Delete());
 
-        Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-        Assert.Null(rule.CurrentState);
+        Assert.Equal(FirewallRuleStatus.Deleted, rule.Status);
+        Assert.Null(rule.InstanceStatus);
     }
 
     [Fact]
@@ -290,5 +290,19 @@ public class FirewallRuleLifecycleTests
         var rule = NewRule();
         rule.MarkActive("acl-n/rule-1");
         return rule;
+    }
+
+    [Fact]
+    public void AFailedRule_IgnoresEveryObservation()
+    {
+        var rule = NewRule();
+        rule.MarkRequestFailed("reason", "raw");
+
+        rule.MarkObserved(FirewallRuleStatus.enabled);
+        rule.MarkNotFound();
+
+        Assert.Equal(FirewallRuleStatus.Failed, rule.Status);
+        Assert.Null(rule.InstanceStatus);
+        Assert.False(rule.CountsTowardQuota);
     }
 }

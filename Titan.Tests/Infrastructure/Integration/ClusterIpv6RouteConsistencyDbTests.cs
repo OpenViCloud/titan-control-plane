@@ -111,7 +111,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
 
         await using TitanDbContext read = pg.NewDbContext();
         List<Guid> liveWithASubnet = await read.Networks
-            .Where(n => n.ClusterId == cluster && n.CurrentExistence != CurrentExistence.Deleted && n.PublicIpv6Subnet != null)
+            .Where(n => n.ClusterId == cluster && n.Status != NetworkStatus.Deleted && n.PublicIpv6Subnet != null)
             .Select(n => n.Id)
             .ToListAsync();
         List<ClusterIpv6Route> routes = await read.ClusterIpv6Routes.Where(r => r.ClusterId == cluster).ToListAsync();

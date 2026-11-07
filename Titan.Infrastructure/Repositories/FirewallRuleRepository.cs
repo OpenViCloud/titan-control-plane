@@ -14,7 +14,7 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
     // but not listed. A rule whose delete is waiting is still listed: Incus still enforces it.
     public async Task<List<FirewallRule>> ListByNetworkAsync(Guid networkId, CancellationToken ct = default) =>
         await db.FirewallRules
-            .Where(r => r.NetworkId == networkId && r.CurrentExistence != CurrentExistence.Deleted)
+            .Where(r => r.NetworkId == networkId && r.Status != FirewallRuleStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -23,7 +23,7 @@ public class FirewallRuleRepository(TitanDbContext db) : IFirewallRuleRepository
     public async Task<List<FirewallRule>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.FirewallRules
             .Where(r => r.ExternalId != null
-                     && r.CurrentExistence != CurrentExistence.Deleted
+                     && r.Status != FirewallRuleStatus.Deleted
                      && db.Networks.Any(n => n.Id == r.NetworkId && n.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);

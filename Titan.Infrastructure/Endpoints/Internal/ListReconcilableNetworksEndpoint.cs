@@ -7,7 +7,7 @@ using Titan.Infrastructure.Hosting;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // A network in this list that Incus does not hold is reported not found (titan-ops features/network/design.md#network-lifecycle);
-// CurrentState and CurrentExistence come along so an unchanged observation sends nothing.
+// CurrentState and CurrentExistence (worked out from the status) come along so an unchanged observation sends nothing.
 //
 // Each call is the reconciler's heartbeat, recorded here rather than in the handler: it is an operational
 // signal about the caller, not a fact about networks.

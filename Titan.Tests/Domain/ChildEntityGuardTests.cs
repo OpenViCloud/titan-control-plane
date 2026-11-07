@@ -133,6 +133,7 @@ public class ChildEntityGuardTests
     private static readonly Dictionary<string, string> PublicChildMethods = new(StringComparer.Ordinal)
     {
         ["FirewallRule.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
+        ["FirewallRule.IsIncusStatus"] = "a predicate over the three states Incus gives a rule, no state of its own: the callback handler parses the worker's words with it",
         ["VolumeSnapshot.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["VmSnapshot.GetExternalId"] = "a read: hands the provider id to the reconciler's read model",
         ["InvoiceItem.Create"] = "the items exist before their invoice: built first, handed to the invoice's factory",

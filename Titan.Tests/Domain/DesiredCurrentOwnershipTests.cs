@@ -16,23 +16,21 @@ namespace Titan.Tests.Domain;
 public class DesiredCurrentOwnershipTests
 {
     // The provisioned aggregates that keep one status instead of the split, by name: the VM
-    // (titan-ops features/vm/design.md#vm-status). Its status moves only through its own table of moves
-    // (VmStatusTests), so the scans below leave it out, and the last fact checks it really has no split.
-    private static readonly string[] OneStatus = ["Vm"];
+    // (titan-ops features/vm/design.md#vm-status), the network and the firewall rule (titan-ops
+    // features/network/design.md#network-lifecycle). Their status moves only through their own table of moves, so the scans
+    // below leave them out, and the last fact checks they really have no split.
+    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule"];
 
     // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
     // there is no observation coming, so the control plane is the only witness
     // (titan-ops architecture/desired-and-current.md#delete-locally).
     private static readonly Dictionary<string, string> IntentWritesCurrentAllowlist = new()
     {
-        ["Network.DeleteLocally"] = "delete of a network whose create failed before Incus had it: nothing to observe",
-        ["FirewallRule.Delete"] = "the delete of a rule whose create failed (no provider id) happens in the request: nothing to observe",
         ["Volume.Delete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["FirewallRule.EndWithItsNetwork"] = "part of Network.DeleteSucceeded: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
@@ -82,12 +80,7 @@ public class DesiredCurrentOwnershipTests
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
         string[] expected =
         [
-            "FirewallRule.CreateFailed", "FirewallRule.CreateSucceeded", "FirewallRule.DeleteFailed", "FirewallRule.DeleteSucceeded",
-            "FirewallRule.RecordWhatTheWorkerSaw",
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
-            "Network.CreateFailed", "Network.CreateSucceeded", "Network.DeleteFailed", "Network.DeleteSucceeded",
-            "Network.FirewallRuleCreateFailed", "Network.FirewallRuleCreateSucceeded", "Network.FirewallRuleDeleteFailed",
-            "Network.FirewallRuleDeleteSucceeded", "Network.RecordWhatTheWorkerSaw",
             "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
             "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
@@ -147,10 +140,9 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        // Finish<Child>Operation and Fail<Child>Operation, or the <Child><Create|Delete><Succeeded|Failed> of a type that
-        // ends an operation by its kind: a root's way in to its child's reports
+        // Finish<Child>Operation and Fail<Child>Operation: a root's way in to its child's reports
         // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part they share.
-        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|(?:FirewallRule)?(?:Create|Delete)(?:Succeeded|Failed)|RecordWhatTheWorkerSaw)$");
+        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|RecordWhatTheWorkerSaw)$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

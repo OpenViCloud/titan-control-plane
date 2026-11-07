@@ -84,7 +84,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
     }
 
     [Fact]
-    public async Task FirewallRuleState_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
+    public async Task FirewallRuleStatus_IsStoredAsItsName_DeletedRulesAreNotListed_AndAWaitingDeleteIsNotCounted()
     {
         Network network = TestAggregates.Network(TestTenant.WithRoomToSpare(), $"rt-net-{Guid.NewGuid():N}"[..12], "cluster-a");
         network.MarkActive("net-1", "10.0.0.0/24", "10.0.0.1");
@@ -107,13 +107,13 @@ public class StateRoundTripDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             List<string> stored = await db.Database
-                .SqlQueryRaw<string>("SELECT desired_existence AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
+                .SqlQueryRaw<string>("SELECT status AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
                 .ToListAsync();
-            Assert.Equal("Deleted", stored.Single());
+            Assert.Equal("Deleting", stored.Single());
             // Incus spells the ACL rule state in lower case, and so does the column
             // (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
             List<string> state = await db.Database
-                .SqlQueryRaw<string>("SELECT current_state AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
+                .SqlQueryRaw<string>("SELECT observed_state AS \"Value\" FROM core.firewall_rules WHERE id = {0}", deleting.Id)
                 .ToListAsync();
             Assert.Equal("enabled", state.Single());
 

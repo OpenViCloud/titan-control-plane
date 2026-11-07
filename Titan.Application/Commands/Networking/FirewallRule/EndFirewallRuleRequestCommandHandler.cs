@@ -22,7 +22,7 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
     {
         // Parsed before the rule is loaded: a malformed report is the worker's bug, whatever the rule.
         OperationOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
-        FirewallRuleState? state = null;
+        FirewallRuleStatus? state = null;
         if (command.State != null)
         {
             state = NetworkReports.ParseState(command.State);
@@ -32,18 +32,18 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        // The operation the rule waits on says which report this is.
-        FirewallRuleOperationKind? waiting = rule.Operation.Kind;
+        // The status the rule waits in says which report this is.
+        FirewallRuleStatus waiting = rule.Status;
         bool ended;
         switch (waiting)
         {
-            case FirewallRuleOperationKind.Create:
+            case FirewallRuleStatus.Creating:
                 ended = outcome == OperationOutcome.Done
                     ? network.FirewallRuleCreateSucceeded(rule.Id, command.RequestId, command.ExternalId, state)
                     : network.FirewallRuleCreateFailed(rule.Id, command.RequestId, command.ExternalId, state,
                         command.Reason, command.Detail);
                 break;
-            case FirewallRuleOperationKind.Delete:
+            case FirewallRuleStatus.Deleting:
                 ended = outcome == OperationOutcome.Done
                     ? network.FirewallRuleDeleteSucceeded(rule.Id, command.RequestId)
                     : network.FirewallRuleDeleteFailed(rule.Id, command.RequestId, state, command.Reason, command.Detail);
@@ -57,7 +57,7 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             return;
         }
 
-        NetworkReports.RecordRuleEnded(rule, waiting!.Value, outcome, activity);
+        NetworkReports.RecordRuleEnded(rule, waiting, outcome, activity);
         await networkRepo.SaveAsync(ct);
     }
 }

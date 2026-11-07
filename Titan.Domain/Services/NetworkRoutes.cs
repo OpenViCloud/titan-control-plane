@@ -26,18 +26,18 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
     /// route goes back, its number waiting at the back of the line. The held route is read without a lock: no create
     /// locks a held route. A repeated report ends nothing and touches no route, and a network without public IPv6
     /// never held one.
-    public async Task<NetworkOperationKind?> FinishOperationAsync(Network network, Guid operationId,
+    public async Task<NetworkStatus?> FinishOperationAsync(Network network, Guid operationId,
         string? externalId, NetworkStatus? status, string? cidr, string? gateway, CancellationToken ct = default)
     {
-        // The operation the network waits on says which Done this is.
-        NetworkOperationKind? waiting = network.Operation.Kind;
+        // The status the network waits in says which Done this is.
+        NetworkStatus waiting = network.Status;
         bool ended;
         switch (waiting)
         {
-            case NetworkOperationKind.Create:
+            case NetworkStatus.Creating:
                 ended = network.CreateSucceeded(operationId, externalId, status, cidr, gateway);
                 break;
-            case NetworkOperationKind.Delete:
+            case NetworkStatus.Deleting:
                 ended = network.DeleteSucceeded(operationId);
                 break;
             default:
@@ -48,7 +48,7 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
         {
             return null;
         }
-        if (waiting == NetworkOperationKind.Delete)
+        if (waiting == NetworkStatus.Deleting)
         {
             await TakeBackTheRouteOfAsync(network, ct);
         }
@@ -57,19 +57,19 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
 
     /// The report that the network's own command gave up, ended here so the route follows it: a create that failed
     /// before Incus had the network lets go of its /64, and the route goes back as for a delete done.
-    public async Task<NetworkOperationKind?> FailOperationAsync(Network network, Guid operationId,
+    public async Task<NetworkStatus?> FailOperationAsync(Network network, Guid operationId,
         string? externalId, NetworkStatus? status, string? cidr, string? gateway, string? reason, string? detail,
         CancellationToken ct = default)
     {
         bool heldAPublicIpv6 = network.HasPublicIpv6;
-        NetworkOperationKind? waiting = network.Operation.Kind;
+        NetworkStatus waiting = network.Status;
         bool ended;
         switch (waiting)
         {
-            case NetworkOperationKind.Create:
+            case NetworkStatus.Creating:
                 ended = network.CreateFailed(operationId, externalId, status, cidr, gateway, reason, detail);
                 break;
-            case NetworkOperationKind.Delete:
+            case NetworkStatus.Deleting:
                 ended = network.DeleteFailed(operationId, status, reason, detail);
                 break;
             default:

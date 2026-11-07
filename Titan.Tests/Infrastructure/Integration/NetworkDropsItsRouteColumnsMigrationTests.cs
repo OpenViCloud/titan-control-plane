@@ -1,9 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Titan.Domain.Aggregates.Tenant;
 using Titan.Infrastructure.Persistence;
-using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
@@ -44,39 +42,40 @@ public sealed class NetworkDropsItsRouteColumnsMigrationTests : IAsyncLifetime
     private Task<int> RouteIndexesAsync() => CountAsync(
         $"SELECT count(*)::int AS \"Value\" FROM pg_indexes WHERE schemaname = 'core' AND tablename = 'networks' AND indexname = '{RouteIndex}'");
 
-    private async Task<NetworkAggregate> SeedNetworkWithItsOldNumberAsync()
+    // Written by SQL: the model of today has a status column the schema of this migration does not.
+    private async Task<Guid> SeedNetworkWithItsOldNumberAsync()
     {
-        Tenant tenant = TestTenant.Active($"drop-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "drop@titan.local");
-        NetworkAggregate network = TestAggregates.Network(tenant, "held-one", $"cluster-{Guid.NewGuid():N}");
+        Guid id = Guid.NewGuid();
         await using TitanDbContext seed = NewDbContext();
-        seed.Tenants.Add(tenant);
-        seed.Networks.Add(network);
-        await seed.SaveChangesAsync();
-        await seed.Database.ExecuteSqlInterpolatedAsync(
-            $"UPDATE core.networks SET public_ipv6_index = 3, public_ipv6_router_address = {"2001:db8:0:3::1"}, public_ipv6_subnet = {"2001:db8:0:3::/64"} WHERE id = {network.Id}");
-        return network;
+        await seed.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO core.networks (id, tenant_id, name, cluster_id, current_existence, desired_existence, created_at,
+                           public_ipv6_index, public_ipv6_router_address, public_ipv6_subnet)
+VALUES ({id}, {Guid.NewGuid()}, {"held-" + id.ToString("N")[..8]}, {"cluster-" + id.ToString("N")}, 'Exists', 'Exists', now(),
+        3, {"2001:db8:0:3::1"}, {"2001:db8:0:3::/64"})");
+        return id;
     }
 
     [Fact]
     public async Task TheColumnsAndTheirIndexGo_EveryNetworkKeepsItsSubnet()
     {
         await MigrateToAsync(MigrationBefore);
-        NetworkAggregate network = await SeedNetworkWithItsOldNumberAsync();
+        Guid networkId = await SeedNetworkWithItsOldNumberAsync();
 
         await MigrateToAsync(ThisMigration);
 
         Assert.Equal(0, await RouteColumnsAsync());
         Assert.Equal(0, await RouteIndexesAsync());
         await using TitanDbContext read = NewDbContext();
-        NetworkAggregate stored = await read.Networks.SingleAsync(n => n.Id == network.Id);
-        Assert.Equal("2001:db8:0:3::/64", stored.PublicIpv6Subnet);
+        string subnet = await read.Database
+            .SqlQuery<string>($"SELECT public_ipv6_subnet AS \"Value\" FROM core.networks WHERE id = {networkId}").SingleAsync();
+        Assert.Equal("2001:db8:0:3::/64", subnet);
     }
 
     [Fact]
     public async Task Down_BringsTheColumnsBackEmpty_WithTheirIndex()
     {
         await MigrateToAsync(MigrationBefore);
-        NetworkAggregate network = await SeedNetworkWithItsOldNumberAsync();
+        Guid networkId = await SeedNetworkWithItsOldNumberAsync();
         await MigrateToAsync(ThisMigration);
 
         await MigrateToAsync(MigrationBefore);
@@ -84,6 +83,6 @@ public sealed class NetworkDropsItsRouteColumnsMigrationTests : IAsyncLifetime
         Assert.Equal(3, await RouteColumnsAsync());
         Assert.Equal(1, await RouteIndexesAsync());
         Assert.Equal(0, await CountAsync(
-            $"SELECT count(*)::int AS \"Value\" FROM core.networks WHERE id = '{network.Id}' AND (public_ipv6_index IS NOT NULL OR public_ipv6_router_address IS NOT NULL OR public_ipv6_released_at IS NOT NULL)"));
+            $"SELECT count(*)::int AS \"Value\" FROM core.networks WHERE id = '{networkId}' AND (public_ipv6_index IS NOT NULL OR public_ipv6_router_address IS NOT NULL OR public_ipv6_released_at IS NOT NULL)"));
     }
 }

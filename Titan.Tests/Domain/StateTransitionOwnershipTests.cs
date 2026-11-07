@@ -282,8 +282,6 @@ public class StateTransitionOwnershipTests
         ["VmSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["Volume.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VolumeSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
-        ["Network.RecordWhatTheWorkerSaw"] = PartOfTheReport,
-        ["FirewallRule.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VmTemplateCluster.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
