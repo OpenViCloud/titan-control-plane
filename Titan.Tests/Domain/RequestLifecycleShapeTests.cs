@@ -140,7 +140,8 @@ public class RequestLifecycleShapeTests
         Assert.True(offenders.Count == 0, "Mark* must return void (titan-ops architecture/resource-lifecycle.md#shape): " + string.Join(", ", offenders));
     }
 
-    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the other types end a request by
+    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network and the firewall rule have one
+    // Succeeded and one Failed move per kind (NetworkReportMoves below); the other types end a request by
     // FinishOperation and FailOperation.
     private static readonly string[] VmReportMoves =
     [

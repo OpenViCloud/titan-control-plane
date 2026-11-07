@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
 // control plane provisions to the provider keeps two states, except the VM, which keeps one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
-// (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
+// (FinishOperation, FailOperation; the Succeeded and Failed moves of a VM, a network and a firewall rule), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -73,8 +73,9 @@ public class DesiredCurrentOwnershipTests
     // The report of a request's own command (FinishOperation for a Done, FailOperation for a give-up,
     // titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the worker
     // saw is current, and a failed request puts desired back. They are neither intents nor observations, so both scans
-    // skip them and the private RecordWhatTheWorkerSaw they share; every aggregate on the new shape gets the pair, and a
-    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation.
+    // skip them and the private RecordWhatTheWorkerSaw they share. A type that keeps its operation in an Operation
+    // (the VM, the network, the firewall rule) has one Succeeded and one Failed move per kind instead of the pair, and a
+    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation or the child's own moves.
     [Fact]
     public void ReportMethods_AreOnlyFinishAndFail()
     {

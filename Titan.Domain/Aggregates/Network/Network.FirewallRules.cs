@@ -10,7 +10,7 @@ public partial class Network
     // (titan-ops architecture/code-structure.md#child-entity). Logic stays on FirewallRule; this is the way in.
 
     /// Intent: a new rule in this network's ACL, with the id the handler chose. The network must be usable. The create
-    /// operation is the rule's own Pending; its ticket carries the network's provider id, whose ACL the command writes to.
+    /// operation is the rule's own Operation; its ticket carries the network's provider id, whose ACL the command writes to.
     public OperationTicket AddFirewallRule(
         Guid ruleId, FirewallDirection direction, FirewallProtocol protocol,
         PortRange? ports, FirewallCidr cidr)
