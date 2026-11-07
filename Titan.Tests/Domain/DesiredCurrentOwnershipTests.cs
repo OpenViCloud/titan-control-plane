@@ -75,7 +75,7 @@ public class DesiredCurrentOwnershipTests
     // saw is current, and a failed request puts desired back. They are neither intents nor observations, so both scans
     // skip them and the private RecordWhatTheWorkerSaw they share. A type that keeps its operation in an Operation
     // (the VM, the network, the firewall rule) has one Succeeded and one Failed move per kind instead of the pair, and a
-    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation or the child's own moves.
+    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation or Network.FirewallRule<Operation>Succeeded/Failed.
     [Fact]
     public void ReportMethods_AreOnlyFinishAndFail()
     {

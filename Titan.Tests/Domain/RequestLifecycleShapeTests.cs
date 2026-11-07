@@ -11,7 +11,7 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods (the
-// VM, with one status, has one report method per move instead of FinishOperation and FailOperation), its
+// VM, the network and the firewall rule have one report method per move instead of FinishOperation and FailOperation), its
 // Mark* return nothing, a report with a foreign id changes nothing, every lifecycle handler locks the row, and every
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //

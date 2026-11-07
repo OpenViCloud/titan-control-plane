@@ -10,8 +10,8 @@ namespace Titan.Domain.Aggregates.Network
 {
     /// A network's and a firewall rule's requests end by their own command's report
     /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
-    /// test setups used before, through the real FinishOperation, FailOperation and MarkObserved. A replay for a request
-    /// not waiting does nothing, like the report it stands for.
+    /// test setups used before, through the real CreateSucceeded, CreateFailed, DeleteSucceeded, DeleteFailed and MarkObserved. A
+    /// replay for a request not waiting does nothing, like the report it stands for.
     public static class NetworkProvisionedOnTheProvider
     {
         /// The worker's Done for the operation the network waits on, in the one call tests used before the four methods

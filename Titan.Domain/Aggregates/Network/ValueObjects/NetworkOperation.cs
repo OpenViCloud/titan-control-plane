@@ -47,6 +47,6 @@ public sealed record NetworkOperation : ValueObject
         };
 
     /// Nothing waits any more without an operation of its own having ended Done or given up (a delete that never reached
-    /// the provider, or one that went with its network): the last failure stays.
+    /// the provider): the last failure stays.
     public NetworkOperation ReturnedToRest() => this with { PendingId = null, Kind = null, AskedAt = null };
 }
