@@ -1,15 +1,14 @@
 using Titan.Tests.Fakes;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Exceptions;
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/intent-and-observation.md#intent-versus-observation, same split as VmStateMachineTests: a request
 // throws when it cannot be accepted, an observation never throws and ends nothing, Deleted absorbs. MarkCreated,
 // MarkReverted, MarkDeleted and MarkRequestFailed here are replays of the commands' reports (Fakes/ProvisionedOnTheProvider);
-// how a request ends is VmSnapshotRequestLifecycleTests'. Incus has no status word
-// for an instance snapshot, so the model is existence plus the waiting request (titan-ops features/vm/design.md#vm-snapshot-is-existence).
+// how a request ends is VmSnapshotRequestLifecycleTests'. Incus has no status word for an instance snapshot, only whether
+// it is there, so the one status says what waits or whether Incus holds it at rest (titan-ops features/vm/design.md#vm-snapshot).
 // The Seed enum names every situation so each "from every other situation" test walks all of them.
 public class VmSnapshotStateMachineTests
 {
@@ -48,25 +47,26 @@ public class VmSnapshotStateMachineTests
         return s;
     }
 
+    // The status, then whether Incus holds the snapshot as far as Titan last knew.
     private static string Shape(VmSnapshot s)
     {
-        string transition = "-";
-        if (s.Transition != null)
+        string held = "-";
+        if (s.InstanceStatus != null)
         {
-            transition = s.Transition.Value.ToString();
+            held = s.InstanceStatus.Value.ToString();
         }
-        return $"{s.CurrentExistence}/{s.DesiredExistence}/{transition}";
+        return $"{s.Status}/{held}";
     }
 
     [Theory]
-    [InlineData(Seed.Creating, "NotCreated/Exists/Creating")]
-    [InlineData(Seed.CreateFailed, "NotCreated/Exists/-")]
-    [InlineData(Seed.Exists, "Exists/Exists/-")]
-    [InlineData(Seed.RevertRequested, "Exists/Exists/Reverting")]
-    [InlineData(Seed.DeleteRequested, "Exists/Deleted/Deleting")]
-    [InlineData(Seed.NotFound, "NotFound/Exists/-")]
-    [InlineData(Seed.Deleted, "Deleted/Deleted/-")]
-    public void EverySituation_ReadsAsExistenceAndTransition(Seed seed, string expected)
+    [InlineData(Seed.Creating, "Creating/-")]
+    [InlineData(Seed.CreateFailed, "Failed/-")]
+    [InlineData(Seed.Exists, "Available/Available")]
+    [InlineData(Seed.RevertRequested, "Reverting/Available")]
+    [InlineData(Seed.DeleteRequested, "Deleting/Available")]
+    [InlineData(Seed.NotFound, "NotFound/-")]
+    [InlineData(Seed.Deleted, "Deleted/-")]
+    public void EverySituation_ReadsAsOneStatus_AndWhetherIncusHoldsIt(Seed seed, string expected)
     {
         Assert.Equal(expected, Shape(SnapshotIn(seed)));
     }
@@ -86,20 +86,20 @@ public class VmSnapshotStateMachineTests
     {
         Vm stopped = VmIn(VmStatus.Stopped);
         var s = stopped.WithSnapshot("ready");
-        Assert.Equal(VmSnapshotTransition.Creating, s.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, s.Status);
         s.MarkCreated("vm42/s7");
         stopped.RevertSnapshot(s.Id, Guid.NewGuid());
-        Assert.Equal("Exists/Exists/Reverting", Shape(s));
+        Assert.Equal("Reverting/Available", Shape(s));
     }
 
     [Fact]
-    public void Created_SetsTheIdAndExists_AndFulfilsTheCreateOnce()
+    public void Created_SetsTheIdAndIsAvailable_AndFulfilsTheCreateOnce()
     {
         var s = SnapshotIn(Seed.Creating);
         Assert.True(s.MarkCreated("vm42/s7"));
         Assert.False(s.MarkCreated("vm42/s9"));
         Assert.Equal("vm42/s7", s.ExternalId);
-        Assert.Equal("Exists/Exists/-", Shape(s));
+        Assert.Equal("Available/Available", Shape(s));
     }
 
     // Only the create command's own report ends the create (titan-ops architecture/resource-lifecycle.md#invariants).
@@ -108,16 +108,18 @@ public class VmSnapshotStateMachineTests
     {
         var s = SnapshotIn(Seed.Creating);
         s.MarkObserved();
-        Assert.Equal("Exists/Exists/Creating", Shape(s));
+        Assert.Equal("Creating/Available", Shape(s));
     }
 
     [Fact]
     public void RequestFailed_OnAWaitingCreate_RecordsWhy_AndEndsIt()
     {
         var s = SnapshotIn(Seed.CreateFailed);
-        Assert.Equal("could not create", s.OperationFailureReason);
-        Assert.Equal("raw", s.OperationFailureDetail);
-        Assert.NotNull(s.OperationFailedAt);
+        Assert.Equal("could not create", s.Operation.FailureReason);
+        Assert.Equal("raw", s.Operation.FailureDetail);
+        Assert.NotNull(s.Operation.FailedAt);
+        Assert.Equal(VmSnapshotStatus.Failed, s.Status);
+        Assert.Null(s.Operation.PendingId);
     }
 
     [Theory]
@@ -130,7 +132,7 @@ public class VmSnapshotStateMachineTests
         string before = Shape(s);
         s.MarkRequestFailed("late", "late");
         Assert.Equal(before, Shape(s));
-        Assert.Null(s.OperationFailureReason);
+        Assert.Null(s.Operation.FailureReason);
     }
 
     // ---------- revert ----------
@@ -142,8 +144,8 @@ public class VmSnapshotStateMachineTests
         Guid revert = Guid.NewGuid();
         s.Revert(revert);
         Assert.Equal("vm42/s7", s.GetExternalId());
-        Assert.Equal(revert, s.Pending!.Id);
-        Assert.Equal("Exists/Exists/Reverting", Shape(s));
+        Assert.Equal(revert, s.Operation.PendingId);
+        Assert.Equal("Reverting/Available", Shape(s));
     }
 
     [Fact] // the VM checks itself in the same call (Vm.RevertSnapshot), not the caller
@@ -155,7 +157,7 @@ public class VmSnapshotStateMachineTests
         vm.MarkObserved(VmStatus.Error, null);
         var ex = Assert.Throws<BusinessException>(() => vm.RevertSnapshot(s.Id, Guid.NewGuid()));
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        Assert.Equal("Exists/Exists/-", Shape(s));
+        Assert.Equal("Available/Available", Shape(s));
     }
 
     [Fact]
@@ -177,7 +179,7 @@ public class VmSnapshotStateMachineTests
         var s = SnapshotIn(Seed.RevertRequested);
         Assert.True(s.MarkReverted());
         Assert.False(s.MarkReverted());
-        Assert.Equal("Exists/Exists/-", Shape(s));
+        Assert.Equal("Available/Available", Shape(s));
     }
 
     // Seeing the snapshot proves it exists, not that a revert finished.
@@ -186,7 +188,7 @@ public class VmSnapshotStateMachineTests
     {
         var s = SnapshotIn(Seed.RevertRequested);
         s.MarkObserved();
-        Assert.Equal(VmSnapshotTransition.Reverting, s.Transition);
+        Assert.Equal(VmSnapshotStatus.Reverting, s.Status);
     }
 
     [Fact]
@@ -195,16 +197,16 @@ public class VmSnapshotStateMachineTests
         Assert.False(SnapshotIn(Seed.Exists).MarkReverted());
         var deleting = SnapshotIn(Seed.DeleteRequested);
         Assert.False(deleting.MarkReverted());
-        Assert.Equal(VmSnapshotTransition.Deleting, deleting.Transition);
+        Assert.Equal(VmSnapshotStatus.Deleting, deleting.Status);
     }
 
     [Fact]
     public void AFailedRevert_EndsIt_WithTheReason_AndKeepsTheSnapshot()
     {
         var s = SnapshotIn(Seed.RevertRequested);
-        s.FailOperation(s.Pending!.Id, null, "revert failed", "raw");
-        Assert.Equal("Exists/Exists/-", Shape(s));
-        Assert.Equal("revert failed", s.OperationFailureReason);
+        Assert.True(s.RevertFailed(s.Operation.PendingId!.Value, "revert failed", "raw"));
+        Assert.Equal("Available/Available", Shape(s));
+        Assert.Equal("revert failed", s.Operation.FailureReason);
     }
 
     // ---------- delete ----------
@@ -217,8 +219,8 @@ public class VmSnapshotStateMachineTests
         var s = SnapshotIn(seed);
         s.Delete(Guid.NewGuid());
         Assert.Equal("vm42/s7", s.GetExternalId());
-        Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
-        Assert.Equal(DesiredExistence.Deleted, s.DesiredExistence);
+        Assert.Equal(VmSnapshotStatus.Deleting, s.Status);
+        Assert.True(s.IsDeletedOrDeleting);
     }
 
     [Theory]
@@ -240,7 +242,7 @@ public class VmSnapshotStateMachineTests
     {
         var s = SnapshotIn(Seed.DeleteRequested);
         s.MarkNotFound();
-        Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
+        Assert.Equal("Deleting/-", Shape(s));
         Assert.True(s.MarkDeleted());
         Assert.False(s.MarkDeleted());
         Assert.True(s.IsDeleted);
@@ -250,11 +252,11 @@ public class VmSnapshotStateMachineTests
     public void AFailedDelete_GivesTheSnapshotBack_WithTheReason()
     {
         var s = SnapshotIn(Seed.DeleteRequested);
-        s.FailOperation(s.Pending!.Id, null, "delete failed", "raw");
-        Assert.Equal("Exists/Exists/-", Shape(s));
-        Assert.Equal("delete failed", s.OperationFailureReason);
+        Assert.True(s.DeleteFailed(s.Operation.PendingId!.Value, "delete failed", "raw"));
+        Assert.Equal("Available/Available", Shape(s));
+        Assert.Equal("delete failed", s.Operation.FailureReason);
         s.Delete(Guid.NewGuid());
-        Assert.Equal(VmSnapshotTransition.Deleting, s.Transition);
+        Assert.Equal(VmSnapshotStatus.Deleting, s.Status);
         Assert.Equal("vm42/s7", s.GetExternalId());
     }
 
@@ -264,7 +266,8 @@ public class VmSnapshotStateMachineTests
         var failed = SnapshotIn(Seed.CreateFailed);
         failed.Delete(Guid.NewGuid());
         Assert.True(failed.IsDeleted);
-        Assert.Equal("Deleted/Deleted/-", Shape(failed));
+        Assert.Equal("Deleted/-", Shape(failed));
+        Assert.Null(failed.Operation.PendingId);
 
         foreach (Seed seed in new[] { Seed.Creating, Seed.Exists, Seed.NotFound, Seed.Deleted })
         {
@@ -289,15 +292,31 @@ public class VmSnapshotStateMachineTests
     // ---------- NotFound, Deleted ----------
 
     [Fact]
-    public void NotFound_KeepsAWaitingCreate_AndSeenAgainExistsAgain()
+    public void NotFound_KeepsAWaitingCreate_AndSeenAgainIsAvailableAgain()
     {
         var s = SnapshotIn(Seed.Creating);
         s.MarkNotFound();
-        Assert.Equal("NotFound/Exists/Creating", Shape(s));
+        Assert.Equal("Creating/-", Shape(s));
 
         var lost = SnapshotIn(Seed.NotFound);
         lost.MarkObserved();
-        Assert.Equal("Exists/Exists/-", Shape(lost));
+        Assert.Equal("Available/Available", Shape(lost));
+    }
+
+    // A create waiting counts whatever the reconciler saw (titan-ops features/vm/design.md#vm-snapshot-counting): only the
+    // create's report says whether Incus holds the snapshot.
+    [Fact]
+    public void NotFound_DuringACreate_OnlyRecordsWhatIsSeen_AndTheSnapshotStillCounts()
+    {
+        Vm vm = RunningVm;
+        var s = vm.WithSnapshot("snap-1");
+
+        vm.MarkSnapshotNotFound(s.Id);
+
+        Assert.Equal(VmSnapshotStatus.Creating, s.Status);
+        Assert.Null(s.InstanceStatus);
+        Assert.True(s.CountsTowardQuota);
+        Assert.Equal(1, vm.SnapshotQuotaUsage);
     }
 
     [Fact]
@@ -310,6 +329,28 @@ public class VmSnapshotStateMachineTests
         s.MarkNotFound();
         s.MarkRequestFailed("late", "late");
         Assert.False(s.MarkDeleted());
-        Assert.Equal("Deleted/Deleted/-", Shape(s));
+        Assert.Equal("Deleted/-", Shape(s));
+    }
+
+    // A create that gave up before Incus held a snapshot leaves nothing to observe, and the reconciler
+    // never lists a snapshot without an id; an observation that still arrives is ignored rather than written.
+    [Fact]
+    public void Failed_IgnoresEveryObservation_AndNeverThrows()
+    {
+        var s = SnapshotIn(Seed.CreateFailed);
+        VmSnapshotOperation before = s.Operation;
+
+        s.MarkObserved();
+        Assert.Equal("Failed/-", Shape(s));
+        s.MarkNotFound();
+        Assert.Equal("Failed/-", Shape(s));
+        Assert.False(s.MarkCreated("vm42/s9"));
+        Assert.False(s.MarkReverted());
+        Assert.False(s.MarkDeleted());
+
+        Assert.Equal(before, s.Operation);
+        Assert.Null(s.ExternalId);
+        Assert.False(s.IsBilled);
+        Assert.False(s.CountsTowardQuota);
     }
 }

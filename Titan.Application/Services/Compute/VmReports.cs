@@ -35,17 +35,18 @@ public static class VmReports
         [VmStatus.Deleting] = "vm.delete_failed",
     };
 
-    private static readonly Dictionary<VmSnapshotOperationKind, string> SnapshotDoneAction = new()
+    // Keyed by the status the snapshot waited in, which says the operation that ended.
+    private static readonly Dictionary<VmSnapshotStatus, string> SnapshotDoneAction = new()
     {
-        [VmSnapshotOperationKind.Create] = "vm_snapshot.created",
-        [VmSnapshotOperationKind.Revert] = "vm_snapshot.reverted",
-        [VmSnapshotOperationKind.Delete] = "vm_snapshot.deleted",
+        [VmSnapshotStatus.Creating] = "vm_snapshot.created",
+        [VmSnapshotStatus.Reverting] = "vm_snapshot.reverted",
+        [VmSnapshotStatus.Deleting] = "vm_snapshot.deleted",
     };
 
-    private static readonly Dictionary<VmSnapshotOperationKind, string> SnapshotFailedAction = new()
+    private static readonly Dictionary<VmSnapshotStatus, string> SnapshotFailedAction = new()
     {
-        [VmSnapshotOperationKind.Revert] = "vm_snapshot.revert_failed",
-        [VmSnapshotOperationKind.Delete] = "vm_snapshot.delete_failed",
+        [VmSnapshotStatus.Reverting] = "vm_snapshot.revert_failed",
+        [VmSnapshotStatus.Deleting] = "vm_snapshot.delete_failed",
     };
 
     public static OperationOutcome ParseOutcome(string outcome)
@@ -219,10 +220,10 @@ public static class VmReports
         return waiting;
     }
 
-    public static void RecordSnapshotEnded(VmSnapshot snapshot, VmSnapshotOperationKind ended,
+    public static void RecordSnapshotEnded(VmSnapshot snapshot, VmSnapshotStatus ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
-        Dictionary<VmSnapshotOperationKind, string> actions =
+        Dictionary<VmSnapshotStatus, string> actions =
             outcome == OperationOutcome.Done ? SnapshotDoneAction : SnapshotFailedAction;
         if (actions.TryGetValue(ended, out string? action))
         {

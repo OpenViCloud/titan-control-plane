@@ -36,15 +36,22 @@ public class VmSnapshotFirewallRepositoryStateTests
         return s;
     }
 
-    // A VM holding one snapshot in every situation: creating, ready, reverting, deleting, deleted, lost, failed. The VM
-    // never holds a create and a revert at once (it is Snapshotting for one), so the revert is put on the snapshot alone
-    // and the create goes last: this builds what the repository queries read, snapshot by snapshot.
+    // A VM holding one snapshot in every situation: creating, ready, reverting and deleting with Incus last seen holding
+    // the snapshot or not, deleted, lost, failed. The VM never holds a create and a revert at once (it is Snapshotting
+    // for one), so the revert is put on the snapshot alone and the create goes last: this builds what the repository
+    // queries read, snapshot by snapshot.
     private static Vm VmWithEverySnapshotSituation(string cluster = "vn-hcm-1")
     {
         var vm = RunningVm(cluster);
         Ready(vm, "ready");
         Ready(vm, "reverting").Revert(Guid.NewGuid());
+        var revertingLost = Ready(vm, "reverting-lost");
+        revertingLost.Revert(Guid.NewGuid());
+        revertingLost.MarkNotFound();
         Ready(vm, "deleting").Delete(Guid.NewGuid());
+        var deletingLost = Ready(vm, "deleting-lost");
+        deletingLost.Delete(Guid.NewGuid());
+        deletingLost.MarkNotFound();
         var deleted = Ready(vm, "deleted");
         deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
@@ -79,7 +86,7 @@ public class VmSnapshotFirewallRepositoryStateTests
 
         var names = (await new VmSnapshotRepository(db).ListReconcilableAsync("vn-hcm-1")).Select(s => s.Name).OrderBy(n => n).ToList();
 
-        Assert.Equal(new[] { "deleting", "lost", "ready", "reverting" }, names);
+        Assert.Equal(new[] { "deleting", "deleting-lost", "lost", "ready", "reverting", "reverting-lost" }, names);
     }
 
     [Fact]
@@ -92,7 +99,7 @@ public class VmSnapshotFirewallRepositoryStateTests
 
         var names = (await new VmSnapshotRepository(db).FindByVmIdAsync(vm.Id)).Select(s => s.Name).OrderBy(n => n).ToList();
 
-        Assert.Equal(new[] { "creating", "deleting", "failed", "lost", "ready", "reverting" }, names);
+        Assert.Equal(new[] { "creating", "deleting", "deleting-lost", "failed", "lost", "ready", "reverting", "reverting-lost" }, names);
     }
 
     // ── Firewall rules ─────────────────────────────────────────────────────
@@ -174,23 +181,36 @@ public class VmSnapshotFirewallRepositoryStateTests
     }
 
     // The repositories write each condition in LINQ; the rule is the plain bool on the child
-    // (titan-ops architecture/domain-methods.md#plain-code). Every snapshot and rule situation through both.
+    // (titan-ops architecture/domain-methods.md#plain-code). Every snapshot and rule situation through both. A second VM
+    // holds a create the reconciler already saw on Incus: one VM takes one create at a time.
     [Fact]
     public async Task EveryChildQuery_AgreesWithTheBoolOnTheChild_ForEverySituation()
     {
         using var db = NewDb();
         Vm vm = VmWithEverySnapshotSituation();
+        Vm creatingSeen = RunningVm();
+        creatingSeen.WithSnapshot("creating-seen").MarkObserved();
         Network network = NetworkWithEveryRuleSituation();
-        db.Vms.Add(vm);
+        db.Vms.AddRange(vm, creatingSeen);
         db.Networks.Add(network);
         await db.SaveChangesAsync();
         var snapshots = new VmSnapshotRepository(db);
         var rules = new FirewallRuleRepository(db);
         Guid[] Ids<T>(IEnumerable<T> rows, Func<T, Guid> id) => rows.Select(id).OrderBy(i => i).ToArray();
+        List<VmSnapshot> all = vm.Snapshots.Concat(creatingSeen.Snapshots).ToList();
 
-        Assert.Equal(Ids(vm.Snapshots.Where(s => s.IsBilled), s => s.Id), Ids(await snapshots.ListBillableAsync(), s => s.Id));
+        // Every status, and each waiting status with Incus last seen holding the snapshot and not.
+        Assert.Equal(Enum.GetValues<VmSnapshotStatus>().OrderBy(v => v), all.Select(s => s.Status).Distinct().OrderBy(v => v));
+        foreach (VmSnapshotStatus waiting in new[] { VmSnapshotStatus.Creating, VmSnapshotStatus.Reverting, VmSnapshotStatus.Deleting })
+        {
+            Assert.Contains(all, s => s.Status == waiting && s.Operation.LastSeenStatus == VmSnapshotStatus.Available);
+            Assert.Contains(all, s => s.Status == waiting && s.Operation.LastSeenStatus == null);
+        }
+
+        Assert.Equal(Ids(all.Where(s => s.IsBilled), s => s.Id), Ids(await snapshots.ListBillableAsync(), s => s.Id));
         Assert.Equal(Ids(vm.Snapshots.Where(s => !s.IsDeleted), s => s.Id), Ids(await snapshots.FindByVmIdAsync(vm.Id), s => s.Id));
-        Assert.Equal(Ids(vm.Snapshots.Where(s => !s.IsDeleted && s.ExternalId != null), s => s.Id), Ids(await snapshots.ListReconcilableAsync("vn-hcm-1"), s => s.Id));
+        Assert.Equal(Ids(creatingSeen.Snapshots.Where(s => !s.IsDeleted), s => s.Id), Ids(await snapshots.FindByVmIdAsync(creatingSeen.Id), s => s.Id));
+        Assert.Equal(Ids(all.Where(s => !s.IsDeleted && s.ExternalId != null), s => s.Id), Ids(await snapshots.ListReconcilableAsync("vn-hcm-1"), s => s.Id));
         Assert.Equal(Ids(network.FirewallRules.Where(r => !r.IsDeleted), r => r.Id), Ids(await rules.ListByNetworkAsync(network.Id), r => r.Id));
         Assert.Equal(Ids(network.FirewallRules.Where(r => !r.IsDeleted && r.ExternalId != null), r => r.Id), Ids(await rules.ListReconcilableAsync("vn-hcm-1"), r => r.Id));
     }

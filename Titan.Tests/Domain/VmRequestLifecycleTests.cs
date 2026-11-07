@@ -217,7 +217,7 @@ public class VmRequestLifecycleTests
         Assert.Null(vm.InstanceStatus);
         Assert.Null(vm.IpAddress);
         Assert.True(vm.IsDeleted);
-        Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
+        Assert.All(vm.Snapshots, s => Assert.Equal(VmSnapshotStatus.Deleted, s.Status));
     }
 
     [Fact]
@@ -407,12 +407,5 @@ public class VmRequestLifecycleTests
         Assert.Null(vm.Operation.PendingId);
         Assert.Equal(VmStatus.Running, vm.Status);
         Assert.Empty(vm.Snapshots);
-    }
-
-    [Fact]
-    public void PendingRequest_RefusesAnEmptyId()
-    {
-        Assert.Throws<Titan.Domain.Exceptions.BusinessException>(
-            () => PendingOperation<VmSnapshotOperationKind>.Of(Guid.Empty, VmSnapshotOperationKind.Revert, DateTimeOffset.UtcNow));
     }
 }

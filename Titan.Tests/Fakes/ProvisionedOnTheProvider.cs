@@ -225,22 +225,22 @@ namespace Titan.Domain.Aggregates.Vm
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id, reported through the VM that holds it:
-        /// the VM leaves Snapshotting with it, which the snapshot's own FinishOperation does not do.
+        /// the VM leaves Snapshotting with it, which the snapshot's own CreateSucceeded does not do.
         public static void MarkSnapshotCreated(this Vm vm, Guid snapshotId, string externalId)
         {
             VmSnapshot snapshot = vm.Snapshots.Single(s => s.Id == snapshotId);
-            if (snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create)
+            if (snapshot.Status == VmSnapshotStatus.Creating)
             {
-                vm.FinishSnapshotOperation(snapshotId, create.Id, externalId);
+                vm.SnapshotCreateSucceeded(snapshotId, snapshot.Operation.PendingId!.Value, externalId);
             }
         }
     }
 
     /// The same replays on one VM snapshot, for tests that build a snapshot's history directly. A report of a snapshot's
-    /// command reaches it through the VM that holds it (Vm.FinishSnapshotOperation, which a create or revert's Done also
-    /// uses to take the VM out of Snapshotting), so a snapshot built by TestAggregates.WithSnapshot replays through its
-    /// VM; any other goes to the snapshot's own FinishOperation and FailOperation. A replay for a request not waiting
-    /// does nothing, like the report it stands for.
+    /// command reaches it through the VM that holds it (Vm.SnapshotCreateSucceeded and the rest, which a create or
+    /// revert's end also uses to take the VM out of Snapshotting), so a snapshot built by TestAggregates.WithSnapshot
+    /// replays through its VM; any other goes to the snapshot's own per-operation methods. A replay for an operation not
+    /// waiting does nothing, like the report it stands for.
     public static class VmSnapshotProvisionedOnTheProvider
     {
         private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<VmSnapshot, Vm> Owners = new();
@@ -248,46 +248,69 @@ namespace Titan.Domain.Aggregates.Vm
         /// Remembers the VM that holds a snapshot a test built.
         internal static void HeldBy(this VmSnapshot snapshot, Vm vm) => Owners.AddOrUpdate(snapshot, vm);
 
-        private static VmSnapshotOperationKind? Finish(VmSnapshot snapshot, Guid operationId, string? externalId)
+        /// The create command's Done with the snapshot's provider id. True when it ended the create.
+        public static bool MarkCreated(this VmSnapshot snapshot, string externalId)
         {
+            if (snapshot.Status != VmSnapshotStatus.Creating)
+            {
+                return false;
+            }
+            Guid operationId = snapshot.Operation.PendingId!.Value;
             if (Owners.TryGetValue(snapshot, out Vm? vm))
             {
-                return vm.FinishSnapshotOperation(snapshot.Id, operationId, externalId);
+                return vm.SnapshotCreateSucceeded(snapshot.Id, operationId, externalId);
             }
-            return snapshot.FinishOperation(operationId, externalId);
+            return snapshot.CreateSucceeded(operationId, externalId);
         }
-
-        /// The create command's Done with the snapshot's provider id. True when it ended the create.
-        public static bool MarkCreated(this VmSnapshot snapshot, string externalId) =>
-            snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create
-            && Finish(snapshot, create.Id, externalId) != null;
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this VmSnapshot snapshot, string? reason, string? detail)
         {
-            if (snapshot.Pending is { Kind: VmSnapshotOperationKind.Create } create)
+            if (snapshot.Status != VmSnapshotStatus.Creating)
             {
-                if (Owners.TryGetValue(snapshot, out Vm? vm))
-                {
-                    vm.FailSnapshotOperation(snapshot.Id, create.Id, null, reason, detail);
-                }
-                else
-                {
-                    snapshot.FailOperation(create.Id, null, reason, detail);
-                }
+                return;
+            }
+            Guid operationId = snapshot.Operation.PendingId!.Value;
+            if (Owners.TryGetValue(snapshot, out Vm? vm))
+            {
+                vm.SnapshotCreateFailed(snapshot.Id, operationId, null, reason, detail);
+            }
+            else
+            {
+                snapshot.CreateFailed(operationId, null, reason, detail);
             }
         }
 
         /// The revert command's Done. True when a revert was waiting.
-        public static bool MarkReverted(this VmSnapshot snapshot) =>
-            snapshot.Pending is { Kind: VmSnapshotOperationKind.Revert } revert
-            && Finish(snapshot, revert.Id, null) != null;
+        public static bool MarkReverted(this VmSnapshot snapshot)
+        {
+            if (snapshot.Status != VmSnapshotStatus.Reverting)
+            {
+                return false;
+            }
+            Guid operationId = snapshot.Operation.PendingId!.Value;
+            if (Owners.TryGetValue(snapshot, out Vm? vm))
+            {
+                return vm.SnapshotRevertSucceeded(snapshot.Id, operationId);
+            }
+            return snapshot.RevertSucceeded(operationId);
+        }
 
         /// The delete command's Done. True when a delete was waiting. The VM's delete ending its snapshots is
         /// EndWithItsVm.
-        public static bool MarkDeleted(this VmSnapshot snapshot) =>
-            snapshot.Pending is { Kind: VmSnapshotOperationKind.Delete } delete
-            && Finish(snapshot, delete.Id, null) != null;
+        public static bool MarkDeleted(this VmSnapshot snapshot)
+        {
+            if (snapshot.Status != VmSnapshotStatus.Deleting)
+            {
+                return false;
+            }
+            Guid operationId = snapshot.Operation.PendingId!.Value;
+            if (Owners.TryGetValue(snapshot, out Vm? vm))
+            {
+                return vm.SnapshotDeleteSucceeded(snapshot.Id, operationId);
+            }
+            return snapshot.DeleteSucceeded(operationId);
+        }
     }
 }
 

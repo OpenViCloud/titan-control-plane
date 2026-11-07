@@ -51,7 +51,7 @@ public class VmSnapshottingTests
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
         Assert.Null(vm.Operation.PendingId);
         Assert.Equal(status, vm.InstanceStatus);
-        Assert.Equal(VmSnapshotTransition.Creating, snapshot.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, snapshot.Status);
     }
 
     [Theory]
@@ -70,7 +70,7 @@ public class VmSnapshottingTests
 
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
         Assert.Null(vm.Operation.PendingId);
-        Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
+        Assert.Equal(VmSnapshotStatus.Reverting, snapshot.Status);
     }
 
     [Fact]
@@ -112,7 +112,7 @@ public class VmSnapshottingTests
 
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
         Assert.Equal(2, vm.Snapshots.Count);
-        Assert.Equal(VmSnapshotTransition.Creating, creating.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, creating.Status);
     }
 
     [Fact]
@@ -182,13 +182,19 @@ public class VmSnapshottingTests
     {
         Vm vm = SnapshottingVm(out VmSnapshot snapshot);
         vm.MarkObserved(observed, null, null);
-        Guid operation = snapshot.Pending!.Id;
+        Guid operation = snapshot.Operation.PendingId!.Value;
 
-        VmSnapshotOperationKind? kind = done
-            ? vm.FinishSnapshotOperation(snapshot.Id, operation, "vm42/s1")
-            : vm.FailSnapshotOperation(snapshot.Id, operation, null, "Creating the snapshot failed.", "raw");
+        bool ended;
+        if (done)
+        {
+            ended = vm.SnapshotCreateSucceeded(snapshot.Id, operation, "vm42/s1");
+        }
+        else
+        {
+            ended = vm.SnapshotCreateFailed(snapshot.Id, operation, null, "Creating the snapshot failed.", "raw");
+        }
 
-        Assert.Equal(VmSnapshotOperationKind.Create, kind);
+        Assert.True(ended);
         Assert.Equal(observed, vm.Status);
     }
 
@@ -201,13 +207,19 @@ public class VmSnapshottingTests
         VmSnapshot snapshot = vm.WithSnapshot("s");
         vm.MarkSnapshotCreated(snapshot.Id, "vm42/s1");
         vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
-        Guid operation = snapshot.Pending!.Id;
+        Guid operation = snapshot.Operation.PendingId!.Value;
 
-        VmSnapshotOperationKind? kind = done
-            ? vm.FinishSnapshotOperation(snapshot.Id, operation, null)
-            : vm.FailSnapshotOperation(snapshot.Id, operation, null, "Reverting the snapshot failed.", "raw");
+        bool ended;
+        if (done)
+        {
+            ended = vm.SnapshotRevertSucceeded(snapshot.Id, operation);
+        }
+        else
+        {
+            ended = vm.SnapshotRevertFailed(snapshot.Id, operation, "Reverting the snapshot failed.", "raw");
+        }
 
-        Assert.Equal(VmSnapshotOperationKind.Revert, kind);
+        Assert.True(ended);
         Assert.Equal(VmStatus.Stopped, vm.Status);
     }
 
@@ -217,7 +229,7 @@ public class VmSnapshottingTests
         Vm vm = SnapshottingVm(out VmSnapshot snapshot);
         vm.MarkNotFound();
 
-        vm.FailSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, null, "Creating the snapshot failed.", "raw");
+        vm.SnapshotCreateFailed(snapshot.Id, snapshot.Operation.PendingId!.Value, null, "Creating the snapshot failed.", "raw");
 
         Assert.Equal(VmStatus.Unknown, vm.Status);
     }
@@ -228,7 +240,7 @@ public class VmSnapshottingTests
         Vm vm = SnapshottingVm(out VmSnapshot snapshot);
         vm.MarkObserved(VmStatus.Stopped, null, null);
 
-        vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1");
+        vm.SnapshotCreateSucceeded(snapshot.Id, snapshot.Operation.PendingId!.Value, "vm42/s1");
 
         Assert.Equal(VmStatus.Stopped, vm.Status);
     }
@@ -242,7 +254,7 @@ public class VmSnapshottingTests
         vm.DeleteSnapshot(snapshotId, Guid.NewGuid());
         Assert.Equal(VmStatus.Running, vm.Status);
 
-        vm.FinishSnapshotOperation(snapshotId, snapshot.Pending!.Id, null);
+        vm.SnapshotDeleteSucceeded(snapshotId, snapshot.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Running, vm.Status);
     }
 
@@ -253,10 +265,10 @@ public class VmSnapshottingTests
         vm.DeleteSnapshot(first, Guid.NewGuid());
         VmSnapshot next = vm.WithSnapshot("next"); // the VM is Snapshotting while the delete of the first still waits
 
-        vm.FinishSnapshotOperation(first, vm.Snapshots.Single(s => s.Id == first).Pending!.Id, null);
+        Assert.True(vm.SnapshotDeleteSucceeded(first, vm.Snapshots.Single(s => s.Id == first).Operation.PendingId!.Value));
 
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        Assert.Equal(VmSnapshotTransition.Creating, next.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, next.Status);
     }
 
     [Fact] // a snapshot command ends without touching a status it did not set (the VM here is Stopped, not Snapshotting)
@@ -266,10 +278,10 @@ public class VmSnapshottingTests
         typeof(Vm).GetProperty(nameof(Vm.Status), BindingFlags.Public | BindingFlags.Instance)!
             .SetValue(vm, VmStatus.Stopped);
 
-        vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1");
+        Assert.True(vm.SnapshotCreateSucceeded(snapshot.Id, snapshot.Operation.PendingId!.Value, "vm42/s1"));
 
         Assert.Equal(VmStatus.Stopped, vm.Status);
-        Assert.Null(snapshot.Transition);
+        Assert.Equal(VmSnapshotStatus.Available, snapshot.Status);
     }
 
     [Fact] // the invariant the status stands for: Snapshotting exactly while one create or revert waits
@@ -280,24 +292,23 @@ public class VmSnapshottingTests
 
         VmSnapshot snapshot = vm.WithSnapshot("s");
         Assert.True(Holds(vm));
-        vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, "vm42/s1");
+        vm.SnapshotCreateSucceeded(snapshot.Id, snapshot.Operation.PendingId!.Value, "vm42/s1");
         Assert.False(Holds(vm));
 
         vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
         Assert.True(Holds(vm));
-        vm.FailSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, null, "Reverting the snapshot failed.", "raw");
+        vm.SnapshotRevertFailed(snapshot.Id, snapshot.Operation.PendingId!.Value, "Reverting the snapshot failed.", "raw");
         Assert.False(Holds(vm));
 
         vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
         Assert.False(Holds(vm));
-        vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, null);
+        vm.SnapshotDeleteSucceeded(snapshot.Id, snapshot.Operation.PendingId!.Value);
         Assert.False(Holds(vm));
     }
 
     private static bool Holds(Vm vm)
     {
-        int waiting = vm.Snapshots.Count(s =>
-            s.Pending is { Kind: VmSnapshotOperationKind.Create or VmSnapshotOperationKind.Revert });
+        int waiting = vm.Snapshots.Count(s => s.Status == VmSnapshotStatus.Creating || s.Status == VmSnapshotStatus.Reverting);
         Assert.InRange(waiting, 0, 1);
         Assert.Equal(waiting == 1, vm.Status == VmStatus.Snapshotting);
         return vm.Status == VmStatus.Snapshotting;

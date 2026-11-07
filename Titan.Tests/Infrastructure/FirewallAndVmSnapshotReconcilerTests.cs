@@ -2,6 +2,7 @@ using FastEndpoints;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Titan.Application.Queries.Compute.VmSnapshot;
+using Titan.Application.Queries.Compute.VmSnapshot.Contracts;
 using Titan.Application.Queries.Networking.FirewallRule;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Network;
@@ -95,6 +96,49 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal("42:3", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
         Assert.NotNull(heartbeat.Snapshot()[$"vm-snapshots/{Cluster}"].LastPollAt);
+    }
+
+    // The worker's contract kept its existence word (titan-ops features/vm/design.md#vm-snapshot-reports): Exists while
+    // Incus was last seen holding the snapshot, a revert or a delete in flight included; NotFound otherwise, so a
+    // snapshot being deleted that Incus already lost is not reported again every cycle.
+    [Theory]
+    [InlineData("available", "Available", "Exists")]
+    [InlineData("reverting", "Reverting", "Exists")]
+    [InlineData("reverting-lost", "Reverting", "NotFound")]
+    [InlineData("deleting", "Deleting", "Exists")]
+    [InlineData("deleting-lost", "Deleting", "NotFound")]
+    [InlineData("lost", "NotFound", "NotFound")]
+    public void ReconcilableRow_GivesTheExistenceWord_FromTheStatusAndWhatIncusWasLastSeenHolding(
+        string situation, string status, string existence)
+    {
+        var vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", Cluster, 20);
+        vm.MarkRunning("42", "10.0.0.5");
+        var snapshot = vm.WithSnapshot("snap");
+        snapshot.MarkCreated("42:3");
+        switch (situation)
+        {
+            case "reverting":
+                vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
+                break;
+            case "reverting-lost":
+                vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
+                vm.MarkSnapshotNotFound(snapshot.Id);
+                break;
+            case "deleting":
+                vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
+                break;
+            case "deleting-lost":
+                vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
+                vm.MarkSnapshotNotFound(snapshot.Id);
+                break;
+            case "lost":
+                vm.MarkSnapshotNotFound(snapshot.Id);
+                break;
+        }
+
+        Assert.Equal(status, snapshot.Status.ToString());
+        Assert.Equal(existence, ReconcilableVmSnapshotQueryResult.ExistenceName(snapshot));
+        Assert.Equal(existence, ReconcilableVmSnapshotQueryResult.From(snapshot).CurrentExistence);
     }
 
     [Fact]

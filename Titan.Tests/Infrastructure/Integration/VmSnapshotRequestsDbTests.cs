@@ -28,7 +28,7 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
         Vm vm = Vm.Create(Tenant, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-a", 20);
         vm.CreateSucceeded(vm.Operation.PendingId!.Value, $"vm{Guid.NewGuid():N}"[..20], VmStatus.Running, "10.0.0.5", null);
         VmSnapshot snapshot = vm.WithSnapshot("nightly");
-        vm.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, $"{vm.ExternalId}/s1");
+        vm.SnapshotCreateSucceeded(snapshot.Id, snapshot.Operation.PendingId!.Value, $"{vm.ExternalId}/s1");
         await using TitanDbContext db = pg.NewDbContext();
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
@@ -79,11 +79,11 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(RevertThroughTheHandlerAsync(vm.Id, snapshot.Id), RevertThroughTheHandlerAsync(vm.Id, snapshot.Id));
 
         VmSnapshot stored = await StoredSnapshotAsync(vm.Id);
-        Assert.Equal(VmSnapshotOperationKind.Revert, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotStatus.Reverting, stored.Status);
         await using TitanDbContext db = pg.NewDbContext();
         List<string> keys = await db.Set<ProviderCommand>()
             .Where(c => c.Key.StartsWith($"vm-snapshot-revert-{snapshot.Id}-")).Select(c => c.Key).ToListAsync();
-        Assert.Equal([$"vm-snapshot-revert-{snapshot.Id}-{stored.Pending.Id}"], keys);
+        Assert.Equal([$"vm-snapshot-revert-{snapshot.Id}-{stored.Operation.PendingId!.Value}"], keys);
     }
 
     [Fact]
@@ -94,11 +94,11 @@ public class VmSnapshotRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(DeleteThroughTheHandlerAsync(vm.Id, snapshot.Id), DeleteThroughTheHandlerAsync(vm.Id, snapshot.Id));
 
         VmSnapshot stored = await StoredSnapshotAsync(vm.Id);
-        Assert.Equal(VmSnapshotOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotStatus.Deleting, stored.Status);
         await using TitanDbContext db = pg.NewDbContext();
         List<string> keys = await db.Set<ProviderCommand>()
             .Where(c => c.Key.StartsWith($"vm-snapshot-delete-{snapshot.Id}-")).Select(c => c.Key).ToListAsync();
-        Assert.Equal([$"vm-snapshot-delete-{snapshot.Id}-{stored.Pending.Id}"], keys);
+        Assert.Equal([$"vm-snapshot-delete-{snapshot.Id}-{stored.Operation.PendingId!.Value}"], keys);
     }
 
     [Fact]

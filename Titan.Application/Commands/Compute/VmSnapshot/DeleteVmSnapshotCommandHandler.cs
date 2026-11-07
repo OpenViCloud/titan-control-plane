@@ -4,7 +4,6 @@ using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
-using VmSnapshotTransition = Titan.Domain.Aggregates.Vm.VmSnapshotTransition;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
