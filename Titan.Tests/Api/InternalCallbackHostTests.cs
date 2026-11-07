@@ -447,10 +447,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..14], Offering, "tpl", "cluster-a", 20);
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         VmSnapshot reverting = vm.WithSnapshot("reverting");
-        vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, $"ext-{vm.Id:N}/s1");
+        vm.SnapshotCreateSucceeded(reverting.Id, reverting.Operation.PendingId!.Value, $"ext-{vm.Id:N}/s1");
         reverting.Revert(Guid.NewGuid());
         VmSnapshot deleting = vm.WithSnapshot("deleting");
-        vm.FinishSnapshotOperation(deleting.Id, deleting.Pending!.Id, $"ext-{vm.Id:N}/s2");
+        vm.SnapshotCreateSucceeded(deleting.Id, deleting.Operation.PendingId!.Value, $"ext-{vm.Id:N}/s2");
         vm.DeleteSnapshot(deleting.Id, Guid.NewGuid());
         vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "creating");
         using IServiceScope scope = factory.Services.CreateScope();
@@ -477,14 +477,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot deleting = vm.Snapshots.Single(s => s.Name == "deleting");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{deleting.Id}/requests/{deleting.Pending!.Id}",
+            $"/internal/vms/{vm.Id}/snapshots/{deleting.Id}/requests/{deleting.Operation.PendingId!.Value}",
             """{"outcome":"Failed","reason":"The snapshot could not be deleted.","detail":"incus: busy"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
-        Assert.Null(stored.Pending);
-        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The snapshot could not be deleted.", stored.OperationFailureReason);
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(VmSnapshotStatus.Available, stored.Status);
+        Assert.Equal("The snapshot could not be deleted.", stored.Operation.FailureReason);
     }
 
     [Fact]
@@ -494,12 +494,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot reverting = vm.Snapshots.Single(s => s.Name == "reverting");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/requests/{reverting.Pending!.Id}", """{"outcome":"Done"}""");
+            $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/requests/{reverting.Operation.PendingId!.Value}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "reverting");
-        Assert.Null(stored.Pending);
-        Assert.Equal(CurrentExistence.Exists, stored.CurrentExistence);
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(VmSnapshotStatus.Available, stored.Status);
     }
 
     // A report naming a request the snapshot does not wait on is ignored, and still 204: the worker has nothing to retry.
@@ -513,11 +513,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(VmSnapshotOperationKind.Revert, (await ReloadSnapshotAsync(vm.Id, "reverting")).Pending!.Kind);
+        Assert.Equal(VmSnapshotStatus.Reverting, (await ReloadSnapshotAsync(vm.Id, "reverting")).Status);
     }
 
     [Fact]
-    public async Task AVmSnapshotObservation_InTheWorkersJson_WritesCurrent_AndLeavesItsDeleteWaiting()
+    public async Task AVmSnapshotObservation_InTheWorkersJson_RemembersIncusLostIt_AndLeavesItsDeleteWaiting()
     {
         Vm vm = await StoredVmWithSnapshotsWaitingAsync();
         VmSnapshot deleting = vm.Snapshots.Single(s => s.Name == "deleting");
@@ -527,8 +527,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
-        Assert.Equal(CurrentExistence.NotFound, stored.CurrentExistence);
-        Assert.Equal(VmSnapshotOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VmSnapshotStatus.Deleting, stored.Status);
+        Assert.Null(stored.InstanceStatus);
     }
 
     [Theory]
@@ -540,11 +540,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot reverting = vm.Snapshots.Single(s => s.Name == "reverting");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/{string.Format(route, reverting.Pending!.Id)}", json);
+            $"/internal/vms/{vm.Id}/snapshots/{reverting.Id}/{string.Format(route, reverting.Operation.PendingId!.Value)}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "reverting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((VmSnapshotStatus.Reverting, (VmSnapshotStatus?)VmSnapshotStatus.Available), (stored.Status, stored.InstanceStatus));
     }
 
     // A create's Done must name the snapshot, or it would be left with nothing to revert or delete through.
@@ -555,10 +555,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot creating = vm.Snapshots.Single(s => s.Name == "creating");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{creating.Id}/requests/{creating.Pending!.Id}", """{"outcome":"Done"}""");
+            $"/internal/vms/{vm.Id}/snapshots/{creating.Id}/requests/{creating.Operation.PendingId!.Value}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal(VmSnapshotOperationKind.Create, (await ReloadSnapshotAsync(vm.Id, "creating")).Pending!.Kind);
+        Assert.Equal(VmSnapshotStatus.Creating, (await ReloadSnapshotAsync(vm.Id, "creating")).Status);
     }
 
     [Theory]
@@ -571,12 +571,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot theirs = other.Snapshots.Single(s => s.Name == "reverting");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{theirs.Id}/{string.Format(route, theirs.Pending!.Id)}",
+            $"/internal/vms/{vm.Id}/snapshots/{theirs.Id}/{string.Format(route, theirs.Operation.PendingId!.Value)}",
             route == "observation" ? """{"exists":false}""" : """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(other.Id, "reverting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Revert), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((VmSnapshotStatus.Reverting, (VmSnapshotStatus?)VmSnapshotStatus.Available), (stored.Status, stored.InstanceStatus));
     }
 
     [Theory]
@@ -588,11 +588,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmSnapshot deleting = vm.Snapshots.Single(s => s.Name == "deleting");
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/vms/{vm.Id}/snapshots/{deleting.Id}/{string.Format(route, deleting.Pending!.Id)}", json, token: null);
+            $"/internal/vms/{vm.Id}/snapshots/{deleting.Id}/{string.Format(route, deleting.Operation.PendingId!.Value)}", json, token: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         VmSnapshot stored = await ReloadSnapshotAsync(vm.Id, "deleting");
-        Assert.Equal((CurrentExistence.Exists, VmSnapshotOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((VmSnapshotStatus.Deleting, (VmSnapshotStatus?)VmSnapshotStatus.Available), (stored.Status, stored.InstanceStatus));
     }
 
     // ---------- the load balancer's routes ----------

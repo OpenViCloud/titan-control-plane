@@ -4,7 +4,7 @@ using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
-using VmSnapshotTransition = Titan.Domain.Aggregates.Vm.VmSnapshotTransition;
+using VmSnapshotStatus = Titan.Domain.Aggregates.Vm.VmSnapshotStatus;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
@@ -30,7 +30,7 @@ public class RevertVmSnapshotCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
         // This snapshot is already reverting.
         // Answer like the first request: nothing recorded, nothing sent.
-        bool alreadyReverting = snapshot.Transition == VmSnapshotTransition.Reverting;
+        bool alreadyReverting = snapshot.Status == VmSnapshotStatus.Reverting;
         if (alreadyReverting)
         {
             return;

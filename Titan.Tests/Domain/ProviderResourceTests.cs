@@ -8,10 +8,10 @@ namespace Titan.Tests.Domain;
 
 // The pending operation and the last failure live once in ProviderResource (titan-ops
 // architecture/domain-methods.md#provider-resource), for roots and entities alike. Every Domain type that has a Pending
-// operation goes through it, so the state is never written again in a type of its own. Vm, Network and FirewallRule
-// are the named exceptions: Vm's one status says what its waiting request asks (titan-ops features/vm/design.md#vm-status),
-// so it keeps the request's id and the last failure itself and has no Pending; Network and FirewallRule keep them in an
-// Operation of their own (titan-ops features/network/design.md#network-operation).
+// operation goes through it, so the state is never written again in a type of its own. Vm, Network, FirewallRule and
+// VmSnapshot are the named exceptions: each keeps one status that says which operation waits, and keeps that operation's
+// id and the last failure in an Operation value object of its own instead of a Pending (titan-ops
+// features/vm/design.md#vm-status, features/network/design.md#network-operation, features/vm/design.md#vm-snapshot).
 public class ProviderResourceTests
 {
     private const BindingFlags Declared =
@@ -31,11 +31,12 @@ public class ProviderResourceTests
             .Where(t => t.GetProperty("Pending")?.PropertyType is { IsGenericType: true } p
                         && p.GetGenericTypeDefinition() == typeof(PendingOperation<>))
             .ToList();
-        Assert.True(withPending.Count >= 5, $"the scan found only {withPending.Count} types with a pending operation");
-        // Vm, Network and FirewallRule have no Pending, so this scan does not reach them: the two tests below hold them.
+        Assert.True(withPending.Count >= 4, $"the scan found only {withPending.Count} types with a pending operation");
+        // Vm, Network, FirewallRule and VmSnapshot have no Pending, so this scan does not reach them: the tests below hold them.
         Assert.DoesNotContain(typeof(Vm), withPending);
         Assert.DoesNotContain(typeof(Network), withPending);
         Assert.DoesNotContain(typeof(FirewallRule), withPending);
+        Assert.DoesNotContain(typeof(VmSnapshot), withPending);
 
         HashSet<string> baseNames = BaseNames();
         List<string> declaringItThemselves = withPending
@@ -74,6 +75,16 @@ public class ProviderResourceTests
         Assert.Equal(typeof(FirewallRuleOperation), typeof(FirewallRule).GetProperty("Operation")?.PropertyType);
     }
 
+    [Fact]
+    public void VmSnapshot_KeepsItsOperationInAVmSnapshotOperation_AndIsNotOnTheBase()
+    {
+        Assert.False(DerivesFromProviderResource(typeof(VmSnapshot)));
+        Assert.Null(typeof(VmSnapshot).GetProperty("Pending"));
+        PropertyInfo? operation = typeof(VmSnapshot).GetProperty("Operation");
+        Assert.NotNull(operation);
+        Assert.Equal(typeof(VmSnapshotOperation), operation.PropertyType);
+    }
+
     private static bool DerivesFromProviderResource(Type type)
     {
         Type? current = type.BaseType;
@@ -99,12 +110,14 @@ public class ProviderResourceTests
             .ToList();
         Assert.True(roleless.Count == 0, "Neither or both of IAggregateRoot and IEntity: " + string.Join(", ", roleless));
 
-        // Vm, Network and FirewallRule are on the provider without the base, so the scan above does not reach them.
+        // Vm, Network, FirewallRule and VmSnapshot are on the provider without the base, so the scan above does not reach them.
         Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Vm)));
         Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Vm)));
         Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Network)));
         Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Network)));
         Assert.True(typeof(IEntity).IsAssignableFrom(typeof(FirewallRule)));
         Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(FirewallRule)));
+        Assert.True(typeof(IEntity).IsAssignableFrom(typeof(VmSnapshot)));
+        Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(VmSnapshot)));
     }
 }

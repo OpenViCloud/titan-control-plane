@@ -10,10 +10,11 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// A database with VM snapshots waiting on a request under the old column meets the migration that gives each request
-/// its kind and time (titan-ops architecture/resource-lifecycle.md#shape): the kind is read in the order
-/// VmSnapshot.Transition read it (desired Deleted, then current NotCreated, else a revert), an open command takes the
-/// request's key and id, and the view lists the table. The old column name and keys below are the schema before it, by
-/// necessity. Category=Integration — its own CI step; needs real Postgres.
+/// its kind and time (titan-ops architecture/resource-lifecycle.md#shape): the kind is read in the order the snapshot
+/// then read it (desired Deleted, then current NotCreated, else a revert) and, after the later migration that gives a
+/// snapshot one status, is the status it waits in; an open command takes the request's key and id, and the view lists
+/// the table. The old column name and keys below are the schema before it, by necessity. Category=Integration — its own
+/// CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class VmSnapshotPendingRequestMigrationTests : IAsyncLifetime
 {
@@ -84,7 +85,7 @@ VALUES ({id}, {vmId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {current
     }
 
     [Fact]
-    public async Task EveryWaitingRequest_GetsItsKindInTheOrderTransitionReadIt_AndATime()
+    public async Task EveryWaitingRequest_GetsTheStatusOfItsKindInTheOrderTheOldModelReadIt_AndATime()
     {
         await MigrateToAsync(MigrationBefore);
         Guid vmId = await SeedVmAsync();
@@ -98,13 +99,22 @@ VALUES ({id}, {vmId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {current
         await MigrateToLatestAsync();
 
         VmSnapshot delete = await SnapshotAsync(vmId, deleting);
-        Assert.Equal(VmSnapshotOperationKind.Delete, delete.Pending!.Kind);
-        Assert.True(delete.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(VmSnapshotOperationKind.Delete, (await SnapshotAsync(vmId, deletingLost)).Pending!.Kind);
-        Assert.Equal(VmSnapshotOperationKind.Create, (await SnapshotAsync(vmId, creating)).Pending!.Kind);
-        Assert.Equal(VmSnapshotOperationKind.Revert, (await SnapshotAsync(vmId, reverting)).Pending!.Kind);
-        Assert.Equal(VmSnapshotOperationKind.Revert, (await SnapshotAsync(vmId, revertingLost)).Pending!.Kind);
-        Assert.Null((await SnapshotAsync(vmId, resting)).Pending);
+        Assert.Equal(VmSnapshotStatus.Deleting, delete.Status);
+        Assert.True(delete.Operation.AskedAt > DateTimeOffset.UnixEpoch);
+        Assert.Equal(VmSnapshotStatus.Available, delete.InstanceStatus);
+        VmSnapshot deleteLost = await SnapshotAsync(vmId, deletingLost);
+        Assert.Equal(VmSnapshotStatus.Deleting, deleteLost.Status);
+        Assert.Null(deleteLost.InstanceStatus);
+        Assert.Equal(VmSnapshotStatus.Creating, (await SnapshotAsync(vmId, creating)).Status);
+        VmSnapshot revert = await SnapshotAsync(vmId, reverting);
+        Assert.Equal(VmSnapshotStatus.Reverting, revert.Status);
+        Assert.Equal(VmSnapshotStatus.Available, revert.InstanceStatus);
+        VmSnapshot revertLost = await SnapshotAsync(vmId, revertingLost);
+        Assert.Equal(VmSnapshotStatus.Reverting, revertLost.Status);
+        Assert.Null(revertLost.InstanceStatus);
+        VmSnapshot rest = await SnapshotAsync(vmId, resting);
+        Assert.Null(rest.Operation.PendingId);
+        Assert.Equal(VmSnapshotStatus.Available, rest.Status);
     }
 
     [Fact]
@@ -128,9 +138,9 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
 
         await MigrateToLatestAsync();
 
-        Guid createRequest = (await SnapshotAsync(vmId, creating)).Pending!.Id;
-        Guid revertRequest = (await SnapshotAsync(vmId, reverting)).Pending!.Id;
-        Guid deleteRequest = (await SnapshotAsync(vmId, deleting)).Pending!.Id;
+        Guid createRequest = (await SnapshotAsync(vmId, creating)).Operation.PendingId!.Value;
+        Guid revertRequest = (await SnapshotAsync(vmId, reverting)).Operation.PendingId!.Value;
+        Guid deleteRequest = (await SnapshotAsync(vmId, deleting)).Operation.PendingId!.Value;
         await using TitanDbContext read = NewDbContext();
         Dictionary<string, string> payloadByKey = await read.ProviderCommands.ToDictionaryAsync(c => c.Key, c => c.Payload);
         Assert.Equal(4, payloadByKey.Count);
@@ -154,7 +164,7 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         Vm vm = Vm.Create(tenantId, Guid.NewGuid(), "vm-after", "m-mig", "tpl", "cluster-a", 20);
         vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-after", VmStatus.Running, "10.0.0.5", null);
         VmSnapshot reverting = vm.WithSnapshot("reverting");
-        vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, "vm-after/s1");
+        vm.SnapshotCreateSucceeded(reverting.Id, reverting.Operation.PendingId!.Value, "vm-after/s1");
         Guid revert = Guid.NewGuid();
         reverting.Revert(revert); // on the snapshot alone, so the view shows both kinds: a VM itself takes one create or revert at a time
         VmSnapshot creating = vm.WithSnapshot("creating");
@@ -170,6 +180,6 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         List<string> rows = await read.Database
             .SqlQuery<string>($"SELECT resource || '|' || kind || '|' || request_id::text AS \"Value\" FROM core.pending_requests WHERE tenant_id = {tenantId} AND resource = 'vm-snapshot' ORDER BY kind")
             .ToListAsync();
-        Assert.Equal([$"vm-snapshot|Create|{creating.Pending!.Id}", $"vm-snapshot|Revert|{revert}"], rows);
+        Assert.Equal([$"vm-snapshot|Create|{creating.Operation.PendingId!.Value}", $"vm-snapshot|Revert|{revert}"], rows);
     }
 }

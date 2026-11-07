@@ -1225,8 +1225,8 @@ public class VmServiceTests
 
         await EndWaiting(vm, "Done");
 
-        Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
-        Assert.All(vm.Snapshots, s => Assert.Null(s.Transition));
+        Assert.All(vm.Snapshots, s => Assert.Equal(VmSnapshotStatus.Deleted, s.Status));
+        Assert.All(vm.Snapshots, s => Assert.Null(s.Operation.PendingId));
         var outcomes = _activity.Events.Where(e => e.OutcomeTenantId != null).ToList();
         Assert.Single(outcomes, o => o.Action == "vm.deleted" && o.ResourceId == vm.Id);
         Assert.Single(outcomes, o => o.Action == "vm_snapshot.deleted" && o.ResourceId == leaving.Id);

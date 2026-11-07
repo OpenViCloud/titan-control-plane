@@ -4,9 +4,9 @@ using System.Text.RegularExpressions;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states, except the VM, the network and the firewall rule, which keep one status (OneStatus below). A person's request writes DesiredState; only an
-// observation of the provider (Mark*, reached from the worker's callback), or a request's own report on the new shape
-// (FinishOperation, FailOperation; the Succeeded and Failed moves of a VM, a network and a firewall rule), writes CurrentState, apart from the allowlist below. The two
+// control plane provisions to the provider keeps two states, except the VM, the network, the firewall rule and the VM snapshot, which keep one status (OneStatus below). A person's request writes DesiredState; only an
+// observation of the provider (Mark*, reached from the worker's callback), or a request's own report
+// (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
 // instead of a convention.
 //
@@ -17,9 +17,10 @@ public class DesiredCurrentOwnershipTests
 {
     // The provisioned aggregates that keep one status instead of the split, by name: the VM
     // (titan-ops features/vm/design.md#vm-status), the network and the firewall rule (titan-ops
-    // features/network/design.md#network-lifecycle). Their status moves only through their own table of moves, so the scans
-    // below leave them out, and the last fact checks they really have no split.
-    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule"];
+    // features/network/design.md#network-lifecycle), and the VM snapshot (titan-ops features/vm/design.md#vm-snapshot).
+    // Their status moves only through their own table of moves, so the scans below leave them out, and the last fact
+    // checks they really have no split.
+    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule", "VmSnapshot"];
 
     // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
     // there is no observation coming, so the control plane is the only witness
@@ -28,10 +29,8 @@ public class DesiredCurrentOwnershipTests
     {
         ["Volume.Delete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -68,20 +67,19 @@ public class DesiredCurrentOwnershipTests
         Assert.True(stale.Count == 0, "IntentWritesCurrentAllowlist rows that no longer write CurrentState:\n  " + string.Join("\n  ", stale));
     }
 
-    // The report of a request's own command (FinishOperation for a Done, FailOperation for a give-up,
-    // titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the worker
-    // saw is current, and a failed request puts desired back. They are neither intents nor observations, so both scans
-    // skip them and the private RecordWhatTheWorkerSaw they share. A type that keeps its operation in an Operation
-    // (the VM, the network, the firewall rule) has one Succeeded and one Failed move per kind instead of the pair, and a
-    // root reaches a child's through Finish<Child>Operation and Fail<Child>Operation or Network.FirewallRule<Operation>Succeeded/Failed.
+    // On a type with two states, the report of a request's own command (FinishOperation for a Done, FailOperation for a
+    // give-up, titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the
+    // worker saw is current, and a failed request puts desired back. They are neither intents nor observations, so both
+    // scans skip them and the private RecordWhatTheWorkerSaw they share; a root reaches a child's through
+    // Finish<Child>Operation and Fail<Child>Operation. The types in OneStatus end an operation with one Succeeded and one
+    // Failed move per kind instead, and this scan does not read them.
     [Fact]
-    public void ReportMethods_AreOnlyFinishAndFail()
+    public void ReportMethodsOfATypeWithTwoStates_AreOnlyFinishAndFailOperation()
     {
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
         string[] expected =
         [
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
-            "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
             "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
             "Volume.RecordWhatTheWorkerSaw",
@@ -188,9 +186,9 @@ public class DesiredCurrentOwnershipTests
     }
 
     // `?` in the type: a nullable current state — a pattern without it would drop the type from every scan here, still
-    // green. The VM, the network and the firewall rule keep one status and are out on purpose (OneStatus). Desired is
+    // green. The VM, the network, the firewall rule and the VM snapshot keep one status and are out on purpose (OneStatus). Desired is
     // DesiredState or, where Titan sets no Incus status, only DesiredExistence; current is CurrentState or, where Incus
-    // has no status word (volume, snapshots), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
+    // has no status word (volume, volume snapshot), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.
     private static bool DeclaresBothStates(string src) =>
         Regex.IsMatch(src, @"public [\w?]+ Desired(?:State|Existence) \{ get; private set; \}")

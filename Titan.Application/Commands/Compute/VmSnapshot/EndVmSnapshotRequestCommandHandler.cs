@@ -27,22 +27,46 @@ public class EndVmSnapshotRequestCommandHandler(IVmRepository repo, IActivityRec
             ?? throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
 
-        VmSnapshotOperationKind? ended;
-        if (outcome == OperationOutcome.Done)
-        {
-            ended = vm.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
-        }
-        else
-        {
-            ended = vm.FailSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId, command.Reason,
-                command.Detail);
-        }
-        if (ended == null)
+        // The status the snapshot waits in says which operation the report ends.
+        VmSnapshotStatus waiting = snapshot.Status;
+        bool ended = EndTheOperation(vm, snapshot.Id, waiting, outcome, command);
+        if (!ended)
         {
             return;
         }
 
-        VmReports.RecordSnapshotEnded(snapshot, ended.Value, outcome, activity);
+        VmReports.RecordSnapshotEnded(snapshot, waiting, outcome, activity);
         await repo.SaveAsync(ct);
+    }
+
+    private static bool EndTheOperation(VmAggregate vm, Guid snapshotId, VmSnapshotStatus waiting,
+        OperationOutcome outcome, EndVmSnapshotRequestCommand command)
+    {
+        bool done = outcome == OperationOutcome.Done;
+        switch (waiting)
+        {
+            case VmSnapshotStatus.Creating:
+                if (done)
+                {
+                    return vm.SnapshotCreateSucceeded(snapshotId, command.RequestId, command.ExternalId);
+                }
+                return vm.SnapshotCreateFailed(snapshotId, command.RequestId, command.ExternalId, command.Reason,
+                    command.Detail);
+            case VmSnapshotStatus.Reverting:
+                if (done)
+                {
+                    return vm.SnapshotRevertSucceeded(snapshotId, command.RequestId);
+                }
+                return vm.SnapshotRevertFailed(snapshotId, command.RequestId, command.Reason, command.Detail);
+            case VmSnapshotStatus.Deleting:
+                if (done)
+                {
+                    return vm.SnapshotDeleteSucceeded(snapshotId, command.RequestId);
+                }
+                return vm.SnapshotDeleteFailed(snapshotId, command.RequestId, command.Reason, command.Detail);
+            default:
+                // Nothing waits: the report is stale.
+                return false;
+        }
     }
 }

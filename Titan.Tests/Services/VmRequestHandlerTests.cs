@@ -122,7 +122,7 @@ public class VmRequestHandlerTests
         gone.MarkCreated("42/s3");
         Guid goneDelete = Guid.NewGuid();
         vm.DeleteSnapshot(gone.Id, goneDelete);
-        vm.FinishSnapshotOperation(gone.Id, goneDelete, null);
+        vm.SnapshotDeleteSucceeded(gone.Id, goneDelete);
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         volume.Attach(vm);
@@ -134,7 +134,7 @@ public class VmRequestHandlerTests
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete, "Done"));
 
         Assert.True(vm.IsDeleted);
-        Assert.All(vm.Snapshots, s => Assert.Equal(CurrentExistence.Deleted, s.CurrentExistence));
+        Assert.All(vm.Snapshots, s => Assert.Equal(VmSnapshotStatus.Deleted, s.Status));
         Assert.Equal(["vm.deleted", "vm_snapshot.deleted"], Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "vm_snapshot.deleted").ResourceId);
         Assert.Null(volume.CurrentAttachedVmId);

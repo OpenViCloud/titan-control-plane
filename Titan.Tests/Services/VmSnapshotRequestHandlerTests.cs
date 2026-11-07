@@ -12,7 +12,7 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a VM snapshot, at the handler: a
-// report ends the request it names and records its outcome once; an observation writes current and ends nothing; the
+// report ends the request it names and records its outcome once; an observation writes what Incus holds and ends nothing; the
 // snapshot is reached through the VM the route names, with the VM's row locked. The requests' own repeat and lock rules
 // are at the end.
 public class VmSnapshotRequestHandlerTests
@@ -54,14 +54,23 @@ public class VmSnapshotRequestHandlerTests
         return snapshot;
     }
 
-    private static Guid Waiting(VmSnapshot snapshot) => snapshot.Pending!.Id;
+    private static Guid Waiting(VmSnapshot snapshot) => snapshot.Operation.PendingId!.Value;
 
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
     private void NothingSaved() => _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
 
-    private static string Shape(VmSnapshot s) =>
-        $"{s.CurrentExistence}/{s.DesiredExistence}/{(s.Transition == null ? "-" : s.Transition.Value.ToString())}";
+    // The status, then whether Incus was last known to hold the snapshot (InstanceStatus, "-" when not): while an
+    // operation waits the status alone does not say it.
+    private static string Shape(VmSnapshot s)
+    {
+        string seen = "-";
+        if (s.InstanceStatus != null)
+        {
+            seen = s.InstanceStatus.Value.ToString();
+        }
+        return $"{s.Status}/{seen}";
+    }
 
     private Task End(Vm vm, VmSnapshot snapshot, Guid requestId, string outcome, string? externalId = null) =>
         EndHandler().HandleAsync(new EndVmSnapshotRequestCommand(vm.Id, snapshot.Id, requestId, outcome, externalId,
@@ -79,7 +88,7 @@ public class VmSnapshotRequestHandlerTests
         await End(vm, snapshot, create, "Done", "vm42/s1");
         await End(vm, snapshot, create, "Done", "vm42/s1");
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         Assert.Equal("vm42/s1", snapshot.ExternalId);
         Assert.Equal(["vm_snapshot.created"], Outcomes());
         Assert.Equal(Owner.Id, _activity.Events.Single().OutcomeTenantId);
@@ -98,7 +107,7 @@ public class VmSnapshotRequestHandlerTests
             () => End(vm, snapshot, Waiting(snapshot), "Done", externalId));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(VmSnapshotTransition.Creating, snapshot.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, snapshot.Status);
         NothingSaved();
     }
 
@@ -110,10 +119,10 @@ public class VmSnapshotRequestHandlerTests
 
         await End(vm, snapshot, Waiting(snapshot), "Failed", "vm42/s1");
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         Assert.Equal("vm42/s1", snapshot.ExternalId);
-        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
-        Assert.Equal("raw", snapshot.OperationFailureDetail);
+        Assert.Equal("The snapshot request could not be completed.", snapshot.Operation.FailureReason);
+        Assert.Equal("raw", snapshot.Operation.FailureDetail);
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -129,7 +138,7 @@ public class VmSnapshotRequestHandlerTests
         await End(vm, snapshot, revert, "Done");
         await End(vm, snapshot, revert, "Done");
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         Assert.Equal(["vm_snapshot.reverted"], Outcomes());
     }
 
@@ -144,8 +153,8 @@ public class VmSnapshotRequestHandlerTests
         await End(vm, snapshot, revert, "Failed");
         await End(vm, snapshot, revert, "Failed");
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
+        Assert.Equal("Available/Available", Shape(snapshot));
+        Assert.Equal("The snapshot request could not be completed.", snapshot.Operation.FailureReason);
         Assert.Equal(["vm_snapshot.revert_failed"], Outcomes());
     }
 
@@ -160,7 +169,7 @@ public class VmSnapshotRequestHandlerTests
         await End(vm, snapshot, delete, "Done");
         await End(vm, snapshot, delete, "Done");
 
-        Assert.Equal("Deleted/Deleted/-", Shape(snapshot));
+        Assert.Equal("Deleted/-", Shape(snapshot));
         Assert.Equal(["vm_snapshot.deleted"], Outcomes());
     }
 
@@ -174,8 +183,8 @@ public class VmSnapshotRequestHandlerTests
 
         await End(vm, snapshot, delete, "Failed");
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("The snapshot request could not be completed.", snapshot.OperationFailureReason);
+        Assert.Equal("Available/Available", Shape(snapshot));
+        Assert.Equal("The snapshot request could not be completed.", snapshot.Operation.FailureReason);
         Assert.Equal(["vm_snapshot.delete_failed"], Outcomes());
     }
 
@@ -189,7 +198,7 @@ public class VmSnapshotRequestHandlerTests
         await End(vm, snapshot, Guid.NewGuid(), "Done");
         await End(vm, snapshot, Guid.NewGuid(), "Failed");
 
-        Assert.Equal("Exists/Exists/Reverting", Shape(snapshot));
+        Assert.Equal("Reverting/Available", Shape(snapshot));
         Assert.Empty(Outcomes());
         NothingSaved();
     }
@@ -226,21 +235,21 @@ public class VmSnapshotRequestHandlerTests
             new EndVmSnapshotRequestCommand(vm.Id, theirs.Id, Waiting(theirs), "Done", "vm42/s1")));
 
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", missing.Code);
-        Assert.Equal(VmSnapshotTransition.Creating, theirs.Transition);
+        Assert.Equal(VmSnapshotStatus.Creating, theirs.Status);
         NothingSaved();
     }
 
     // ---------- the observation ----------
 
     [Fact]
-    public async Task AnObservation_WhileTheCreateWaits_WritesExistence_AndTheCreateKeepsWaiting()
+    public async Task AnObservation_WhileTheCreateWaits_IsRememberedAsSeen_AndTheCreateKeepsWaiting()
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Creating(vm);
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, true));
 
-        Assert.Equal("Exists/Exists/Creating", Shape(snapshot));
+        Assert.Equal("Creating/Available", Shape(snapshot));
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -254,12 +263,12 @@ public class VmSnapshotRequestHandlerTests
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, true));
 
-        Assert.Equal("Exists/Exists/Reverting", Shape(snapshot));
+        Assert.Equal("Reverting/Available", Shape(snapshot));
         Assert.Empty(Outcomes());
     }
 
     [Fact]
-    public async Task AnObservation_NotFound_WritesNotFound_AndLeavesTheDeleteWaiting()
+    public async Task AnObservation_NotFound_IsRememberedAsSeenGone_AndLeavesTheDeleteWaiting()
     {
         Vm vm = RunningVm();
         VmSnapshot snapshot = Ready(vm);
@@ -267,7 +276,7 @@ public class VmSnapshotRequestHandlerTests
 
         await ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, snapshot.Id, false));
 
-        Assert.Equal("NotFound/Deleted/Deleting", Shape(snapshot));
+        Assert.Equal("Deleting/-", Shape(snapshot));
         Assert.Empty(Outcomes());
     }
 
@@ -281,7 +290,7 @@ public class VmSnapshotRequestHandlerTests
             () => ObserveHandler().HandleAsync(new ObserveVmSnapshotCommand(vm.Id, theirs.Id, false)));
 
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", missing.Code);
-        Assert.Equal(CurrentExistence.Exists, theirs.CurrentExistence);
+        Assert.Equal(VmSnapshotStatus.Available, theirs.Status);
     }
 
     // ---------- the requests: repeats and the lock ----------

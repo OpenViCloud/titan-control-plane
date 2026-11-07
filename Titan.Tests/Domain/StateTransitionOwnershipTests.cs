@@ -279,7 +279,6 @@ public class StateTransitionOwnershipTests
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
         ["VmTemplateCluster.FinishOperation"] = TemplateReport,
-        ["VmSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["Volume.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VolumeSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
@@ -319,9 +318,10 @@ public class StateTransitionOwnershipTests
                              || Regex.IsMatch(body, @"\bEnsure[A-Z]\w*\(\)")
                              || Regex.IsMatch(body, @"\bStatus != VmStatus\.\w+ \|\| Operation\.PendingId != operationId\)\s*\{\s*return false;")
                              // A snapshot's report moves only a VM still Snapshotting: the status check is the guard.
-                             || Regex.IsMatch(body, @"if \(Status == VmStatus\.Snapshotting && ")
-                             // A report of a network or a rule ignores every operation of another kind or id, and a type already
-                             // Deleted, by returning false (titan-ops features/network/design.md#network-operation).
+                             || Regex.IsMatch(body, @"if \(Status != VmStatus\.Snapshotting\)\s*\{\s*return;")
+                             // A report of a network, a rule or a VM snapshot ignores every operation of another kind or id, and a
+                             // type already Deleted, by returning false (titan-ops features/network/design.md#network-operation,
+                             // features/vm/design.md#vm-snapshot-reports).
                              || Regex.IsMatch(body, @"if \(!IsWaitingOn\(operationId, \w+\.\w+\)\)\s*\{\s*return false;");
                 if (!validates) offenders.Add($"{type}.{m.Groups[1].Value}");
             }

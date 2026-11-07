@@ -49,6 +49,15 @@ public class QueryRuleDbTests(PostgresFixture pg)
         return vm;
     }
 
+    // A VM Snapshotting is on Incus with a snapshot create or revert in flight.
+    private Vm SnapshottingVm(string offering, string name, Guid? networkId = null)
+    {
+        Vm vm = SeenVm(offering, name, VmStatus.Running, networkId);
+        vm.AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "s");
+        Assert.Equal(VmStatus.Snapshotting, vm.Status);
+        return vm;
+    }
+
     [Fact]
     public async Task VmQuota_CountsWhatExistsOrIsBeingCreated_NotAFailedCreate_NotFound_OrADeleteAsked()
     {
@@ -59,10 +68,13 @@ public class QueryRuleDbTests(PostgresFixture pg)
         lost.MarkNotFound();
         Vm deleting = SeenVm(offering, "deleting", VmStatus.Running);
         deleting.Delete(Guid.NewGuid());
-        await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmStatus.Stopped), failed, lost, deleting);
+        Vm snapshotting = SnapshottingVm(offering, "snapshotting");
+        await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmStatus.Stopped), snapshotting, failed, lost,
+            deleting);
 
         await using TitanDbContext db = pg.NewDbContext();
-        Assert.Equal(2, await new VmRepository(db).CountActiveByTenantAsync(_tenant.Id));
+        Assert.Equal(3, await new VmRepository(db).CountActiveByTenantAsync(_tenant.Id)); // creating, stopped, snapshotting
+        Assert.True(snapshotting.OccupiesQuota);
     }
 
     [Fact]
@@ -90,7 +102,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     {
         string offering = await OfferingAsync();
         Guid deletingNetwork = Guid.NewGuid(), creatingNetwork = Guid.NewGuid(), failedNetwork = Guid.NewGuid(),
-            lostNetwork = Guid.NewGuid(), deletedNetwork = Guid.NewGuid();
+            lostNetwork = Guid.NewGuid(), deletedNetwork = Guid.NewGuid(), snapshottingNetwork = Guid.NewGuid();
         Vm deleting = SeenVm(offering, "deleting", VmStatus.Running, deletingNetwork);
         deleting.Delete(Guid.NewGuid());
         Vm failed = NewVm(offering, "failed", failedNetwork);
@@ -100,12 +112,15 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Vm deleted = SeenVm(offering, "deleted", VmStatus.Running, deletedNetwork);
         deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
-        await SaveAsync(deleting, NewVm(offering, "creating", creatingNetwork), failed, lost, deleted);
+        Vm snapshotting = SnapshottingVm(offering, "snapshotting", snapshottingNetwork);
+        await SaveAsync(deleting, NewVm(offering, "creating", creatingNetwork), failed, lost, deleted, snapshotting);
 
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new NetworkRepository(db);
         Assert.True(await repo.HasActiveVmsAsync(deletingNetwork));
         Assert.True(await repo.HasActiveVmsAsync(creatingNetwork));
+        Assert.True(await repo.HasActiveVmsAsync(snapshottingNetwork));
+        Assert.True(snapshotting.HasNetwork);
         Assert.False(await repo.HasActiveVmsAsync(failedNetwork));
         Assert.False(await repo.HasActiveVmsAsync(lostNetwork));
         Assert.False(await repo.HasActiveVmsAsync(deletedNetwork));
@@ -140,24 +155,70 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Assert.Equal(new[] { available.Id, deleting.Id }.OrderBy(i => i), billed); // a delete in flight still bills
     }
 
+    // A snapshot on Incus, its create ended Done.
+    private static VmSnapshot CreatedSnapshot(Vm vm, string name)
+    {
+        VmSnapshot snapshot = vm.WithSnapshot(name);
+        snapshot.MarkCreated($"{vm.ExternalId}/{name}");
+        return snapshot;
+    }
+
+    // Billed while Incus holds the snapshot: Available at rest, or an operation waiting on one Incus was last seen holding
+    // (titan-ops features/vm/design.md#vm-snapshot-counting). A VM takes one create or revert at a time, so each waiting
+    // create or revert is on a VM of its own; deletes wait side by side on one VM.
     [Fact]
     public async Task SnapshotBilling_IsWhatIncusHolds()
     {
         string offering = await OfferingAsync();
-        Vm vm = SeenVm(offering, "vm", VmStatus.Running);
-        VmSnapshot vmReady = vm.WithSnapshot("vm-ready");
-        vmReady.MarkCreated($"{vm.ExternalId}/s1");
-        vm.WithSnapshot("vm-creating"); // last: the VM is Snapshotting from here
+        Vm atRest = SeenVm(offering, "vm-rest", VmStatus.Running);
+        VmSnapshot available = CreatedSnapshot(atRest, "available");
+        VmSnapshot notFound = CreatedSnapshot(atRest, "not-found");
+        atRest.MarkSnapshotNotFound(notFound.Id);
+        VmSnapshot failed = atRest.WithSnapshot("failed");
+        failed.MarkRequestFailed("refused", null);
+        VmSnapshot deletingHeld = CreatedSnapshot(atRest, "deleting-held");
+        atRest.DeleteSnapshot(deletingHeld.Id, Guid.NewGuid());
+        VmSnapshot deletingLost = CreatedSnapshot(atRest, "deleting-lost");
+        atRest.DeleteSnapshot(deletingLost.Id, Guid.NewGuid());
+        atRest.MarkSnapshotNotFound(deletingLost.Id);
+        VmSnapshot deleted = CreatedSnapshot(atRest, "deleted");
+        atRest.DeleteSnapshot(deleted.Id, Guid.NewGuid());
+        deleted.MarkDeleted();
+
+        Vm creatingVm = SeenVm(offering, "vm-creating", VmStatus.Running);
+        VmSnapshot creating = creatingVm.WithSnapshot("creating");
+        // Seen on Incus while its create still waits: only the Domain reaches it, the reconciler lists only snapshots
+        // with a provider id; the SQL bills it as IsBilled does.
+        Vm creatingSeenVm = SeenVm(offering, "vm-creating-seen", VmStatus.Running);
+        VmSnapshot creatingSeen = creatingSeenVm.WithSnapshot("creating-seen");
+        creatingSeenVm.MarkSnapshotObserved(creatingSeen.Id);
+        Vm revertingHeldVm = SeenVm(offering, "vm-reverting-held", VmStatus.Running);
+        VmSnapshot revertingHeld = CreatedSnapshot(revertingHeldVm, "reverting-held");
+        revertingHeldVm.RevertSnapshot(revertingHeld.Id, Guid.NewGuid());
+        Vm revertingLostVm = SeenVm(offering, "vm-reverting-lost", VmStatus.Running);
+        VmSnapshot revertingLost = CreatedSnapshot(revertingLostVm, "reverting-lost");
+        revertingLostVm.RevertSnapshot(revertingLost.Id, Guid.NewGuid());
+        revertingLostVm.MarkSnapshotNotFound(revertingLost.Id);
+
         Volume volume = OnIncus("vol");
         volume.WithSnapshot("vol-creating");
         VolumeSnapshot volumeReady = volume.WithSnapshot("vol-ready");
         volumeReady.MarkCreated("vol/s1");
-        await SaveAsync(vm, volume);
+        Vm[] vms = [atRest, creatingVm, creatingSeenVm, revertingHeldVm, revertingLostVm];
+        await SaveAsync([.. vms, volume]);
 
+        VmSnapshot[] all =
+        [
+            available, notFound, failed, deletingHeld, deletingLost, deleted, creating, creatingSeen, revertingHeld,
+            revertingLost,
+        ];
+        Guid[] expected = [available.Id, deletingHeld.Id, creatingSeen.Id, revertingHeld.Id];
+        Assert.Equal(expected.Order(), all.Where(s => s.IsBilled).Select(s => s.Id).Order());
+        HashSet<Guid> vmIds = vms.Select(v => v.Id).ToHashSet();
         await using TitanDbContext db = pg.NewDbContext();
-        var vmBilled = (await new VmSnapshotRepository(db).ListBillableAsync()).Where(s => s.VmId == vm.Id).Select(s => s.Id);
+        var vmBilled = (await new VmSnapshotRepository(db).ListBillableAsync()).Where(s => vmIds.Contains(s.VmId)).Select(s => s.Id);
         var volumeBilled = (await new VolumeSnapshotRepository(db).ListBillableAsync()).Where(s => s.VolumeId == volume.Id).Select(s => s.Id);
-        Assert.Equal(new[] { vmReady.Id }, vmBilled);
+        Assert.Equal(expected.Order(), vmBilled.Order());
         Assert.Equal(new[] { volumeReady.Id }, volumeBilled);
     }
 

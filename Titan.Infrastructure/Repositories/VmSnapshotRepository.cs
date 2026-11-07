@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
@@ -13,7 +12,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
     // !VmSnapshot.IsDeleted
     public async Task<List<VmSnapshot>> FindByVmIdAsync(Guid vmId, CancellationToken ct = default) =>
         await db.VmSnapshots
-            .Where(s => s.VmId == vmId && s.CurrentExistence != CurrentExistence.Deleted)
+            .Where(s => s.VmId == vmId && s.Status != VmSnapshotStatus.Deleted)
             .OrderByDescending(s => s.CreatedAt)
             .AsNoTracking()
             .ToListAsync(ct);
@@ -21,7 +20,11 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
     // VmSnapshot.IsBilled
     public async Task<List<VmSnapshot>> ListBillableAsync(CancellationToken ct = default) =>
         await db.VmSnapshots
-            .Where(s => s.CurrentExistence == CurrentExistence.Exists)
+            .Where(s => s.Status == VmSnapshotStatus.Available
+                     || ((s.Status == VmSnapshotStatus.Creating
+                          || s.Status == VmSnapshotStatus.Reverting
+                          || s.Status == VmSnapshotStatus.Deleting)
+                         && s.Operation.LastSeenStatus == VmSnapshotStatus.Available))
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -29,7 +32,7 @@ public class VmSnapshotRepository(TitanDbContext db) : IVmSnapshotRepository
     public async Task<List<VmSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmSnapshots
             .Where(s => s.ExternalId != null
-                     && s.CurrentExistence != CurrentExistence.Deleted
+                     && s.Status != VmSnapshotStatus.Deleted
                      && db.Vms.Any(v => v.Id == s.VmId && v.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);

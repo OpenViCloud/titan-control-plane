@@ -97,8 +97,8 @@ public class GroupBRepeatRefusedTests
         vm.RevertSnapshot(snapshot.Id, revert);
 
         Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => vm.RevertSnapshot(snapshot.Id, Guid.NewGuid())).Code);
-        Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
-        Assert.Equal(revert, snapshot.PendingOperationId);
+        Assert.Equal(VmSnapshotStatus.Reverting, snapshot.Status);
+        Assert.Equal(revert, snapshot.Operation.PendingId);
     }
 
     [Fact] // once the revert finished, reverting again is a new request and is accepted
@@ -113,8 +113,8 @@ public class GroupBRepeatRefusedTests
         Guid again = Guid.NewGuid();
         vm.RevertSnapshot(snapshot.Id, again);
 
-        Assert.Equal(VmSnapshotTransition.Reverting, snapshot.Transition);
-        Assert.Equal(again, snapshot.PendingOperationId);
+        Assert.Equal(VmSnapshotStatus.Reverting, snapshot.Status);
+        Assert.Equal(again, snapshot.Operation.PendingId);
         Assert.Equal("snap-ext", snapshot.GetExternalId());
     }
 

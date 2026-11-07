@@ -11,7 +11,8 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods (the
-// VM, the network and the firewall rule have one report method per move instead of FinishOperation and FailOperation), its
+// VM, the network, the firewall rule and the VM snapshot have one report method per move instead of FinishOperation and
+// FailOperation), its
 // Mark* return nothing, a report with a foreign id changes nothing, every lifecycle handler locks the row, and every
 // command payload carries the request id. Reflection and a factory for the first three; source text for the last two.
 //
@@ -21,15 +22,15 @@ namespace Titan.Tests.Domain;
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
 // Pending property: its one status says what the waiting request asks, and it keeps only that request's id
-// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Network and
-// FirewallRule keep the waiting operation in an Operation of their own (titan-ops features/network/design.md#network-operation)
-// and are named here for the same reason.
+// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Network,
+// FirewallRule and VmSnapshot keep the waiting operation in an Operation of their own (titan-ops
+// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot) and are named here for the same reason.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
     // On the shape without a Pending property, each kept by name.
-    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm), typeof(Network), typeof(FirewallRule)];
+    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot)];
 
     // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
     private static List<Type> WithAPendingProperty() =>
@@ -140,9 +141,9 @@ public class RequestLifecycleShapeTests
         Assert.True(offenders.Count == 0, "Mark* must return void (titan-ops architecture/resource-lifecycle.md#shape): " + string.Join(", ", offenders));
     }
 
-    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network and the firewall rule have one
-    // Succeeded and one Failed move per kind (NetworkReportMoves below); the other types end a request by
-    // FinishOperation and FailOperation.
+    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule and
+    // the VM snapshot have one Succeeded and one Failed move per kind (NetworkReportMoves and VmSnapshotReportMoves below);
+    // the other types end a request by FinishOperation and FailOperation.
     private static readonly string[] VmReportMoves =
     [
         "CreateSucceeded", "CreateFailed", "StartSucceeded", "StartFailed",
@@ -151,6 +152,12 @@ public class RequestLifecycleShapeTests
 
     // Network and FirewallRule end an operation by its kind too (titan-ops features/network/design.md#network-operation).
     private static readonly string[] NetworkReportMoves = ["CreateSucceeded", "CreateFailed", "DeleteSucceeded", "DeleteFailed"];
+
+    // A VM snapshot ends its create, revert or delete by its kind (titan-ops features/vm/design.md#vm-snapshot-reports).
+    private static readonly string[] VmSnapshotReportMoves =
+    [
+        "CreateSucceeded", "CreateFailed", "RevertSucceeded", "RevertFailed", "DeleteSucceeded", "DeleteFailed",
+    ];
 
     private static IEnumerable<string> RequiredReportsOf(Type type)
     {
@@ -161,6 +168,10 @@ public class RequestLifecycleShapeTests
         if (type == typeof(Network) || type == typeof(FirewallRule))
         {
             return [.. NetworkReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(VmSnapshot))
+        {
+            return [.. VmSnapshotReportMoves, "MarkObserved", "MarkNotFound"];
         }
         return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
     }
@@ -204,6 +215,46 @@ public class RequestLifecycleShapeTests
                 Assert.Equal(before, PublicProperties(aggregate));
             }
         }
+    }
+
+    // Each move of a VM snapshot run for real on a snapshot waiting in that move's status, so the false comes from the id
+    // alone: a report naming another operation returns false and leaves every public property as it was.
+    [Fact]
+    public void EveryVmSnapshotMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in VmSnapshotReportMoves)
+        {
+            VmSnapshot snapshot = VmSnapshotWaitingFor(move);
+            MethodInfo ending = typeof(VmSnapshot).GetMethod(move, BindingFlags.NonPublic | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(snapshot);
+
+            object? result = ending.Invoke(snapshot, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(snapshot));
+        }
+    }
+
+    private static VmSnapshot VmSnapshotWaitingFor(string move)
+    {
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
+        VmSnapshot snapshot = vm.WithSnapshot("shape");
+        if (move.StartsWith("Create", StringComparison.Ordinal))
+        {
+            return snapshot;
+        }
+        snapshot.MarkCreated("vm-shape/s1");
+        if (move.StartsWith("Revert", StringComparison.Ordinal))
+        {
+            vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
+        }
+        else
+        {
+            vm.DeleteSnapshot(snapshot.Id, Guid.NewGuid());
+        }
+        return snapshot;
     }
 
     private static object? ForeignArgument(ParameterInfo parameter)
@@ -255,6 +306,10 @@ public class RequestLifecycleShapeTests
             {
                 continue; // EveryNetworkAndRuleMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
             }
+            if (type == typeof(VmSnapshot))
+            {
+                continue; // EveryVmSnapshotMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
+            }
             foreach (string method in new[] { "FinishOperation", "FailOperation" })
             {
                 object aggregate = build();
@@ -277,8 +332,7 @@ public class RequestLifecycleShapeTests
         if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
         else if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
         else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleStatus.enabled];
-        else if (type == typeof(VolumeSnapshot) || type == typeof(VmSnapshot) || type == typeof(LoadBalancer)
-                 || type == typeof(VmTemplateCluster)) seen = ["foreign"];
+        else if (type == typeof(VolumeSnapshot) || type == typeof(LoadBalancer) || type == typeof(VmTemplateCluster)) seen = ["foreign"];
         else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");
         if (method == "FinishOperation")
         {

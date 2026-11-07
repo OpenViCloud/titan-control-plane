@@ -74,45 +74,67 @@ public partial class Vm
         GetSnapshot(snapshotId).Delete(operationId);
     }
 
-    /// The report that the snapshot's own command ended Done (titan-ops architecture/resource-lifecycle.md#shape); null
-    /// when it names another operation than the one the snapshot waits on. A create or revert that ends takes the VM
-    /// out of Snapshotting, but only for a VM that still is Snapshotting: a VM at rest has nothing to leave, so its
-    /// status does not change.
-    public VmSnapshotOperationKind? FinishSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId)
+    /// The reports of the snapshot's own commands (titan-ops features/vm/design.md#vm-snapshot-reports); each is false when
+    /// it names another operation than the one the snapshot waits on, which its status says. A create or revert that ends
+    /// takes the VM out of Snapshotting, but only for a VM that still is Snapshotting: a VM at rest has nothing to leave,
+    /// so its status does not change. A delete's end never touches the VM: only a create or a revert made it Snapshotting.
+    public bool SnapshotCreateSucceeded(Guid snapshotId, Guid operationId, string? externalId)
     {
-        VmSnapshotOperationKind? ended = GetSnapshot(snapshotId).FinishOperation(operationId, externalId);
-        if (Status == VmStatus.Snapshotting && IsACreateOrARevert(ended))
+        bool ended = GetSnapshot(snapshotId).CreateSucceeded(operationId, externalId);
+        if (ended)
         {
-            Status = RestingStatusAfterTheSnapshot();
+            LeaveSnapshotting();
         }
         return ended;
     }
 
-    /// The report that the snapshot's own command gave up; null when it names another operation than the one the
-    /// snapshot waits on. A create or revert that ends takes the VM out of Snapshotting, only for a VM that still is.
-    public VmSnapshotOperationKind? FailSnapshotOperation(Guid snapshotId, Guid operationId, string? externalId,
-        string? reason, string? detail)
+    public bool SnapshotCreateFailed(Guid snapshotId, Guid operationId, string? externalId, string? reason, string? detail)
     {
-        VmSnapshotOperationKind? ended = GetSnapshot(snapshotId).FailOperation(operationId, externalId, reason, detail);
-        if (Status == VmStatus.Snapshotting && IsACreateOrARevert(ended))
+        bool ended = GetSnapshot(snapshotId).CreateFailed(operationId, externalId, reason, detail);
+        if (ended)
         {
-            Status = RestingStatusAfterTheSnapshot();
+            LeaveSnapshotting();
         }
         return ended;
     }
 
-    /// Only a create or a revert made the VM Snapshotting: the end of a snapshot's delete must not clear a Snapshotting
-    /// that another snapshot's create or revert set.
-    private static bool IsACreateOrARevert(VmSnapshotOperationKind? ended) =>
-        ended == VmSnapshotOperationKind.Create || ended == VmSnapshotOperationKind.Revert;
-
-    /// The status a VM goes back to when its snapshot create or revert ends: the Incus status it holds, Unknown without
-    /// one, as a Start or Stop that gave up goes back to it. It keeps no status seen afterwards: it is at rest.
-    private VmStatus RestingStatusAfterTheSnapshot()
+    public bool SnapshotRevertSucceeded(Guid snapshotId, Guid operationId)
     {
+        bool ended = GetSnapshot(snapshotId).RevertSucceeded(operationId);
+        if (ended)
+        {
+            LeaveSnapshotting();
+        }
+        return ended;
+    }
+
+    public bool SnapshotRevertFailed(Guid snapshotId, Guid operationId, string? reason, string? detail)
+    {
+        bool ended = GetSnapshot(snapshotId).RevertFailed(operationId, reason, detail);
+        if (ended)
+        {
+            LeaveSnapshotting();
+        }
+        return ended;
+    }
+
+    public bool SnapshotDeleteSucceeded(Guid snapshotId, Guid operationId) =>
+        GetSnapshot(snapshotId).DeleteSucceeded(operationId);
+
+    public bool SnapshotDeleteFailed(Guid snapshotId, Guid operationId, string? reason, string? detail) =>
+        GetSnapshot(snapshotId).DeleteFailed(operationId, reason, detail);
+
+    /// A snapshot create or revert ended: a VM still Snapshotting goes back to the Incus status it holds, Unknown without
+    /// one, as a Start or Stop that gave up goes back to it, and keeps no status seen afterwards: it is at rest.
+    private void LeaveSnapshotting()
+    {
+        if (Status != VmStatus.Snapshotting)
+        {
+            return;
+        }
         VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
         Operation = Operation.ReturnedToRest();
-        return resting;
+        Status = resting;
     }
 
     // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
