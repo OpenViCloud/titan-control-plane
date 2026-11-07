@@ -74,11 +74,11 @@ public class NetworkRoutesTests
         await Routes().GiveAsync(network, Block56);
         ClusterIpv6Route route = RouteOf(network);
 
-        NetworkOperationKind? ended = await CreateFailed(network, network.Pending!.Id);
+        NetworkOperationKind? ended = await CreateFailed(network, network.Operation.PendingId!.Value);
 
         Assert.Equal(NetworkOperationKind.Create, ended);
         Assert.False(network.HasPublicIpv6);
-        Assert.Equal("Network creation failed.", network.OperationFailureReason);
+        Assert.Equal("Network creation failed.", network.Operation.FailureReason);
         Assert.True(route.IsFree);
         Assert.NotNull(route.ReleasedAt);
     }
@@ -90,7 +90,7 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        NetworkOperationKind? ended = await CreateFailed(network, network.Pending!.Id, "net-x");
+        NetworkOperationKind? ended = await CreateFailed(network, network.Operation.PendingId!.Value, "net-x");
 
         Assert.Equal(NetworkOperationKind.Create, ended);
         Assert.True(network.HasPublicIpv6);
@@ -103,7 +103,7 @@ public class NetworkRoutesTests
         Network network = WantingPublicIpv6();
         await Routes().GiveAsync(network, Block56);
 
-        await Routes().FinishOperationAsync(network, network.Pending!.Id, "net-x",
+        await Routes().FinishOperationAsync(network, network.Operation.PendingId!.Value, "net-x",
             NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
 
         Assert.True(network.HasPublicIpv6);
@@ -203,8 +203,10 @@ public class NetworkRoutesTests
         Assert.DoesNotContain(nameof(Network.ReceivePublicIpv6), network);
         // Only NetworkRoutes ends the network's own operation: a create that failed before Incus lets go of the /64, and
         // a delete done gives the route back.
-        Assert.DoesNotContain(nameof(Network.FinishOperation), network);
-        Assert.DoesNotContain(nameof(Network.FailOperation), network);
+        Assert.DoesNotContain(nameof(Network.CreateSucceeded), network);
+        Assert.DoesNotContain(nameof(Network.CreateFailed), network);
+        Assert.DoesNotContain(nameof(Network.DeleteSucceeded), network);
+        Assert.DoesNotContain(nameof(Network.DeleteFailed), network);
         Assert.Contains(nameof(ClusterIpv6Route.NextToGive), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.HandTo), route);
         Assert.DoesNotContain(nameof(ClusterIpv6Route.TakeBack), route);

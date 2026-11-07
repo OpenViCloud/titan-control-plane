@@ -52,7 +52,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
     private async Task<Guid> WaitingRequestAsync(Guid networkId)
     {
         await using TitanDbContext db = pg.NewDbContext();
-        return (await new NetworkRepository(db).FindByIdAsync(networkId))!.Pending!.Id;
+        return (await new NetworkRepository(db).FindByIdAsync(networkId))!.Operation.PendingId!.Value;
     }
 
     private async Task EndAsync(Guid networkId, Guid requestId, string outcome, string? externalId = null,

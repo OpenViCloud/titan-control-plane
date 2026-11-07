@@ -303,9 +303,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = Network.Create(TestTenant.WithRoomToSpare().Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..14]),
             "cluster-a", null, wantsPublicIpv6: false);
-        network.FinishOperation(network.Pending!.Id, $"net-{network.Id:N}", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
+        network.ReportDone(network.Operation.PendingId!.Value, $"net-{network.Id:N}", NetworkStatus.Created, "10.0.0.0/24", "10.0.0.1");
         FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
-        network.FinishFirewallRuleOperation(rule.Id, rule.Pending!.Id, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
+        network.ReportRuleDone(rule.Id, rule.Operation.PendingId!.Value, $"acl-{network.Id:N}/1", FirewallRuleState.enabled);
         network.DeleteFirewallRule(rule.Id);
         network.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
@@ -327,14 +327,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Pending!.Id}",
+        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Operation.PendingId!.Value}",
             """{"outcome":"Failed","observed":{"status":"Created"},"reason":"The network could not be deleted.","detail":"incus: in use"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Null(stored.Pending);
+        Assert.Null(stored.Operation.PendingId);
         Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal(("The network could not be deleted.", "incus: in use"), (stored.OperationFailureReason, stored.OperationFailureDetail));
+        Assert.Equal(("The network could not be deleted.", "incus: in use"), (stored.Operation.FailureReason, stored.Operation.FailureDetail));
     }
 
     [Fact]
@@ -342,12 +342,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Network network = await StoredNetworkAndRuleWaitingOnTheirDeletesAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Pending!.Id}",
+        HttpResponseMessage response = await PatchAsync($"/internal/networks/{network.Id}/requests/{network.Operation.PendingId!.Value}",
             """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Null(stored.Pending);
+        Assert.Null(stored.Operation.PendingId);
         Assert.Equal(CurrentExistence.Deleted, stored.CurrentExistence);
         Assert.Equal(CurrentExistence.Deleted, stored.FirewallRules.Single().CurrentExistence);
     }
@@ -363,7 +363,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
         Assert.Equal(NetworkStatus.Errored, stored.CurrentState);
-        Assert.Equal(NetworkOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, stored.Operation.Kind!.Value);
     }
 
     [Fact]
@@ -373,12 +373,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         FirewallRule rule = network.FirewallRules.Single();
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/networks/{network.Id}/firewall-rules/{rule.Id}/requests/{rule.Pending!.Id}", """{"outcome":"Done"}""");
+            $"/internal/networks/{network.Id}/firewall-rules/{rule.Id}/requests/{rule.Operation.PendingId!.Value}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
         Assert.Equal(CurrentExistence.Deleted, stored.FirewallRules.Single().CurrentExistence);
-        Assert.Equal(NetworkOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(NetworkOperationKind.Delete, stored.Operation.Kind!.Value);
     }
 
     [Fact]
@@ -393,7 +393,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         FirewallRule stored = (await ReloadNetworkAsync(network.Id)).FirewallRules.Single();
         Assert.Equal(FirewallRuleState.disabled, stored.CurrentState);
-        Assert.Equal(FirewallRuleOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(FirewallRuleOperationKind.Delete, stored.Operation.Kind!.Value);
     }
 
     [Theory]
@@ -409,13 +409,13 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         FirewallRule rule = network.FirewallRules.Single();
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/networks/{network.Id}/{string.Format(route, network.Pending!.Id, rule.Id, rule.Pending!.Id)}", json);
+            $"/internal/networks/{network.Id}/{string.Format(route, network.Operation.PendingId!.Value, rule.Id, rule.Operation.PendingId!.Value)}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Equal((NetworkStatus.Created, NetworkOperationKind.Delete), (stored.CurrentState!.Value, stored.Pending!.Kind));
+        Assert.Equal((NetworkStatus.Created, NetworkOperationKind.Delete), (stored.CurrentState!.Value, stored.Operation.Kind!.Value));
         Assert.Equal((FirewallRuleState.enabled, FirewallRuleOperationKind.Delete),
-            (stored.FirewallRules.Single().CurrentState!.Value, stored.FirewallRules.Single().Pending!.Kind));
+            (stored.FirewallRules.Single().CurrentState!.Value, stored.FirewallRules.Single().Operation.Kind!.Value));
     }
 
     [Theory]
@@ -429,13 +429,13 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         FirewallRule rule = network.FirewallRules.Single();
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/networks/{network.Id}/{string.Format(route, network.Pending!.Id, rule.Id, rule.Pending!.Id)}", json, token: null);
+            $"/internal/networks/{network.Id}/{string.Format(route, network.Operation.PendingId!.Value, rule.Id, rule.Operation.PendingId!.Value)}", json, token: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Network stored = await ReloadNetworkAsync(network.Id);
-        Assert.Equal((CurrentExistence.Exists, NetworkOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((CurrentExistence.Exists, NetworkOperationKind.Delete), (stored.CurrentExistence, stored.Operation.Kind!.Value));
         Assert.Equal((CurrentExistence.Exists, FirewallRuleOperationKind.Delete),
-            (stored.FirewallRules.Single().CurrentExistence, stored.FirewallRules.Single().Pending!.Kind));
+            (stored.FirewallRules.Single().CurrentExistence, stored.FirewallRules.Single().Operation.Kind!.Value));
     }
 
     // ---------- the VM's snapshots' routes ----------

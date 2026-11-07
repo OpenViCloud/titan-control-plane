@@ -24,15 +24,19 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
         builder.Property(n => n.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(n => n.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(n => n.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(n => n.OperationFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(n => n.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(n => n.OperationFailedAt).HasColumnName("request_failed_at");
-        // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Network.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<NetworkOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(n => n.Pending);
+        // The waiting operation (id, kind, when asked) and the last failure, six columns the aggregate writes through one
+        // NetworkOperation (titan-ops features/network/design.md#network-operation). OwnsOne, not ComplexProperty: the
+        // InMemory provider of EF Core 9.0.4 cannot load an entity that has a complex property (titan-ops
+        // features/vm/design.md#vm-data-model).
+        builder.OwnsOne(n => n.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.Kind).HasColumnName("pending_request_kind").HasConversion<string>();
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+        });
         builder.Ignore(n => n.Transition);
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");
 

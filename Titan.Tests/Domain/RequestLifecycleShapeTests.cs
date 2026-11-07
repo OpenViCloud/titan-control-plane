@@ -21,13 +21,15 @@ namespace Titan.Tests.Domain;
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
 // Pending property: its one status says what the waiting request asks, and it keeps only that request's id
-// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead.
+// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Network and
+// FirewallRule keep the waiting operation in an Operation of their own (titan-ops features/network/design.md#network-operation)
+// and are named here for the same reason.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
     // On the shape without a Pending property, each kept by name.
-    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm)];
+    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm), typeof(Network), typeof(FirewallRule)];
 
     // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
     private static List<Type> WithAPendingProperty() =>
@@ -73,7 +75,7 @@ public class RequestLifecycleShapeTests
         [typeof(FirewallRule)] = () =>
         {
             Network network = ANetwork();
-            network.FinishOperation(network.Pending!.Id, "net-shape", NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1");
+            network.ReportDone(network.Operation.PendingId!.Value, "net-shape", NetworkStatus.Created, "10.9.0.0/24", "10.9.0.1");
             return network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, null, FirewallCidr.Parse("10.0.0.0/8"));
         },
         [typeof(VmTemplateCluster)] = () =>
@@ -146,11 +148,18 @@ public class RequestLifecycleShapeTests
         "StopSucceeded", "StopFailed", "DeleteSucceeded", "DeleteFailed",
     ];
 
+    // Network and FirewallRule end an operation by its kind too (titan-ops features/network/design.md#network-operation).
+    private static readonly string[] NetworkReportMoves = ["CreateSucceeded", "CreateFailed", "DeleteSucceeded", "DeleteFailed"];
+
     private static IEnumerable<string> RequiredReportsOf(Type type)
     {
         if (type == typeof(Vm))
         {
             return [.. VmReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(Network) || type == typeof(FirewallRule))
+        {
+            return [.. NetworkReportMoves, "MarkObserved", "MarkNotFound"];
         }
         return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
     }
@@ -172,6 +181,36 @@ public class RequestLifecycleShapeTests
             Assert.Equal(false, result);
             Assert.Equal(before, PublicProperties(vm));
         }
+    }
+
+    // Each move of a network and of a rule run for real on one waiting on its create: a report naming another operation
+    // returns false and leaves every public property as it was.
+    [Fact]
+    public void EveryNetworkAndRuleMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (Type type in new[] { typeof(Network), typeof(FirewallRule) })
+        {
+            foreach (string move in NetworkReportMoves)
+            {
+                object aggregate = WaitingOnARequest[type]();
+                MethodInfo ending = type.GetMethod(move, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
+                object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+                Dictionary<string, object?> before = PublicProperties(aggregate);
+
+                object? result = ending.Invoke(aggregate, arguments);
+
+                Assert.Equal(false, result);
+                Assert.Equal(before, PublicProperties(aggregate));
+            }
+        }
+    }
+
+    private static object? ForeignArgument(ParameterInfo parameter)
+    {
+        if (parameter.ParameterType == typeof(NetworkStatus?)) return NetworkStatus.Created;
+        if (parameter.ParameterType == typeof(FirewallRuleState?)) return FirewallRuleState.enabled;
+        if (parameter.Name == "externalId") return "foreign";
+        return "late";
     }
 
     private static Vm VmWaitingFor(string move)
@@ -210,6 +249,10 @@ public class RequestLifecycleShapeTests
             if (type == typeof(Vm))
             {
                 continue; // EveryVmMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
+            }
+            if (type == typeof(Network) || type == typeof(FirewallRule))
+            {
+                continue; // EveryNetworkAndRuleMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
             }
             foreach (string method in new[] { "FinishOperation", "FailOperation" })
             {

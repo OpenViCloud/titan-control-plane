@@ -32,22 +32,32 @@ public class EndFirewallRuleRequestCommandHandler(INetworkRepository networkRepo
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, command.RuleId);
 
-        FirewallRuleOperationKind? ended;
-        if (outcome == OperationOutcome.Done)
+        // The operation the rule waits on says which report this is.
+        FirewallRuleOperationKind? waiting = rule.Operation.Kind;
+        bool ended;
+        switch (waiting)
         {
-            ended = network.FinishFirewallRuleOperation(rule.Id, command.RequestId, command.ExternalId, state);
+            case FirewallRuleOperationKind.Create:
+                ended = outcome == OperationOutcome.Done
+                    ? network.FirewallRuleCreateSucceeded(rule.Id, command.RequestId, command.ExternalId, state)
+                    : network.FirewallRuleCreateFailed(rule.Id, command.RequestId, command.ExternalId, state,
+                        command.Reason, command.Detail);
+                break;
+            case FirewallRuleOperationKind.Delete:
+                ended = outcome == OperationOutcome.Done
+                    ? network.FirewallRuleDeleteSucceeded(rule.Id, command.RequestId)
+                    : network.FirewallRuleDeleteFailed(rule.Id, command.RequestId, state, command.Reason, command.Detail);
+                break;
+            default:
+                ended = false;
+                break;
         }
-        else
-        {
-            ended = network.FailFirewallRuleOperation(rule.Id, command.RequestId, command.ExternalId, state,
-                command.Reason, command.Detail);
-        }
-        if (ended == null)
+        if (!ended)
         {
             return;
         }
 
-        NetworkReports.RecordRuleEnded(rule, ended.Value, outcome, activity);
+        NetworkReports.RecordRuleEnded(rule, waiting!.Value, outcome, activity);
         await networkRepo.SaveAsync(ct);
     }
 }

@@ -82,10 +82,10 @@ public class NetworkServiceTests
                 reason == null ? null : "raw incus error"));
 
     private Task DoneAsync(Network network, string? externalId = null, string? cidr = null, string? gateway = null) =>
-        EndAsync(network.Id, network.Pending!.Id, "Done", externalId, cidr, gateway);
+        EndAsync(network.Id, network.Operation.PendingId!.Value, "Done", externalId, cidr, gateway);
 
     private Task FailedAsync(Network network, string reason, string? externalId = null, string? cidr = null, string? gateway = null) =>
-        EndAsync(network.Id, network.Pending!.Id, "Failed", externalId, cidr, gateway, reason);
+        EndAsync(network.Id, network.Operation.PendingId!.Value, "Failed", externalId, cidr, gateway, reason);
 
     private Task ObserveAsync(Guid networkId, bool exists, string? status = null) =>
         new ObserveNetworkCommandHandler(_repo.Object).HandleAsync(new ObserveNetworkCommand(networkId, exists, status));
@@ -115,7 +115,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -384,7 +384,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -678,7 +678,7 @@ public class NetworkServiceTests
         Assert.NotNull(added);
         Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.ChosenCidr);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A delete that failed leaves the customer free to press Delete again — a new request, a new command.
@@ -787,7 +787,7 @@ public class NetworkServiceTests
 
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
         Assert.Null(network.Transition);
-        Assert.Equal("Network deletion failed.", network.OperationFailureReason);
+        Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
     }
 
     // A create's Done that did not read the status leaves it to the reconciler.
@@ -803,7 +803,7 @@ public class NetworkServiceTests
         Assert.Equal("10.0.0.0/24", network.Cidr);
         Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
         Assert.Null(network.CurrentState);
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.Equal("network.created", Assert.Single(_activity.Events).Action);
         _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -820,7 +820,7 @@ public class NetworkServiceTests
         await FailedAsync(network, "Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1");
         await CreateService().DeleteAsync(network.Id, default);
 
-        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, network.Pending!.Id, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(CurrentExistence.Deleted, network.CurrentExistence);
     }
 
@@ -838,8 +838,8 @@ public class NetworkServiceTests
 
         Assert.Equal(NetworkStatus.Created, network.CurrentState);
         Assert.Equal(DesiredExistence.Exists, network.DesiredExistence);
-        Assert.Equal("Network deletion failed.", network.OperationFailureReason);
-        Assert.Equal("raw incus error", network.OperationFailureDetail);
+        Assert.Equal("Network deletion failed.", network.Operation.FailureReason);
+        Assert.Equal("raw incus error", network.Operation.FailureDetail);
         Assert.Null(network.Transition);
         var outcome = Assert.Single(_activity.Events);
         Assert.Equal(("network.delete_failed", TenantId), (outcome.Action, outcome.OutcomeTenantId));
@@ -856,7 +856,7 @@ public class NetworkServiceTests
         Assert.Equal(CurrentExistence.Exists, network.CurrentExistence);
         Assert.Equal("cs-net-id", network.ExternalId);
         Assert.Equal("10.0.0.0/24", network.Cidr);
-        Assert.Equal("Network creation failed.", network.OperationFailureReason);
+        Assert.Equal("Network creation failed.", network.Operation.FailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -971,7 +971,7 @@ public class NetworkServiceTests
         Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
         Assert.Equal(added.Id, RouteRow(3).NetworkId);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Pending!.Id, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
+            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
             "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }

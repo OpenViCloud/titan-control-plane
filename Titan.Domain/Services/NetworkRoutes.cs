@@ -29,17 +29,30 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
     public async Task<NetworkOperationKind?> FinishOperationAsync(Network network, Guid operationId,
         string? externalId, NetworkStatus? status, string? cidr, string? gateway, CancellationToken ct = default)
     {
-        NetworkOperationKind? ended = network.FinishOperation(operationId, externalId,
-            status: status, cidr: cidr, gateway: gateway);
-        if (ended == null)
+        // The operation the network waits on says which Done this is.
+        NetworkOperationKind? waiting = network.Operation.Kind;
+        bool ended;
+        switch (waiting)
+        {
+            case NetworkOperationKind.Create:
+                ended = network.CreateSucceeded(operationId, externalId, status, cidr, gateway);
+                break;
+            case NetworkOperationKind.Delete:
+                ended = network.DeleteSucceeded(operationId);
+                break;
+            default:
+                ended = false;
+                break;
+        }
+        if (!ended)
         {
             return null;
         }
-        if (ended == NetworkOperationKind.Delete)
+        if (waiting == NetworkOperationKind.Delete)
         {
             await TakeBackTheRouteOfAsync(network, ct);
         }
-        return ended;
+        return waiting;
     }
 
     /// The report that the network's own command gave up, ended here so the route follows it: a create that failed
@@ -49,9 +62,21 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
         CancellationToken ct = default)
     {
         bool heldAPublicIpv6 = network.HasPublicIpv6;
-        NetworkOperationKind? ended = network.FailOperation(operationId, externalId,
-            status: status, cidr: cidr, gateway: gateway, reason: reason, detail: detail);
-        if (ended == null)
+        NetworkOperationKind? waiting = network.Operation.Kind;
+        bool ended;
+        switch (waiting)
+        {
+            case NetworkOperationKind.Create:
+                ended = network.CreateFailed(operationId, externalId, status, cidr, gateway, reason, detail);
+                break;
+            case NetworkOperationKind.Delete:
+                ended = network.DeleteFailed(operationId, status, reason, detail);
+                break;
+            default:
+                ended = false;
+                break;
+        }
+        if (!ended)
         {
             return null;
         }
@@ -60,7 +85,7 @@ public class NetworkRoutes(IClusterIpv6RouteRepository routes)
         {
             await TakeBackTheRouteOfAsync(network, ct);
         }
-        return ended;
+        return waiting;
     }
 
     private async Task TakeBackTheRouteOfAsync(Network network, CancellationToken ct)

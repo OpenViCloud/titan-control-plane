@@ -1,4 +1,5 @@
 using System.Reflection;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
@@ -7,9 +8,10 @@ namespace Titan.Tests.Domain;
 
 // The pending operation and the last failure live once in ProviderResource (titan-ops
 // architecture/domain-methods.md#provider-resource), for roots and entities alike. Every Domain type that has a Pending
-// operation goes through it, so the state is never written again in a type of its own. Vm is the one named exception:
-// its one status says what its waiting request asks (titan-ops features/vm/design.md#vm-status), so it keeps the request's
-// id and the last failure itself and has no Pending.
+// operation goes through it, so the state is never written again in a type of its own. Vm, Network and FirewallRule
+// are the named exceptions: Vm's one status says what its waiting request asks (titan-ops features/vm/design.md#vm-status),
+// so it keeps the request's id and the last failure itself and has no Pending; Network and FirewallRule keep them in an
+// Operation of their own (titan-ops features/network/design.md#network-operation).
 public class ProviderResourceTests
 {
     private const BindingFlags Declared =
@@ -29,9 +31,11 @@ public class ProviderResourceTests
             .Where(t => t.GetProperty("Pending")?.PropertyType is { IsGenericType: true } p
                         && p.GetGenericTypeDefinition() == typeof(PendingOperation<>))
             .ToList();
-        Assert.True(withPending.Count >= 7, $"the scan found only {withPending.Count} types with a pending operation");
-        // Vm has no Pending, so this scan does not reach it: Vm_KeepsItsOperationInASingleVmOperation_AndNoTypeCopiesTheBasesState holds it.
+        Assert.True(withPending.Count >= 5, $"the scan found only {withPending.Count} types with a pending operation");
+        // Vm, Network and FirewallRule have no Pending, so this scan does not reach them: the two tests below hold them.
         Assert.DoesNotContain(typeof(Vm), withPending);
+        Assert.DoesNotContain(typeof(Network), withPending);
+        Assert.DoesNotContain(typeof(FirewallRule), withPending);
 
         HashSet<string> baseNames = BaseNames();
         List<string> declaringItThemselves = withPending
@@ -59,6 +63,17 @@ public class ProviderResourceTests
         Assert.Empty(keepingItThemselves);
     }
 
+    [Fact]
+    public void NetworkAndFirewallRule_KeepTheirOperationInAnOperationValueObject_AndAreNotOnTheBase()
+    {
+        Assert.False(DerivesFromProviderResource(typeof(Network)));
+        Assert.False(DerivesFromProviderResource(typeof(FirewallRule)));
+        Assert.Null(typeof(Network).GetProperty("Pending"));
+        Assert.Null(typeof(FirewallRule).GetProperty("Pending"));
+        Assert.Equal(typeof(NetworkOperation), typeof(Network).GetProperty("Operation")?.PropertyType);
+        Assert.Equal(typeof(FirewallRuleOperation), typeof(FirewallRule).GetProperty("Operation")?.PropertyType);
+    }
+
     private static bool DerivesFromProviderResource(Type type)
     {
         Type? current = type.BaseType;
@@ -84,8 +99,12 @@ public class ProviderResourceTests
             .ToList();
         Assert.True(roleless.Count == 0, "Neither or both of IAggregateRoot and IEntity: " + string.Join(", ", roleless));
 
-        // Vm is on the provider without the base, so the scan above does not reach it.
+        // Vm, Network and FirewallRule are on the provider without the base, so the scan above does not reach them.
         Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Vm)));
         Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Vm)));
+        Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Network)));
+        Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Network)));
+        Assert.True(typeof(IEntity).IsAssignableFrom(typeof(FirewallRule)));
+        Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(FirewallRule)));
     }
 }

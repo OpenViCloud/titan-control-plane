@@ -42,7 +42,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
             n => n.TenantId == tenantId
                  && n.DesiredExistence == DesiredExistence.Exists
                  && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)), ct);
+                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)), ct);
 
     // Network.OccupiesPublicIpv6Quota
     public async Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
@@ -51,7 +51,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
                  && n.PublicIpv6Subnet != null
                  && n.DesiredExistence == DesiredExistence.Exists
                  && (n.CurrentExistence == CurrentExistence.Exists
-                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)), ct);
+                     || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)), ct);
 
     // !Network.IsDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) =>
@@ -80,7 +80,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         List<Network> holding = await db.Networks
             .Where(n => n.TenantId == tenantId
                         && (n.CurrentExistence == CurrentExistence.Exists
-                            || (n.CurrentExistence == CurrentExistence.NotCreated && n.PendingOperationId != null)))
+                            || (n.CurrentExistence == CurrentExistence.NotCreated && n.Operation.PendingId != null)))
             .AsNoTracking()
             .ToListAsync(ct);
 

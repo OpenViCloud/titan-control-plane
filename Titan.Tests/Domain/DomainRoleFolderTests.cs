@@ -93,6 +93,65 @@ public class DomainRoleFolderTests
     }
 
     [Fact]
+    public void EveryEntityFile_IsNamedAfterItsType_OrIsAPartialFileOfIt()
+    {
+        var offenders = new List<string>();
+        foreach (var folder in AggregateFolders())
+        {
+            string entities = Path.Combine(folder, Entities);
+            if (!Directory.Exists(entities))
+                continue;
+            var files = new Dictionary<string, string>();
+            foreach (var path in Directory.GetFiles(entities, "*.cs"))
+                files[Path.GetFileName(path)] = File.ReadAllText(path);
+            offenders.AddRange(EntityFileOffenders(Path.GetFileName(folder), files));
+        }
+
+        Assert.True(offenders.Count == 0,
+            "A file in Entities/ is <Entity>.cs, or <Entity>.<Part>.cs declaring partial class <Entity>: " + string.Join(" | ", offenders));
+    }
+
+    // An entity that grows past one screen is split like its root, by operation: <Entity>.<Part>.cs next to <Entity>.cs
+    // (titan-ops architecture/code-structure.md#domain-tree), read from the code outside comments.
+    private static List<string> EntityFileOffenders(string aggregate, Dictionary<string, string> files)
+    {
+        var offenders = new List<string>();
+        foreach (var name in files.Keys.Order(StringComparer.Ordinal))
+        {
+            var segments = name.Split('.');
+            if (segments.Length == 2)
+                continue;
+            if (segments.Length != 3)
+            {
+                offenders.Add($"{aggregate}: {name} is not <Entity>.cs or <Entity>.<Part>.cs");
+                continue;
+            }
+            var code = string.Join('\n', files[name].Split('\n')
+                .Where(line => !line.TrimStart().StartsWith("//", StringComparison.Ordinal)));
+            if (!Regex.IsMatch(code, $@"\bpartial\s+class\s+{segments[0]}\b"))
+                offenders.Add($"{aggregate}: {name} is not a partial file of {segments[0]}");
+        }
+        return offenders;
+    }
+
+    [Fact]
+    public void EntityFileOffenders_AcceptsOnlyTheEntityAndItsPartialFiles()
+    {
+        var files = new Dictionary<string, string>
+        {
+            ["FirewallRule.cs"] = "public partial class FirewallRule : IEntity { }",
+            ["FirewallRule.Deletion.cs"] = "namespace X;\npublic partial class FirewallRule\n{\n}",
+            ["FirewallRule.Helper.cs"] = "// public partial class FirewallRule\ninternal static class Helper { }",
+            ["FirewallRule.Part.Deep.cs"] = "public partial class FirewallRule { }",
+        };
+
+        Assert.Equal(
+            ["Network: FirewallRule.Helper.cs is not a partial file of FirewallRule",
+             "Network: FirewallRule.Part.Deep.cs is not <Entity>.cs or <Entity>.<Part>.cs"],
+            EntityFileOffenders("Network", files));
+    }
+
+    [Fact]
     public void AggregateFolders_HoldOnlyRoleFolders_WithNothingBelowThem()
     {
         var folders = AggregateFolders();

@@ -32,7 +32,7 @@ public class DesiredCurrentOwnershipTests
         ["VmSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
         ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
-        ["FirewallRule.EndWithItsNetwork"] = "part of Network.FinishOperation: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
+        ["FirewallRule.EndWithItsNetwork"] = "part of Network.DeleteSucceeded: the network's delete Done takes its rules with it (titan-ops architecture/resource-lifecycle.md#shape)",
         ["VmSnapshot.EndWithItsVm"] = "part of Vm.DeleteSucceeded: the VM's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
@@ -81,10 +81,12 @@ public class DesiredCurrentOwnershipTests
         var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
         string[] expected =
         [
-            "FirewallRule.FailOperation", "FirewallRule.FinishOperation", "FirewallRule.RecordWhatTheWorkerSaw",
+            "FirewallRule.CreateFailed", "FirewallRule.CreateSucceeded", "FirewallRule.DeleteFailed", "FirewallRule.DeleteSucceeded",
+            "FirewallRule.RecordWhatTheWorkerSaw",
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
-            "Network.FailFirewallRuleOperation", "Network.FailOperation", "Network.FinishFirewallRuleOperation",
-            "Network.FinishOperation", "Network.RecordWhatTheWorkerSaw",
+            "Network.CreateFailed", "Network.CreateSucceeded", "Network.DeleteFailed", "Network.DeleteSucceeded",
+            "Network.FirewallRuleCreateFailed", "Network.FirewallRuleCreateSucceeded", "Network.FirewallRuleDeleteFailed",
+            "Network.FirewallRuleDeleteSucceeded", "Network.RecordWhatTheWorkerSaw",
             "VmSnapshot.FailOperation", "VmSnapshot.FinishOperation", "VmSnapshot.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
             "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
@@ -144,9 +146,10 @@ public class DesiredCurrentOwnershipTests
 
     private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
     {
-        // Finish<Child>Operation and Fail<Child>Operation: a root's way in to its child's pair
-        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part both share.
-        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|RecordWhatTheWorkerSaw)$");
+        // Finish<Child>Operation and Fail<Child>Operation, or the <Child><Create|Delete><Succeeded|Failed> of a type that
+        // ends an operation by its kind: a root's way in to its child's reports
+        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part they share.
+        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|(?:FirewallRule)?(?:Create|Delete)(?:Succeeded|Failed)|RecordWhatTheWorkerSaw)$");
     }
 
     private static List<AggregateMethod> SplitAggregateMethods()

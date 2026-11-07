@@ -58,7 +58,7 @@ public class NetworkDeletionTests
         OperationTicket? ticket = await Deletion().DeleteAsync(network);
 
         Assert.Equal("net-ext", ticket!.ProviderId);
-        Assert.Equal((NetworkOperationKind.Delete, ticket.OperationId), (network.Pending!.Kind, network.Pending.Id));
+        Assert.Equal((NetworkOperationKind.Delete, ticket.OperationId), (network.Operation.Kind!.Value, network.Operation.PendingId!.Value));
         Assert.Equal(DesiredExistence.Deleted, network.DesiredExistence);
         Assert.Equal(NetworkTransition.Deleting, network.Transition);
     }
@@ -72,7 +72,7 @@ public class NetworkDeletionTests
         OperationTicket? ticket = await Deletion().DeleteAsync(network);
 
         Assert.Null(ticket);
-        Assert.Null(network.Pending);
+        Assert.Null(network.Operation.PendingId);
         Assert.True(network.IsDeleted);
     }
 

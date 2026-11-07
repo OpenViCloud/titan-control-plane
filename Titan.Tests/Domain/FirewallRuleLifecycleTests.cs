@@ -106,9 +106,9 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkRequestFailed("Firewall rule creation failed.", "raw");
 
-        Assert.Equal("Firewall rule creation failed.", rule.OperationFailureReason);
-        Assert.Equal("raw", rule.OperationFailureDetail);
-        Assert.NotNull(rule.OperationFailedAt);
+        Assert.Equal("Firewall rule creation failed.", rule.Operation.FailureReason);
+        Assert.Equal("raw", rule.Operation.FailureDetail);
+        Assert.NotNull(rule.Operation.FailedAt);
         Assert.Null(rule.Transition);
         Assert.Equal(CurrentExistence.NotCreated, rule.CurrentExistence);
     }
@@ -120,7 +120,7 @@ public class FirewallRuleLifecycleTests
 
         rule.MarkRequestFailed("late", "late");
 
-        Assert.Null(rule.OperationFailureReason);
+        Assert.Null(rule.Operation.FailureReason);
     }
 
     // ── Delete ──
@@ -201,7 +201,7 @@ public class FirewallRuleLifecycleTests
         rule.EndWithItsNetwork();
 
         Assert.True(rule.IsDeleted);
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public class FirewallRuleLifecycleTests
         rule.EndWithItsNetwork();
 
         Assert.Equal(CurrentExistence.Deleted, rule.CurrentExistence);
-        Assert.Null(rule.Pending);
+        Assert.Null(rule.Operation.PendingId);
         Assert.Null(rule.Transition);
     }
 
@@ -264,7 +264,7 @@ public class FirewallRuleLifecycleTests
     public void RequestDelete_OfAFailedCreateThatSawAState_WithNoId_LeavesNoStateBehind()
     {
         var rule = NewRule();
-        rule.FailOperation(rule.Pending!.Id, null, FirewallRuleState.enabled, "r", "d");
+        rule.ReportFailed(rule.Operation.PendingId!.Value, null, FirewallRuleState.enabled, "r", "d");
         Assert.Equal(FirewallRuleState.enabled, rule.CurrentState);
 
         Assert.Null(rule.Delete());

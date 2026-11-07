@@ -27,14 +27,17 @@ public class FirewallRuleConfiguration : IEntityTypeConfiguration<FirewallRule>
         builder.Property(r => r.CurrentState).HasColumnName("current_state").HasConversion<string>();
         builder.Property(r => r.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
         builder.Property(r => r.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        builder.Property(r => r.OperationFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(r => r.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(r => r.OperationFailedAt).HasColumnName("request_failed_at");
-        // The rule's own waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<FirewallRuleOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(r => r.Pending);
+        // The rule's own waiting operation and last failure, six columns the entity writes through one
+        // FirewallRuleOperation (titan-ops features/network/design.md#network-operation).
+        builder.OwnsOne(r => r.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.Kind).HasColumnName("pending_request_kind").HasConversion<string>();
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+        });
         builder.Ignore(r => r.Transition);
         builder.Ignore(r => r.Ports);
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
