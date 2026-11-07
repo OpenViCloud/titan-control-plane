@@ -30,7 +30,7 @@ public class ProviderResourceTests
                         && p.GetGenericTypeDefinition() == typeof(PendingOperation<>))
             .ToList();
         Assert.True(withPending.Count >= 7, $"the scan found only {withPending.Count} types with a pending operation");
-        // Vm has no Pending, so this scan does not reach it: Vm_KeepsItsOperationInOneVmOperation_AndNoTypeCopiesTheBasesState holds it.
+        // Vm has no Pending, so this scan does not reach it: Vm_KeepsItsOperationInASingleVmOperation_AndNoTypeCopiesTheBasesState holds it.
         Assert.DoesNotContain(typeof(Vm), withPending);
 
         HashSet<string> baseNames = BaseNames();
@@ -44,7 +44,7 @@ public class ProviderResourceTests
     // and the Incus status seen in one VmOperation under other names, and a type declaring the base's names is a copy of the
     // base instead of deriving from it.
     [Fact]
-    public void Vm_KeepsItsOperationInOneVmOperation_AndNoTypeCopiesTheBasesState()
+    public void Vm_KeepsItsOperationInASingleVmOperation_AndNoTypeCopiesTheBasesState()
     {
         Assert.False(DerivesFromProviderResource(typeof(Vm)));
         Assert.Null(typeof(Vm).GetProperty("Pending"));
