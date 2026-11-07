@@ -579,6 +579,17 @@ public class VmStateMachineTests
         Assert.Equal("42", vm.ExternalId);
     }
 
+    [Fact] // the refusal names every status the guard accepts, so a caller can read what to wait for
+    public void EnsureVolumeCanAttach_RefusedFromError_NamesEveryStatusItAccepts()
+    {
+        var thrown = Assert.Throws<BusinessException>(() => VmIn(Seed.Error).EnsureVolumeCanAttach());
+
+        foreach (VmStatus accepted in new[] { VmStatus.Running, VmStatus.Ready, VmStatus.Stopped, VmStatus.Frozen, VmStatus.Starting })
+        {
+            Assert.Contains(accepted.ToString(), thrown.Message);
+        }
+    }
+
     // ---------- Intent: rename ----------
 
     [Fact] // asserting the name did NOT change is the half that matters: a guard that throws after mutating is no guard
