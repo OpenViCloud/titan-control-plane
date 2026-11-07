@@ -114,7 +114,7 @@ namespace Titan.Domain.Aggregates.Vm
         {
             if (vm.Status == VmStatus.Creating)
             {
-                vm.CreateSucceeded(vm.PendingOperationId!.Value, externalId, null, null, null);
+                vm.CreateSucceeded(vm.Operation.PendingId!.Value, externalId, null, null, null);
             }
         }
 
@@ -124,14 +124,14 @@ namespace Titan.Domain.Aggregates.Vm
 
         /// The delete command's Done.
         public static bool MarkDeleted(this Vm vm) =>
-            vm.Status == VmStatus.Deleting && vm.DeleteSucceeded(vm.PendingOperationId!.Value);
+            vm.Status == VmStatus.Deleting && vm.DeleteSucceeded(vm.Operation.PendingId!.Value);
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this Vm vm, string? reason, string? detail, string? externalId = null)
         {
             if (vm.Status == VmStatus.Creating)
             {
-                vm.CreateFailed(vm.PendingOperationId!.Value, externalId, reason, detail);
+                vm.CreateFailed(vm.Operation.PendingId!.Value, externalId, reason, detail);
             }
         }
         /// The snapshot's create command's Done with the snapshot's provider id, reported through the VM that holds it:

@@ -27,64 +27,48 @@ public partial class Vm
             throw new BusinessException("VM_INVALID_STATUS", "VM can only be started while its instance is Stopped or Frozen.");
         }
         EnsureOnTheProvider();
+        VmStatus? seen = InstanceStatus;
         Status = VmStatus.Starting;
-        PendingOperationId = operationId;
-        PendingOperationAskedAt = DateTimeOffset.UtcNow;
+        Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
     }
 
-    /// The start command's Done: the status is the word Incus reports. Without a word the old one may be stale, so it is
+    /// The start command's Done: the status is the one Incus reports. Without one the old may be stale, so it is
     /// forgotten and the status is Unknown: the reconciler reports the instance next cycle.
-    public bool StartSucceeded(Guid operationId, VmStatus? word, string? ipAddress, string? publicIpv6Address)
+    public bool StartSucceeded(Guid operationId, VmStatus? status, string? ipAddress, string? publicIpv6Address)
     {
-        if (Status != VmStatus.Starting || PendingOperationId != operationId)
+        if (Status != VmStatus.Starting || Operation.PendingId != operationId)
         {
             return false;
         }
-        if (IsForeignStatus(word))
+        if (IsForeignStatus(status))
         {
-            throw new BusinessException("INVALID_STATUS", $"'{word}' is not an Incus status.");
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus status.");
         }
-        OperationFailureReason = null;
-        OperationFailureDetail = null;
-        OperationFailedAt = null;
-        if (word == null)
+        Operation = Operation.Done();
+        if (status == null)
         {
-            ObservedState = null;
             Status = VmStatus.Unknown;
         }
         else
         {
-            ObservedState = word;
             IpAddress = ipAddress;
             PublicIpv6Address = publicIpv6Address;
-            Status = word.Value;
+            Status = status.Value;
         }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
         return true;
     }
 
-    /// The start command gave up: back to the Incus word the VM holds (Unknown without one), with the reason
+    /// The start command gave up: back to the Incus status the VM holds (Unknown without one), with the reason
     /// (titan-ops architecture/desired-and-current.md#abandoned-operation).
     public bool StartFailed(Guid operationId, string? reason, string? detail)
     {
-        if (Status != VmStatus.Starting || PendingOperationId != operationId)
+        if (Status != VmStatus.Starting || Operation.PendingId != operationId)
         {
             return false;
         }
-        OperationFailureReason = reason;
-        OperationFailureDetail = detail;
-        OperationFailedAt = DateTimeOffset.UtcNow;
-        if (ObservedState == null)
-        {
-            Status = VmStatus.Unknown;
-        }
-        else
-        {
-            Status = ObservedState.Value;
-        }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
+        VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
+        Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
+        Status = resting;
         return true;
     }
 }

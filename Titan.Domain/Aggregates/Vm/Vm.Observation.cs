@@ -6,22 +6,27 @@ public partial class Vm
 {
     // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): a report of what the
     // provider is, so no guard and no operation ends here (titan-ops architecture/resource-lifecycle.md#invariants). While
-    // an operation waits the status stays; only the word is recorded. Running seen before a stop finishes is legitimate.
+    // an operation waits the status stays; only the status seen is recorded. Running seen before a stop finishes is
+    // legitimate.
 
-    /// The reconciler saw the instance with this Incus word and these addresses.
-    public void MarkObserved(VmStatus word, string? ipAddress, string? publicIpv6Address)
+    /// The reconciler saw the instance with this Incus status and these addresses.
+    public void MarkObserved(VmStatus status, string? ipAddress, string? publicIpv6Address)
     {
-        if (IsForeignStatus(word))
+        if (IsForeignStatus(status))
         {
-            throw new BusinessException("INVALID_STATUS", $"'{word}' is not an Incus status.");
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus status.");
         }
         if (IsDeleted || Status == VmStatus.Failed) return;
-        ObservedState = word;
         IpAddress = ipAddress;
         PublicIpv6Address = publicIpv6Address;
-        if (!IsTransitionStatus)
+        if (IsTransitionStatus)
         {
-            Status = word;
+            Operation = Operation.Saw(status);
+        }
+        else
+        {
+            Operation = Operation.Saw(null);
+            Status = status;
         }
     }
 
@@ -30,7 +35,7 @@ public partial class Vm
     public void MarkNotFound()
     {
         if (IsDeleted || Status == VmStatus.Failed) return;
-        ObservedState = null;
+        Operation = Operation.Saw(null);
         IpAddress = null;
         PublicIpv6Address = null;
         if (!IsTransitionStatus)

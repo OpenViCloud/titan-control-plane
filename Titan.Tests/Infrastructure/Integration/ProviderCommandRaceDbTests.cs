@@ -60,7 +60,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
         await using TitanDbContext read = pg.NewDbContext();
         Vm stored = await read.Vms.SingleAsync(v => v.Id == vm.Id);
         Assert.Equal(VmStatus.Deleting, stored.Status);
-        Guid deleteRequest = stored.PendingOperationId!.Value;
+        Guid deleteRequest = stored.Operation.PendingId!.Value;
         Assert.Equal(1, await read.ActivityEvents.CountAsync(e => e.ResourceId == vm.Id && e.Action == "vm.delete_requested"));
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Key == $"vm-delete-{vm.Id}-{deleteRequest}"));
         Assert.Equal(ProviderCommandStatus.Failed, (await read.ProviderCommands.SingleAsync(c => c.Key == $"vm-delete-{vm.Id}")).Status);

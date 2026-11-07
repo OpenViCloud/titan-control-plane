@@ -48,7 +48,7 @@ public class VmDeletionTests
 
         Assert.Equal("vm-ext", vm.ExternalId);
         Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Equal(delete, vm.PendingOperationId);
+        Assert.Equal(delete, vm.Operation.PendingId);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class VmDeletionTests
         await Deletion().DeleteAsync(vm, Guid.NewGuid());
 
         Assert.True(vm.IsDeleted); // nothing on the provider: no command, deleted here
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
     }
 
     // The VM's own refusal comes before the load balancer's: a snapshot being created makes the VM Snapshotting.

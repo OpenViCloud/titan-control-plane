@@ -13,7 +13,7 @@ public class VmSnapshotRequestLifecycleTests
     private static Vm RunningVm()
     {
         Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm42", VmStatus.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm42", VmStatus.Running, "10.0.0.5", null);
         return vm;
     }
 

@@ -9,7 +9,7 @@ public partial class Vm
     public void EnsureVolumeCanAttach()
     {
         if (!IncusCanAttach())
-            throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped or Frozen to attach a volume.");
+            throw new BusinessException("VM_INVALID_STATUS", "VM must be Running, Ready, Stopped, Frozen or Starting to attach a volume.");
     }
 
     /// A load balancer of this VM's network may send to it: the instance is on Incus and its delete was not pressed.

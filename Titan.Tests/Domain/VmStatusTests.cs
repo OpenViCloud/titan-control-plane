@@ -13,7 +13,7 @@ public class VmStatusTests
     private static Vm VmThat(VmStatus incusSays)
     {
         Vm vm = NewVm();
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-1-on-incus", incusSays, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-1-on-incus", incusSays, "10.0.0.5", null);
         return vm;
     }
 
@@ -25,8 +25,8 @@ public class VmStatusTests
         Vm vm = NewVm();
 
         Assert.Equal(VmStatus.Creating, vm.Status);
-        Assert.NotNull(vm.PendingOperationId);
-        Assert.Null(vm.ObservedState);
+        Assert.NotNull(vm.Operation.PendingId);
+        Assert.Null(vm.InstanceStatus);
     }
 
     [Theory]
@@ -42,7 +42,7 @@ public class VmStatusTests
         vm.Stop(stop);
 
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(stop, vm.PendingOperationId);
+        Assert.Equal(stop, vm.Operation.PendingId);
         Assert.Equal("vm-1-on-incus", vm.ExternalId);
     }
 
@@ -107,12 +107,12 @@ public class VmStatusTests
 
         Assert.Equal("VM_INVALID_STATUS", refused.Code);
         Assert.Equal(waitingStatus, vm.Status);
-        Assert.Equal(waiting, vm.PendingOperationId);
+        Assert.Equal(waiting, vm.Operation.PendingId);
         bool ended = resting == VmStatus.Running
             ? vm.StopSucceeded(waiting, VmStatus.Stopped, null, null)
             : vm.StartSucceeded(waiting, VmStatus.Running, null, null);
         Assert.True(ended);
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
     }
 
     // The refusal says why: another operation is running, not that the status is wrong for this move.
@@ -161,8 +161,8 @@ public class VmStatusTests
 
         Assert.True(ended);
         Assert.Equal(VmStatus.Stopped, vm.Status);
-        Assert.Equal(VmStatus.Stopped, vm.ObservedState);
-        Assert.Null(vm.PendingOperationId);
+        Assert.Equal(VmStatus.Stopped, vm.InstanceStatus);
+        Assert.Null(vm.Operation.PendingId);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class VmStatusTests
         Assert.True(first);
         Assert.False(second);
         Assert.Equal(VmStatus.Deleted, vm.Status);
-        Assert.Null(vm.ObservedState);
+        Assert.Null(vm.InstanceStatus);
     }
 
     [Fact]
@@ -190,14 +190,14 @@ public class VmStatusTests
         vm.StartSucceeded(start, null, null, null);
 
         Assert.Equal(VmStatus.Unknown, vm.Status);
-        Assert.Null(vm.ObservedState);
+        Assert.Null(vm.InstanceStatus);
     }
 
     [Fact]
     public void Done_OfTheCreate_WithoutAnIncusWord_IsUnknown_UntilTheFirstObservation()
     {
         Vm vm = NewVm();
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-1-on-incus", null, null, null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-1-on-incus", null, null, null);
         Assert.Equal(VmStatus.Unknown, vm.Status);
 
         vm.MarkObserved(VmStatus.Running, "10.0.0.5", null);
@@ -215,8 +215,8 @@ public class VmStatusTests
 
         Assert.True(ended);
         Assert.Equal(VmStatus.Running, vm.Status);
-        Assert.Equal("VM stop failed.", vm.OperationFailureReason);
-        Assert.Null(vm.PendingOperationId);
+        Assert.Equal("VM stop failed.", vm.Operation.FailureReason);
+        Assert.Null(vm.Operation.PendingId);
     }
 
     [Fact]
@@ -236,7 +236,7 @@ public class VmStatusTests
     public void Failed_OfTheCreate_BeforeAnInstance_IsFailed_AndDeletesHere()
     {
         Vm vm = NewVm();
-        vm.CreateFailed(vm.PendingOperationId!.Value, null, "VM provisioning failed.", "raw");
+        vm.CreateFailed(vm.Operation.PendingId!.Value, null, "VM provisioning failed.", "raw");
 
         Assert.Equal(VmStatus.Failed, vm.Status);
         Assert.False(vm.OccupiesQuota);
@@ -244,21 +244,21 @@ public class VmStatusTests
         Delete(vm);
 
         Assert.Equal(VmStatus.Deleted, vm.Status); // nothing on the provider: no command, deleted here
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
     }
 
     [Fact]
     public void Failed_OfTheCreate_AfterIncusMadeTheInstance_RestsInTheIncusWord_AndCounts()
     {
         Vm vm = NewVm();
-        vm.CreateFailed(vm.PendingOperationId!.Value, "vm-1-on-incus", "VM provisioning failed.", "raw");
+        vm.CreateFailed(vm.Operation.PendingId!.Value, "vm-1-on-incus", "VM provisioning failed.", "raw");
         vm.MarkObserved(VmStatus.Stopped, null, null);
 
         Assert.Equal(VmStatus.Stopped, vm.Status);
         Assert.True(vm.OccupiesQuota);
         Guid delete = Delete(vm);
         Assert.Equal(VmStatus.Deleting, vm.Status); // the instance is on the provider: its delete waits on a command
-        Assert.Equal(delete, vm.PendingOperationId);
+        Assert.Equal(delete, vm.Operation.PendingId);
     }
 
     // ---------- observations ----------
@@ -282,8 +282,8 @@ public class VmStatusTests
         vm.MarkObserved(VmStatus.Stopped, null, null);
 
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Stopped, vm.ObservedState);
-        Assert.NotNull(vm.PendingOperationId);
+        Assert.Equal(VmStatus.Stopped, vm.InstanceStatus);
+        Assert.NotNull(vm.Operation.PendingId);
     }
 
     [Fact]
@@ -293,7 +293,7 @@ public class VmStatusTests
 
         vm.MarkNotFound();
         Assert.Equal(VmStatus.NotFound, vm.Status);
-        Assert.Null(vm.ObservedState);
+        Assert.Null(vm.InstanceStatus);
 
         vm.MarkObserved(VmStatus.Running, "10.0.0.5", null);
         Assert.Equal(VmStatus.Running, vm.Status);
@@ -329,8 +329,8 @@ public class VmStatusTests
         Assert.Equal("INVALID_STATUS", observed.Code);
         Assert.Equal("INVALID_STATUS", reported.Code);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
-        Assert.Equal(stop, vm.PendingOperationId);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
+        Assert.Equal(stop, vm.Operation.PendingId);
     }
 
     [Fact]

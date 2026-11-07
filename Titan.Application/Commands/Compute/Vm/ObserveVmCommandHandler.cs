@@ -9,7 +9,7 @@ using Titan.Application.Exceptions;
 namespace Titan.Application.Commands.Compute.Vm;
 
 // The reconciler's observation of one VM (titan-ops architecture/resource-lifecycle.md#callback-routes): what Incus has,
-// recorded as the Incus word (the status follows it only while no request waits), ending no request: only the report carrying a request's id ends it
+// recorded as the Incus status (the status follows it only while no request waits), ending no request: only the report carrying a request's id ends it
 // (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated by X-Internal-Token at the endpoint, acting
 // for no tenant. Locked like every lifecycle handler, so an observation and a request on the same VM take turns.
 public class ObserveVmCommandHandler(IVmRepository repo)

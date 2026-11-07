@@ -49,7 +49,7 @@ public class PendingRequestsDbTests(PostgresFixture pg)
             new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
             new ActivityRecorder(new ActivityEventRepository(db), caller));
         await handler.HandleAsync(new StopVmCommand(vmId));
-        return (await vms.FindByIdAsync(vmId))!.PendingOperationId!.Value;
+        return (await vms.FindByIdAsync(vmId))!.Operation.PendingId!.Value;
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class PendingRequestsDbTests(PostgresFixture pg)
         await using TitanDbContext db = pg.NewDbContext();
         Vm stored = await db.Vms.SingleAsync(v => v.Id == vm.Id);
         Assert.Equal(VmStatus.Stopping, stored.Status);
-        Assert.NotNull(stored.PendingOperationId);
+        Assert.NotNull(stored.Operation.PendingId);
         int rows = await db.Set<ProviderCommand>().CountAsync(c => c.Key.StartsWith($"vm-stop-{vm.Id}-"));
         Assert.Equal(1, rows);
     }

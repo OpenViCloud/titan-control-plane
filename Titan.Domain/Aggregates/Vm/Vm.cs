@@ -23,20 +23,31 @@ public partial class Vm : IAggregateRoot
     /// an observation at rest writes it, each through the moves of Vm.Creation.cs, Vm.Start.cs, Vm.Stop.cs,
     /// Vm.Deletion.cs and Vm.Observation.cs.
     public VmStatus Status { get; private set; }
-    /// The Incus word the worker read last, word for word, null while none is known
-    /// (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim): one of the five statuses whose names
-    /// are Incus words (IsIncusStatus). Not on /v1: billing reads it, and the reconciler compares the instance with it.
-    public VmStatus? ObservedState { get; private set; }
-    /// The operation waiting on its command's report, or null. The aggregate only compares a report's id with it; the
-    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants). A snapshot
-    /// create or revert is not this id: the snapshot holds it, and the VM is Snapshotting with this one null.
-    public Guid? PendingOperationId { get; private set; }
-    public DateTimeOffset? PendingOperationAskedAt { get; private set; }
-    // An operation that failed (titan-ops architecture/desired-and-current.md#operation-failure): a fixed reason and the
-    // raw detail; the detail is admin-only. Cleared when a later operation ends Done.
-    public string? OperationFailureReason { get; private set; }
-    public string? OperationFailureDetail { get; private set; }
-    public DateTimeOffset? OperationFailedAt { get; private set; }
+    /// The operation waiting on its command's report, the last one that failed, and the Incus status seen while one waits
+    /// (titan-ops features/vm/design.md#vm-status). The aggregate only compares a report's id with the pending one; the
+    /// status says what the operation asks for (titan-ops architecture/resource-lifecycle.md#invariants). A snapshot create
+    /// or revert holds no id here: the snapshot holds it, and the VM is Snapshotting.
+    public VmOperation Operation { get; private set; } = VmOperation.None;
+
+    /// The Incus status the VM holds as far as Titan last knew, null when none is known (titan-ops
+    /// architecture/desired-and-current.md#provider-state-is-verbatim): the status seen while an operation waits, else
+    /// Status when it is one of the five Incus statuses (IsIncusStatus). Worked out, never stored, and not on /v1:
+    /// billing reads it, a lapse returns to it, and the reconciler compares the instance with it.
+    public VmStatus? InstanceStatus
+    {
+        get
+        {
+            if (Operation.LastSeenStatus != null)
+            {
+                return Operation.LastSeenStatus;
+            }
+            if (IsIncusStatus(Status))
+            {
+                return Status;
+            }
+            return null;
+        }
+    }
     public string? ExternalId { get; private set; }
     public string? IpAddress { get; private set; }
     public string? PublicIpv6Address { get; private set; }
@@ -67,13 +78,13 @@ public partial class Vm : IAggregateRoot
 
     /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
     /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A stop or delete in flight
-    /// still bills while Incus last said so. Not found and Deleted need no test of their own: both clear the word, and
-    /// a Deleted VM ignores every later observation. VmRepository.ListBillableAsync writes the same test in SQL.
+    /// still bills while Incus last said so. Not found and Deleted need no test of their own: neither holds an Incus
+    /// status, and a Deleted VM ignores every later observation. VmRepository.ListBillableAsync writes the same test in SQL.
     public bool IsBilled =>
-        ObservedState == VmStatus.Running
-        || ObservedState == VmStatus.Ready
-        || ObservedState == VmStatus.Frozen
-        || ObservedState == VmStatus.Error;
+        InstanceStatus == VmStatus.Running
+        || InstanceStatus == VmStatus.Ready
+        || InstanceStatus == VmStatus.Frozen
+        || InstanceStatus == VmStatus.Error;
 
     /// Holds its network while the instance may be on Incus, a delete in flight included (Incus refuses to delete a
     /// network an instance still uses), or while its create waits (titan-ops features/vm/design.md#counting-and-billing).
@@ -95,8 +106,8 @@ public partial class Vm : IAggregateRoot
         && Status != VmStatus.NotFound
         && Status != VmStatus.Deleted;
 
-    /// The five statuses that are Incus words for a QEMU instance (incus driver_qemu.go statusCode): the only ones a
-    /// worker reports, and the only ones ObservedState holds.
+    /// The five statuses that are Incus statuses for a QEMU instance (incus driver_qemu.go statusCode): the only ones a
+    /// worker reports, and the only ones InstanceStatus can be.
     public static bool IsIncusStatus(VmStatus status) =>
         status == VmStatus.Running
         || status == VmStatus.Ready
@@ -104,9 +115,9 @@ public partial class Vm : IAggregateRoot
         || status == VmStatus.Frozen
         || status == VmStatus.Error;
 
-    /// A worker reports only the five Incus words; any other status in a report is the worker's bug. No word at all
+    /// A worker reports only the five Incus statuses; any other status in a report is the worker's bug. No status at all
     /// (null) is a report that read none, not a foreign one.
-    private static bool IsForeignStatus(VmStatus? word) => word != null && !IsIncusStatus(word.Value);
+    private static bool IsForeignStatus(VmStatus? status) => status != null && !IsIncusStatus(status.Value);
 
     /// An operation waits on its command: only the report carrying its id moves the status on. A snapshot create or
     /// revert waits on its own command, whose id the snapshot holds (titan-ops features/vm/design.md#vm-snapshot).

@@ -28,62 +28,46 @@ public partial class Vm
             throw new BusinessException("VM_INVALID_STATUS", "VM can only be stopped while its instance is Running, Ready, Frozen or Error.");
         }
         EnsureOnTheProvider();
+        VmStatus? seen = InstanceStatus;
         Status = VmStatus.Stopping;
-        PendingOperationId = operationId;
-        PendingOperationAskedAt = DateTimeOffset.UtcNow;
+        Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
     }
 
-    /// The stop command's Done: the status is the word Incus reports; without a word, Unknown, as StartSucceeded.
-    public bool StopSucceeded(Guid operationId, VmStatus? word, string? ipAddress, string? publicIpv6Address)
+    /// The stop command's Done: the status is the one Incus reports; without one, Unknown, as StartSucceeded.
+    public bool StopSucceeded(Guid operationId, VmStatus? status, string? ipAddress, string? publicIpv6Address)
     {
-        if (Status != VmStatus.Stopping || PendingOperationId != operationId)
+        if (Status != VmStatus.Stopping || Operation.PendingId != operationId)
         {
             return false;
         }
-        if (IsForeignStatus(word))
+        if (IsForeignStatus(status))
         {
-            throw new BusinessException("INVALID_STATUS", $"'{word}' is not an Incus status.");
+            throw new BusinessException("INVALID_STATUS", $"'{status}' is not an Incus status.");
         }
-        OperationFailureReason = null;
-        OperationFailureDetail = null;
-        OperationFailedAt = null;
-        if (word == null)
+        Operation = Operation.Done();
+        if (status == null)
         {
-            ObservedState = null;
             Status = VmStatus.Unknown;
         }
         else
         {
-            ObservedState = word;
             IpAddress = ipAddress;
             PublicIpv6Address = publicIpv6Address;
-            Status = word.Value;
+            Status = status.Value;
         }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
         return true;
     }
 
-    /// The stop command gave up: back to the Incus word the VM holds (Unknown without one), with the reason.
+    /// The stop command gave up: back to the Incus status the VM holds (Unknown without one), with the reason.
     public bool StopFailed(Guid operationId, string? reason, string? detail)
     {
-        if (Status != VmStatus.Stopping || PendingOperationId != operationId)
+        if (Status != VmStatus.Stopping || Operation.PendingId != operationId)
         {
             return false;
         }
-        OperationFailureReason = reason;
-        OperationFailureDetail = detail;
-        OperationFailedAt = DateTimeOffset.UtcNow;
-        if (ObservedState == null)
-        {
-            Status = VmStatus.Unknown;
-        }
-        else
-        {
-            Status = ObservedState.Value;
-        }
-        PendingOperationId = null;
-        PendingOperationAskedAt = null;
+        VmStatus resting = InstanceStatus ?? VmStatus.Unknown;
+        Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
+        Status = resting;
         return true;
     }
 }

@@ -178,7 +178,7 @@ public static class VmReports
         string? externalId, string? reason, string? detail,
         IActivityRecorder activity, IVolumeRepository volumes, CancellationToken ct)
     {
-        // The move the VM waits in says which give-up this is. A worker sends no Incus word with a give-up.
+        // The move the VM waits in says which give-up this is. A worker sends no Incus status with a give-up.
         VmStatus waiting = vm.Status;
         bool ended;
         switch (waiting)

@@ -200,7 +200,7 @@ public class AdminResourceServiceTests
             && e.ResourceType == "vm" && e.ResourceId == vm.Id && e.OwnerTenantId == TenantB)), Times.Once);
         Assert.True(repo.SaveCalled);
         Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.NotNull(vm.PendingOperationId);
+        Assert.NotNull(vm.Operation.PendingId);
     }
 
     // titan-ops features/volume/design.md#vm-delete-releases-volumes — the admin path releases the VM's volumes like the
@@ -232,13 +232,13 @@ public class AdminResourceServiceTests
         var (svc, wf, audit) = Build(repo);
 
         await svc.DeleteVmAsync(vm.Id);
-        Guid firstRequest = vm.PendingOperationId!.Value;
+        Guid firstRequest = vm.Operation.PendingId!.Value;
         await svc.DeleteVmAsync(vm.Id);
 
         audit.Verify(a => a.Add(It.IsAny<AdminAuditLog>()), Times.Once);
         wf.Verify(w => w.EnqueueVmDeleteAsync(vm.Id, firstRequest, "one-123", TenantBProject, "vn-hcm-1", default), Times.Once);
         wf.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
-        Assert.Equal(firstRequest, vm.PendingOperationId!.Value);
+        Assert.Equal(firstRequest, vm.Operation.PendingId!.Value);
     }
 
     [Fact] // deleting a VM that is already gone is done, not an error, and audits nothing

@@ -8,7 +8,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// A VM's status and Incus word, and a network's and rule's desired/current state and existence pair, as Postgres stores them: what InMemory cannot show — filtered unique
+/// A VM's status and Incus status, and a network's and rule's desired/current state and existence pair, as Postgres stores them: what InMemory cannot show — filtered unique
 /// indexes and the column spelling (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
@@ -35,7 +35,7 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
         await using (TitanDbContext db = pg.NewDbContext())
         {
-            // The status and the Incus word are stored as their names.
+            // The status and the Incus status are stored as their names.
             var stored = (await db.Database
                 .SqlQueryRaw<string>("SELECT status || '|' || observed_state AS \"Value\" FROM core.vms WHERE id = {0}", vm.Id)
                 .ToListAsync())[0];
@@ -43,9 +43,9 @@ public class StateRoundTripDbTests(PostgresFixture pg)
 
             var reloaded = await db.Vms.SingleAsync(v => v.Id == vm.Id);
             Assert.Equal(VmStatus.Stopping, reloaded.Status);
-            Assert.Equal(VmStatus.Running, reloaded.ObservedState);
-            Assert.Equal(stop, reloaded.PendingOperationId!.Value);
-            Assert.Equal(vm.PendingOperationAskedAt!.Value, reloaded.PendingOperationAskedAt!.Value, TimeSpan.FromMilliseconds(1));
+            Assert.Equal(VmStatus.Running, reloaded.InstanceStatus);
+            Assert.Equal(stop, reloaded.Operation.PendingId!.Value);
+            Assert.Equal(vm.Operation.AskedAt!.Value, reloaded.Operation.AskedAt!.Value, TimeSpan.FromMilliseconds(1));
         }
     }
 

@@ -14,7 +14,7 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The two request routes of titan-ops architecture/resource-lifecycle.md#callback-routes at the handler: a report ends the
-// request it names and records its outcome once; an observation records the Incus word and ends nothing.
+// request it names and records its outcome once; an observation records the Incus status and ends nothing.
 public class VmRequestHandlerTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
@@ -56,13 +56,13 @@ public class VmRequestHandlerTests
     public async Task Done_OfTheCreate_StoresTheId_RecordsVmCreatedOnce_AndSaves()
     {
         Vm vm = Given(NewVm());
-        Guid createId = vm.PendingOperationId!.Value;
+        Guid createId = vm.Operation.PendingId!.Value;
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, createId, "Done", "42", Seen("Running", "10.0.0.5")));
 
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal("42", vm.ExternalId);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
         Assert.Equal(VmStatus.Running, vm.Status);
         Assert.Equal(["vm.created"], Outcomes());
         Assert.Equal(Owner.Id, _activity.Events.Single().OutcomeTenantId);
@@ -75,10 +75,10 @@ public class VmRequestHandlerTests
         Vm vm = Given(NewVm());
 
         var ex = await Assert.ThrowsAsync<BusinessException>(() =>
-            EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.PendingOperationId!.Value, "Done")));
+            EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.Operation.PendingId!.Value, "Done")));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.NotNull(vm.PendingOperationId);
+        Assert.NotNull(vm.Operation.PendingId);
         Assert.Equal(VmStatus.Creating, vm.Status);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -103,8 +103,8 @@ public class VmRequestHandlerTests
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, operationId, "Done", null, Seen(seen)));
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, operationId, "Done", null, Seen(seen)));
 
-        Assert.Null(vm.PendingOperationId);
-        Assert.Equal(seen, vm.ObservedState.ToString());
+        Assert.Null(vm.Operation.PendingId);
+        Assert.Equal(seen, vm.InstanceStatus.ToString());
         Assert.Equal(seen, vm.Status.ToString());
         Assert.Equal([outcome], Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once); // the repeat ends nothing and saves nothing
@@ -163,7 +163,7 @@ public class VmRequestHandlerTests
         Guid secondDelete = Guid.NewGuid();
         vm.Delete(secondDelete);
         Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Equal(secondDelete, vm.PendingOperationId);
+        Assert.Equal(secondDelete, vm.Operation.PendingId);
         volume.ReleaseFromVmDelete(vm.Id);
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.Null(volume.Pending);
@@ -212,10 +212,10 @@ public class VmRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, operationId, "Failed", Reason: "The VM could not be changed.", Detail: "raw"));
 
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal(VmStatus.Running, vm.Status);
-        Assert.Equal("The VM could not be changed.", vm.OperationFailureReason);
-        Assert.Equal("raw", vm.OperationFailureDetail);
+        Assert.Equal("The VM could not be changed.", vm.Operation.FailureReason);
+        Assert.Equal("raw", vm.Operation.FailureDetail);
         Assert.Equal([outcome], Outcomes());
     }
 
@@ -224,14 +224,14 @@ public class VmRequestHandlerTests
     {
         Vm vm = Given(NewVm());
 
-        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.PendingOperationId!.Value, "Failed", "45", null, "VM provisioning failed.", "raw"));
+        await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, vm.Operation.PendingId!.Value, "Failed", "45", null, "VM provisioning failed.", "raw"));
 
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal("45", vm.ExternalId);
-        // Incus made the instance, so the VM is not Failed: no Incus word was read yet.
+        // Incus made the instance, so the VM is not Failed: no Incus status was read yet.
         Assert.True(vm.HasAnInstance);
         Assert.Equal(VmStatus.Unknown, vm.Status);
-        Assert.Equal("VM provisioning failed.", vm.OperationFailureReason);
+        Assert.Equal("VM provisioning failed.", vm.Operation.FailureReason);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -246,10 +246,10 @@ public class VmRequestHandlerTests
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, Guid.NewGuid(), "Done", null, Seen("Stopped")));
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
-        Assert.Equal(stop, vm.PendingOperationId!.Value);
+        Assert.Equal(stop, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
-        Assert.Null(vm.OperationFailureReason);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
+        Assert.Null(vm.Operation.FailureReason);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -259,7 +259,7 @@ public class VmRequestHandlerTests
     {
         Vm resting = Given(RunningVm());
         await EndHandler().HandleAsync(new EndVmRequestCommand(resting.Id, Guid.NewGuid(), "Done", null, Seen("Stopped")));
-        Assert.Equal(VmStatus.Running, resting.ObservedState);
+        Assert.Equal(VmStatus.Running, resting.InstanceStatus);
         Assert.Equal(VmStatus.Running, resting.Status);
 
         Vm deleted = Given(RunningVm());
@@ -268,7 +268,7 @@ public class VmRequestHandlerTests
         deleted.MarkDeleted();
         await EndHandler().HandleAsync(new EndVmRequestCommand(deleted.Id, delete, "Done", null, Seen("Running")));
         Assert.True(deleted.IsDeleted);
-        Assert.Null(deleted.ObservedState);
+        Assert.Null(deleted.InstanceStatus);
 
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
@@ -298,19 +298,19 @@ public class VmRequestHandlerTests
         Assert.Equal("VM_NOT_FOUND", ex.Code);
     }
 
-    // ---------- Observe: the Incus word; the status follows only when nothing waits ----------
+    // ---------- Observe: the Incus status; the status follows only when nothing waits ----------
 
     [Fact]
     public async Task AnObservation_RecordsTheIncusWord_AndLeavesTheCreateWaiting()
     {
         Vm vm = Given(NewVm());
-        Guid createId = vm.PendingOperationId!.Value;
+        Guid createId = vm.Operation.PendingId!.Value;
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, true, Seen("Running", "10.0.0.5")));
 
-        Assert.Equal(createId, vm.PendingOperationId!.Value);
+        Assert.Equal(createId, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Creating, vm.Status);
-        Assert.Equal(VmStatus.Running, vm.ObservedState);
+        Assert.Equal(VmStatus.Running, vm.InstanceStatus);
         Assert.Equal("10.0.0.5", vm.IpAddress);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
@@ -325,10 +325,10 @@ public class VmRequestHandlerTests
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, false));
 
-        Assert.Equal(delete, vm.PendingOperationId!.Value);
-        // The waiting delete keeps the status; the observation only forgets the Incus word.
+        Assert.Equal(delete, vm.Operation.PendingId!.Value);
+        // The waiting delete keeps the status; the observation only forgets the Incus status.
         Assert.Equal(VmStatus.Deleting, vm.Status);
-        Assert.Null(vm.ObservedState);
+        Assert.Null(vm.InstanceStatus);
         Assert.Empty(_activity.Events);
     }
 
@@ -343,14 +343,14 @@ public class VmRequestHandlerTests
 
         await ObserveHandler().HandleAsync(new ObserveVmCommand(vm.Id, true, Seen("Stopped")));
 
-        Assert.Equal(stop, vm.PendingOperationId!.Value);
+        Assert.Equal(stop, vm.Operation.PendingId!.Value);
         Assert.Equal(VmStatus.Stopping, vm.Status);
-        Assert.Equal(VmStatus.Stopped, vm.ObservedState);
+        Assert.Equal(VmStatus.Stopped, vm.InstanceStatus);
         Assert.Empty(Outcomes());
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, stop, "Done", null, Seen("Stopped")));
 
-        Assert.Null(vm.PendingOperationId);
+        Assert.Null(vm.Operation.PendingId);
         Assert.Equal(VmStatus.Stopped, vm.Status);
         Assert.Equal(["vm.stopped"], Outcomes());
     }

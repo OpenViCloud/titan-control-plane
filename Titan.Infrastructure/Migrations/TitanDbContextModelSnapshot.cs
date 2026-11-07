@@ -1308,30 +1308,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("network_id");
 
-                    b.Property<string>("ObservedState")
-                        .HasColumnType("text")
-                        .HasColumnName("observed_state");
-
-                    b.Property<DateTimeOffset?>("OperationFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("OperationFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("OperationFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingOperationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
                     b.Property<string>("PublicIpv6Address")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_address");
@@ -2130,6 +2106,46 @@ namespace Titan.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_vms_vm_offerings_vm_offering_id");
+
+                    b.OwnsOne("Titan.Domain.Aggregates.Vm.VmOperation", "Operation", b1 =>
+                        {
+                            b1.Property<Guid>("VmId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("AskedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("pending_request_asked_at");
+
+                            b1.Property<DateTimeOffset?>("FailedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("request_failed_at");
+
+                            b1.Property<string>("FailureDetail")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_detail");
+
+                            b1.Property<string>("FailureReason")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_reason");
+
+                            b1.Property<string>("LastSeenStatus")
+                                .HasColumnType("text")
+                                .HasColumnName("observed_state");
+
+                            b1.Property<Guid?>("PendingId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("pending_request_id");
+
+                            b1.HasKey("VmId");
+
+                            b1.ToTable("vms", "core");
+
+                            b1.WithOwner()
+                                .HasForeignKey("VmId");
+                        });
+
+                    b.Navigation("Operation")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Vm.VmSnapshot", b =>

@@ -55,13 +55,15 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
-    // Vm.IsBilled
+    // Vm.IsBilled: InstanceStatus is the status seen while an operation waits, else Status. A row written before the
+    // status seen was kept only while an operation waits can still hold it at rest, equal to Status when that is an
+    // Incus status: same answer.
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => v.ObservedState == VmStatus.Running
-                        || v.ObservedState == VmStatus.Ready
-                        || v.ObservedState == VmStatus.Frozen
-                        || v.ObservedState == VmStatus.Error)
+            .Where(v => (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Running
+                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Ready
+                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Frozen
+                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Error)
             .AsNoTracking()
             .ToListAsync(ct);
 

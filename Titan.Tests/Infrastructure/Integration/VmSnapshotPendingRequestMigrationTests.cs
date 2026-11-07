@@ -152,7 +152,7 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         await MigrateToLatestAsync();
         Guid tenantId = Guid.NewGuid();
         Vm vm = Vm.Create(tenantId, Guid.NewGuid(), "vm-after", "m-mig", "tpl", "cluster-a", 20);
-        vm.CreateSucceeded(vm.PendingOperationId!.Value, "vm-after", VmStatus.Running, "10.0.0.5", null);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-after", VmStatus.Running, "10.0.0.5", null);
         VmSnapshot reverting = vm.WithSnapshot("reverting");
         vm.FinishSnapshotOperation(reverting.Id, reverting.Pending!.Id, "vm-after/s1");
         Guid revert = Guid.NewGuid();

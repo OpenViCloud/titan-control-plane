@@ -23,7 +23,7 @@ public class VmSnapshotStateMachineTests
         if (status == VmStatus.Running) vm.MarkRunning("vm42", "10.0.0.5");
         else if (status == VmStatus.Stopped) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkStopped(); }
         else if (status == VmStatus.Error) { vm.MarkRunning("vm42", "10.0.0.5"); vm.MarkObserved(VmStatus.Error, null); }
-        Assert.Equal(status, vm.ObservedState);
+        Assert.Equal(status, vm.InstanceStatus);
         return vm;
     }
 
