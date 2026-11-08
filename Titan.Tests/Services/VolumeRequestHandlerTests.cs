@@ -14,8 +14,8 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a volume and its snapshots, at the
-// handler: a report ends the request it names and records its outcome once; an observation writes current and ends
-// nothing.
+// handler: a report ends the request it names and records its outcome once; an observation writes what Incus holds and
+// ends nothing.
 public class VolumeRequestHandlerTests
 {
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
@@ -59,6 +59,10 @@ public class VolumeRequestHandlerTests
         return volume;
     }
 
+    private static Guid Waiting(Volume volume) => volume.Operation.PendingId!.Value;
+
+    private static Guid Waiting(VolumeSnapshot snapshot) => snapshot.Operation.PendingId!.Value;
+
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
     // ---------- the volume's request report ----------
@@ -68,10 +72,10 @@ public class VolumeRequestHandlerTests
     {
         Volume volume = Given(NewVolume());
 
-        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Done", "vol-ext"));
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Waiting(volume), "Done", "vol-ext"));
 
-        Assert.Null(volume.Pending);
-        Assert.Equal(("vol-ext", CurrentExistence.Exists), (volume.ExternalId, volume.CurrentExistence));
+        Assert.Null(volume.Operation.PendingId);
+        Assert.Equal(("vol-ext", VolumeStatus.Available), (volume.ExternalId, volume.Status));
         Assert.Equal(["volume.created"], Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -82,10 +86,11 @@ public class VolumeRequestHandlerTests
         Volume volume = Given(NewVolume());
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() =>
-            EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Done")));
+            EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Waiting(volume), "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.NotNull(volume.Pending);
+        Assert.Equal(VolumeStatus.Creating, volume.Status);
+        Assert.NotNull(volume.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -97,7 +102,8 @@ public class VolumeRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, attach.OperationId, "Done", AttachedTo: ["vm-ext"]));
 
-        Assert.Null(volume.Pending);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Equal(_vm.Id, volume.CurrentAttachedVmId);
         Assert.False(volume.CurrentAttachedElsewhere);
         Assert.Equal(["volume.attached"], Outcomes());
@@ -115,7 +121,8 @@ public class VolumeRequestHandlerTests
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, detach.OperationId, "Failed",
             Reason: "The volume request could not be completed.", Detail: "raw"));
 
-        Assert.Null(volume.Pending);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Equal(_vm.Id, volume.CurrentAttachedVmId);
         Assert.False(volume.CurrentAttachedElsewhere);
     }
@@ -136,7 +143,7 @@ public class VolumeRequestHandlerTests
                 break;
             case "Detach":
                 VolumeAttachProviderIds attach = volume.Attach(_vm);
-                volume.FinishOperation(attach.OperationId, null, true, _vm.Id, false);
+                volume.AttachSucceeded(attach.OperationId, null, true, _vm.Id, false);
                 requestId = volume.Detach().OperationId;
                 attachedTo = ["vm-ext"];
                 break;
@@ -148,10 +155,10 @@ public class VolumeRequestHandlerTests
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, requestId, "Failed",
             AttachedTo: kind == "Delete" ? null : attachedTo, Reason: "The volume request could not be completed.", Detail: "raw"));
 
-        Assert.Null(volume.Pending);
-        Assert.Equal(DesiredExistence.Exists, volume.DesiredExistence);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Equal(volume.CurrentAttachedVmId, volume.DesiredAttachedVmId);
-        Assert.Equal(("The volume request could not be completed.", "raw"), (volume.OperationFailureReason, volume.OperationFailureDetail));
+        Assert.Equal(("The volume request could not be completed.", "raw"), (volume.Operation.FailureReason, volume.Operation.FailureDetail));
         Assert.Equal([outcome], Outcomes());
     }
 
@@ -160,11 +167,11 @@ public class VolumeRequestHandlerTests
     {
         Volume volume = Given(NewVolume());
 
-        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, volume.Pending!.Id, "Failed", "vol-ext",
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Waiting(volume), "Failed", "vol-ext",
             Reason: "Volume creation failed.", Detail: "raw"));
 
-        Assert.Equal(("vol-ext", CurrentExistence.Exists), (volume.ExternalId, volume.CurrentExistence));
-        Assert.Equal("Volume creation failed.", volume.OperationFailureReason);
+        Assert.Equal(("vol-ext", VolumeStatus.Available), (volume.ExternalId, volume.Status));
+        Assert.Equal("Volume creation failed.", volume.Operation.FailureReason);
         Assert.Empty(Outcomes());
     }
 
@@ -177,7 +184,7 @@ public class VolumeRequestHandlerTests
         volume.DeleteSnapshot(leaving.Id);
         VolumeSnapshot gone = volume.WithSnapshot("gone");
         volume.MarkSnapshotCreated(gone.Id, "vol-ext/s2");
-        volume.FinishSnapshotOperation(gone.Id, volume.DeleteSnapshot(gone.Id)!.OperationId, null);
+        volume.SnapshotDeleteSucceeded(gone.Id, volume.DeleteSnapshot(gone.Id)!.OperationId);
         VolumeSnapshot lost = volume.WithSnapshot("lost");
         volume.MarkSnapshotCreated(lost.Id, "vol-ext/s3");
         volume.MarkSnapshotNotFound(lost.Id);
@@ -185,7 +192,7 @@ public class VolumeRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, delete.OperationId, "Done"));
 
-        Assert.Equal(CurrentExistence.Deleted, volume.CurrentExistence);
+        Assert.Equal(VolumeStatus.Deleted, volume.Status);
         Assert.Equal(["volume.deleted", "volume_snapshot.deleted"], Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "volume_snapshot.deleted").ResourceId);
     }
@@ -198,8 +205,51 @@ public class VolumeRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Guid.NewGuid(), "Failed", Reason: "stale"));
 
-        Assert.Equal(delete.OperationId, volume.Pending!.Id);
-        Assert.Null(volume.OperationFailureReason);
+        Assert.Equal(VolumeStatus.Deleting, volume.Status);
+        Assert.Equal(delete.OperationId, volume.Operation.PendingId);
+        Assert.Null(volume.Operation.FailureReason);
+        Assert.Empty(_activity.Events);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // The status the volume waits in says which operation a report can end: when nothing waits (the volume rests, gave
+    // up its create, or is gone) there is none, so the report is ignored, records nothing and saves nothing.
+    [Theory]
+    [InlineData("Rests", "Done")]
+    [InlineData("Rests", "Failed")]
+    [InlineData("CreateFailed", "Done")]
+    [InlineData("CreateFailed", "Failed")]
+    [InlineData("Deleted", "Done")]
+    [InlineData("Deleted", "Failed")]
+    public async Task AReport_WhenNothingWaits_IsIgnored_RecordsNothing_AndSavesNothing(string situation, string outcome)
+    {
+        Volume volume;
+        if (situation == "CreateFailed")
+        {
+            volume = NewVolume();
+            volume.CreateFailed(Waiting(volume), null, false, null, false, "Volume creation failed.", "raw");
+        }
+        else
+        {
+            volume = RestingVolume();
+            if (situation == "Deleted")
+            {
+                volume.DeleteSucceeded(volume.Delete()!.OperationId, null, false, null, false);
+            }
+        }
+        Given(volume);
+        VolumeStatus status = volume.Status;
+        string? externalId = volume.ExternalId;
+        string? failureReason = volume.Operation.FailureReason;
+
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, Guid.NewGuid(), outcome, "vol-late",
+            AttachedTo: ["vm-ext"], Reason: "stale", Detail: "stale"));
+
+        Assert.Equal(status, volume.Status);
+        Assert.Equal(externalId, volume.ExternalId);
+        Assert.Equal(failureReason, volume.Operation.FailureReason);
+        Assert.Null(volume.Operation.PendingId);
+        Assert.Null(volume.CurrentAttachedVmId);
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -233,8 +283,10 @@ public class VolumeRequestHandlerTests
 
         await ObserveHandler().HandleAsync(new ObserveVolumeCommand(volume.Id, false));
 
-        Assert.Equal(CurrentExistence.NotFound, volume.CurrentExistence);
-        Assert.Equal(delete.OperationId, volume.Pending!.Id);
+        // The delete keeps waiting; the observation is only what Incus was last seen to hold: not the volume.
+        Assert.Equal(VolumeStatus.Deleting, volume.Status);
+        Assert.Null(volume.InstanceStatus);
+        Assert.Equal(delete.OperationId, volume.Operation.PendingId);
         Assert.Empty(_activity.Events);
     }
 
@@ -248,7 +300,8 @@ public class VolumeRequestHandlerTests
         Assert.True(volume.CurrentAttachedElsewhere);
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
-        Assert.Null(volume.Pending);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Empty(_activity.Events);
     }
 
@@ -263,12 +316,13 @@ public class VolumeRequestHandlerTests
         await ObserveHandler().HandleAsync(new ObserveVolumeCommand(volume.Id, true, ["vm-ext"]));
 
         Assert.Equal(_vm.Id, volume.CurrentAttachedVmId);
-        Assert.Equal(attach.OperationId, volume.Pending!.Id);
+        Assert.Equal(VolumeStatus.Attaching, volume.Status);
+        Assert.Equal(attach.OperationId, volume.Operation.PendingId);
         Assert.Empty(_activity.Events);
 
         await EndHandler().HandleAsync(new EndVolumeRequestCommand(volume.Id, attach.OperationId, "Done", AttachedTo: ["vm-ext"]));
 
-        Assert.Null(volume.Pending);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
         Assert.Equal(["volume.attached"], Outcomes());
     }
 
@@ -281,9 +335,10 @@ public class VolumeRequestHandlerTests
         VolumeSnapshot snapshot = volume.WithSnapshot("s1");
 
         await EndSnapshotHandler().HandleAsync(
-            new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "vol-ext/s1"));
+            new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, Waiting(snapshot), "Done", "vol-ext/s1"));
 
-        Assert.Null(snapshot.Pending);
+        Assert.Equal(VolumeSnapshotStatus.Available, snapshot.Status);
+        Assert.Null(snapshot.Operation.PendingId);
         Assert.Equal("vol-ext/s1", snapshot.ExternalId);
         Assert.Equal(["volume_snapshot.created"], Outcomes());
     }
@@ -295,10 +350,11 @@ public class VolumeRequestHandlerTests
         VolumeSnapshot snapshot = volume.WithSnapshot("s1");
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => EndSnapshotHandler().HandleAsync(
-            new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done")));
+            new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, Waiting(snapshot), "Done")));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.NotNull(snapshot.Pending);
+        Assert.Equal(VolumeSnapshotStatus.Creating, snapshot.Status);
+        Assert.NotNull(snapshot.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -313,9 +369,48 @@ public class VolumeRequestHandlerTests
         await EndSnapshotHandler().HandleAsync(
             new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, delete.OperationId, "Failed", Reason: "could not"));
 
-        Assert.Null(snapshot.Pending);
-        Assert.Equal(DesiredExistence.Exists, snapshot.DesiredExistence);
+        Assert.Equal(VolumeSnapshotStatus.Available, snapshot.Status);
+        Assert.Null(snapshot.Operation.PendingId);
         Assert.Equal(["volume_snapshot.delete_failed"], Outcomes());
+    }
+
+    // Same for a snapshot: no waiting operation, no method to pick, nothing recorded or saved.
+    [Theory]
+    [InlineData("Rests", "Done")]
+    [InlineData("Rests", "Failed")]
+    [InlineData("CreateFailed", "Done")]
+    [InlineData("CreateFailed", "Failed")]
+    [InlineData("Deleted", "Done")]
+    [InlineData("Deleted", "Failed")]
+    public async Task ASnapshotReport_WhenNothingWaits_IsIgnored_RecordsNothing_AndSavesNothing(string situation, string outcome)
+    {
+        Volume volume = Given(RestingVolume());
+        VolumeSnapshot snapshot = volume.WithSnapshot("s1");
+        if (situation == "CreateFailed")
+        {
+            volume.SnapshotCreateFailed(snapshot.Id, Waiting(snapshot), null, "Snapshot creation failed.", "raw");
+        }
+        else
+        {
+            volume.MarkSnapshotCreated(snapshot.Id, "vol-ext/s1");
+            if (situation == "Deleted")
+            {
+                volume.SnapshotDeleteSucceeded(snapshot.Id, volume.DeleteSnapshot(snapshot.Id)!.OperationId);
+            }
+        }
+        VolumeSnapshotStatus status = snapshot.Status;
+        string? externalId = snapshot.ExternalId;
+        string? failureReason = snapshot.Operation.FailureReason;
+
+        await EndSnapshotHandler().HandleAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, Guid.NewGuid(),
+            outcome, "vol-ext/late", Reason: "stale", Detail: "stale"));
+
+        Assert.Equal(status, snapshot.Status);
+        Assert.Equal(externalId, snapshot.ExternalId);
+        Assert.Equal(failureReason, snapshot.Operation.FailureReason);
+        Assert.Null(snapshot.Operation.PendingId);
+        Assert.Empty(_activity.Events);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -337,8 +432,9 @@ public class VolumeRequestHandlerTests
 
         await ObserveSnapshotHandler().HandleAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
 
-        Assert.Equal(CurrentExistence.NotFound, snapshot.CurrentExistence);
-        Assert.Equal(VolumeSnapshotOperationKind.Create, snapshot.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotStatus.Creating, snapshot.Status);
+        Assert.Null(snapshot.InstanceStatus);
+        Assert.NotNull(snapshot.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

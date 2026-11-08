@@ -1247,10 +1247,11 @@ public class VmServiceTests
 
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
         Assert.Null(volume.DesiredAttachedVmId);
-        Assert.Null(volume.Pending);
+        Assert.Null(volume.Operation.PendingId);
         await EndWaiting(vm, "Done");
 
-        Assert.Null(volume.Transition);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
         volume.Delete();
@@ -1269,7 +1270,8 @@ public class VmServiceTests
         await EndWaiting(vm, "Done");
 
         Assert.Null(volume.CurrentAttachedVmId);
-        Assert.Null(volume.Transition);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
+        Assert.Null(volume.Operation.PendingId);
     }
 
     private Volume AttachedVolume(Vm vm)

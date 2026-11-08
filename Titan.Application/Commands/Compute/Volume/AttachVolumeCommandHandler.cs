@@ -31,8 +31,8 @@ public class AttachVolumeCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this volume is already attaching
         // or attached to THIS VM. A repeat succeeds like the first request and sends nothing. Another VM falls
         // through and is refused.
-        bool attachIsWaiting = volume.Transition == VolumeTransition.Attaching;
-        bool restsAttached = volume.Transition == null && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId;
+        bool attachIsWaiting = volume.Status == VolumeStatus.Attaching;
+        bool restsAttached = volume.Operation.PendingId == null && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId;
         bool attachingOrAttached = attachIsWaiting || restsAttached;
         bool toThisVm = volume.DesiredAttachedVmId == vm.Id;
         if (attachingOrAttached && toThisVm)

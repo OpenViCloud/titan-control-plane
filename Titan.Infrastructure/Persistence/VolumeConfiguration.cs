@@ -23,24 +23,25 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
             .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id")
             .OnDelete(DeleteBehavior.Restrict);
         builder.Property(v => v.SizeGb).HasColumnName("size_gb");
-        // Incus has no status word for it: existence only (titan-ops architecture/desired-and-current.md#existence-axis).
-        builder.Property(v => v.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(v => v.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        // The one waiting request, as three columns the aggregate writes together (titan-ops architecture/resource-lifecycle.md#shape);
-        // Volume.Pending is built from them on read. Properties of the RequestingRoot base, mapped by name.
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<VolumeOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(v => v.Pending);
-        builder.Ignore(v => v.Transition);
+        // titan-ops features/volume/design.md#volume-state-is-existence: status is the one status. The volume's own waiting
+        // operation and last failure are a value object kept in this table's columns, never null, with observed_state
+        // whether Incus was last seen holding the volume while an operation waits (titan-ops features/volume/design.md#volume-data-model).
+        builder.Property(v => v.Status).HasColumnName("status").HasConversion<string>().IsRequired();
+        builder.OwnsOne(v => v.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+            o.Property(x => x.LastSeenStatus).HasColumnName("observed_state").HasConversion<string>();
+        });
+        builder.Ignore(v => v.InstanceStatus);
         builder.Property(v => v.ExternalId).HasColumnName("external_id");
         // The attachment pair: Incus's used_by (only observations) and the customer's ask (only requests).
         builder.Property(v => v.CurrentAttachedVmId).HasColumnName("current_attached_vm_id");
         builder.Property(v => v.CurrentAttachedElsewhere).HasColumnName("current_attached_elsewhere");
         builder.Property(v => v.DesiredAttachedVmId).HasColumnName("desired_attached_vm_id");
-        builder.Property(v => v.OperationFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(v => v.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(v => v.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(v => v.TenantId);

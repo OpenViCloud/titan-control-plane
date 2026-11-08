@@ -7,7 +7,7 @@ using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 namespace Titan.Application.Commands.Compute.VolumeSnapshot;
 
 // The reconciler's observation of one volume snapshot (titan-ops architecture/resource-lifecycle.md#callback-routes):
-// current only, no request ends here. Authenticated by X-Internal-Token at the endpoint; the volume's row is locked like
+// recorded without ending a request. Authenticated by X-Internal-Token at the endpoint; the volume's row is locked like
 // every lifecycle handler's.
 public class ObserveVolumeSnapshotCommandHandler(IVolumeRepository repo)
 {

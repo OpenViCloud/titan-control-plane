@@ -24,8 +24,8 @@ public class DetachVolumeCommandHandler(
         // A detach is already running, or no instance uses the volume and none is asked for. One used outside Titan
         // is not a repeat: the aggregate refuses it.
         // Answer like the first request: nothing recorded, nothing sent.
-        bool detachIsWaiting = volume.Transition == VolumeTransition.Detaching;
-        bool restsUnattached = volume.Transition == null
+        bool detachIsWaiting = volume.Status == VolumeStatus.Detaching;
+        bool restsUnattached = volume.Operation.PendingId == null
                             && volume.CurrentAttachedVmId == null
                             && volume.DesiredAttachedVmId == null
                             && !volume.CurrentAttachedElsewhere;

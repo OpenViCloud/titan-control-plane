@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
@@ -13,7 +12,7 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
     // !VolumeSnapshot.IsDeleted
     public async Task<List<VolumeSnapshot>> FindByVolumeIdAsync(Guid volumeId, CancellationToken ct = default) =>
         await db.VolumeSnapshots
-            .Where(s => s.VolumeId == volumeId && s.CurrentExistence != CurrentExistence.Deleted)
+            .Where(s => s.VolumeId == volumeId && s.Status != VolumeSnapshotStatus.Deleted)
             .OrderByDescending(s => s.CreatedAt)
             .AsNoTracking()
             .ToListAsync(ct);
@@ -21,7 +20,9 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
     // VolumeSnapshot.IsBilled
     public async Task<List<VolumeSnapshot>> ListBillableAsync(CancellationToken ct = default) =>
         await db.VolumeSnapshots
-            .Where(s => s.CurrentExistence == CurrentExistence.Exists)
+            .Where(s => s.Status == VolumeSnapshotStatus.Available
+                     || ((s.Status == VolumeSnapshotStatus.Creating || s.Status == VolumeSnapshotStatus.Deleting)
+                         && s.Operation.LastSeenStatus == VolumeSnapshotStatus.Available))
             .AsNoTracking()
             .ToListAsync(ct);
 
@@ -29,7 +30,7 @@ public class VolumeSnapshotRepository(TitanDbContext db) : IVolumeSnapshotReposi
     public async Task<List<VolumeSnapshot>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.VolumeSnapshots
             .Where(s => s.ExternalId != null
-                     && s.CurrentExistence != CurrentExistence.Deleted
+                     && s.Status != VolumeSnapshotStatus.Deleted
                      && db.Volumes.Any(v => v.Id == s.VolumeId && v.ClusterId == clusterId))
             .AsNoTracking()
             .ToListAsync(ct);

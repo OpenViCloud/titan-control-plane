@@ -1,7 +1,7 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Admin.Backup.Contracts;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
+using VolumeStatus = Titan.Domain.Aggregates.Volume.VolumeStatus;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Admin.Backup;
@@ -34,7 +34,7 @@ public class ScheduleBackupsCommandHandler(
         foreach (var volume in await volumes.ListBillableAsync(ct))
         {
             string? externalId = volume.ExternalId;
-            if (volume.CurrentExistence != CurrentExistence.Exists || externalId == null)
+            if (volume.InstanceStatus != VolumeStatus.Available || externalId == null)
             {
                 continue;
             }

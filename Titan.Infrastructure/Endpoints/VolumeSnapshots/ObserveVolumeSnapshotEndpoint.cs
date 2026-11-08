@@ -7,7 +7,7 @@ using Titan.Infrastructure.Endpoints.Internal;
 namespace Titan.Infrastructure.Endpoints.VolumeSnapshots;
 
 // The reconciler's observation of one volume snapshot (titan-ops architecture/resource-lifecycle.md#callback-routes):
-// whether Incus has it. Writes current only.
+// whether Incus has it. Ends no request.
 public class ObserveVolumeSnapshotEndpoint(ObserveVolumeSnapshotCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVolumeSnapshotBody>
 {

@@ -8,7 +8,7 @@ using Titan.Domain.Values;
 namespace Titan.Application.Commands.Compute.Volume;
 
 // The reconciler's observation of one volume (titan-ops architecture/resource-lifecycle.md#callback-routes): what Incus has,
-// written to current; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated by
+// recorded without ending a request; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated by
 // X-Internal-Token at the endpoint, acting for no tenant. Locked like every lifecycle handler, so an observation and a
 // request on the same volume take turns.
 public class ObserveVolumeCommandHandler(

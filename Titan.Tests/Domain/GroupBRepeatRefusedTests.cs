@@ -48,7 +48,7 @@ public class GroupBRepeatRefusedTests
         volume.Delete();
 
         Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.Delete()).Code);
-        Assert.Equal(VolumeTransition.Deleting, volume.Transition);
+        Assert.Equal(VolumeStatus.Deleting, volume.Status);
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class GroupBRepeatRefusedTests
         volume.Attach(vm);
 
         Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.Attach(vm)).Code);
-        Assert.Equal(VolumeTransition.Attaching, volume.Transition);
+        Assert.Equal(VolumeStatus.Attaching, volume.Status);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
     }
 
@@ -84,7 +84,7 @@ public class GroupBRepeatRefusedTests
         volume.Detach();
 
         Assert.Equal("VOLUME_INVALID_STATE", Assert.Throws<BusinessException>(() => volume.Detach()).Code);
-        Assert.Equal(VolumeTransition.Detaching, volume.Transition);
+        Assert.Equal(VolumeStatus.Detaching, volume.Status);
     }
 
     [Fact]
@@ -126,6 +126,6 @@ public class GroupBRepeatRefusedTests
         snapshot.Delete();
 
         Assert.Equal("VOLUME_SNAPSHOT_INVALID_STATE", Assert.Throws<BusinessException>(() => snapshot.Delete()).Code);
-        Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
     }
 }

@@ -5,7 +5,7 @@ using Titan.Application.Queries.Platform.Backup.Contracts;
 using Titan.Domain.Aggregates.BackupObservation;
 using Titan.Domain.Aggregates.BackupRecord;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
+using VolumeStatus = Titan.Domain.Aggregates.Volume.VolumeStatus;
 
 namespace Titan.Application.Queries.Admin.Backup;
 
@@ -36,7 +36,7 @@ public class ListDiskBackupsQueryHandler(
         }
         foreach (var volume in await volumes.ListBillableAsync(ct))
         {
-            if (volume.CurrentExistence != CurrentExistence.Exists || volume.ExternalId == null)
+            if (volume.InstanceStatus != VolumeStatus.Available || volume.ExternalId == null)
             {
                 continue;
             }

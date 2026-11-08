@@ -217,7 +217,8 @@ public class AdminResourceServiceTests
 
         // Released, not a request of the volume (titan-ops architecture/resource-lifecycle.md#kinds): nothing waits on it.
         Assert.Null(volume.DesiredAttachedVmId);
-        Assert.Null(volume.Pending);
+        Assert.Null(volume.Operation.PendingId);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
     }
 
     // titan-ops features/vm/design.md#admin-delete-audit — a repeated admin delete writes the audit row once and sends

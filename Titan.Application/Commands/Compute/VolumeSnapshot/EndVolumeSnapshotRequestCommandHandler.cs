@@ -25,22 +25,40 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
             ?? throw new NotFoundException("VOLUME_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
 
-        VolumeSnapshotOperationKind? ended;
-        if (outcome == OperationOutcome.Done)
-        {
-            ended = volume.FinishSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId);
-        }
-        else
-        {
-            ended = volume.FailSnapshotOperation(snapshot.Id, command.RequestId, command.ExternalId, command.Reason,
-                command.Detail);
-        }
-        if (ended == null)
+        // The status the snapshot waits in says which operation the report ends.
+        VolumeSnapshotStatus waiting = snapshot.Status;
+        bool ended = EndTheOperation(volume, snapshot.Id, waiting, outcome, command);
+        if (!ended)
         {
             return;
         }
 
-        VolumeReports.RecordSnapshotEnded(snapshot, ended.Value, outcome, activity);
+        VolumeReports.RecordSnapshotEnded(snapshot, waiting, outcome, activity);
         await repo.SaveAsync(ct);
+    }
+
+    private static bool EndTheOperation(VolumeAggregate volume, Guid snapshotId, VolumeSnapshotStatus waiting,
+        OperationOutcome outcome, EndVolumeSnapshotRequestCommand command)
+    {
+        bool done = outcome == OperationOutcome.Done;
+        switch (waiting)
+        {
+            case VolumeSnapshotStatus.Creating:
+                if (done)
+                {
+                    return volume.SnapshotCreateSucceeded(snapshotId, command.RequestId, command.ExternalId);
+                }
+                return volume.SnapshotCreateFailed(snapshotId, command.RequestId, command.ExternalId, command.Reason,
+                    command.Detail);
+            case VolumeSnapshotStatus.Deleting:
+                if (done)
+                {
+                    return volume.SnapshotDeleteSucceeded(snapshotId, command.RequestId);
+                }
+                return volume.SnapshotDeleteFailed(snapshotId, command.RequestId, command.Reason, command.Detail);
+            default:
+                // Nothing waits: the report is stale.
+                return false;
+        }
     }
 }

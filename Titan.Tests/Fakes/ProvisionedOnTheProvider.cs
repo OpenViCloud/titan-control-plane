@@ -316,42 +316,41 @@ namespace Titan.Domain.Aggregates.Vm
 
 namespace Titan.Domain.Aggregates.Volume
 {
-    /// A volume's and a volume snapshot's requests end by their own command's report
+    /// A volume's and a volume snapshot's operations end by their own command's report
     /// (titan-ops architecture/resource-lifecycle.md#shape); these replay the worker's reports under the one-call names
-    /// test setups used before, through the real FinishOperation and FailOperation. A replay for a request not waiting
-    /// does nothing.
+    /// test setups used before, through the real per-operation methods. A replay for an operation not waiting does
+    /// nothing, like the report it stands for.
     public static class VolumeProvisionedOnTheProvider
     {
         /// The create (or restore) command's Done with the volume name.
         public static void MarkCreated(this Volume volume, string externalId)
         {
-            if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
+            if (volume.Status == VolumeStatus.Creating)
             {
-                volume.FinishOperation(create.Id, externalId, false, null, false);
+                volume.CreateSucceeded(volume.Operation.PendingId!.Value, externalId, false, null, false);
             }
         }
 
         /// The attach command's Done, reading the volume used by that VM.
         public static void MarkAttached(this Volume volume, Guid vmId)
         {
-            if (volume.Pending is { Kind: VolumeOperationKind.Attach } attach)
+            if (volume.Status == VolumeStatus.Attaching)
             {
-                volume.FinishOperation(attach.Id, null, true, vmId, false);
+                volume.AttachSucceeded(volume.Operation.PendingId!.Value, null, true, vmId, false);
             }
         }
 
-        /// The delete command's Done.
-        public static VolumeOperationKind? MarkDeleted(this Volume volume) =>
-            volume.Pending is { Kind: VolumeOperationKind.Delete } delete
-                ? volume.FinishOperation(delete.Id, null, false, null, false)
-                : null;
+        /// The delete command's Done; false when no delete waited.
+        public static bool MarkDeleted(this Volume volume) =>
+            volume.Status == VolumeStatus.Deleting
+            && volume.DeleteSucceeded(volume.Operation.PendingId!.Value, null, false, null, false);
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this Volume volume, string? reason, string? detail, string? externalId = null)
         {
-            if (volume.Pending is { Kind: VolumeOperationKind.Create } create)
+            if (volume.Status == VolumeStatus.Creating)
             {
-                volume.FailOperation(create.Id, externalId, false, null, false, reason, detail);
+                volume.CreateFailed(volume.Operation.PendingId!.Value, externalId, false, null, false, reason, detail);
             }
         }
 
@@ -359,9 +358,9 @@ namespace Titan.Domain.Aggregates.Volume
         public static void MarkSnapshotCreated(this Volume volume, Guid snapshotId, string externalId)
         {
             VolumeSnapshot snapshot = volume.Snapshots.Single(s => s.Id == snapshotId);
-            if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
+            if (snapshot.Status == VolumeSnapshotStatus.Creating)
             {
-                volume.FinishSnapshotOperation(snapshotId, create.Id, externalId);
+                volume.SnapshotCreateSucceeded(snapshotId, snapshot.Operation.PendingId!.Value, externalId);
             }
         }
     }
@@ -372,18 +371,18 @@ namespace Titan.Domain.Aggregates.Volume
         /// The create command's Done with the snapshot's provider id.
         public static void MarkCreated(this VolumeSnapshot snapshot, string externalId)
         {
-            if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
+            if (snapshot.Status == VolumeSnapshotStatus.Creating)
             {
-                snapshot.FinishOperation(create.Id, externalId);
+                snapshot.CreateSucceeded(snapshot.Operation.PendingId!.Value, externalId);
             }
         }
 
         /// The create command's give-up.
         public static void MarkRequestFailed(this VolumeSnapshot snapshot, string? reason, string? detail)
         {
-            if (snapshot.Pending is { Kind: VolumeSnapshotOperationKind.Create } create)
+            if (snapshot.Status == VolumeSnapshotStatus.Creating)
             {
-                snapshot.FailOperation(create.Id, null, reason, detail);
+                snapshot.CreateFailed(snapshot.Operation.PendingId!.Value, null, reason, detail);
             }
         }
 
