@@ -287,14 +287,13 @@ public class QueryRuleDbTests(PostgresFixture pg)
     {
         string offering = await OfferingAsync();
         string cluster = $"qr-{Guid.NewGuid():N}"[..16];
-        Guid syncId;
 
         VmTemplate Template(string name) =>
             VmTemplate.Create($"{name}-{Guid.NewGuid():N}"[..20], null, "Ubuntu-22.04", null, offering);
         VmTemplate Available(string name)
         {
             VmTemplate template = Template(name);
-            syncId = template.SyncIn(cluster);
+            Guid syncId = template.SyncIn(cluster);
             template.SyncSucceededIn(cluster, syncId, $"tpl-{template.Id:N}");
             return template;
         }
@@ -313,8 +312,8 @@ public class QueryRuleDbTests(PostgresFixture pg)
         VmTemplate resyncLost = Lost("resync-lost");
         resyncLost.SyncIn(cluster);
         VmTemplate failed = Template("failed");
-        syncId = failed.SyncIn(cluster);
-        failed.SyncFailedIn(cluster, syncId, null, "no image for this architecture", null);
+        Guid failedSyncId = failed.SyncIn(cluster);
+        failed.SyncFailedIn(cluster, failedSyncId, null, "no image for this architecture", null);
         VmTemplate firstSync = Template("first-sync");
         firstSync.SyncIn(cluster);
         VmTemplate[] all = [available, notFound, resyncSeen, resyncLost, failed, firstSync];
