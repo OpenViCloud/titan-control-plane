@@ -190,7 +190,7 @@ public class VmTemplateSyncRequestLifecycleTests
         Assert.Equal(inSingapore, Row(t, Singapore).Operation.PendingId);
     }
 
-    // ---------- observations: current only ----------
+    // ---------- observations: what was seen, never the end of a sync ----------
 
     [Fact] // the reconciler sees the alias back while a re-sync waits: the sync still waits for its own report
     public void SeeingTheAlias_WhileASyncWaits_IsSeenAndEndsNoSync()
@@ -221,7 +221,7 @@ public class VmTemplateSyncRequestLifecycleTests
         Assert.Equal("Available/Available", Shape(t, Mock));
     }
 
-    [Fact] // an observation writes current, not the request's failure: only the next Done clears the reason
+    [Fact] // an observation writes what was seen, not the request's failure: only the next Done clears the reason
     public void SeeingTheAlias_KeepsTheReasonOfTheLastFailedSync()
     {
         VmTemplate t = NewTemplate();

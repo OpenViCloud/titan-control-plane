@@ -35,7 +35,7 @@ public partial class VmTemplateCluster : IEntity
     {
         get
         {
-            if (IsTransitionStatus)
+            if (SyncWaits)
             {
                 return Operation.LastSeenStatus;
             }
@@ -48,7 +48,7 @@ public partial class VmTemplateCluster : IEntity
     }
 
     /// A sync waits on its command: only the report carrying its id moves the status on.
-    private bool IsTransitionStatus => Status == VmTemplateClusterStatus.Syncing;
+    private bool SyncWaits => Status == VmTemplateClusterStatus.Syncing;
 
     /// What customers in the cluster may pick: the cluster holds the alias, or a re-sync waits and saw it
     /// (titan-ops features/catalog/design.md#template-customer-read). VmTemplateRepository writes the same test in SQL

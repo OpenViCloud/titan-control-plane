@@ -14,7 +14,7 @@ public partial class VmTemplateCluster
         if (string.IsNullOrEmpty(ExternalTemplateId))
             throw new BusinessException("PROVIDER_ID_MISSING", "A template with no provider id cannot have been seen on the provider.");
 
-        if (IsTransitionStatus)
+        if (SyncWaits)
         {
             Operation = Operation.Saw(VmTemplateClusterStatus.Available);
         }
@@ -29,7 +29,7 @@ public partial class VmTemplateCluster
     internal void MarkNotFound()
     {
         if (Status == VmTemplateClusterStatus.Failed) return;
-        if (IsTransitionStatus)
+        if (SyncWaits)
         {
             Operation = Operation.Saw(null);
         }

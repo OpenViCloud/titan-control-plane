@@ -49,7 +49,4 @@ public sealed record VmTemplateOperation : ValueObject
             FailureDetail = detail,
             FailedAt = at,
         };
-
-    /// Nothing waits any more without a sync having ended Done or given up: the last failure stays.
-    public VmTemplateOperation ReturnedToRest() => this with { PendingId = null, AskedAt = null, LastSeenStatus = null };
 }

@@ -625,7 +625,7 @@ public class TemplateServiceTests
         VerifySync(wf, Times.Exactly(2)); // the first run's two clusters
     }
 
-    [Fact] // the alias went missing on Incus: sync-all pulls it again, and a waiting or present one is left alone
+    [Fact] // the alias went missing on Incus: sync-all pulls it again, and a present one is left alone
     public async Task SyncAll_AsksAgain_ForAClusterWhoseAliasIsGone_AndNotForOneThatHasIt()
     {
         var lost = SyncedTemplate("a-lost", "50");

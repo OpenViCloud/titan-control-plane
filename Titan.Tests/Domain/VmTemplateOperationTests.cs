@@ -107,22 +107,6 @@ public class VmTemplateOperationTests
     }
 
     [Fact]
-    public void ReturnedToRest_ForgetsTheSyncAndTheStatusSeen_ButKeepsTheLastFailure()
-    {
-        VmTemplateOperation asked = VmTemplateOperation.None.Asked(Guid.NewGuid(), AskedAt, null).Failed("r", "d", FailedAt)
-            .Asked(Guid.NewGuid(), AskedAt, VmTemplateClusterStatus.Available);
-
-        VmTemplateOperation rested = asked.ReturnedToRest();
-
-        Assert.Null(rested.PendingId);
-        Assert.Null(rested.AskedAt);
-        Assert.Null(rested.LastSeenStatus);
-        Assert.Equal("r", rested.FailureReason);
-        Assert.Equal("d", rested.FailureDetail);
-        Assert.Equal(FailedAt, rested.FailedAt);
-    }
-
-    [Fact]
     public void EveryMove_LeavesTheOldObjectAsItWas()
     {
         Guid id = Guid.NewGuid();
@@ -130,7 +114,6 @@ public class VmTemplateOperationTests
 
         asked.Failed("r", "d", FailedAt);
         asked.Done();
-        asked.ReturnedToRest();
         asked.Saw(null);
 
         Assert.Equal(id, asked.PendingId);

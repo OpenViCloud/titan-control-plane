@@ -9,7 +9,7 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // The pending operation and the last failure live once in ProviderResource (titan-ops
-// architecture/domain-methods.md#provider-resource), for roots and entities alike. Every Domain type that has a Pending
+// architecture/domain-methods.md#provider-resource). Every Domain type that has a Pending
 // operation goes through it, so the state is never written again in a type of its own. Vm, Network, FirewallRule,
 // VmSnapshot, Volume, VolumeSnapshot and VmTemplateCluster are the named exceptions: each keeps one status that says
 // which operation waits, and keeps that operation's id and the last failure in an Operation value object of its own

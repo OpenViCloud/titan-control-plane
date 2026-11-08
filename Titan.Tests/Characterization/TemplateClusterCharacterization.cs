@@ -4,9 +4,9 @@ using static Titan.Tests.Characterization.MoveSequences;
 
 namespace Titan.Tests.Characterization;
 
-// A template's sync state in one cluster, reached through the root VmTemplate. The adapters below are the extension
-// points of the change that reshapes VmTemplateCluster: OldSide keeps calling Old/, CurrentSide is what that change
-// re-points (the moves, PendingId and View).
+// A template's sync state in one cluster, reached through the root VmTemplate. OldSide calls the frozen copy in Old/,
+// CurrentSide the live aggregate; the live side's moves, PendingId and ViewOf are what the next change to the cluster
+// re-points.
 [Trait("Category", "Characterization")]
 public class TemplateClusterCharacterization
 {
@@ -138,7 +138,7 @@ public class TemplateClusterCharacterization
         report.AssertNoMismatches();
     }
 
-    // The change in one list: the three report methods answer a bool, the status and the operation replace the two
+    // The change in one list: the two report methods answer a bool and SyncIn answers the sync's id, the status and the operation replace the two
     // existence axes, the derived transition and the base class's pending operation.
     [Fact]
     public void TemplateCluster_SurfaceOfFrozenCopyAgainstLive_IsExactlyTheChange()

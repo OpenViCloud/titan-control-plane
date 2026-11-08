@@ -18,7 +18,8 @@ public class OneStatusTypeListTests
 
     private const int ListStartsAt = 5;
 
-    private const string AnyName = @"\b(?:VM|" + "Vm|Network|FirewallRule|VmSnapshot|Volume|VolumeSnapshot|VmTemplateCluster" + @")\b";
+    // Built from Types, so a type added there is read by the scan with no second list to remember.
+    private static readonly string AnyName = @"\b(?:VM|" + string.Join("|", Types) + @")\b";
 
     private static readonly Regex Run = new(
         AnyName + @"(?:\s*(?:,|\s+và|\s+and|·|/)\s*" + AnyName + ")+", RegexOptions.Compiled);
