@@ -60,5 +60,5 @@ public class EndVolumeSnapshotRequestCommandHandler(IVolumeRepository repo, IAct
                 // Nothing waits: the report is stale.
                 return false;
         }
-}
+    }
 }
