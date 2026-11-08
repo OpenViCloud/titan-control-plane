@@ -96,10 +96,10 @@ public class VolumeSnapshotServiceTests
         Assert.NotEqual(Guid.Empty, result.SnapshotId);
         VolumeSnapshot added = Assert.Single(volume.Snapshots);
         Assert.Equal(result.SnapshotId, added.Id);
-        Assert.Equal(VolumeSnapshotTransition.Creating, added.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Creating, added.Status);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotCreateAsync(
-            added.Id, added.Pending!.Id, volume.Id, "cs-vol-1", Project, volume.ClusterId,
+            added.Id, added.Operation.PendingId!.Value, volume.Id, "cs-vol-1", Project, volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -139,7 +139,7 @@ public class VolumeSnapshotServiceTests
 
         VolumeSnapshot added = Assert.Single(volume.Snapshots);
         Assert.Equal(result.SnapshotId, added.Id);
-        Assert.Equal(VolumeSnapshotTransition.Creating, added.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Creating, added.Status);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
@@ -270,10 +270,10 @@ public class VolumeSnapshotServiceTests
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
-        Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Pending!.Id, volume.Id, "cs-snap-1", Project, volume.ClusterId,
+            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-1", Project, volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -299,13 +299,13 @@ public class VolumeSnapshotServiceTests
         var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "cs-snap-9"));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value, "Done", "cs-snap-9"));
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
-        Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Pending!.Id, volume.Id, "cs-snap-9", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-9", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -317,11 +317,11 @@ public class VolumeSnapshotServiceTests
         var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, from, csSnapId: "cs-snap-1");
-        var before = (snapshot.CurrentExistence, snapshot.DesiredExistence, snapshot.Pending?.Id);
+        var before = (snapshot.Status, snapshot.Operation.PendingId);
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
-        Assert.Equal(before, (snapshot.CurrentExistence, snapshot.DesiredExistence, snapshot.Pending?.Id));
+        Assert.Equal(before, (snapshot.Status, snapshot.Operation.PendingId));
         _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
@@ -355,7 +355,7 @@ public class VolumeSnapshotServiceTests
             () => CreateService().DeleteAsync(volume.Id, snapshot.Id, default));
 
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", ex.Code);
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
     }
 
     // ── RestoreAsync ─────────────────────────────────────────────────────────
@@ -379,7 +379,7 @@ public class VolumeSnapshotServiceTests
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         // The restore is the new volume's create, so the command carries that volume's request id.
         _commands.Verify(w => w.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, result.NewVolumeId, added!.Pending!.Id, "cs-snap-1", "vol-restored-01", "t-" + _tenant.Id.ToString("N"), volume.ClusterId,
+            snapshot.Id, result.NewVolumeId, added!.Operation.PendingId!.Value, "cs-snap-1", "vol-restored-01", "t-" + _tenant.Id.ToString("N"), volume.ClusterId,
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -474,9 +474,9 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done", "vol1/s1"));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value, "Done", "vol1/s1"));
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         Assert.Equal("vol1/s1", snapshot.ExternalId);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
     }
@@ -488,16 +488,16 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value,
             "Failed", Reason: "Snapshot creation failed.", Detail: "raw"));
 
-        Assert.Equal("NotCreated/Exists/-", Shape(snapshot));
-        Assert.Equal("Snapshot creation failed.", snapshot.OperationFailureReason);
-        Assert.Equal("raw", snapshot.OperationFailureDetail);
+        Assert.Equal("Failed/-", Shape(snapshot));
+        Assert.Equal("Snapshot creation failed.", snapshot.Operation.FailureReason);
+        Assert.Equal("raw", snapshot.Operation.FailureDetail);
     }
 
-    // The give-up found the snapshot on Incus: the id and existence are kept, so the delete reaches Incus, but the
-    // create still failed — it records why, and a failed create has no outcome.
+    // The give-up found the snapshot on Incus: the id is kept and the snapshot is Available, so the delete reaches Incus,
+    // but the create still failed — it records why, and a failed create has no outcome.
     [Fact]
     public async Task EndRequest_FailedCreateCarryingTheId_RecordsTheIdAndWhy_WithoutSnapshotCreated()
     {
@@ -506,18 +506,18 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value,
             "Failed", "vol1/s1", Reason: "Snapshot creation failed."));
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         Assert.Equal("vol1/s1", snapshot.ExternalId);
-        Assert.Equal("Snapshot creation failed.", snapshot.OperationFailureReason);
+        Assert.Equal("Snapshot creation failed.", snapshot.Operation.FailureReason);
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Pending!.Id, volume.Id, "vol1/s1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "vol1/s1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -528,18 +528,18 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting, csSnapId: "cs-snap-1");
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id,
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value,
             "Failed", Reason: "Snapshot deletion failed.", Detail: "refused"));
 
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
-        Assert.Equal("Snapshot deletion failed.", snapshot.OperationFailureReason);
+        Assert.Equal("Available/Available", Shape(snapshot));
+        Assert.Equal("Snapshot deletion failed.", snapshot.Operation.FailureReason);
         _activity.Verify(a => a.StageOutcome(TenantId, "volume_snapshot.delete_failed", "volume_snapshot", snapshot.Id, "snap-01"), Times.Once);
 
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
-        Assert.Equal(VolumeSnapshotTransition.Deleting, snapshot.Transition);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Pending!.Id, volume.Id, "cs-snap-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -549,12 +549,12 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snapshot = MakeSnapshot(volume, SnapSeed.Deleting);
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Pending!.Id, "Done"));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value, "Done"));
 
-        Assert.Equal("Deleted/Deleted/-", Shape(snapshot));
+        Assert.Equal("Deleted/-", Shape(snapshot));
     }
 
-    // Only the delete command ends a delete: the reconciler not finding the snapshot is NotFound.
+    // Only the delete command ends a delete: the reconciler not finding the snapshot is only remembered as seen gone.
     [Fact]
     public async Task Observe_NotFound_WhileADeleteWaits_IsNotFound_AndTheDeleteKeepsWaiting()
     {
@@ -564,7 +564,7 @@ public class VolumeSnapshotServiceTests
 
         await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
 
-        Assert.Equal("NotFound/Deleted/Deleting", Shape(snapshot));
+        Assert.Equal("Deleting/-", Shape(snapshot));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -576,10 +576,10 @@ public class VolumeSnapshotServiceTests
         var snapshot = MakeSnapshot(volume, SnapSeed.Exists);
 
         await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, false));
-        Assert.Equal("NotFound/Exists/-", Shape(snapshot));
+        Assert.Equal("NotFound/-", Shape(snapshot));
 
         await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, snapshot.Id, true));
-        Assert.Equal("Exists/Exists/-", Shape(snapshot));
+        Assert.Equal("Available/Available", Shape(snapshot));
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
 
@@ -607,10 +607,10 @@ public class VolumeSnapshotServiceTests
         SetupVolume(otherVolume);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(otherVolume.Id, snapshot.Id, snapshot.Pending!.Id, "Done")));
+            () => CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(otherVolume.Id, snapshot.Id, snapshot.Operation.PendingId!.Value, "Done")));
 
         Assert.Equal("VOLUME_SNAPSHOT_NOT_FOUND", ex.Code);
-        Assert.Equal("Exists/Deleted/Deleting", Shape(snapshot));
+        Assert.Equal("Deleting/Available", Shape(snapshot));
         _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -628,7 +628,7 @@ public class VolumeSnapshotServiceTests
         _activity.Verify(a => a.Stage("volume_snapshot.create_requested", "volume_snapshot", result.SnapshotId, "nightly"), Times.Once);
 
         VolumeSnapshot saved = Assert.Single(volume.Snapshots);
-        Guid createId = saved.Pending!.Id;
+        Guid createId = saved.Operation.PendingId!.Value;
         await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, saved.Id, createId, "Done", "cs-snap-1"));
         await CreateService().ObserveAsync(new ObserveVolumeSnapshotCommand(volume.Id, saved.Id, true));
         await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, saved.Id, createId, "Done", "cs-snap-1"));
@@ -649,7 +649,7 @@ public class VolumeSnapshotServiceTests
 
         _activity.Verify(a => a.Stage("volume_snapshot.delete_requested", "volume_snapshot", snap.Id, "snap-01"), Times.Once);
 
-        Guid deleteId = snap.Pending!.Id;
+        Guid deleteId = snap.Operation.PendingId!.Value;
         await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, deleteId, "Done"));
         await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, deleteId, "Done"));
 
@@ -679,7 +679,7 @@ public class VolumeSnapshotServiceTests
         SetupVolume(volume);
         var snap = MakeSnapshot(volume, SnapSeed.Creating);
 
-        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, snap.Pending!.Id, "Failed", Reason: "boom"));
+        await CreateService().EndRequestAsync(new EndVolumeSnapshotRequestCommand(volume.Id, snap.Id, snap.Operation.PendingId!.Value, "Failed", Reason: "boom"));
 
         _activity.Verify(a => a.StageOutcome(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Never);
     }
@@ -696,7 +696,7 @@ public class VolumeSnapshotServiceTests
 
         await CreateService().DeleteAsync(volume.Id, snap.Id, default);
 
-        Assert.Equal("Deleted/Deleted/-", Shape(snap));
+        Assert.Equal("Deleted/-", Shape(snap));
         Assert.Empty(_commands.Invocations);
         _activity.Verify(a => a.StageOutcome(TenantId, "volume_snapshot.deleted", "volume_snapshot", snap.Id, "snap-01"), Times.Once);
     }
@@ -717,14 +717,16 @@ public class VolumeSnapshotServiceTests
         _volumeRepo.Setup(r => r.FindByIdForUpdateAsync(volume.Id, default)).ReturnsAsync(volume);
     }
 
+    // The status, then whether Incus was last known to hold the snapshot (InstanceStatus, "-" when not): while an
+    // operation waits the status alone does not say it.
     private static string Shape(VolumeSnapshot s)
     {
-        string transition = "-";
-        if (s.Transition != null)
+        string seen = "-";
+        if (s.InstanceStatus != null)
         {
-            transition = s.Transition.Value.ToString();
+            seen = s.InstanceStatus.Value.ToString();
         }
-        return $"{s.CurrentExistence}/{s.DesiredExistence}/{transition}";
+        return $"{s.Status}/{seen}";
     }
 
     // Situations named in the tests' vocabulary: Attaching/Detaching/Deleting mean "that request is waiting".
@@ -754,7 +756,7 @@ public class VolumeSnapshotServiceTests
     private static void EndAttachDone(Volume vol, Vm vm)
     {
         VolumeAttachProviderIds attach = vol.Attach(vm);
-        vol.FinishOperation(attach.OperationId, null, true, vm.Id, false);
+        vol.AttachSucceeded(attach.OperationId, null, true, vm.Id, false);
     }
 
     // A snapshot of the volume, in the shape named (titan-ops architecture/code-structure.md#child-entity).
@@ -779,6 +781,9 @@ public class VolumeSnapshotServiceTests
         Assert.Null(typeof(VolumeSnapshotQueryResult).GetProperty("CurrentState"));
         Assert.Null(typeof(VolumeSnapshotQueryResult).GetProperty("DesiredState"));
         Assert.NotNull(typeof(VolumeSnapshotQueryResult).GetProperty("RequestFailureReason"));
-        Assert.NotNull(typeof(VolumeSnapshotQueryResult).GetProperty("CurrentExistence"));
+        Assert.Null(typeof(VolumeSnapshotQueryResult).GetProperty("CurrentExistence"));
+        Assert.Null(typeof(VolumeSnapshotQueryResult).GetProperty("DesiredExistence"));
+        Assert.Null(typeof(VolumeSnapshotQueryResult).GetProperty("Transition"));
+        Assert.NotNull(typeof(VolumeSnapshotQueryResult).GetProperty("Status"));
     }
 }

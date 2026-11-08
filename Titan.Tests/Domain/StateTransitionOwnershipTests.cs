@@ -180,8 +180,8 @@ public class StateTransitionOwnershipTests
         foreach (var (file, src) in ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates")))
         {
             var aggregate = Path.GetFileNameWithoutExtension(file);
-            // `?` is in the return-type class: Volume.MarkObserved returns VolumeTransition?, and a pattern without it
-            // would skip that method silently — the scan measuring less, still green. `internal` for the same
+            // `?` is in the return-type class: a Mark* that returns a nullable type would be skipped silently by a pattern
+            // without it — the scan measuring less, still green. `internal` for the same
             // reason: a child's mutations (VmTemplateCluster) are internal, reached only through its root.
             foreach (var m in Regex.Matches(src, @"(?:public|internal) (?:void|[A-Za-z<>?]+) (Mark\w*)\([^)]*\)\s*\{").Cast<Match>())
             {
@@ -279,8 +279,6 @@ public class StateTransitionOwnershipTests
             "Inventing a check here would be a check that cannot fail — which is worse than none, " +
             "because it reads like protection. Declared, not enforced.",
         ["VmTemplateCluster.FinishOperation"] = TemplateReport,
-        ["Volume.RecordWhatTheWorkerSaw"] = PartOfTheReport,
-        ["VolumeSnapshot.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["VmTemplateCluster.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +

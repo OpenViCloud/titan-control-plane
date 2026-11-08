@@ -23,14 +23,16 @@ namespace Titan.Tests.Domain;
 // VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
 // Pending property: its one status says what the waiting request asks, and it keeps only that request's id
 // (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Network,
-// FirewallRule and VmSnapshot keep the waiting operation in an Operation of their own (titan-ops
-// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot) and are named here for the same reason.
+// FirewallRule, VmSnapshot, Volume and VolumeSnapshot keep the waiting operation in an Operation of their own (titan-ops
+// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot, features/volume/design.md#volume-state-is-existence)
+// and are named here for the same reason.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
     // On the shape without a Pending property, each kept by name.
-    private static readonly Type[] OnTheShapeWithoutPending = [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot)];
+    private static readonly Type[] OnTheShapeWithoutPending =
+        [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot)];
 
     // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
     private static List<Type> WithAPendingProperty() =>
@@ -50,7 +52,7 @@ public class RequestLifecycleShapeTests
         [typeof(VolumeSnapshot)] = () =>
         {
             Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
-            volume.FinishOperation(volume.Pending!.Id, "vol-shape", false, null, false);
+            volume.CreateSucceeded(volume.Operation.PendingId!.Value, "vol-shape", false, null, false);
             return volume.WithSnapshot("shape");
         },
         [typeof(VmSnapshot)] = () =>
@@ -141,9 +143,10 @@ public class RequestLifecycleShapeTests
         Assert.True(offenders.Count == 0, "Mark* must return void (titan-ops architecture/resource-lifecycle.md#shape): " + string.Join(", ", offenders));
     }
 
-    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule and
-    // the VM snapshot have one Succeeded and one Failed move per operation (NetworkReportMoves and VmSnapshotReportMoves below);
-    // the other types end a request by FinishOperation and FailOperation.
+    // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule, the
+    // VM snapshot, the volume and the volume snapshot have one Succeeded and one Failed move per operation (NetworkReportMoves,
+    // VmSnapshotReportMoves, VolumeReportMoves and VolumeSnapshotReportMoves below); the other types end a request by
+    // FinishOperation and FailOperation.
     private static readonly string[] VmReportMoves =
     [
         "CreateSucceeded", "CreateFailed", "StartSucceeded", "StartFailed",
@@ -159,6 +162,16 @@ public class RequestLifecycleShapeTests
         "CreateSucceeded", "CreateFailed", "RevertSucceeded", "RevertFailed", "DeleteSucceeded", "DeleteFailed",
     ];
 
+    // A volume ends its create, attach, detach or delete by the status it waits in (titan-ops features/volume/design.md#volume-reports).
+    private static readonly string[] VolumeReportMoves =
+    [
+        "CreateSucceeded", "CreateFailed", "AttachSucceeded", "AttachFailed", "DetachSucceeded", "DetachFailed",
+        "DeleteSucceeded", "DeleteFailed",
+    ];
+
+    // A volume snapshot ends its create or delete by the status it waits in (titan-ops features/volume/design.md#volume-snapshot).
+    private static readonly string[] VolumeSnapshotReportMoves = ["CreateSucceeded", "CreateFailed", "DeleteSucceeded", "DeleteFailed"];
+
     private static IEnumerable<string> RequiredReportsOf(Type type)
     {
         if (type == typeof(Vm))
@@ -172,6 +185,14 @@ public class RequestLifecycleShapeTests
         if (type == typeof(VmSnapshot))
         {
             return [.. VmSnapshotReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(Volume))
+        {
+            return [.. VolumeReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(VolumeSnapshot))
+        {
+            return [.. VolumeSnapshotReportMoves, "MarkObserved", "MarkNotFound"];
         }
         return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
     }
@@ -257,6 +278,90 @@ public class RequestLifecycleShapeTests
         return snapshot;
     }
 
+    // Each volume move run for real on a volume waiting in that move's status: a report naming another operation returns
+    // false and leaves every public property as it was.
+    [Fact]
+    public void EveryVolumeMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in VolumeReportMoves)
+        {
+            Volume volume = VolumeWaitingFor(move);
+            MethodInfo ending = typeof(Volume).GetMethod(move, BindingFlags.Public | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(StorageForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(volume);
+
+            object? result = ending.Invoke(volume, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(volume));
+        }
+    }
+
+    // The same for a volume snapshot, whose moves are internal to it and reached through its volume.
+    [Fact]
+    public void EveryVolumeSnapshotMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in VolumeSnapshotReportMoves)
+        {
+            VolumeSnapshot snapshot = VolumeSnapshotWaitingFor(move);
+            MethodInfo ending = typeof(VolumeSnapshot).GetMethod(move, BindingFlags.NonPublic | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(StorageForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(snapshot);
+
+            object? result = ending.Invoke(snapshot, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(snapshot));
+        }
+    }
+
+    private static Volume VolumeWaitingFor(string move)
+    {
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
+        if (move.StartsWith("Create", StringComparison.Ordinal))
+        {
+            return volume;
+        }
+        volume.MarkCreated("vol-shape");
+        if (move.StartsWith("Delete", StringComparison.Ordinal))
+        {
+            volume.Delete();
+            return volume;
+        }
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "shape", "m", "tpl", "cluster-a", 20);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
+        volume.Attach(vm);
+        if (move.StartsWith("Detach", StringComparison.Ordinal))
+        {
+            volume.MarkAttached(vm.Id);
+            volume.Detach();
+        }
+        return volume;
+    }
+
+    private static VolumeSnapshot VolumeSnapshotWaitingFor(string move)
+    {
+        Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
+        volume.MarkCreated("vol-shape");
+        VolumeSnapshot snapshot = volume.WithSnapshot("shape");
+        if (move.StartsWith("Create", StringComparison.Ordinal))
+        {
+            return snapshot;
+        }
+        snapshot.MarkCreated("vol-shape/s1");
+        volume.DeleteSnapshot(snapshot.Id);
+        return snapshot;
+    }
+
+    // A volume or snapshot report after the operation id: a plausible value for each other parameter of the move.
+    private static object? StorageForeignArgument(ParameterInfo parameter)
+    {
+        if (parameter.ParameterType == typeof(bool)) return true;
+        if (parameter.ParameterType == typeof(Guid?)) return Guid.NewGuid();
+        if (parameter.Name == "externalId") return "foreign";
+        return "late";
+    }
+
     private static object? ForeignArgument(ParameterInfo parameter)
     {
         if (parameter.ParameterType == typeof(NetworkStatus?)) return NetworkStatus.Created;
@@ -310,6 +415,10 @@ public class RequestLifecycleShapeTests
             {
                 continue; // EveryVmSnapshotMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
             }
+            if (type == typeof(Volume) || type == typeof(VolumeSnapshot))
+            {
+                continue; // EveryVolumeMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty and the snapshot's
+            }
             foreach (string method in new[] { "FinishOperation", "FailOperation" })
             {
                 object aggregate = build();
@@ -329,10 +438,9 @@ public class RequestLifecycleShapeTests
     private static object?[] WhatTheWorkerSawFor(Type type, string method)
     {
         object?[] seen;
-        if (type == typeof(Volume)) seen = ["foreign", true, Guid.NewGuid(), true];
-        else if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
+        if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
         else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleStatus.enabled];
-        else if (type == typeof(VolumeSnapshot) || type == typeof(LoadBalancer) || type == typeof(VmTemplateCluster)) seen = ["foreign"];
+        else if (type == typeof(LoadBalancer) || type == typeof(VmTemplateCluster)) seen = ["foreign"];
         else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");
         if (method == "FinishOperation")
         {

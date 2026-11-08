@@ -139,7 +139,8 @@ public class VmRequestHandlerTests
         Assert.Equal(leaving.Id, _activity.Events.Single(e => e.Action == "vm_snapshot.deleted").ResourceId);
         Assert.Null(volume.CurrentAttachedVmId);
         Assert.Null(volume.DesiredAttachedVmId);
-        Assert.Null(volume.Pending);
+        Assert.Null(volume.Operation.PendingId);
+        Assert.Equal(VolumeStatus.Available, volume.Status);
     }
 
     [Fact]
@@ -157,7 +158,7 @@ public class VmRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete, "Failed", Reason: "It failed."));
 
-        Assert.Null(volume.Pending);
+        Assert.Null(volume.Operation.PendingId);
         Assert.Equal(vm.Id, volume.CurrentAttachedVmId);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         Guid secondDelete = Guid.NewGuid();
@@ -166,7 +167,7 @@ public class VmRequestHandlerTests
         Assert.Equal(secondDelete, vm.Operation.PendingId);
         volume.ReleaseFromVmDelete(vm.Id);
         Assert.Null(volume.DesiredAttachedVmId);
-        Assert.Null(volume.Pending);
+        Assert.Null(volume.Operation.PendingId);
     }
 
     // A VM's delete is not a request of the volume (titan-ops architecture/resource-lifecycle.md#kinds): a detach the
@@ -180,7 +181,7 @@ public class VmRequestHandlerTests
         Volume volume = Volume.Create(Owner.Id, "data-1", vm.ClusterId, "std", 20);
         volume.MarkCreated("vol-x");
         VolumeAttachProviderIds attach = volume.Attach(vm);
-        volume.FinishOperation(attach.OperationId, null, true, vm.Id, false);
+        volume.AttachSucceeded(attach.OperationId, null, true, vm.Id, false);
         OperationTicket detach = volume.Detach();
         _volumeRepo.Setup(r => r.ListAttachedToVmLockedAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync([volume]);
         Guid delete = Guid.NewGuid();
@@ -189,7 +190,7 @@ public class VmRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndVmRequestCommand(vm.Id, delete, outcome, Reason: "It failed."));
 
-        Assert.Equal((VolumeOperationKind.Detach, detach.OperationId), (volume.Pending!.Kind, volume.Pending.Id));
+        Assert.Equal((VolumeStatus.Detaching, detach.OperationId), (volume.Status, volume.Operation.PendingId!.Value));
         Assert.Null(volume.DesiredAttachedVmId);
         Assert.DoesNotContain(_activity.Events, e => e.Action.StartsWith("volume.", StringComparison.Ordinal));
     }

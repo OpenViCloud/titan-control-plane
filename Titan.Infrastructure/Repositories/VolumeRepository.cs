@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
@@ -25,19 +24,19 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
     public async Task<List<Volume>> ListAttachedToVmLockedAsync(Guid vmId, CancellationToken ct = default)
     {
         await db.LockRowAsync(
-            $"SELECT id FROM core.volumes WHERE (current_attached_vm_id = {vmId} OR desired_attached_vm_id = {vmId}) AND current_existence <> 'Deleted' FOR UPDATE",
+            $"SELECT id FROM core.volumes WHERE (current_attached_vm_id = {vmId} OR desired_attached_vm_id = {vmId}) AND status <> 'Deleted' FOR UPDATE",
             ct);
         return await db.Volumes
             .Include(v => v.Snapshots)
             .Where(v => (v.CurrentAttachedVmId == vmId || v.DesiredAttachedVmId == vmId)
-                        && v.CurrentExistence != CurrentExistence.Deleted)
+                        && v.Status != VolumeStatus.Deleted)
             .ToListAsync(ct);
     }
 
     // !Volume.IsDeleted
     public async Task<List<Volume>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes
-            .Where(v => v.TenantId == tenantId && v.CurrentExistence != CurrentExistence.Deleted)
+            .Where(v => v.TenantId == tenantId && v.Status != VolumeStatus.Deleted)
             .AsNoTracking()
             .OrderByDescending(v => v.CreatedAt)
             .ToListAsync(ct);
@@ -46,21 +45,27 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes.CountAsync(
             v => v.TenantId == tenantId
-                 && v.DesiredExistence == DesiredExistence.Exists
-                 && (v.CurrentExistence == CurrentExistence.Exists
-                     || (v.CurrentExistence == CurrentExistence.NotCreated && v.PendingOperationId != null)), ct);
+                 && (v.Status == VolumeStatus.Creating
+                     || v.Status == VolumeStatus.Available
+                     || ((v.Status == VolumeStatus.Attaching || v.Status == VolumeStatus.Detaching)
+                         && v.Operation.LastSeenStatus == VolumeStatus.Available)), ct);
 
     // Volume.IsBilled
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Volumes
-            .Where(v => v.CurrentExistence == CurrentExistence.Exists)
+            .Where(v => v.Status == VolumeStatus.Available
+                     || ((v.Status == VolumeStatus.Creating
+                          || v.Status == VolumeStatus.Attaching
+                          || v.Status == VolumeStatus.Detaching
+                          || v.Status == VolumeStatus.Deleting)
+                         && v.Operation.LastSeenStatus == VolumeStatus.Available))
             .AsNoTracking()
             .ToListAsync(ct);
 
     // !Volume.IsDeleted with a provider id.
     public async Task<List<Volume>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.Volumes
-            .Where(v => v.ClusterId == clusterId && v.ExternalId != null && v.CurrentExistence != CurrentExistence.Deleted)
+            .Where(v => v.ClusterId == clusterId && v.ExternalId != null && v.Status != VolumeStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 

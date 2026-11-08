@@ -36,7 +36,7 @@ public class EndVolumeRequestCommandHandler(
             (attachedVmId, attachedElsewhere) =
                 await VolumeReports.ResolveAttachmentAsync(vmRepo, volume.TenantId, command.AttachedTo, ct);
         }
-        VolumeOperationKind? ended;
+        VolumeStatus? ended;
         if (outcome == OperationOutcome.Done)
         {
             ended = VolumeReports.FinishOperation(volume, command.RequestId, command.ExternalId,

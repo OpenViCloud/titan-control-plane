@@ -187,9 +187,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     private async Task<Volume> StoredVolumeWaitingOnADeleteAsync()
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, $"vol-{Guid.NewGuid():N}"[..14], "cluster-a", VolumeOffering, 10);
-        volume.FinishOperation(volume.Pending!.Id, $"vol-{volume.Id:N}", false, null, false);
+        volume.MarkCreated($"vol-{volume.Id:N}");
         VolumeSnapshot snapshot = volume.WithSnapshot("s1");
-        volume.FinishSnapshotOperation(snapshot.Id, snapshot.Pending!.Id, $"vol-{volume.Id:N}/s1");
+        volume.MarkSnapshotCreated(snapshot.Id, $"vol-{volume.Id:N}/s1");
         volume.DeleteSnapshot(snapshot.Id);
         volume.Delete();
         using IServiceScope scope = factory.Services.CreateScope();
@@ -213,14 +213,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Volume volume = await StoredVolumeWaitingOnADeleteAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/requests/{volume.Pending!.Id}",
+        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/requests/{volume.Operation.PendingId!.Value}",
             """{"outcome":"Failed","observed":{"attachedTo":[]},"reason":"The volume could not be deleted.","detail":"incus: busy"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Volume stored = await ReloadVolumeAsync(volume.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The volume could not be deleted.", stored.OperationFailureReason);
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(VolumeStatus.Available, stored.Status);
+        Assert.Equal("The volume could not be deleted.", stored.Operation.FailureReason);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Volume stored = await ReloadVolumeAsync(volume.Id);
         Assert.True(stored.CurrentAttachedElsewhere);
-        Assert.Equal(VolumeOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VolumeStatus.Deleting, stored.Status);
     }
 
     [Fact]
@@ -244,10 +244,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VolumeSnapshot snapshot = volume.Snapshots.Single();
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/volumes/{volume.Id}/snapshots/{snapshot.Id}/requests/{snapshot.Pending!.Id}", """{"outcome":"Done"}""");
+            $"/internal/volumes/{volume.Id}/snapshots/{snapshot.Id}/requests/{snapshot.Operation.PendingId!.Value}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(CurrentExistence.Deleted, (await ReloadVolumeAsync(volume.Id)).Snapshots.Single().CurrentExistence);
+        Assert.Equal(VolumeSnapshotStatus.Deleted, (await ReloadVolumeAsync(volume.Id)).Snapshots.Single().Status);
     }
 
     [Fact]
@@ -261,8 +261,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VolumeSnapshot stored = (await ReloadVolumeAsync(volume.Id)).Snapshots.Single();
-        Assert.Equal(CurrentExistence.NotFound, stored.CurrentExistence);
-        Assert.Equal(VolumeSnapshotOperationKind.Delete, stored.Pending!.Kind);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, stored.Status);
+        Assert.Null(stored.InstanceStatus);
     }
 
     [Theory]
@@ -272,10 +272,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     {
         Volume volume = await StoredVolumeWaitingOnADeleteAsync();
 
-        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/{string.Format(route, volume.Pending!.Id)}", json);
+        HttpResponseMessage response = await PatchAsync($"/internal/volumes/{volume.Id}/{string.Format(route, volume.Operation.PendingId!.Value)}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(VolumeOperationKind.Delete, (await ReloadVolumeAsync(volume.Id)).Pending!.Kind);
+        Assert.Equal(VolumeStatus.Deleting, (await ReloadVolumeAsync(volume.Id)).Status);
     }
 
     [Theory]
@@ -289,12 +289,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VolumeSnapshot snapshot = volume.Snapshots.Single();
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/volumes/{volume.Id}/{string.Format(route, volume.Pending!.Id, snapshot.Id, snapshot.Pending!.Id)}", json, token: null);
+            $"/internal/volumes/{volume.Id}/{string.Format(route, volume.Operation.PendingId!.Value, snapshot.Id, snapshot.Operation.PendingId!.Value)}", json, token: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Volume stored = await ReloadVolumeAsync(volume.Id);
-        Assert.Equal((CurrentExistence.Exists, VolumeOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
-        Assert.Equal(CurrentExistence.Exists, stored.Snapshots.Single().CurrentExistence);
+        Assert.Equal((VolumeStatus.Deleting, (VolumeStatus?)VolumeStatus.Available), (stored.Status, stored.InstanceStatus));
+        VolumeSnapshot storedSnapshot = stored.Snapshots.Single();
+        Assert.Equal((VolumeSnapshotStatus.Deleting, (VolumeSnapshotStatus?)VolumeSnapshotStatus.Available),
+            (storedSnapshot.Status, storedSnapshot.InstanceStatus));
     }
 
     // ---------- the network's and its firewall rules' routes ----------

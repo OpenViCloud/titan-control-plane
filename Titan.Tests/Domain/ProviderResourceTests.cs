@@ -1,6 +1,7 @@
 using System.Reflection;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Model;
 using Titan.Domain.Values;
 
@@ -31,12 +32,14 @@ public class ProviderResourceTests
             .Where(t => t.GetProperty("Pending")?.PropertyType is { IsGenericType: true } p
                         && p.GetGenericTypeDefinition() == typeof(PendingOperation<>))
             .ToList();
-        Assert.True(withPending.Count >= 4, $"the scan found only {withPending.Count} types with a pending operation");
-        // Vm, Network, FirewallRule and VmSnapshot have no Pending, so this scan does not reach them: the tests below hold them.
+        Assert.True(withPending.Count >= 2, $"the scan found only {withPending.Count} types with a pending operation");
+        // Vm, Network, FirewallRule, VmSnapshot, Volume and VolumeSnapshot have no Pending, so this scan does not reach them: the tests below hold them.
         Assert.DoesNotContain(typeof(Vm), withPending);
         Assert.DoesNotContain(typeof(Network), withPending);
         Assert.DoesNotContain(typeof(FirewallRule), withPending);
         Assert.DoesNotContain(typeof(VmSnapshot), withPending);
+        Assert.DoesNotContain(typeof(Volume), withPending);
+        Assert.DoesNotContain(typeof(VolumeSnapshot), withPending);
 
         HashSet<string> baseNames = BaseNames();
         List<string> declaringItThemselves = withPending
@@ -85,6 +88,17 @@ public class ProviderResourceTests
         Assert.Equal(typeof(VmSnapshotOperation), operation.PropertyType);
     }
 
+    [Fact]
+    public void VolumeAndVolumeSnapshot_KeepTheirOperationInAnOperationValueObject_AndAreNotOnTheBase()
+    {
+        Assert.False(DerivesFromProviderResource(typeof(Volume)));
+        Assert.False(DerivesFromProviderResource(typeof(VolumeSnapshot)));
+        Assert.Null(typeof(Volume).GetProperty("Pending"));
+        Assert.Null(typeof(VolumeSnapshot).GetProperty("Pending"));
+        Assert.Equal(typeof(VolumeOperation), typeof(Volume).GetProperty("Operation")?.PropertyType);
+        Assert.Equal(typeof(VolumeSnapshotOperation), typeof(VolumeSnapshot).GetProperty("Operation")?.PropertyType);
+    }
+
     private static bool DerivesFromProviderResource(Type type)
     {
         Type? current = type.BaseType;
@@ -110,7 +124,7 @@ public class ProviderResourceTests
             .ToList();
         Assert.True(roleless.Count == 0, "Neither or both of IAggregateRoot and IEntity: " + string.Join(", ", roleless));
 
-        // Vm, Network, FirewallRule and VmSnapshot are on the provider without the base, so the scan above does not reach them.
+        // Vm, Network, FirewallRule, VmSnapshot, Volume and VolumeSnapshot are on the provider without the base, so the scan above does not reach them.
         Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Vm)));
         Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Vm)));
         Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Network)));
@@ -119,5 +133,9 @@ public class ProviderResourceTests
         Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(FirewallRule)));
         Assert.True(typeof(IEntity).IsAssignableFrom(typeof(VmSnapshot)));
         Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(VmSnapshot)));
+        Assert.True(typeof(IAggregateRoot).IsAssignableFrom(typeof(Volume)));
+        Assert.False(typeof(IEntity).IsAssignableFrom(typeof(Volume)));
+        Assert.True(typeof(IEntity).IsAssignableFrom(typeof(VolumeSnapshot)));
+        Assert.False(typeof(IAggregateRoot).IsAssignableFrom(typeof(VolumeSnapshot)));
     }
 }

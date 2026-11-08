@@ -55,7 +55,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         activity.Stage("volume_snapshot.restore_requested", "volume", newVolume.Id, newVolume.Name); // atomic with Add
         string projectName = TenantAggregate.ProjectNameFor(newVolume.TenantId);
         await commands.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, newVolume.Id, newVolume.Pending!.Id, externalSnapshotId, command.Name, projectName, sourceVolume.ClusterId, ct);
+            snapshot.Id, newVolume.Id, newVolume.Operation.PendingId!.Value, externalSnapshotId, command.Name, projectName, sourceVolume.ClusterId, ct);
         await volumeRepo.SaveAsync(ct);
 
         return new RestoreVolumeSnapshotCommandResult(newVolume.Id);

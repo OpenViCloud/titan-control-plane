@@ -1,6 +1,5 @@
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
-using Titan.Domain.Values;
 
 namespace Titan.Domain.Aggregates.Volume;
 
@@ -8,9 +7,9 @@ namespace Titan.Domain.Aggregates.Volume;
 /// (titan-ops features/volume/design.md#volume-snapshot). A child of Volume (titan-ops architecture/code-structure.md#child-entity):
 /// "a volume with a live snapshot is not deleted" and "the volume's delete takes its snapshots"
 /// are the volume's invariants, so only the root reaches the methods below, and handlers go through
-/// Volume.AddSnapshot, DeleteSnapshot, ProviderIdForSnapshotRestore, FinishSnapshotOperation, FailSnapshotOperation
-/// and MarkSnapshot*.
-public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEntity
+/// Volume.AddSnapshot, DeleteSnapshot, ProviderIdForSnapshotRestore, SnapshotCreateSucceeded, SnapshotCreateFailed,
+/// SnapshotDeleteSucceeded, SnapshotDeleteFailed and MarkSnapshot*.
+public partial class VolumeSnapshot : IEntity
 {
     /// A snapshot's name: 1 to 100 characters, not blank, any characters. The validator reads it. A property, not a const: a child
     /// has no public field.
@@ -20,94 +19,78 @@ public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEn
     public Guid VolumeId { get; private set; }
     public Guid TenantId { get; private set; }
     public string Name { get; private set; } = default!;
-    // Incus has no status word for a volume snapshot, only whether it is there
-    // (titan-ops features/volume/design.md#volume-state-is-existence). Mark* and an operation's report write CurrentExistence;
-    // an operation, and a report that it failed, write DesiredExistence (titan-ops architecture/desired-and-current.md#desired-and-current).
-    public CurrentExistence CurrentExistence { get; private set; }
-    public DesiredExistence DesiredExistence { get; private set; }
+    /// The one status the API shows (titan-ops features/volume/design.md#volume-snapshot). Only an operation, a report ending
+    /// it, the volume's delete taking it along, or an observation at rest writes it, each through the moves of
+    /// VolumeSnapshot.Creation.cs, VolumeSnapshot.Deletion.cs and VolumeSnapshot.Observation.cs.
+    public VolumeSnapshotStatus Status { get; private set; }
+    /// The snapshot's own operation, independent of its volume's, the last one that failed, and whether Incus was last
+    /// seen holding the snapshot while one waits.
+    public VolumeSnapshotOperation Operation { get; private set; } = VolumeSnapshotOperation.None;
     public string? ExternalId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
-    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
-    /// VolumeSnapshotRepository.ListBillableAsync writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
-    public bool IsBilled => CurrentExistence == CurrentExistence.Exists;
-
-    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
-    /// Until then the snapshot is still listed under its volume and still observed; the repository's list and
-    /// reconciler queries write !IsDeleted in SQL (titan-ops architecture/domain-methods.md#plain-code).
-    public bool IsDeleted => CurrentExistence == CurrentExistence.Deleted;
-
     private VolumeSnapshot() { }
 
-    /// The move the waiting operation makes, for display.
-    public VolumeSnapshotTransition? Transition
+    /// Whether Incus holds the snapshot as far as Titan last knew: Available, or null. While an operation waits it is what
+    /// the operation last saw; at rest it is Available when the status is. Worked out, never stored, and not on /v1.
+    public VolumeSnapshotStatus? InstanceStatus
     {
         get
         {
-            switch (PendingOperationKind)
+            if (IsTransitionStatus)
             {
-                case VolumeSnapshotOperationKind.Create:
-                    return VolumeSnapshotTransition.Creating;
-                case VolumeSnapshotOperationKind.Delete:
-                    return VolumeSnapshotTransition.Deleting;
-                default:
-                    return null;
+                return Operation.LastSeenStatus;
             }
+            if (Status == VolumeSnapshotStatus.Available)
+            {
+                return VolumeSnapshotStatus.Available;
+            }
+            return null;
         }
     }
 
-    private bool CreateIsWaiting => PendingOperationKind == VolumeSnapshotOperationKind.Create;
-    private bool DeleteIsWaiting => PendingOperationKind == VolumeSnapshotOperationKind.Delete;
+    /// An operation waits on its command: only the report carrying its id moves the status on.
+    private bool IsTransitionStatus =>
+        Status == VolumeSnapshotStatus.Creating || Status == VolumeSnapshotStatus.Deleting;
+
+    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
+    /// VolumeSnapshotRepository.ListBillableAsync writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsBilled => InstanceStatus == VolumeSnapshotStatus.Available;
+
+    /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
+    /// Until then the snapshot is still listed under its volume and still observed; the repository's list and
+    /// reconciler queries write status <> 'Deleted' in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsDeleted => Status == VolumeSnapshotStatus.Deleted;
+
     /// A delete was asked and still waits, or the snapshot is gone: a later delete is a repeat, answered like the first
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    public bool IsDeletedOrDeleting => DeleteIsWaiting || IsDeleted;
+    public bool IsDeletedOrDeleting => Status == VolumeSnapshotStatus.Deleting || IsDeleted;
 
     /// Counted by occupancy toward MaxVolumeSnapshotsPerVolume, and the same count says whether the volume may be
     /// deleted (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to hold. A delete
     /// asked for stops counting at once; a failed create with nothing on Incus, and a snapshot Incus lost, do not count.
     public bool CountsTowardQuota =>
-        DesiredExistence == DesiredExistence.Exists
-        && (CurrentExistence == CurrentExistence.Exists
-            || (CurrentExistence == CurrentExistence.NotCreated && CreateIsWaiting));
-
-    /// Called by Volume.AddSnapshot after the volume checked itself, with the id the handler chose.
-    internal static VolumeSnapshot Create(Guid id, Guid volumeId, Guid tenantId, string name)
-    {
-        if (id == Guid.Empty)
-        {
-            throw new BusinessException("INVALID_REQUEST", "A snapshot needs an id.");
-        }
-        var snapshot = new VolumeSnapshot
-        {
-            Id = id,
-            VolumeId = volumeId,
-            TenantId = tenantId,
-            Name = name,
-            CurrentExistence = CurrentExistence.NotCreated,
-            DesiredExistence = DesiredExistence.Exists,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-        snapshot.SetPending(NewOperation(VolumeSnapshotOperationKind.Create));
-        return snapshot;
-    }
-
-    /// The create this snapshot waits on, for its command. The snapshot is not on Incus yet, so the command acts on its
-    /// volume there: the ticket carries the volume's provider id, which the volume hands in after its own check.
-    internal OperationTicket TicketForCreate(string volumeProviderId)
-    {
-        PendingOperation<VolumeSnapshotOperationKind>? waiting = Pending;
-        if (waiting == null || waiting.Kind != VolumeSnapshotOperationKind.Create)
-        {
-            throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "No create is waiting for this snapshot.");
-        }
-        return OperationTicket.Of(waiting.Id, volumeProviderId);
-    }
+        Status == VolumeSnapshotStatus.Creating || Status == VolumeSnapshotStatus.Available;
 
     /// Incus holds it and nothing waits: the only situation a snapshot can be restored from.
-    private bool RestsOnIncus =>
-        PendingOperationId == null
-        && CurrentExistence == CurrentExistence.Exists
-        && DesiredExistence == DesiredExistence.Exists;
+    private bool RestsOnIncus => Status == VolumeSnapshotStatus.Available;
+
+    /// The report names the operation the snapshot waits on, which its status says.
+    private bool IsWaitingOn(Guid operationId, VolumeSnapshotStatus waiting) =>
+        Status == waiting && Operation.PendingId == operationId;
+
+    /// The status a delete that gave up goes back to: whether Incus was last seen holding the snapshot.
+    private VolumeSnapshotStatus RestingStatus => InstanceStatus ?? VolumeSnapshotStatus.NotFound;
+
+    /// A report brings the provider id with it, once.
+    private void RecordTheId(string? externalId)
+    {
+        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
+        if (bringsTheProviderId)
+        {
+            ExternalId = externalId;
+        }
+    }
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation).
 
@@ -117,34 +100,6 @@ public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEn
     {
         if (!RestsOnIncus)
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot must exist on Incus, with nothing waiting, to restore.");
-    }
-
-    /// Follows Incus: a snapshot with a provider id is deleted through Incus, even one Incus no longer has; the
-    /// existence waits for the delete command (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
-    /// Refuses a repeat (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-    /// A snapshot that never reached Incus is deleted here, at once, and gets no ticket
-    /// (titan-ops architecture/desired-and-current.md#delete-locally).
-    internal OperationTicket? Delete()
-    {
-        if (DeleteIsWaiting)
-            throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "A delete is already in progress for this snapshot.");
-        if (IsDeleted)
-            throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "The snapshot is already deleted.");
-        // Never reached Incus: no command to send and no report coming.
-        bool neverReachedIncus = ExternalId is null && PendingOperationId == null;
-        if (neverReachedIncus)
-        {
-            DesiredExistence = DesiredExistence.Deleted;
-            CurrentExistence = CurrentExistence.Deleted;
-            SetPending(null);
-            return null;
-        }
-        if (CreateIsWaiting || ExternalId is null)
-            throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot is not yet on Incus.");
-        PendingOperation<VolumeSnapshotOperationKind> operation = NewOperation(VolumeSnapshotOperationKind.Delete);
-        DesiredExistence = DesiredExistence.Deleted;
-        SetPending(operation);
-        return OperationTicket.Of(operation.Id, ExternalId);
     }
 
     /// Volume.Create checks the same rule; this hands out the id, and the caller needs both,
@@ -165,106 +120,5 @@ public class VolumeSnapshot : ProviderResource<VolumeSnapshotOperationKind>, IEn
             throw new BusinessException("VOLUME_SNAPSHOT_INVALID_STATE", "Snapshot has no provider resource yet.");
         }
         return ExternalId;
-    }
-
-    // ---- The report of the snapshot's own command (titan-ops architecture/resource-lifecycle.md#shape): the one thing that
-    // ends its operation.
-
-    /// The command ended Done. Ends the waiting operation when the report names it; any other report is ignored and
-    /// returns null. The create records the id and existence, the delete ends the snapshot
-    /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal VolumeSnapshotOperationKind? FinishOperation(Guid operationId, string? externalId)
-    {
-        if (IsDeleted) return null;
-        PendingOperation<VolumeSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
-        if (waiting == null)
-        {
-            return null;
-        }
-        EnsureProviderIdOnDone(ExternalId, externalId);
-        RecordWhatTheWorkerSaw(externalId);
-
-        ClearFailure();
-        if (waiting.Kind == VolumeSnapshotOperationKind.Delete)
-        {
-            CurrentExistence = CurrentExistence.Deleted;
-        }
-
-        SetPending(null);
-        return waiting.Kind;
-    }
-
-    /// The command gave up. Ends the waiting operation when the report names it; any other report is ignored and
-    /// returns null. Records the reason, keeps an id the worker found, and gives a delete back
-    /// (titan-ops architecture/resource-lifecycle.md#kinds).
-    internal VolumeSnapshotOperationKind? FailOperation(Guid operationId, string? externalId, string? reason, string? detail)
-    {
-        if (IsDeleted) return null;
-        PendingOperation<VolumeSnapshotOperationKind>? waiting = WaitingOperationNamed(operationId);
-        if (waiting == null)
-        {
-            return null;
-        }
-        RecordWhatTheWorkerSaw(externalId);
-
-        RecordFailure(reason, detail);
-        if (waiting.Kind == VolumeSnapshotOperationKind.Delete)
-        {
-            DesiredExistence = DesiredExistence.Exists;
-        }
-
-        SetPending(null);
-        return waiting.Kind;
-    }
-
-    private PendingOperation<VolumeSnapshotOperationKind>? WaitingOperationNamed(Guid operationId)
-    {
-        PendingOperation<VolumeSnapshotOperationKind>? waiting = Pending;
-        bool reportIsForThePendingOperation = waiting != null && waiting.Id == operationId;
-        if (!reportIsForThePendingOperation)
-        {
-            return null;
-        }
-        return waiting;
-    }
-
-    private void RecordWhatTheWorkerSaw(string? externalId)
-    {
-        bool bringsTheProviderId = ExternalId == null && !string.IsNullOrEmpty(externalId);
-        if (bringsTheProviderId)
-        {
-            ExternalId = externalId;
-            CurrentExistence = CurrentExistence.Exists;
-        }
-    }
-
-    /// Incus deleted the volume, and with it this snapshot: the volume's delete Done ends it, whatever it waited on.
-    /// A snapshot already Deleted stays as it is.
-    internal void EndWithItsVolume()
-    {
-        if (IsDeleted)
-        {
-            return;
-        }
-        CurrentExistence = CurrentExistence.Deleted;
-        SetPending(null);
-    }
-
-    // ---- Observation (titan-ops architecture/intent-and-observation.md#observation-converges): current only, never throws,
-    // ends no operation (titan-ops architecture/resource-lifecycle.md#invariants).
-
-    /// The reconciler found the snapshot on Incus.
-    internal void MarkObserved()
-    {
-        if (IsDeleted) return;
-        CurrentExistence = CurrentExistence.Exists;
-    }
-
-    /// The reconciler did not find the snapshot, or its volume. Never Deleted: only a delete's Done confirms that
-    /// (titan-ops architecture/desired-and-current.md#existence-axis).
-    internal void MarkNotFound()
-    {
-        if (IsDeleted) return;
-        CurrentExistence = CurrentExistence.NotFound;
     }
 }

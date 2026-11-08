@@ -11,9 +11,10 @@ namespace Titan.Tests.Infrastructure.Integration;
 
 /// A database with volumes and volume snapshots waiting on a request under the old column meets the migration that gives
 /// each request its kind and time (titan-ops architecture/resource-lifecycle.md#shape): the kind is read in the order
-/// Volume.Transition read it, a detach a VM's delete asked for without a command ends, an open command takes the
-/// request's key and id, and the view lists both tables. The old column name below is the schema before it, by
-/// necessity. Category=Integration — its own CI step; needs real Postgres.
+/// the volume then read it and, after the later migration that gives a volume one status, is the status it waits in; a
+/// detach a VM's delete asked for without a command ends, an open command takes the request's key and id, and the view
+/// lists both tables. The old column name below is the schema before it, by necessity. Category=Integration — its own CI
+/// step; needs real Postgres.
 [Trait("Category", "Integration")]
 public sealed class VolumePendingRequestMigrationTests : IAsyncLifetime
 {
@@ -84,7 +85,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
     }
 
     [Fact]
-    public async Task EveryWaitingRequest_GetsItsKindFromTheOldColumns_AndATime()
+    public async Task EveryWaitingRequest_GetsTheStatusOfItsKindFromTheOldColumns_AndATime()
     {
         await MigrateToAsync(MigrationBefore);
         Guid vm = Guid.NewGuid();
@@ -99,16 +100,17 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
 
         await MigrateToLatestAsync();
 
-        Assert.Equal(VolumeOperationKind.Delete, (await VolumeAsync(deleting)).Pending!.Kind);
-        Assert.Equal(VolumeOperationKind.Create, (await VolumeAsync(creating)).Pending!.Kind);
-        Assert.Equal(VolumeOperationKind.Attach, (await VolumeAsync(attaching)).Pending!.Kind);
+        Assert.Equal(VolumeStatus.Deleting, (await VolumeAsync(deleting)).Status);
+        Assert.Equal(VolumeStatus.Creating, (await VolumeAsync(creating)).Status);
+        Assert.Equal(VolumeStatus.Attaching, (await VolumeAsync(attaching)).Status);
         Volume detach = await VolumeAsync(detaching);
-        Assert.Equal(VolumeOperationKind.Detach, detach.Pending!.Kind);
-        Assert.True(detach.Pending.AskedAt > DateTimeOffset.UnixEpoch);
+        Assert.Equal(VolumeStatus.Detaching, detach.Status);
+        Assert.True(detach.Operation.AskedAt > DateTimeOffset.UnixEpoch);
         Volume rest = await VolumeAsync(resting);
-        Assert.Null(rest.Pending);
-        Assert.Equal(VolumeSnapshotOperationKind.Delete, rest.Snapshots.Single(s => s.Id == snapshotDeleting).Pending!.Kind);
-        Assert.Equal(VolumeSnapshotOperationKind.Create, rest.Snapshots.Single(s => s.Id == snapshotCreating).Pending!.Kind);
+        Assert.Null(rest.Operation.PendingId);
+        Assert.Equal(VolumeStatus.Available, rest.Status);
+        Assert.Equal(VolumeSnapshotStatus.Deleting, rest.Snapshots.Single(s => s.Id == snapshotDeleting).Status);
+        Assert.Equal(VolumeSnapshotStatus.Creating, rest.Snapshots.Single(s => s.Id == snapshotCreating).Status);
     }
 
     // A detach waiting with no open command — the one Volume.DetachWithDeletedVm left — has no report coming, so it ends;
@@ -125,10 +127,11 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         await MigrateToLatestAsync();
 
         Volume ended = await VolumeAsync(askedByAVmDelete);
-        Assert.Null(ended.Pending);
+        Assert.Null(ended.Operation.PendingId);
+        Assert.Equal(VolumeStatus.Available, ended.Status);
         Assert.Null(ended.DesiredAttachedVmId);
         Assert.Equal(vm, ended.CurrentAttachedVmId);
-        Assert.Equal(VolumeOperationKind.Detach, (await VolumeAsync(askedByTheCustomer)).Pending!.Kind);
+        Assert.Equal(VolumeStatus.Detaching, (await VolumeAsync(askedByTheCustomer)).Status);
     }
 
     [Fact]
@@ -145,9 +148,9 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
 
         await MigrateToLatestAsync();
 
-        Guid deleteRequest = (await VolumeAsync(deleting)).Pending!.Id;
-        Guid restoreRequest = (await VolumeAsync(restoring)).Pending!.Id;
-        Guid snapshotRequest = (await VolumeAsync(resting)).Snapshots.Single().Pending!.Id;
+        Guid deleteRequest = (await VolumeAsync(deleting)).Operation.PendingId!.Value;
+        Guid restoreRequest = (await VolumeAsync(restoring)).Operation.PendingId!.Value;
+        Guid snapshotRequest = (await VolumeAsync(resting)).Snapshots.Single().Operation.PendingId!.Value;
         await using TitanDbContext read = NewDbContext();
         Dictionary<string, string> payloadByKey = await read.ProviderCommands.ToDictionaryAsync(c => c.Key, c => c.Payload);
         Assert.Equal(deleteRequest.ToString(), RequestIdIn(payloadByKey[$"volume-delete-{deleting}-{deleteRequest}"]));
@@ -171,7 +174,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         {
             await db.Database.ExecuteSqlRawAsync(
                 "INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('vol-mig', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
-            volume.FinishOperation(volume.Pending!.Id, "vol-after", false, null, false);
+            volume.CreateSucceeded(volume.Operation.PendingId!.Value, "vol-after", false, null, false);
             volume.AddSnapshot(Guid.NewGuid(), "s");
             db.Volumes.Add(volume);
             await db.SaveChangesAsync();

@@ -135,24 +135,69 @@ public class QueryRuleDbTests(PostgresFixture pg)
         return volume;
     }
 
+    // Quota counts a volume Incus holds or is about to hold; billing, a volume Incus holds, an attach, a detach or a delete
+    // in flight included while it was last seen holding it (titan-ops features/volume/design.md#counting-and-billing).
     [Fact]
     public async Task VolumeQuotaAndBilling_FollowWhatIncusHolds()
     {
+        string offering = await OfferingAsync();
+        Vm vm = SeenVm(offering, "vm-for-volumes", VmStatus.Running);
         Volume creating = NewVolume("creating");
+        // Seen on Incus while its create still waits: only the Domain reaches it, the reconciler lists only volumes with a
+        // provider id; the SQL counts and bills it as the bools do.
+        Volume creatingSeen = NewVolume("creating-seen");
+        creatingSeen.MarkObserved(null, false);
         Volume available = OnIncus("available");
+        Volume attachingHeld = OnIncus("attaching-held");
+        attachingHeld.Attach(vm);
+        Volume attachingLost = OnIncus("attaching-lost");
+        attachingLost.Attach(vm);
+        attachingLost.MarkNotFound();
+        Volume detachingHeld = OnIncus("detaching-held");
+        detachingHeld.Attach(vm);
+        detachingHeld.MarkAttached(vm.Id);
+        detachingHeld.Detach();
+        Volume detachingLost = OnIncus("detaching-lost");
+        detachingLost.Attach(vm);
+        detachingLost.MarkAttached(vm.Id);
+        detachingLost.Detach();
+        detachingLost.MarkNotFound();
         Volume deleting = OnIncus("deleting");
         deleting.Delete();
+        Volume deletingLost = OnIncus("deleting-lost");
+        deletingLost.Delete();
+        deletingLost.MarkNotFound();
         Volume failed = NewVolume("failed");
         failed.MarkRequestFailed("could not create", "raw");
         Volume lost = OnIncus("lost");
         lost.MarkNotFound();
-        await SaveAsync(creating, available, deleting, failed, lost);
+        Volume deleted = OnIncus("deleted");
+        deleted.Delete();
+        deleted.MarkDeleted();
+        Volume[] all =
+        [
+            creating, creatingSeen, available, attachingHeld, attachingLost, detachingHeld, detachingLost, deleting,
+            deletingLost, failed, lost, deleted,
+        ];
+        await SaveAsync(all);
 
+        Guid[] counted = [creating.Id, creatingSeen.Id, available.Id, attachingHeld.Id, detachingHeld.Id];
+        Guid[] billedIds = [creatingSeen.Id, available.Id, attachingHeld.Id, detachingHeld.Id, deleting.Id];
+        Assert.Equal(counted.Order(), all.Where(v => v.OccupiesQuota).Select(v => v.Id).Order());
+        Assert.Equal(billedIds.Order(), all.Where(v => v.IsBilled).Select(v => v.Id).Order());
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new VolumeRepository(db);
-        Assert.Equal(2, await repo.CountActiveByTenantAsync(_tenant.Id)); // creating, available
-        var billed = (await repo.ListBillableAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id).OrderBy(i => i);
-        Assert.Equal(new[] { available.Id, deleting.Id }.OrderBy(i => i), billed); // a delete in flight still bills
+        Assert.Equal(counted.Length, await repo.CountActiveByTenantAsync(_tenant.Id));
+        var billed = (await repo.ListBillableAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
+        Assert.Equal(billedIds.Order(), billed.Order()); // a delete in flight still bills
+    }
+
+    // A volume snapshot on Incus, its create ended Done.
+    private static VolumeSnapshot CreatedVolumeSnapshot(Volume volume, string name)
+    {
+        VolumeSnapshot snapshot = volume.WithSnapshot(name);
+        snapshot.MarkCreated($"{volume.ExternalId}/{name}");
+        return snapshot;
     }
 
     // A snapshot on Incus, its create ended Done.
@@ -202,8 +247,19 @@ public class QueryRuleDbTests(PostgresFixture pg)
 
         Volume volume = OnIncus("vol");
         volume.WithSnapshot("vol-creating");
-        VolumeSnapshot volumeReady = volume.WithSnapshot("vol-ready");
-        volumeReady.MarkCreated("vol/s1");
+        VolumeSnapshot volumeReady = CreatedVolumeSnapshot(volume, "vol-ready");
+        VolumeSnapshot volumeNotFound = CreatedVolumeSnapshot(volume, "vol-not-found");
+        volume.MarkSnapshotNotFound(volumeNotFound.Id);
+        VolumeSnapshot volumeFailed = volume.WithSnapshot("vol-failed");
+        volumeFailed.MarkRequestFailed("refused", null);
+        VolumeSnapshot volumeDeletingHeld = CreatedVolumeSnapshot(volume, "vol-deleting-held");
+        volume.DeleteSnapshot(volumeDeletingHeld.Id);
+        VolumeSnapshot volumeDeletingLost = CreatedVolumeSnapshot(volume, "vol-deleting-lost");
+        volume.DeleteSnapshot(volumeDeletingLost.Id);
+        volume.MarkSnapshotNotFound(volumeDeletingLost.Id);
+        // Seen while its create still waits: Domain only, as for a VM snapshot.
+        VolumeSnapshot volumeCreatingSeen = volume.WithSnapshot("vol-creating-seen");
+        volume.MarkSnapshotObserved(volumeCreatingSeen.Id);
         Vm[] vms = [atRest, creatingVm, creatingSeenVm, revertingHeldVm, revertingLostVm];
         await SaveAsync([.. vms, volume]);
 
@@ -219,7 +275,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
         var vmBilled = (await new VmSnapshotRepository(db).ListBillableAsync()).Where(s => vmIds.Contains(s.VmId)).Select(s => s.Id);
         var volumeBilled = (await new VolumeSnapshotRepository(db).ListBillableAsync()).Where(s => s.VolumeId == volume.Id).Select(s => s.Id);
         Assert.Equal(expected.Order(), vmBilled.Order());
-        Assert.Equal(new[] { volumeReady.Id }, volumeBilled);
+        Assert.Equal(new[] { volumeReady.Id, volumeDeletingHeld.Id, volumeCreatingSeen.Id }.Order(), volumeBilled.Order());
     }
 
     private Network NewNetwork(string name, bool publicIpv6)

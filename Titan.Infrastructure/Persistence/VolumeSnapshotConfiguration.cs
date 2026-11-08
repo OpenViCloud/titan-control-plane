@@ -16,19 +16,21 @@ public class VolumeSnapshotConfiguration : IEntityTypeConfiguration<VolumeSnapsh
         builder.Property(s => s.VolumeId).HasColumnName("volume_id");
         builder.Property(s => s.TenantId).HasColumnName("tenant_id");
         builder.Property(s => s.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
-        // Incus has no status word for it: existence only (titan-ops architecture/desired-and-current.md#existence-axis).
-        builder.Property(s => s.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(s => s.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        // The snapshot's own waiting request, as the volume's (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<VolumeSnapshotOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(s => s.Pending);
-        builder.Ignore(s => s.Transition);
+        // titan-ops features/volume/design.md#volume-snapshot: status is the one status. The snapshot's own waiting operation
+        // and last failure are a value object kept in this table's columns, never null, with observed_state whether Incus
+        // was last seen holding the snapshot while an operation waits (titan-ops features/volume/design.md#volume-data-model).
+        builder.Property(s => s.Status).HasColumnName("status").HasConversion<string>().IsRequired();
+        builder.OwnsOne(s => s.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+            o.Property(x => x.LastSeenStatus).HasColumnName("observed_state").HasConversion<string>();
+        });
+        builder.Ignore(s => s.InstanceStatus);
         builder.Property(s => s.ExternalId).HasColumnName("external_id");
-        builder.Property(s => s.OperationFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(s => s.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(s => s.OperationFailedAt).HasColumnName("request_failed_at");
         builder.Property(s => s.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(s => s.VolumeId);

@@ -45,7 +45,7 @@ public class CreateVolumeCommandHandler(
         activity.Stage("volume.create_requested", "volume", volume.Id, volume.Name); // atomic with the volume insert
         string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
         await commands.EnqueueVolumeCreateAsync(
-            volume.Id, volume.Pending!.Id, volume.Name, volume.ClusterId, volume.SizeGb, projectName, ct);
+            volume.Id, volume.Operation.PendingId!.Value, volume.Name, volume.ClusterId, volume.SizeGb, projectName, ct);
         await repo.SaveAsync(ct);
 
         return new CreateVolumeCommandResult(volume.Id);

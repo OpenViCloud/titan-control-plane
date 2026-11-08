@@ -1,23 +1,20 @@
 using System.Text.Json.Serialization;
 using Titan.Domain.Aggregates.Volume;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
-using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;
 
 // The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse): never reused by a command, even
-// where fields would match. Incus has no status word for a volume (titan-ops features/volume/design.md#volume-state-is-existence):
-// the current pair (existence, attachment) is what Incus was last seen to hold, the desired pair what was asked, and
-// transition the request still waiting, derived. The failure detail is the operator's, never the tenant's.
+// where fields would match. One status (titan-ops features/volume/design.md#volume-state-is-existence), and the attachment: the
+// current attachment is what Incus was last seen to hold, the desired one what was asked. The failure detail is the
+// operator's, never the tenant's.
 public record VolumeQueryResult(
     Guid Id,
     string Name,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] CurrentExistence CurrentExistence,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] DesiredExistence DesiredExistence,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] VolumeStatus Status,
     Guid? CurrentAttachedVmId,
     bool CurrentAttachedElsewhere,
     Guid? DesiredAttachedVmId,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] VolumeTransition? Transition,
     string ClusterId,
     string VolumeOfferingId,
     int SizeGb,
@@ -26,7 +23,6 @@ public record VolumeQueryResult(
     DateTimeOffset? RequestFailedAt)
 {
     public static VolumeQueryResult From(VolumeAggregate v) =>
-        new(v.Id, v.Name, v.CurrentExistence, v.DesiredExistence, v.CurrentAttachedVmId,
-            v.CurrentAttachedElsewhere, v.DesiredAttachedVmId, v.Transition, v.ClusterId,
-            v.VolumeOfferingId, v.SizeGb, v.CreatedAt, v.OperationFailureReason, v.OperationFailedAt);
+        new(v.Id, v.Name, v.Status, v.CurrentAttachedVmId, v.CurrentAttachedElsewhere, v.DesiredAttachedVmId,
+            v.ClusterId, v.VolumeOfferingId, v.SizeGb, v.CreatedAt, v.Operation.FailureReason, v.Operation.FailedAt);
 }

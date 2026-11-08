@@ -17,20 +17,18 @@ public class DesiredCurrentOwnershipTests
 {
     // The provisioned aggregates that keep one status instead of the split, by name: the VM
     // (titan-ops features/vm/design.md#vm-status), the network and the firewall rule (titan-ops
-    // features/network/design.md#network-lifecycle), and the VM snapshot (titan-ops features/vm/design.md#vm-snapshot).
+    // features/network/design.md#network-lifecycle), the VM snapshot (titan-ops features/vm/design.md#vm-snapshot), and the
+    // volume and its snapshot (titan-ops features/volume/design.md#volume-state-is-existence).
     // Their status moves only through their own table of moves, so the scans below leave them out, and the last fact
     // checks they really have no split.
-    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule", "VmSnapshot"];
+    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot"];
 
     // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
     // there is no observation coming, so the control plane is the only witness
     // (titan-ops architecture/desired-and-current.md#delete-locally).
     private static readonly Dictionary<string, string> IntentWritesCurrentAllowlist = new()
     {
-        ["Volume.Delete"] = "the delete of a volume whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VolumeSnapshot.Delete"] = "the delete of a snapshot whose create failed before Incus had it happens in the request: nothing to observe",
         ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
-        ["VolumeSnapshot.EndWithItsVolume"] = "part of Volume.FinishOperation: the volume's delete Done takes its snapshots with it (titan-ops architecture/resource-lifecycle.md#shape)",
     };
 
     private static readonly Regex MethodHead = new(
@@ -81,9 +79,6 @@ public class DesiredCurrentOwnershipTests
         [
             "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
             "VmTemplateCluster.FailOperation", "VmTemplateCluster.FinishOperation", "VmTemplateCluster.RecordWhatTheWorkerSaw",
-            "Volume.FailOperation", "Volume.FailSnapshotOperation", "Volume.FinishOperation", "Volume.FinishSnapshotOperation",
-            "Volume.RecordWhatTheWorkerSaw",
-            "VolumeSnapshot.FailOperation", "VolumeSnapshot.FinishOperation", "VolumeSnapshot.RecordWhatTheWorkerSaw",
         ];
         Assert.Equal(expected.OrderBy(k => k, StringComparer.Ordinal), reports);
     }
@@ -186,9 +181,9 @@ public class DesiredCurrentOwnershipTests
     }
 
     // `?` in the type: a nullable current state — a pattern without it would drop the type from every scan here, still
-    // green. The VM, the network, the firewall rule and the VM snapshot keep one status and are out on purpose (OneStatus). Desired is
+    // green. The VM, the network, the firewall rule, the VM snapshot, the volume and the volume snapshot keep one status and are out on purpose (OneStatus). Desired is
     // DesiredState or, where Titan sets no Incus status, only DesiredExistence; current is CurrentState or, where Incus
-    // has no status word (volume, volume snapshot), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
+    // has no status word (load balancer, template per cluster), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
     // pattern for one name alone would drop the others the same way.
     private static bool DeclaresBothStates(string src) =>
         Regex.IsMatch(src, @"public [\w?]+ Desired(?:State|Existence) \{ get; private set; \}")

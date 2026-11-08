@@ -1569,19 +1569,9 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("current_attached_vm_id");
 
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
                     b.Property<Guid?>("DesiredAttachedVmId")
                         .HasColumnType("uuid")
                         .HasColumnName("desired_attached_vm_id");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
 
                     b.Property<string>("ExternalId")
                         .HasColumnType("text")
@@ -1593,33 +1583,14 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("OperationFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("OperationFailureDetail")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("OperationFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingOperationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingOperationKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
-
                     b.Property<int>("SizeGb")
                         .HasColumnType("integer")
                         .HasColumnName("size_gb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1649,16 +1620,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<string>("CurrentExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("current_existence");
-
-                    b.Property<string>("DesiredExistence")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("desired_existence");
-
                     b.Property<string>("ExternalId")
                         .HasColumnType("text")
                         .HasColumnName("external_id");
@@ -1669,29 +1630,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
-                    b.Property<DateTimeOffset?>("OperationFailedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("request_failed_at");
-
-                    b.Property<string>("OperationFailureDetail")
+                    b.Property<string>("Status")
+                        .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("request_failure_detail");
-
-                    b.Property<string>("OperationFailureReason")
-                        .HasColumnType("text")
-                        .HasColumnName("request_failure_reason");
-
-                    b.Property<DateTimeOffset?>("PendingOperationAskedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("pending_request_asked_at");
-
-                    b.Property<Guid?>("PendingOperationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("pending_request_id");
-
-                    b.Property<string>("PendingOperationKind")
-                        .HasColumnType("text")
-                        .HasColumnName("pending_request_kind");
+                        .HasColumnName("status");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -2212,6 +2154,46 @@ namespace Titan.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_volumes_volume_offerings_volume_offering_id");
+
+                    b.OwnsOne("Titan.Domain.Aggregates.Volume.VolumeOperation", "Operation", b1 =>
+                        {
+                            b1.Property<Guid>("VolumeId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("AskedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("pending_request_asked_at");
+
+                            b1.Property<DateTimeOffset?>("FailedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("request_failed_at");
+
+                            b1.Property<string>("FailureDetail")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_detail");
+
+                            b1.Property<string>("FailureReason")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_reason");
+
+                            b1.Property<string>("LastSeenStatus")
+                                .HasColumnType("text")
+                                .HasColumnName("observed_state");
+
+                            b1.Property<Guid?>("PendingId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("pending_request_id");
+
+                            b1.HasKey("VolumeId");
+
+                            b1.ToTable("volumes", "core");
+
+                            b1.WithOwner()
+                                .HasForeignKey("VolumeId");
+                        });
+
+                    b.Navigation("Operation")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Volume.VolumeSnapshot", b =>
@@ -2220,6 +2202,46 @@ namespace Titan.Infrastructure.Migrations
                         .WithMany("Snapshots")
                         .HasForeignKey("VolumeId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsOne("Titan.Domain.Aggregates.Volume.VolumeSnapshotOperation", "Operation", b1 =>
+                        {
+                            b1.Property<Guid>("VolumeSnapshotId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("AskedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("pending_request_asked_at");
+
+                            b1.Property<DateTimeOffset?>("FailedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("request_failed_at");
+
+                            b1.Property<string>("FailureDetail")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_detail");
+
+                            b1.Property<string>("FailureReason")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_reason");
+
+                            b1.Property<string>("LastSeenStatus")
+                                .HasColumnType("text")
+                                .HasColumnName("observed_state");
+
+                            b1.Property<Guid?>("PendingId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("pending_request_id");
+
+                            b1.HasKey("VolumeSnapshotId");
+
+                            b1.ToTable("volume_snapshots", "core");
+
+                            b1.WithOwner()
+                                .HasForeignKey("VolumeSnapshotId");
+                        });
+
+                    b.Navigation("Operation")
                         .IsRequired();
                 });
 
