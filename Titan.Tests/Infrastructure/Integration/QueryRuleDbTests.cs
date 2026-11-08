@@ -3,6 +3,7 @@ using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
@@ -276,6 +277,57 @@ public class QueryRuleDbTests(PostgresFixture pg)
         var volumeBilled = (await new VolumeSnapshotRepository(db).ListBillableAsync()).Where(s => s.VolumeId == volume.Id).Select(s => s.Id);
         Assert.Equal(expected.Order(), vmBilled.Order());
         Assert.Equal(new[] { volumeReady.Id, volumeDeletingHeld.Id, volumeCreatingSeen.Id }.Order(), volumeBilled.Order());
+    }
+
+    // What customers in a cluster may pick: the cluster holds the alias, or a re-sync waits and saw it there
+    // (titan-ops features/catalog/design.md#template-customer-read). The LINQ filter reads the owned operation's
+    // last-seen column; InMemory runs it as C#, so only Postgres shows it translates.
+    [Fact]
+    public async Task TemplateSyncedList_IsAnAvailableCluster_OrASyncThatSawTheAliasThere()
+    {
+        string offering = await OfferingAsync();
+        string cluster = $"qr-{Guid.NewGuid():N}"[..16];
+
+        VmTemplate Template(string name) =>
+            VmTemplate.Create($"{name}-{Guid.NewGuid():N}"[..20], null, "Ubuntu-22.04", null, offering);
+        VmTemplate Available(string name)
+        {
+            VmTemplate template = Template(name);
+            Guid syncId = template.SyncIn(cluster);
+            template.SyncSucceededIn(cluster, syncId, $"tpl-{template.Id:N}");
+            return template;
+        }
+        VmTemplate Lost(string name)
+        {
+            VmTemplate template = Available(name);
+            template.MarkNotFoundIn(cluster);
+            return template;
+        }
+
+        VmTemplate available = Available("available");
+        VmTemplate notFound = Lost("not-found");
+        VmTemplate resyncSeen = Lost("resync-seen");
+        resyncSeen.SyncIn(cluster);
+        resyncSeen.MarkObservedIn(cluster);
+        VmTemplate resyncLost = Lost("resync-lost");
+        resyncLost.SyncIn(cluster);
+        VmTemplate failed = Template("failed");
+        Guid failedSyncId = failed.SyncIn(cluster);
+        failed.SyncFailedIn(cluster, failedSyncId, null, "no image for this architecture", null);
+        VmTemplate firstSync = Template("first-sync");
+        firstSync.SyncIn(cluster);
+        VmTemplate[] all = [available, notFound, resyncSeen, resyncLost, failed, firstSync];
+        await SaveAsync([.. all]);
+
+        Guid[] expected = [available.Id, resyncSeen.Id];
+        Assert.Equal(expected.Order(), all.Where(t => t.IsSyncedIn(cluster)).Select(t => t.Id).Order());
+        HashSet<Guid> ids = all.Select(t => t.Id).ToHashSet();
+        await using TitanDbContext db = pg.NewDbContext();
+        var repository = new VmTemplateRepository(db);
+        var inCluster = (await repository.ListSyncedInClusterAsync(cluster)).Where(t => ids.Contains(t.Id)).Select(t => t.Id);
+        var inAnyCluster = (await repository.ListSyncedInAnyClusterAsync()).Where(t => ids.Contains(t.Id)).Select(t => t.Id);
+        Assert.Equal(expected.Order(), inCluster.Order());
+        Assert.Equal(expected.Order(), inAnyCluster.Order());
     }
 
     private Network NewNetwork(string name, bool publicIpv6)

@@ -429,23 +429,23 @@ namespace Titan.Domain.Aggregates.VmTemplate
 {
     /// A template's sync in a cluster ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
     /// these replay the worker's reports under the one-call names test setups used before, through the real
-    /// FinishSyncOperation and FailSyncOperation. A replay for a sync not waiting ends nothing.
+    /// SyncSucceededIn and SyncFailedIn. A replay for a sync not waiting ends nothing.
     public static class VmTemplateProvisionedOnTheProvider
     {
         /// The sync command's Done with the alias. True when it ended a waiting sync; with none waiting there is no
         /// request to end, so nothing changes.
         public static bool MarkCreatedIn(this VmTemplate template, string clusterId, string externalTemplateId)
         {
-            Values.PendingOperation<VmTemplateOperationKind>? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Pending;
-            return waiting != null && template.FinishSyncOperation(clusterId, waiting.Id, externalTemplateId) != null;
+            Guid? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Operation.PendingId;
+            return waiting != null && template.SyncSucceededIn(clusterId, waiting.Value, externalTemplateId);
         }
 
         /// The sync command's give-up, before Incus had the alias. True when a sync was waiting.
         public static bool MarkRequestFailedIn(this VmTemplate template, string clusterId, string? reason, string? detail)
         {
-            Values.PendingOperation<VmTemplateOperationKind>? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Pending;
+            Guid? waiting = template.Clusters.FirstOrDefault(c => c.ClusterId == clusterId)?.Operation.PendingId;
             return waiting != null
-                   && template.FailSyncOperation(clusterId, waiting.Id, null, reason, detail) != null;
+                   && template.SyncFailedIn(clusterId, waiting.Value, null, reason, detail);
         }
     }
 }

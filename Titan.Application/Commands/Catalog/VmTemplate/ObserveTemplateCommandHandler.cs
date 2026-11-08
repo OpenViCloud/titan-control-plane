@@ -7,7 +7,7 @@ using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 namespace Titan.Application.Commands.Catalog.VmTemplate;
 
 // The template reconciler's observation of one cluster (titan-ops architecture/resource-lifecycle.md#callback-routes):
-// current only, no sync ends here. Authenticated by X-Internal-Token at the endpoint; the template's row is locked like
+// it records what was seen and ends no sync. Authenticated by X-Internal-Token at the endpoint; the template's row is locked like
 // every lifecycle handler's.
 public class ObserveTemplateCommandHandler(IVmTemplateRepository repo, ClusterOptions clusters)
 {

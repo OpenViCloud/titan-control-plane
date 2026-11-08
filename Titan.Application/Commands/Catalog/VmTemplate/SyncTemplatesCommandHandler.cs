@@ -4,7 +4,6 @@ using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
 
 namespace Titan.Application.Commands.Catalog.VmTemplate;
@@ -51,8 +50,8 @@ public class SyncTemplatesCommandHandler(
                 {
                     continue;
                 }
-                PendingOperation<VmTemplateOperationKind> request = locked.SyncIn(cluster.Id);
-                await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, request.Id, locked.Name, locked.Description,
+                Guid requestId = locked.SyncIn(cluster.Id);
+                await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, requestId, locked.Name, locked.Description,
                     locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
                 enqueued++;
             }
@@ -72,8 +71,6 @@ public class SyncTemplatesCommandHandler(
         {
             return true;
         }
-        bool aliasIsThere = row.CurrentExistence == CurrentExistence.Exists;
-        bool syncIsWaiting = row.Pending != null;
-        return !aliasIsThere && !syncIsWaiting;
+        return row.Status == VmTemplateClusterStatus.Failed || row.Status == VmTemplateClusterStatus.NotFound;
     }
 }

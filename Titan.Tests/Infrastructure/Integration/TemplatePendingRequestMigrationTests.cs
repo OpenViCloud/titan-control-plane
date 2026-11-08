@@ -81,9 +81,9 @@ VALUES ({templateId}, {clusterId}, 'NotCreated', 'Exists', {intent}, now())");
         await MigrateToLatestAsync();
 
         VmTemplateCluster sync = await RowAsync(templates[0], "cluster-a");
-        Assert.Equal((VmTemplateOperationKind.Sync, waiting!.Value), (sync.Pending!.Kind, sync.Pending.Id));
-        Assert.True(sync.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Null((await RowAsync(templates[0], "cluster-b")).Pending);
+        Assert.Equal((VmTemplateClusterStatus.Syncing, waiting!.Value), (sync.Status, sync.Operation.PendingId!.Value));
+        Assert.True(sync.Operation.AskedAt > DateTimeOffset.UnixEpoch);
+        Assert.Null((await RowAsync(templates[0], "cluster-b")).Operation.PendingId);
     }
 
     [Fact]
@@ -130,7 +130,7 @@ VALUES ({templateId}, {clusterId}, 'NotCreated', 'Exists', {intent}, now())");
         await using (TitanDbContext db = NewDbContext())
         {
             VmTemplate template = await db.VmTemplates.Include(t => t.Clusters).SingleAsync(t => t.Id == templateId);
-            requestId = template.SyncIn("cluster-a").Id;
+            requestId = template.SyncIn("cluster-a");
             await db.SaveChangesAsync();
         }
 

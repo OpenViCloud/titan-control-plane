@@ -123,7 +123,7 @@ public class TemplateServiceTests
         return t;
     }
 
-    private static Guid WaitingSync(VmTemplate t) => t.Clusters.Single(c => c.ClusterId == Mock).Pending!.Id;
+    private static Guid WaitingSync(VmTemplate t) => t.Clusters.Single(c => c.ClusterId == Mock).Operation.PendingId!.Value;
 
     private static string Shape(VmTemplate t, string clusterId)
     {
@@ -132,12 +132,7 @@ public class TemplateServiceTests
         {
             return "none";
         }
-        string transition = "-";
-        if (cluster.Transition != null)
-        {
-            transition = cluster.Transition.ToString()!;
-        }
-        return $"{cluster.CurrentExistence}/{cluster.DesiredExistence}/{transition}";
+        return cluster.Status.ToString();
     }
 
     private static void VerifySync(Mock<IProviderCommandQueue> wf, Times times) =>
@@ -145,7 +140,7 @@ public class TemplateServiceTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), times);
 
     private static Guid WaitingSyncOf(VmTemplate t, string clusterId) =>
-        t.Clusters.Single(candidate => candidate.ClusterId == clusterId).Pending!.Id;
+        t.Clusters.Single(candidate => candidate.ClusterId == clusterId).Operation.PendingId!.Value;
 
     // ── Templates never asked into a cluster (titan-ops features/catalog/design.md#template-sync-never-asked) ──
 
@@ -165,7 +160,7 @@ public class TemplateServiceTests
 
         await RunNeverAsked(repo, wf);
 
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(t, Singapore));
+        Assert.Equal("Syncing", Shape(t, Singapore));
         wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Singapore, WaitingSyncOf(t, Singapore), It.IsAny<string>(),
             It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.True(repo.Saved);
@@ -198,7 +193,7 @@ public class TemplateServiceTests
 
         await RunNeverAsked(repo, wf);
 
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(added, Singapore));
+        Assert.Equal("Syncing", Shape(added, Singapore));
     }
 
     [Fact]
@@ -352,9 +347,28 @@ public class TemplateServiceTests
         var dtos = (await svc.ListAllForAdminAsync()).ToDictionary(d => d.Name, d => d.Clusters.Single());
 
         // Unlike the customer ListAsync, admin sees a waiting and a failed sync too.
-        Assert.Equal(("NotCreated", "Syncing", (string?)null), (dtos["Ubuntu-Web"].CurrentExistence, dtos["Ubuntu-Web"].Transition, dtos["Ubuntu-Web"].RequestFailureReason));
-        Assert.Equal(("Exists", (string?)null, (string?)null), (dtos["CentOS"].CurrentExistence, dtos["CentOS"].Transition, dtos["CentOS"].RequestFailureReason));
-        Assert.Equal(("NotCreated", (string?)null, (string?)"boom"), (dtos["Broken"].CurrentExistence, dtos["Broken"].Transition, dtos["Broken"].RequestFailureReason));
+        Assert.Equal(("Syncing", (string?)null), (dtos["Ubuntu-Web"].Status, dtos["Ubuntu-Web"].RequestFailureReason));
+        Assert.Equal(("Available", (string?)null), (dtos["CentOS"].Status, dtos["CentOS"].RequestFailureReason));
+        Assert.Equal(("Failed", (string?)"boom"), (dtos["Broken"].Status, dtos["Broken"].RequestFailureReason));
+    }
+
+    // The admin JSON carries the one status and none of the three fields it replaced (titan-ops features/catalog/design.md#template-per-cluster).
+    [Fact]
+    public async Task ListAllForAdmin_Json_CarriesStatus_AndNoExistenceOrTransition()
+    {
+        var syncing = PendingTemplate();
+        var (svc, _, _) = Make(syncing, SyncedTemplate("CentOS", "77"));
+
+        var dtos = await svc.ListAllForAdminAsync();
+        using var json = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(
+            dtos.Single(d => d.Name == "Ubuntu-Web").Clusters.Single(),
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+
+        var names = json.RootElement.EnumerateObject().Select(p => p.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        Assert.Equal(
+            ["clusterId", "externalTemplateId", "requestFailedAt", "requestFailureDetail", "requestFailureReason", "status"],
+            names);
+        Assert.Equal("Syncing", json.RootElement.GetProperty("status").GetString());
     }
 
     [Fact] // the raw provider error is the operator's: only the admin list carries it (titan-ops architecture/desired-and-current.md#request-failure)
@@ -372,20 +386,20 @@ public class TemplateServiceTests
     }
 
     [Fact]
-    public async Task ListAllForAdmin_Exists_ExposesExternalTemplateId()
+    public async Task ListAllForAdmin_Available_ExposesExternalTemplateId()
     {
         var (svc, _, _) = Make(SyncedTemplate("Ubuntu", "205"));
 
         var dto = Assert.Single(await svc.ListAllForAdminAsync());
 
         var cluster = Assert.Single(dto.Clusters);
-        Assert.Equal((Mock, "Exists", "Exists", "205"), (cluster.ClusterId, cluster.CurrentExistence, cluster.DesiredExistence, cluster.ExternalTemplateId));
+        Assert.Equal((Mock, "Available", "205"), (cluster.ClusterId, cluster.Status, cluster.ExternalTemplateId));
         Assert.Equal("Ubuntu", dto.Name);
         Assert.Equal("img", dto.Os);
     }
 
-    [Fact] // one template, two clusters: two existences, two ids, ordered by cluster id
-    public async Task ListAllForAdmin_ShowsEachClustersExistenceAndId()
+    [Fact] // one template, two clusters: two statuses, two ids, ordered by cluster id
+    public async Task ListAllForAdmin_ShowsEachClustersStatusAndId()
     {
         var t = SyncedTemplate("Ubuntu", "205", Singapore);
         t.SyncIn(Mock);
@@ -394,8 +408,8 @@ public class TemplateServiceTests
         var clusters = Assert.Single(await svc.ListAllForAdminAsync()).Clusters;
 
         Assert.Equal(
-            [(Mock, "NotCreated", (string?)"Syncing", (string?)null), (Singapore, "Exists", null, "205")],
-            clusters.Select(z => (z.ClusterId, z.CurrentExistence, z.Transition, z.ExternalTemplateId)));
+            [(Mock, "Syncing", (string?)null), (Singapore, "Available", "205")],
+            clusters.Select(z => (z.ClusterId, z.Status, z.ExternalTemplateId)));
     }
 
     [Fact] // an alias seen gone keeps its id: the admin sees which alias to look for
@@ -407,7 +421,7 @@ public class TemplateServiceTests
 
         var cluster = Assert.Single(Assert.Single(await svc.ListAllForAdminAsync()).Clusters);
 
-        Assert.Equal(("NotFound", "tpl-1"), (cluster.CurrentExistence, cluster.ExternalTemplateId));
+        Assert.Equal(("NotFound", "tpl-1"), (cluster.Status, cluster.ExternalTemplateId));
     }
 
     [Fact]
@@ -421,20 +435,20 @@ public class TemplateServiceTests
     // ── The worker's reports: what customers see ─────────────────────────
 
     [Fact] // the sync command: the alias is there and of the cluster's architecture
-    public async Task SyncDone_RecordsTheAlias_AndTheTemplateExists()
+    public async Task SyncDone_RecordsTheAlias_AndTheTemplateIsAvailable()
     {
         var t = PendingTemplate();
         var (svc, repo, _) = Make(t);
 
         await svc.EndSyncAsync(t.Id, WaitingSync(t), "Done", "tpl-205");
 
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
+        Assert.Equal("Available", Shape(t, Mock));
         Assert.Equal("tpl-205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
         Assert.True(repo.Saved);
         Assert.Single(await svc.ListAsync(Mock));
     }
 
-    [Fact] // the sync command gave up (wrong architecture, no cluster): the reason for the operator, existence unchanged
+    [Fact] // the sync command gave up (wrong architecture, no cluster): the reason for the operator, and the cluster holds no alias
     public async Task SyncFailed_RecordsReasonAndDetail_AndEndsTheWait()
     {
         var t = PendingTemplate();
@@ -442,9 +456,9 @@ public class TemplateServiceTests
 
         await svc.EndSyncAsync(t.Id, WaitingSync(t), "Failed", reason: "Template image has the wrong architecture.", detail: "x86_64 on aarch64");
 
-        Assert.Equal("NotCreated/Exists/-", Shape(t, Mock));
-        Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureReason);
-        Assert.Equal("x86_64 on aarch64", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.OperationFailureDetail);
+        Assert.Equal("Failed", Shape(t, Mock));
+        Assert.Equal("Template image has the wrong architecture.", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.Operation.FailureReason);
+        Assert.Equal("x86_64 on aarch64", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.Operation.FailureDetail);
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
@@ -457,14 +471,14 @@ public class TemplateServiceTests
 
         await svc.ObserveAsync(t.Id, exists: false);
 
-        Assert.Equal("NotFound/Exists/-", Shape(t, Mock));
+        Assert.Equal("NotFound", Shape(t, Mock));
         Assert.Equal("205", t.Clusters.FirstOrDefault(candidate => candidate.ClusterId == Mock)!.ExternalTemplateId);
         Assert.True(repo.Saved);
         Assert.Empty(await svc.ListAsync(Mock));
     }
 
     [Fact]
-    public async Task ObservedThere_OnALostTemplate_RecordsItExistsAgain()
+    public async Task ObservedThere_OnALostTemplate_RecordsItAvailableAgain()
     {
         var t = SyncedTemplate("Ubuntu", "205");
         t.MarkNotFoundIn(Mock);
@@ -472,7 +486,7 @@ public class TemplateServiceTests
 
         await svc.ObserveAsync(t.Id, exists: true);
 
-        Assert.Equal("Exists/Exists/-", Shape(t, Mock));
+        Assert.Equal("Available", Shape(t, Mock));
         Assert.Single(await svc.ListAsync(Mock));
     }
 
@@ -555,8 +569,8 @@ public class TemplateServiceTests
 
         await svc.SyncAllAsync();
 
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(failed, Mock));
-        Assert.Equal("Exists/Exists/-", Shape(synced, Mock));
+        Assert.Equal("Syncing", Shape(failed, Mock));
+        Assert.Equal("Available", Shape(synced, Mock));
         Assert.True(repo.Saved);
     }
 
@@ -588,10 +602,10 @@ public class TemplateServiceTests
 
         await svc.SyncAllAsync();
 
-        Assert.Equal("Exists/Exists/-", Shape(synced, Mock));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(synced, Singapore));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(fresh, Mock));
-        Assert.Equal("NotCreated/Exists/Syncing", Shape(fresh, Singapore));
+        Assert.Equal("Available", Shape(synced, Mock));
+        Assert.Equal("Syncing", Shape(synced, Singapore));
+        Assert.Equal("Syncing", Shape(fresh, Mock));
+        Assert.Equal("Syncing", Shape(fresh, Singapore));
     }
 
     // The repeat (titan-ops architecture/resource-lifecycle.md#repeat): a second press while a sync waits asks for nothing
@@ -609,6 +623,24 @@ public class TemplateServiceTests
         Assert.Equal(firstRequest, WaitingSyncOf(t, Mock));
         Assert.Equal(0, second);
         VerifySync(wf, Times.Exactly(2)); // the first run's two clusters
+    }
+
+    [Fact] // the alias went missing on Incus: sync-all pulls it again, and a present one is left alone
+    public async Task SyncAll_AsksAgain_ForAClusterWhoseAliasIsGone_AndNotForOneThatHasIt()
+    {
+        var lost = SyncedTemplate("a-lost", "50");
+        lost.MarkNotFoundIn(Mock);
+        var there = SyncedTemplate("b-there", "51");
+        var (svc, _, wf) = Make(lost, there);
+
+        await svc.SyncAllAsync();
+
+        Assert.Equal("Syncing", Shape(lost, Mock));
+        Assert.Equal("Available", Shape(there, Mock));
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(lost.Id, Mock, WaitingSyncOf(lost, Mock), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(there.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
+            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

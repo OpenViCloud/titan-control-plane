@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
@@ -18,18 +17,22 @@ public class VmTemplateRepository(TitanDbContext db) : IVmTemplateRepository
         return await FindByIdAsync(id, ct);
     }
 
-    // Unordered: ListTemplatesQueryHandler owns the customer-facing name ordering.
+    // Both synced lists write VmTemplateCluster.IsSynced in SQL. Unordered: ListTemplatesQueryHandler owns the
+    // customer-facing name ordering.
     public async Task<List<VmTemplate>> ListSyncedInClusterAsync(string clusterId, CancellationToken ct = default) =>
         await db.VmTemplates
             .Include(t => t.Clusters)
-            .Where(t => t.Clusters.Any(z => z.ClusterId == clusterId && z.CurrentExistence == CurrentExistence.Exists))
+            .Where(t => t.Clusters.Any(z => z.ClusterId == clusterId
+                && (z.Status == VmTemplateClusterStatus.Available
+                    || (z.Status == VmTemplateClusterStatus.Syncing && z.Operation.LastSeenStatus == VmTemplateClusterStatus.Available))))
             .AsNoTracking()
             .ToListAsync(ct);
 
     public async Task<List<VmTemplate>> ListSyncedInAnyClusterAsync(CancellationToken ct = default) =>
         await db.VmTemplates
             .Include(t => t.Clusters)
-            .Where(t => t.Clusters.Any(z => z.CurrentExistence == CurrentExistence.Exists))
+            .Where(t => t.Clusters.Any(z => z.Status == VmTemplateClusterStatus.Available
+                || (z.Status == VmTemplateClusterStatus.Syncing && z.Operation.LastSeenStatus == VmTemplateClusterStatus.Available)))
             .AsNoTracking()
             .ToListAsync(ct);
 
