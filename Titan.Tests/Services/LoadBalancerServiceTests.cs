@@ -141,9 +141,9 @@ public class LoadBalancerServiceTests
         Assert.Equal("net-ext", lb.ExternalNetworkId);
         Assert.Equal("2001:41d0:d00:d405::/64", lb.NetworkSubnet);
         Assert.Equal("cluster-1", lb.ClusterId);
-        Assert.Equal(LoadBalancerTransition.Creating, lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Creating, lb.Status);
         Assert.Equal(1, _repo.Saves);
-        _commands.Verify(c => c.EnqueueLoadBalancerCreateAsync(lb, lb.Pending!.Id, Project, It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerCreateAsync(lb, lb.Operation.PendingId!.Value, Project, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.create_requested" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -256,8 +256,8 @@ public class LoadBalancerServiceTests
 
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Http, Dns], Backends(a, b)));
 
-        Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
-        _commands.Verify(c => c.EnqueueLoadBalancerUpdateAsync(lb, lb.Pending!.Id, Project, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(LoadBalancerStatus.Updating, lb.Status);
+        _commands.Verify(c => c.EnqueueLoadBalancerUpdateAsync(lb, lb.Operation.PendingId!.Value, Project, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.update_requested" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -271,7 +271,7 @@ public class LoadBalancerServiceTests
 
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Http], Backends(a)));
 
-        Assert.Null(lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         _commands.VerifyNoOtherCalls();
         Assert.Empty(_activity.Events);
         Assert.Equal(saves, _repo.Saves);
@@ -285,13 +285,13 @@ public class LoadBalancerServiceTests
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Http, Dns], Backends(a)));
-        Guid request = lb.Pending!.Id;
+        Guid request = lb.Operation.PendingId!.Value;
         _commands.Invocations.Clear();
         _activity.Events.Clear();
 
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns, Http], Backends(a)));
 
-        Assert.Equal(request, lb.Pending!.Id);
+        Assert.Equal(request, lb.Operation.PendingId!.Value);
         Assert.Empty(_activity.Events);
         _commands.VerifyNoOtherCalls();
     }
@@ -330,8 +330,8 @@ public class LoadBalancerServiceTests
 
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
-        Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, lb.Pending!.Id, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, lb.Operation.PendingId!.Value, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.delete_requested" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -386,13 +386,13 @@ public class LoadBalancerServiceTests
     {
         Network network = NetworkWithIpv6();
         LoadBalancer lb = await CreatedAsync(network, VmOn(network));
-        Guid create = lb.Pending!.Id;
+        Guid create = lb.Operation.PendingId!.Value;
         _activity.Events.Clear();
 
         await End(lb, create, "Done", lb.Vip);
         await End(lb, create, "Done", lb.Vip);
 
-        Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(new[] { "load_balancer.created" }, _activity.Events.Select(e => e.Action));
         Assert.Equal(TenantId, _activity.Events.Single().OutcomeTenantId);
     }
@@ -404,14 +404,14 @@ public class LoadBalancerServiceTests
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
-        Guid update = lb.Pending!.Id;
+        Guid update = lb.Operation.PendingId!.Value;
         _activity.Events.Clear();
 
         await End(lb, Guid.NewGuid(), "Done");
-        Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Updating, lb.Status);
         await End(lb, update, "Done");
 
-        Assert.Null(lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(new[] { "load_balancer.updated" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -422,13 +422,13 @@ public class LoadBalancerServiceTests
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
-        Guid update = lb.Pending!.Id;
+        Guid update = lb.Operation.PendingId!.Value;
 
         await End(lb, update, "Failed", reason: "Load balancer update failed.", detail: "raw");
 
-        Assert.Null(lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(new[] { 80 }, lb.DesiredListeners.Select(l => l.Port));
-        Assert.Equal("Load balancer update failed.", lb.OperationFailureReason);
+        Assert.Equal("Load balancer update failed.", lb.Operation.FailureReason);
         Assert.Equal(new[] { "load_balancer.update_requested", "load_balancer.update_failed" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -440,13 +440,13 @@ public class LoadBalancerServiceTests
         Vm a = VmOn(network);
         LoadBalancer lb = await OnIncusAsync(network, a);
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
-        Guid update = lb.Pending!.Id;
+        Guid update = lb.Operation.PendingId!.Value;
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
         await End(lb, update, "Failed", reason: "Load balancer update failed.");
 
-        Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        Assert.Null(lb.OperationFailureReason);
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+        Assert.Null(lb.Operation.FailureReason);
     }
 
     [Fact]
@@ -456,10 +456,10 @@ public class LoadBalancerServiceTests
         LoadBalancer lb = await OnIncusAsync(network, VmOn(network));
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
-        await End(lb, lb.Pending!.Id, "Failed", reason: "Load balancer deletion failed.");
+        await End(lb, lb.Operation.PendingId!.Value, "Failed", reason: "Load balancer deletion failed.");
 
-        Assert.Null(lb.Transition);
-        Assert.Equal(DesiredExistence.Exists, lb.DesiredExistence);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
+        Assert.True(lb.OccupiesQuota);
         Assert.Contains("load_balancer.delete_failed", _activity.Events.Select(e => e.Action));
     }
 
@@ -472,12 +472,11 @@ public class LoadBalancerServiceTests
         LoadBalancer lb = await CreatedAsync(network, VmOn(network));
         _activity.Events.Clear();
 
-        await End(lb, lb.Pending!.Id, "Failed", lb.Vip, reason: "x");
+        await End(lb, lb.Operation.PendingId!.Value, "Failed", lb.Vip, reason: "x");
 
-        Assert.Equal(CurrentExistence.Exists, lb.CurrentExistence);
-        Assert.Null(lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(lb.Vip, lb.ExternalId);
-        Assert.Equal("x", lb.OperationFailureReason);
+        Assert.Equal("x", lb.Operation.FailureReason);
         Assert.Empty(_activity.Events);
     }
 
@@ -490,9 +489,9 @@ public class LoadBalancerServiceTests
         _activity.Events.Clear();
 
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(lb.Id, false));
-        Assert.Equal(CurrentExistence.NotFound, lb.CurrentExistence);
-        Assert.Equal(LoadBalancerTransition.Deleting, lb.Transition);
-        await End(lb, lb.Pending!.Id, "Done");
+        Assert.Null(lb.InstanceStatus);
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+        await End(lb, lb.Operation.PendingId!.Value, "Done");
 
         Assert.True(lb.IsDeleted);
         Assert.Equal(new[] { "load_balancer.deleted" }, _activity.Events.Select(e => e.Action));
@@ -518,7 +517,7 @@ public class LoadBalancerServiceTests
         Assert.Equal(kept.Id, row.Id);
         Assert.Equal(new[] { "TCP 80->8080", "UDP 53->53" }, row.Listeners.Select(l => $"{l.Protocol} {l.Port}->{l.TargetPort}"));
         Assert.Equal(new[] { a.Id }, row.Backends.Select(b => b.VmId));
-        Assert.Equal(LoadBalancerTransition.Updating, row.Transition);
+        Assert.Equal(LoadBalancerStatus.Updating, row.Status);
         Assert.Equal("2001:41d0:d00:d405::1:1", row.Vip);
     }
 
@@ -534,6 +533,113 @@ public class LoadBalancerServiceTests
 
         ReconcilableLoadBalancerQueryResult row = Assert.Single(rows);
         Assert.Equal(new ReconcilableLoadBalancerQueryResult(onIncus.Id, Project, "net-ext", onIncus.Vip, "Exists"), row);
+    }
+
+    // What the worker compares with is its own word, read off the status and what Incus was last seen holding
+    // (titan-ops features/load-balancer/design.md#lb-lifecycle): a delete in flight on a load balancer Incus lost reads
+    // NotFound, so the worker does not report it again every cycle.
+    [Fact]
+    public async Task Reconcilable_CurrentExistence_IsExists_OnlyWhileIncusIsKnownToHoldTheVip()
+    {
+        Network network = NetworkWithIpv6();
+        Vm a = VmOn(network);
+        LoadBalancer available = await OnIncusAsync(network, a);
+        LoadBalancer notFound = await OnIncusAsync(network, a);
+        notFound.MarkNotFound();
+        LoadBalancer updatingSeen = await OnIncusAsync(network, a);
+        updatingSeen.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [a]);
+        LoadBalancer updatingLost = await OnIncusAsync(network, a);
+        updatingLost.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [a]);
+        updatingLost.MarkNotFound();
+        LoadBalancer deletingSeen = await OnIncusAsync(network, a);
+        deletingSeen.Delete();
+        LoadBalancer deletingLost = await OnIncusAsync(network, a);
+        deletingLost.MarkNotFound();
+        deletingLost.Delete();
+
+        var rows = await new ListReconcilableLoadBalancersQueryHandler(_repo).HandleAsync(new ListReconcilableLoadBalancersQuery("cluster-1"));
+
+        Assert.Equal(
+            new Dictionary<Guid, string>
+            {
+                [available.Id] = "Exists", [notFound.Id] = "NotFound", [updatingSeen.Id] = "Exists",
+                [updatingLost.Id] = "NotFound", [deletingSeen.Id] = "Exists", [deletingLost.Id] = "NotFound",
+            },
+            rows.ToDictionary(r => r.Id, r => r.CurrentExistence));
+    }
+
+    // The one status is the only state word on /v1 (titan-ops features/load-balancer/design.md#lb-lifecycle); the failure
+    // detail is the operator's, never the tenant's.
+    [Fact]
+    public async Task TenantLoadBalancerQueryResult_HasOneStatus_AndNoExistenceOrTransition()
+    {
+        Network network = NetworkWithIpv6();
+        LoadBalancer lb = await OnIncusAsync(network, VmOn(network));
+
+        using var json = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(LoadBalancerQueryResult.From(lb),
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+        string[] names = json.RootElement.EnumerateObject().Select(p => p.Name).ToArray();
+
+        Assert.Equal("Available", json.RootElement.GetProperty("status").GetString());
+        Assert.Contains("requestFailureReason", names);
+        Assert.Contains("requestFailedAt", names);
+        Assert.DoesNotContain("requestFailureDetail", names);
+        Assert.DoesNotContain("currentExistence", names);
+        Assert.DoesNotContain("desiredExistence", names);
+        Assert.DoesNotContain("transition", names);
+    }
+
+    // A repeat of the delete is answered like the first; a PUT of the configuration a load balancer being deleted already
+    // has is not a repeat: the aggregate refuses it (titan-ops features/load-balancer/design.md#lb-lifecycle).
+    [Fact]
+    public async Task Update_ToTheSameConfiguration_WhileDeleting_IsInvalidState_NotARepeat()
+    {
+        Network network = NetworkWithIpv6();
+        Vm a = VmOn(network);
+        LoadBalancer lb = await OnIncusAsync(network, a);
+        await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
+        _commands.Invocations.Clear();
+
+        string code = await CodeOf(() => UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Http], Backends(a))));
+
+        Assert.Equal("LOAD_BALANCER_INVALID_STATE", code);
+        _commands.VerifyNoOtherCalls();
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+    }
+
+    [Fact]
+    public async Task Delete_OfALoadBalancerIncusLost_GoesThroughIncus()
+    {
+        Network network = NetworkWithIpv6();
+        LoadBalancer lb = await OnIncusAsync(network, VmOn(network));
+        await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(lb.Id, false));
+        Assert.Equal(LoadBalancerStatus.NotFound, lb.Status);
+
+        await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
+
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, lb.Operation.PendingId!.Value, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Delete_WhileTheUpdateWaits_SendsItsOwnCommand_AndTheUpdatesLateDoneChangesNothing()
+    {
+        Network network = NetworkWithIpv6();
+        Vm a = VmOn(network);
+        LoadBalancer lb = await OnIncusAsync(network, a);
+        await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Dns], Backends(a)));
+        Guid update = lb.Operation.PendingId!.Value;
+        _activity.Events.Clear();
+
+        await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
+        Guid delete = lb.Operation.PendingId!.Value;
+        await End(lb, update, "Done");
+
+        Assert.NotEqual(update, delete);
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, delete, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal(new[] { "load_balancer.delete_requested" }, _activity.Events.Select(e => e.Action));
     }
 
     // ---- rename (titan-ops features/load-balancer/design.md#lb-rename)

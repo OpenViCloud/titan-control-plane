@@ -32,7 +32,7 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         vm.CreateSucceeded(vm.Operation.PendingId!.Value, $"vm{Guid.NewGuid():N}"[..20], VmStatus.Running, "10.0.0.5", null);
         LoadBalancer lb = LoadBalancer.Create(Tenant, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [vm]);
-        lb.FinishOperation(lb.Pending!.Id, lb.Vip);
+        lb.CreateSucceeded(lb.Operation.PendingId!.Value, lb.Vip);
         await using TitanDbContext db = pg.NewDbContext();
         db.Vms.Add(vm);
         db.LoadBalancers.Add(lb);
@@ -90,8 +90,8 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(UpdateThroughTheHandlerAsync(lb.Id, backend.Id), UpdateThroughTheHandlerAsync(lb.Id, backend.Id));
 
         LoadBalancer stored = await StoredAsync(lb.Id);
-        Assert.Equal(LoadBalancerOperationKind.Update, stored.Pending!.Kind);
-        Assert.Equal([$"load-balancer-update-{lb.Id}-{stored.Pending.Id}"], await KeysAsync($"load-balancer-update-{lb.Id}-"));
+        Assert.Equal(LoadBalancerStatus.Updating, stored.Status);
+        Assert.Equal([$"load-balancer-update-{lb.Id}-{stored.Operation.PendingId}"], await KeysAsync($"load-balancer-update-{lb.Id}-"));
     }
 
     [Fact]
@@ -102,8 +102,8 @@ public class LoadBalancerRequestsDbTests(PostgresFixture pg)
         await Task.WhenAll(DeleteThroughTheHandlerAsync(lb.Id), DeleteThroughTheHandlerAsync(lb.Id));
 
         LoadBalancer stored = await StoredAsync(lb.Id);
-        Assert.Equal(LoadBalancerOperationKind.Delete, stored.Pending!.Kind);
-        Assert.Equal([$"load-balancer-delete-{lb.Id}-{stored.Pending.Id}"], await KeysAsync($"load-balancer-delete-{lb.Id}-"));
+        Assert.Equal(LoadBalancerStatus.Deleting, stored.Status);
+        Assert.Equal([$"load-balancer-delete-{lb.Id}-{stored.Operation.PendingId}"], await KeysAsync($"load-balancer-delete-{lb.Id}-"));
     }
 
     [Fact]

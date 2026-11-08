@@ -3,107 +3,36 @@ using System.Text.RegularExpressions;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states, except the VM, the network, the firewall rule, the VM
-// snapshot, the volume, the volume snapshot and the template in a cluster, which keep one status (OneStatus below). A person's request writes DesiredState; only an
-// observation of the provider (Mark*, reached from the worker's callback), or a request's own report
-// (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
-// directions below are what makes "currentState is updated in the reconcile direction" a build failure
-// instead of a convention.
+// titan-ops architecture/desired-and-current.md#desired-and-current: every resource the control plane provisions to the
+// provider keeps one status and an Operation of its own, and no Domain type keeps a desired existence, a current existence
+// or a desired and a current state beside it. That holds for Vm, Network, FirewallRule, VmSnapshot, Volume, VolumeSnapshot,
+// VmTemplateCluster and LoadBalancer (OneStatus below). Their status moves only
+// through their own table of moves, which StateTransitionOwnershipTests and RequestLifecycleShapeTests read; this file
+// keeps the other two ways back to the old shape closed.
 //
-// What these tests are SILENT about: they read source text. An assignment made some other way — reflection,
-// a helper that takes the aggregate as a parameter, EF writing a shadow property — is invisible here. Green
-// means "no assignment in the shapes we look for", not "no path exists".
+// What these tests are SILENT about: they read source text. A second status kept under another name, or a state pair
+// declared in a shape the pattern does not match, is invisible here. Green means "no property of the old names", not "no
+// second status exists".
 public class DesiredCurrentOwnershipTests
 {
-    // The provisioned aggregates that keep one status instead of the split, by name: the VM
-    // (titan-ops features/vm/design.md#vm-status), the network and the firewall rule (titan-ops
-    // features/network/design.md#network-lifecycle), the VM snapshot (titan-ops features/vm/design.md#vm-snapshot), and the
-    // volume and its snapshot (titan-ops features/volume/design.md#volume-state-is-existence), and the template in a
-    // cluster (titan-ops features/catalog/design.md#template-state-is-existence).
-    // Their status moves only through their own table of moves, so the scans below leave them out, and the last fact
-    // checks they really have no split.
-    private static readonly string[] OneStatus = ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster"];
+    // The provisioned aggregates, by name: the VM (titan-ops features/vm/design.md#vm-status), the network and the firewall
+    // rule (titan-ops features/network/design.md#network-lifecycle), the VM snapshot (titan-ops features/vm/design.md#vm-snapshot),
+    // the volume and its snapshot (titan-ops features/volume/design.md#volume-state-is-existence), the template in a cluster
+    // (titan-ops features/catalog/design.md#template-state-is-existence) and the load balancer
+    // (titan-ops features/load-balancer/design.md#lb-lifecycle).
+    private static readonly string[] OneStatus =
+        ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer"];
 
-    // Intent methods that write CurrentState on purpose. Each is a resource that never reached the provider:
-    // there is no observation coming, so the control plane is the only witness
-    // (titan-ops architecture/desired-and-current.md#delete-locally).
-    private static readonly Dictionary<string, string> IntentWritesCurrentAllowlist = new()
-    {
-        ["LoadBalancer.Delete"] = "the delete of a load balancer whose create failed before Incus had it happens in the request: nothing to observe",
-    };
-
-    private static readonly Regex MethodHead = new(
-        @"(?<mods>(?:public|private|internal)(?: static)?) (?:void|[A-Za-z<>?.]+) (?<name>[A-Z]\w*)\([^)]*\)\s*(?<shape>=>|\{)",
-        RegexOptions.Compiled);
-
-    // The existence pair has the same two writers as the state pair
-    // (titan-ops architecture/desired-and-current.md#existence-axis). A volume's attachment pair is not scanned: the volume
-    // is in OneStatus and moves it only through its own attach and detach methods.
-    private static readonly Regex WritesCurrent = new(@"\bCurrent(?:State|Existence)\s*=(?!=)", RegexOptions.Compiled);
-    private static readonly Regex WritesDesired = new(@"\bDesired(?:State|Existence)\s*=(?!=)", RegexOptions.Compiled);
+    // The old axes: an existence pair, or a desired and a current state. `?` in the type: a nullable one would otherwise
+    // slip past the pattern.
+    private static readonly Regex AnAxis = new(
+        @"public [\w?<>]+ (?:Desired|Current)(?:State|Existence) \{", RegexOptions.Compiled);
 
     [Fact]
-    public void IntentMethods_DoNotWriteCurrentState()
-    {
-        var offenders = new List<string>();
-        foreach (var method in SplitAggregateMethods())
-        {
-            if (method.IsObservation || method.IsReport)
-            {
-                continue;
-            }
-            if (WritesCurrent.IsMatch(method.Body))
-            {
-                offenders.Add(method.Key);
-            }
-        }
-
-        var undeclared = offenders.Where(o => !IntentWritesCurrentAllowlist.ContainsKey(o)).OrderBy(o => o).ToList();
-        Assert.True(undeclared.Count == 0,
-            "A request writes CurrentState. CurrentState is only what the provider was observed to be — write "
-            + "DesiredState and let the reconciler report the result:\n  " + string.Join("\n  ", undeclared));
-
-        var stale = IntentWritesCurrentAllowlist.Keys.Where(k => !offenders.Contains(k)).OrderBy(k => k).ToList();
-        Assert.True(stale.Count == 0, "IntentWritesCurrentAllowlist rows that no longer write CurrentState:\n  " + string.Join("\n  ", stale));
-    }
-
-    // On a type with two states, the report of a request's own command (FinishOperation for a Done, FailOperation for a
-    // give-up, titan-ops architecture/resource-lifecycle.md#shape) is the one pair of methods that may write both: what the
-    // worker saw is current, and a failed request puts desired back. They are neither intents nor observations, so both
-    // scans skip them and the private RecordWhatTheWorkerSaw they share; a root reaches a child's through
-    // Finish<Child>Operation and Fail<Child>Operation. The types in OneStatus end an operation with one Succeeded and one
-    // Failed move per kind instead, and this scan does not read them.
-    [Fact]
-    public void ReportMethodsOfATypeWithTwoStates_AreOnlyFinishAndFailOperation()
-    {
-        var reports = SplitAggregateMethods().Where(m => m.IsReport).Select(m => m.Key).OrderBy(k => k, StringComparer.Ordinal).ToList();
-        string[] expected =
-        [
-            "LoadBalancer.FailOperation", "LoadBalancer.FinishOperation", "LoadBalancer.RecordWhatTheWorkerSaw",
-        ];
-        Assert.Equal(expected.OrderBy(k => k, StringComparer.Ordinal), reports);
-    }
-
-    [Fact]
-    public void ObservationMethods_DoNotWriteDesiredState()
-    {
-        var offenders = SplitAggregateMethods()
-            .Where(m => m.IsObservation && WritesDesired.IsMatch(m.Body))
-            .Select(m => m.Key)
-            .OrderBy(k => k)
-            .ToList();
-
-        Assert.True(offenders.Count == 0,
-            "An observation writes DesiredState. What a person asked for is theirs; an observation may only "
-            + "report what the provider is:\n  " + string.Join("\n  ", offenders));
-    }
-
-    [Fact]
-    public void EveryProvisionedAggregate_SplitsDesiredAndCurrent()
+    public void EveryProvisionedAggregate_KeepsOneStatus()
     {
         var provisioned = new List<string>();
-        var split = new List<string>();
+        var withoutStatus = new List<string>();
         foreach (var (file, src) in ReadSources(AggregatesDir()))
         {
             var type = Path.GetFileNameWithoutExtension(file);
@@ -114,9 +43,9 @@ public class DesiredCurrentOwnershipTests
                 continue;
             }
             provisioned.Add(type);
-            if (DeclaresBothStates(src))
+            if (!Regex.IsMatch(src, $@"public {type}Status Status \{{ get; private set; \}}"))
             {
-                split.Add(type);
+                withoutStatus.Add(type);
             }
         }
 
@@ -124,72 +53,39 @@ public class DesiredCurrentOwnershipTests
         // titan-ops architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
         Assert.Equal(8, provisioned.Count);
 
-        // No allowlist beyond OneStatus: a new provisioned aggregate is born split, or this fails.
-        Assert.Empty(OneStatus.Intersect(split));
-        var missing = provisioned.Except(split).Except(OneStatus).OrderBy(t => t).ToList();
-        Assert.True(missing.Count == 0,
-            "Provisioned aggregates without DesiredState + CurrentState:\n  " + string.Join("\n  ", missing));
+        // No allowlist: a new provisioned aggregate is born with one status of its own, or this fails.
+        Assert.Equal(OneStatus.OrderBy(t => t, StringComparer.Ordinal), provisioned.OrderBy(t => t, StringComparer.Ordinal));
+        Assert.True(withoutStatus.Count == 0,
+            "Provisioned aggregates without their own Status:\n  " + string.Join("\n  ", withoutStatus.OrderBy(t => t)));
+    }
+
+    [Fact]
+    public void NoDomainType_KeepsAnExistenceAxisOrAStatePair()
+    {
+        var sources = ReadSources(AggregatesDir());
+        Assert.True(sources.Count > 20, $"Only {sources.Count} aggregate files were read — the scan is blind.");
+
+        var offenders = sources
+            .Where(entry => AnAxis.IsMatch(entry.Source))
+            .Select(entry => Path.GetFileNameWithoutExtension(entry.File))
+            .OrderBy(t => t, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(offenders.Count == 0,
+            "A second axis beside the one status. Existence, the kind of the waiting operation and the move for display are "
+            + "what the status says; write the status:\n  " + string.Join("\n  ", offenders));
+    }
+
+    [Fact]
+    public void ThePatternForAnAxis_ReadsTheOldShapes()
+    {
+        Assert.Matches(AnAxis, "    public CurrentExistence CurrentExistence { get; private set; }");
+        Assert.Matches(AnAxis, "    public DesiredExistence DesiredExistence { get; private set; }");
+        Assert.Matches(AnAxis, "    public VmState? CurrentState { get; private set; }");
+        Assert.DoesNotMatch(AnAxis, "    public Guid? CurrentAttachedVmId { get; private set; }");
     }
 
     // ---------- helpers ----------
-
-    private sealed record AggregateMethod(string Key, bool IsObservation, string Body)
-    {
-        // Finish<Child>Operation and Fail<Child>Operation: a root's way in to its child's reports
-        // (titan-ops architecture/code-structure.md#child-entity). RecordWhatTheWorkerSaw is the part they share.
-        public bool IsReport => Regex.IsMatch(Key, @"\.(?:(?:Finish|Fail)\w*Operation|RecordWhatTheWorkerSaw)$");
-    }
-
-    private static List<AggregateMethod> SplitAggregateMethods()
-    {
-        var methods = new List<AggregateMethod>();
-        var aggregates = 0;
-        foreach (var (file, src) in ReadSources(AggregatesDir()))
-        {
-            if (!DeclaresBothStates(src))
-            {
-                continue;
-            }
-            aggregates++;
-            var type = Path.GetFileNameWithoutExtension(file);
-            foreach (var m in MethodHead.Matches(src).Cast<Match>())
-            {
-                bool isFactory = m.Groups["mods"].Value.Contains("static");
-                if (isFactory)
-                {
-                    continue; // a factory sets the initial value of both — nobody has asked or observed yet
-                }
-
-                string body;
-                if (m.Groups["shape"].Value == "=>")
-                {
-                    int semicolon = src.IndexOf(';', m.Index);
-                    body = src[m.Index..(semicolon + 1)];
-                }
-                else
-                {
-                    int end = src.IndexOf("\n    }", m.Index, StringComparison.Ordinal);
-                    body = end > 0 ? src[m.Index..end] : src[m.Index..];
-                }
-
-                string name = m.Groups["name"].Value;
-                methods.Add(new AggregateMethod($"{type}.{name}", name.StartsWith("Mark", StringComparison.Ordinal), body));
-            }
-        }
-
-        // Zero split aggregates makes both directions vacuously green.
-        Assert.True(aggregates >= 1, $"Only {aggregates} aggregates declare DesiredState + CurrentState — the scan is blind.");
-        return methods;
-    }
-
-    // `?` in the type: a nullable current state — a pattern without it would drop the type from every scan here, still
-    // green. The VM, the network, the firewall rule, the VM snapshot, the volume, the volume snapshot and the template in a cluster keep one status and are out on purpose (OneStatus). Desired is
-    // DesiredState or, where Titan sets no Incus status, only DesiredExistence; current is CurrentState or, where Incus
-    // has no status word (load balancer), only CurrentExistence (titan-ops architecture/desired-and-current.md#existence-axis) — a
-    // pattern for one name alone would drop the others the same way.
-    private static bool DeclaresBothStates(string src) =>
-        Regex.IsMatch(src, @"public [\w?]+ Desired(?:State|Existence) \{ get; private set; \}")
-        && Regex.IsMatch(src, @"public [\w?]+ Current(?:State|Existence) \{ get; private set; \}");
 
     private static string AggregatesDir() => Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates");
 

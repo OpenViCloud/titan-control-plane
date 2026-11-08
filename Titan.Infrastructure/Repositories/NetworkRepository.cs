@@ -73,7 +73,7 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
     // reads the VM table.
     public async Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.LoadBalancer.LoadBalancer>().AnyAsync(
-            lb => lb.NetworkId == networkId && lb.CurrentExistence != CurrentExistence.Deleted, ct);
+            lb => lb.NetworkId == networkId && lb.Status != Domain.Aggregates.LoadBalancer.LoadBalancerStatus.Deleted, ct);
 
     // Network.HoldsARange narrows the rows; Network.HeldRange is then asked of each. The rows are bounded by MaxNetworks
     // plus the deletes in flight, which keep their range but no longer count.

@@ -25,21 +25,21 @@ public class EndLoadBalancerRequestCommandHandler(ILoadBalancerRepository repo, 
         LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
 
-        LoadBalancerOperationKind? ended;
+        LoadBalancerStatus? ended;
         if (outcome == OperationOutcome.Done)
         {
-            ended = loadBalancer.FinishOperation(command.RequestId, command.ExternalId);
+            ended = LoadBalancerReports.FinishOperation(loadBalancer, command.RequestId, command.ExternalId, activity);
         }
         else
         {
-            ended = loadBalancer.FailOperation(command.RequestId, command.ExternalId, command.Reason, command.Detail);
+            ended = LoadBalancerReports.FailOperation(loadBalancer, command.RequestId, command.ExternalId,
+                command.Reason, command.Detail, activity);
         }
         if (ended == null)
         {
             return;
         }
 
-        LoadBalancerReports.RecordEnded(loadBalancer, ended.Value, outcome, activity);
         await repo.SaveAsync(ct);
     }
 }

@@ -224,10 +224,8 @@ public class StateTransitionOwnershipTests
                 var name = m.Groups[1].Value;
                 var end = src.IndexOf("\n    }", m.Index, StringComparison.Ordinal);
                 var body = end > 0 ? src[m.Index..end] : src[m.Index..];
-                // The method that ENTERS the terminal state is the one exception, by definition. CurrentState too:
-                // a split aggregate has no Status, and a pattern without it would not recognise its entering method.
-                // CurrentExistence too: a split aggregate enters its terminal state on the existence axis.
-                if (body.Contains("IsDeleted") || body.Contains("IsTerminal") || Regex.IsMatch(body, @"(?:Status|CurrentState|CurrentExistence) = \w+(?:Status|State|Existence)\.(Destroyed|Deleted)")) continue;
+                // The method that ENTERS the terminal state is the one exception, by definition.
+                if (body.Contains("IsDeleted") || body.Contains("IsTerminal") || Regex.IsMatch(body, @"Status = \w+Status\.(Destroyed|Deleted)")) continue;
                 missing.Add($"{key}.{name}");
             }
         }
@@ -240,10 +238,7 @@ public class StateTransitionOwnershipTests
 
         // And the aggregates with a Status but no IsDeleted at all must be declared, with a reason.
         var withStatus = ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain", "Aggregates"))
-            // CurrentState: an aggregate split into desired/current (titan-ops architecture/desired-and-current.md#desired-and-current)
-            // still has a state that must absorb; dropping it here would shrink the scan without a signal.
-            .Where(t => Regex.IsMatch(t.Source, @"public (?:\w+Status|string) Status \{ get; private set; \}")
-                     || Regex.IsMatch(t.Source, @"public \w+State\?? CurrentState \{ get; private set; \}"))
+            .Where(t => Regex.IsMatch(t.Source, @"public (?:\w+Status|string) Status \{ get; private set; \}"))
             .Select(t => $"{Directory.GetParent(t.File)!.Name}/{Path.GetFileNameWithoutExtension(t.File)}")
             .ToList();
 
@@ -265,17 +260,11 @@ public class StateTransitionOwnershipTests
     // Internal validation counts in three shapes: it throws; it consults IsDeleted (absorb instead
     // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an Ensure*() on itself
     // (EnsureSnapshottable, EnsureNoCreateWaiting, …), which a text scan looking only for `throw` would report as a violation.
-    private const string PartOfTheReport = "private helper, reached only from the type's FinishOperation and " +
-        "FailOperation, which ignore a report that names another operation, and absorb one for a Deleted resource where " +
-        "the type can be Deleted, before calling it; it records what the worker saw, which a waiting operation may always take. A check here would " +
-        "repeat theirs.";
-
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
         ["VmTemplateCluster.MarkNotFound"] = "an observation, not an intent: there is no invariant to refuse. NotFound is " +
             "reachable from every status but Failed (no alias to lose), which the method ignores with an early return " +
             "the scan does not read as validation. Declared, not enforced.",
-        ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
             "handler must recognise first.",
@@ -295,11 +284,8 @@ public class StateTransitionOwnershipTests
             {
                 var end = src.IndexOf("\n    }", m.Index, StringComparison.Ordinal);
                 var body = end > 0 ? src[m.Index..end] : src[m.Index..];
-                // DesiredState/CurrentState too: without them every split aggregate's mutation would drop out
-                // of this scan while the count stayed above 20 — green and blind.
-                // The existence pair too (titan-ops architecture/desired-and-current.md#existence-axis).
                 // \b: the aggregate's own Status, not a member of a value object that ends in Status (VmOperation.LastSeenStatus).
-                if (!Regex.IsMatch(body, @"\b(?:Status|CurrentState|DesiredState|CurrentExistence|DesiredExistence)\s*=(?!=)")) continue;
+                if (!Regex.IsMatch(body, @"\bStatus\s*=(?!=)")) continue;
                 if (body.Contains("static ")) continue;              // Create() sets initial state
                 scanned++;
 

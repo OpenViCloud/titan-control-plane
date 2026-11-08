@@ -1,13 +1,12 @@
 using System.Text.Json.Serialization;
 using Titan.Domain.Aggregates.LoadBalancer;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
-using Titan.Domain.Values;
 
 namespace Titan.Application.Queries.Compute.LoadBalancer.Contracts;
 
 // The read side's own shape (titan-ops architecture/code-structure.md#no-contract-reuse). Listeners and backends are what
-// the customer last asked for; transition says whether Incus has it yet. Incus has no status word for a load
-// balancer (titan-ops features/load-balancer/design.md#lb-lifecycle). The failure detail is the operator's, never the
+// the customer last asked for; status is the one word that says whether Incus has it yet. Incus has no status word
+// for a load balancer (titan-ops features/load-balancer/design.md#lb-lifecycle). The failure detail is the operator's, never the
 // tenant's.
 public record LoadBalancerQueryResult(
     Guid Id,
@@ -17,9 +16,7 @@ public record LoadBalancerQueryResult(
     string Vip,
     List<LoadBalancerListenerQueryResult> Listeners,
     List<LoadBalancerBackendQueryResult> Backends,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] CurrentExistence CurrentExistence,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] DesiredExistence DesiredExistence,
-    [property: JsonConverter(typeof(JsonStringEnumConverter))] LoadBalancerTransition? Transition,
+    [property: JsonConverter(typeof(JsonStringEnumConverter))] LoadBalancerStatus Status,
     string? RequestFailureReason,
     DateTimeOffset? RequestFailedAt,
     DateTimeOffset CreatedAt)
@@ -31,6 +28,6 @@ public record LoadBalancerQueryResult(
                 .Select(l => new LoadBalancerListenerQueryResult(l.Protocol.ToString(), l.Port, l.TargetPort))
                 .ToList(),
             lb.DesiredBackends.Select(b => new LoadBalancerBackendQueryResult(b.VmId)).ToList(),
-            lb.CurrentExistence, lb.DesiredExistence, lb.Transition,
-            lb.OperationFailureReason, lb.OperationFailedAt, lb.CreatedAt);
+            lb.Status,
+            lb.Operation.FailureReason, lb.Operation.FailedAt, lb.CreatedAt);
 }

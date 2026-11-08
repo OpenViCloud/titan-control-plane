@@ -12,7 +12,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 
 /// A database with load balancers waiting on a request under the old column meets the migration that gives each request
 /// its kind and time (titan-ops architecture/resource-lifecycle.md#shape): the kind is read in the order
-/// LoadBalancer.Transition read it (desired Deleted, then current NotCreated, else an update), an open create or delete
+/// the transition was read then (desired Deleted, then current NotCreated, else an update), an open create or delete
 /// takes the request's key and id, an open update takes the id its key already ends with, and the view lists the table.
 /// The old column name and keys below are the schema before it, by necessity. Category=Integration — its own CI step;
 /// needs real Postgres.
@@ -83,14 +83,18 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
 
         await MigrateToLatestAsync();
 
+        // This migration gave each waiting request its kind and time; the one-status migration after it reads the kind
+        // off the status, and a request that was waiting is still waiting under the id it was given.
         LoadBalancer delete = await LoadBalancerAsync(deleting.Id);
-        Assert.Equal((LoadBalancerOperationKind.Delete, deleting.Intent!.Value), (delete.Pending!.Kind, delete.Pending.Id));
-        Assert.True(delete.Pending.AskedAt > DateTimeOffset.UnixEpoch);
-        Assert.Equal(LoadBalancerOperationKind.Delete, (await LoadBalancerAsync(deletingLost.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerOperationKind.Create, (await LoadBalancerAsync(creating.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerOperationKind.Update, (await LoadBalancerAsync(updating.Id)).Pending!.Kind);
-        Assert.Equal(LoadBalancerOperationKind.Update, (await LoadBalancerAsync(updatingLost.Id)).Pending!.Kind);
-        Assert.Null((await LoadBalancerAsync(resting.Id)).Pending);
+        Assert.Equal((LoadBalancerStatus.Deleting, deleting.Intent!.Value), (delete.Status, delete.Operation.PendingId!.Value));
+        Assert.True(delete.Operation.AskedAt > DateTimeOffset.UnixEpoch);
+        Assert.Equal(LoadBalancerStatus.Deleting, (await LoadBalancerAsync(deletingLost.Id)).Status);
+        Assert.Equal(LoadBalancerStatus.Creating, (await LoadBalancerAsync(creating.Id)).Status);
+        Assert.Equal(LoadBalancerStatus.Updating, (await LoadBalancerAsync(updating.Id)).Status);
+        Assert.Equal(LoadBalancerStatus.Updating, (await LoadBalancerAsync(updatingLost.Id)).Status);
+        LoadBalancer rest = await LoadBalancerAsync(resting.Id);
+        Assert.Equal(LoadBalancerStatus.Available, rest.Status);
+        Assert.Null(rest.Operation.PendingId);
     }
 
     [Fact]
@@ -152,7 +156,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
             LoadBalancerVip.For(Subnet, 1), [http], [backend]);
         LoadBalancer updating = LoadBalancer.Create(tenantId, "updating", networkId, "net-x", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, 2), [http], [backend]);
-        updating.FinishOperation(updating.Pending!.Id, updating.Vip);
+        updating.CreateSucceeded(updating.Operation.PendingId!.Value, updating.Vip);
         OperationTicket update = updating.Update([new(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
         await using (TitanDbContext db = NewDbContext())
         {
@@ -164,7 +168,7 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, 'net-x', {Subnet}, 'cluster-a'
         List<string> rows = await read.Database
             .SqlQuery<string>($"SELECT resource || '|' || kind || '|' || request_id::text AS \"Value\" FROM core.pending_requests WHERE tenant_id = {tenantId} ORDER BY kind")
             .ToListAsync();
-        Assert.Equal([$"load-balancer|Create|{creating.Pending!.Id}", $"load-balancer|Update|{update.OperationId}"], rows);
+        Assert.Equal([$"load-balancer|Create|{creating.Operation.PendingId}", $"load-balancer|Update|{update.OperationId}"], rows);
     }
 
     // Down puts the view of the earlier phases back before the kind column goes, and the old column name.

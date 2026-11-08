@@ -13,7 +13,7 @@ public class OneStatusTypeListTests
 {
     private static readonly string[] Types =
     [
-        "Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster",
+        "Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer",
     ];
 
     private const int ListStartsAt = 5;
@@ -53,7 +53,7 @@ public class OneStatusTypeListTests
     [Fact]
     public void TheScan_FindsTheListsItGuards()
     {
-        // A scan that finds nothing is green too: the comment in ProviderResourceTests lists them all.
+        // A scan that finds nothing is green too: the lists in the guards below the Domain tests name them all.
         int lists = TestComments().Concat(ClaudeMdBullets())
             .SelectMany(entry => Run.Matches(entry.Text.Replace("`", "")).Select(run => NamesIn(run.Value)))
             .Count(named => named.Length >= ListStartsAt);

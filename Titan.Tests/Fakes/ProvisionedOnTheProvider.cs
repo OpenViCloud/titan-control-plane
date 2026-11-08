@@ -393,33 +393,32 @@ namespace Titan.Domain.Aggregates.Volume
 
 namespace Titan.Domain.Aggregates.LoadBalancer
 {
-    /// A load balancer's request ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
+    /// A load balancer's operation ends by its own command's report (titan-ops architecture/resource-lifecycle.md#shape);
     /// these replay the worker's reports under the one-call names test setups used before, through the real
-    /// FinishOperation and FailOperation. A replay for a request not waiting does nothing, like the report it stands for.
+    /// CreateSucceeded, UpdateSucceeded, DeleteSucceeded and CreateFailed. A replay for an operation not waiting does
+    /// nothing, like the report it stands for.
     public static class LoadBalancerProvisionedOnTheProvider
     {
         /// The create command's Done with the VIP. True when it ended the create.
         public static bool MarkCreated(this LoadBalancer loadBalancer, string externalId) =>
-            loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Create } create
-            && loadBalancer.FinishOperation(create.Id, externalId) != null;
+            loadBalancer.Status == LoadBalancerStatus.Creating
+            && loadBalancer.CreateSucceeded(loadBalancer.Operation.PendingId!.Value, externalId);
 
         /// The update command's Done for its request. True when that update was the one waiting.
         public static bool MarkUpdated(this LoadBalancer loadBalancer, Guid requestId) =>
-            loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Update } update
-            && update.Id == requestId
-            && loadBalancer.FinishOperation(requestId, null) != null;
+            loadBalancer.UpdateSucceeded(requestId, null);
 
         /// The delete command's Done. True when a delete was waiting.
         public static bool MarkDeleted(this LoadBalancer loadBalancer) =>
-            loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Delete } delete
-            && loadBalancer.FinishOperation(delete.Id, null) != null;
+            loadBalancer.Status == LoadBalancerStatus.Deleting
+            && loadBalancer.DeleteSucceeded(loadBalancer.Operation.PendingId!.Value, null);
 
         /// The create command's give-up, before Incus had the VIP.
         public static void MarkRequestFailed(this LoadBalancer loadBalancer, string? reason, string? detail)
         {
-            if (loadBalancer.Pending is { Kind: LoadBalancerOperationKind.Create } create)
+            if (loadBalancer.Status == LoadBalancerStatus.Creating)
             {
-                loadBalancer.FailOperation(create.Id, null, reason, detail);
+                loadBalancer.CreateFailed(loadBalancer.Operation.PendingId!.Value, null, reason, detail);
             }
         }
     }

@@ -10,9 +10,8 @@ using Titan.Domain.Values;
 
 namespace Titan.Tests.Domain;
 
-// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods (the
-// VM, the network, the firewall rule, the VM snapshot, the volume, the volume snapshot and the template in a cluster have
-// one report method per move instead of FinishOperation and FailOperation), its Mark* return nothing, a report with a foreign id changes nothing,
+// titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has a report method per move
+// (a Succeeded and a Failed for each operation), its Mark* return nothing, a report with a foreign id changes nothing,
 // every lifecycle handler locks the row, and every command payload carries the request id. Reflection and a factory for
 // the first three; source text for the last two.
 //
@@ -20,29 +19,30 @@ namespace Titan.Tests.Domain;
 // semantics of the report methods beyond "a foreign id is ignored" (VmStatusTests, VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
-// VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
-// Pending property: its one status says what the waiting request asks, and it keeps only that request's id
-// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Vm, Network,
-// FirewallRule, VmSnapshot, Volume, VolumeSnapshot and VmTemplateCluster keep the waiting operation in an Operation of their own (titan-ops
-// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot, features/volume/design.md#volume-state-is-existence,
-// features/catalog/design.md#template-state-is-existence) and are named here for the same reason.
+// VmTemplateCluster) is on the shape with internal methods, reached through its root. Every type on the shape keeps its
+// one status, which says what the waiting operation asks, and only that operation's id, in an Operation of its own
+// (titan-ops features/vm/design.md#vm-status, features/network/design.md#network-operation, features/vm/design.md#vm-snapshot,
+// features/volume/design.md#volume-state-is-existence, features/load-balancer/design.md#lb-lifecycle,
+// features/catalog/design.md#template-state-is-existence): no type keeps a Pending property, and a scan for a type with
+// such an Operation finds the same list as the one named here.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
-    // On the shape without a Pending property, each kept by name.
-    private static readonly Type[] OnTheShapeWithoutPending =
-        [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot), typeof(VmTemplateCluster)];
+    // Every type on the shape, each kept by name.
+    private static readonly Type[] OnTheShape =
+        [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot),
+            typeof(VmTemplateCluster), typeof(LoadBalancer)];
 
-    // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
-    private static List<Type> WithAPendingProperty() =>
+    // Types that keep a waiting operation's id in an Operation (titan-ops architecture/resource-lifecycle.md#shape).
+    private static List<Type> WithAnOperation() =>
         typeof(Vm).Assembly.GetExportedTypes()
             .Where(t => t.IsClass && t.Namespace is not null && t.Namespace.StartsWith("Titan.Domain.Aggregates.", StringComparison.Ordinal)
-                        && t.GetProperty("Pending", BindingFlags.Public | BindingFlags.Instance) is not null)
+                        && t.GetProperty("Operation", BindingFlags.Public | BindingFlags.Instance)
+                            ?.PropertyType.GetProperty("PendingId", BindingFlags.Public | BindingFlags.Instance) is not null)
             .ToList();
 
-    // Aggregates on the new shape: the ones with a Pending property, and the ones named without it.
-    private static List<Type> OnTheRequestShape() => [.. WithAPendingProperty(), .. OnTheShapeWithoutPending];
+    private static List<Type> OnTheRequestShape() => [.. OnTheShape];
 
     // Each rollout phase adds its aggregate here, with the factory that builds one waiting on a request.
     private static readonly Dictionary<Type, Func<object>> WaitingOnARequest = new()
@@ -71,7 +71,7 @@ public class RequestLifecycleShapeTests
             backend.CreateSucceeded(backend.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
             LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
                 LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
-            lb.FinishOperation(lb.Pending!.Id, lb.Vip);
+            lb.CreateSucceeded(lb.Operation.PendingId!.Value, lb.Vip);
             lb.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
             return lb;
         },
@@ -101,6 +101,7 @@ public class RequestLifecycleShapeTests
         List<Type> shaped = OnTheRequestShape();
         Assert.NotEmpty(shaped);
         Assert.Equal(shaped.OrderBy(t => t.Name), WaitingOnARequest.Keys.OrderBy(t => t.Name));
+        Assert.Equal(shaped.OrderBy(t => t.Name), WithAnOperation().OrderBy(t => t.Name));
 
         var missing = new List<string>();
         foreach (Type type in shaped)
@@ -115,15 +116,14 @@ public class RequestLifecycleShapeTests
         Assert.True(missing.Count == 0, "Aggregates on the request shape without the five methods: " + string.Join(", ", missing));
     }
 
-    // A type named without Pending must still be invisible to the scan (or it would be counted twice) and still keep the
-    // waiting operation's id, the one thing a report is compared with, in its Operation.
+    // No type keeps a Pending property: the waiting operation's id, the one thing a report is compared with, is in its
+    // Operation.
     [Fact]
     public void ATypeNamedWithoutPending_HasNoPendingProperty_AndKeepsTheWaitingOperationsId()
     {
-        List<Type> scanned = WithAPendingProperty();
-        foreach (Type type in OnTheShapeWithoutPending)
+        foreach (Type type in OnTheShape)
         {
-            Assert.DoesNotContain(type, scanned);
+            Assert.Null(type.GetProperty("Pending", BindingFlags.Public | BindingFlags.Instance));
             PropertyInfo? operation = type.GetProperty("Operation", BindingFlags.Public | BindingFlags.Instance);
             Assert.True(operation != null, $"{type.Name} keeps no Operation");
             PropertyInfo? id = operation.PropertyType.GetProperty("PendingId", BindingFlags.Public | BindingFlags.Instance);
@@ -145,8 +145,7 @@ public class RequestLifecycleShapeTests
 
     // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule, the
     // VM snapshot, the volume and the volume snapshot have one Succeeded and one Failed move per operation (NetworkReportMoves,
-    // VmSnapshotReportMoves, VolumeReportMoves, VolumeSnapshotReportMoves and VmTemplateReportMoves below); the other type
-    // (the load balancer) ends a request by FinishOperation and FailOperation.
+    // VmSnapshotReportMoves, VolumeReportMoves, VolumeSnapshotReportMoves, VmTemplateReportMoves and LoadBalancerReportMoves below).
     private static readonly string[] VmReportMoves =
     [
         "CreateSucceeded", "CreateFailed", "StartSucceeded", "StartFailed",
@@ -175,6 +174,12 @@ public class RequestLifecycleShapeTests
     // A template in a cluster ends its one operation, a sync, by the status it waits in (titan-ops features/catalog/design.md#template-reports).
     private static readonly string[] VmTemplateReportMoves = ["SyncSucceeded", "SyncFailed"];
 
+    // A load balancer ends its create, update or delete by the status it waits in (titan-ops features/load-balancer/design.md#lb-lifecycle).
+    private static readonly string[] LoadBalancerReportMoves =
+    [
+        "CreateSucceeded", "CreateFailed", "UpdateSucceeded", "UpdateFailed", "DeleteSucceeded", "DeleteFailed",
+    ];
+
     private static IEnumerable<string> RequiredReportsOf(Type type)
     {
         if (type == typeof(Vm))
@@ -201,7 +206,11 @@ public class RequestLifecycleShapeTests
         {
             return [.. VmTemplateReportMoves, "MarkObserved", "MarkNotFound"];
         }
-        return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
+        if (type == typeof(LoadBalancer))
+        {
+            return [.. LoadBalancerReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        throw new InvalidOperationException($"no report moves for {type.Name}: add them with the type");
     }
 
     // Each VM move run for real on a VM waiting in that move's status: a report naming another operation returns false
@@ -340,6 +349,50 @@ public class RequestLifecycleShapeTests
         }
     }
 
+    // Each load balancer move run for real on a load balancer waiting in that move's status, so the false comes from the id
+    // alone: a report naming another operation returns false and leaves every public property as it was.
+    [Fact]
+    public void EveryLoadBalancerMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in LoadBalancerReportMoves)
+        {
+            LoadBalancer loadBalancer = LoadBalancerWaitingFor(move);
+            MethodInfo ending = typeof(LoadBalancer).GetMethod(move, BindingFlags.Public | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(loadBalancer);
+
+            object? result = ending.Invoke(loadBalancer, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(loadBalancer));
+        }
+    }
+
+    private static LoadBalancer LoadBalancerWaitingFor(string move)
+    {
+        const string subnet = "2001:db8:0:9::/64";
+        Guid tenantId = TestTenant.WithRoomToSpare().Id;
+        Guid networkId = Guid.NewGuid();
+        Vm backend = Vm.Create(tenantId, networkId, "shape", "m", "tpl", "cluster-a", 20);
+        backend.CreateSucceeded(backend.Operation.PendingId!.Value, "vm-shape", VmStatus.Running, "10.0.0.9", null);
+        LoadBalancer lb = LoadBalancer.Create(tenantId, "shape", networkId, "net-shape", subnet, "cluster-a",
+            LoadBalancerVip.For(subnet, 1), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
+        if (move.StartsWith("Create", StringComparison.Ordinal))
+        {
+            return lb;
+        }
+        lb.CreateSucceeded(lb.Operation.PendingId!.Value, lb.Vip);
+        if (move.StartsWith("Update", StringComparison.Ordinal))
+        {
+            lb.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
+        }
+        else
+        {
+            lb.Delete();
+        }
+        return lb;
+    }
+
     private static Volume VolumeWaitingFor(string move)
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
@@ -421,61 +474,6 @@ public class RequestLifecycleShapeTests
             else arguments.Add("late");
         }
         return [.. arguments];
-    }
-
-    [Fact] // run for real, through each type's factory: a report naming another operation leaves every public property as it was
-    public void FinishOrFail_WithAForeignId_ReturnsNull_AndChangesNoPublicProperty()
-    {
-        foreach ((Type type, Func<object> build) in WaitingOnARequest)
-        {
-            if (type == typeof(Vm))
-            {
-                continue; // EveryVmMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
-            }
-            if (type == typeof(Network) || type == typeof(FirewallRule))
-            {
-                continue; // EveryNetworkAndRuleMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
-            }
-            if (type == typeof(VmSnapshot))
-            {
-                continue; // EveryVmSnapshotMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
-            }
-            if (type == typeof(Volume) || type == typeof(VolumeSnapshot))
-            {
-                continue; // EveryVolumeMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty and the snapshot's
-            }
-            if (type == typeof(VmTemplateCluster))
-            {
-                continue; // EveryVmTemplateClusterMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
-            }
-            foreach (string method in new[] { "FinishOperation", "FailOperation" })
-            {
-                object aggregate = build();
-                MethodInfo ending = type.GetMethod(method, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
-                object?[] arguments = [Guid.NewGuid(), .. WhatTheWorkerSawFor(type, method)];
-                Dictionary<string, object?> before = PublicProperties(aggregate);
-
-                object? result = ending.Invoke(aggregate, arguments);
-
-                Assert.Null(result);
-                Assert.Equal(before, PublicProperties(aggregate));
-            }
-        }
-    }
-
-    // Everything a report brings after the operation id: what the worker saw, and for a give-up the reason and detail.
-    private static object?[] WhatTheWorkerSawFor(Type type, string method)
-    {
-        object?[] seen;
-        if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
-        else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleStatus.enabled];
-        else if (type == typeof(LoadBalancer)) seen = ["foreign"];
-        else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");
-        if (method == "FinishOperation")
-        {
-            return seen;
-        }
-        return [.. seen, "late", "late detail"];
     }
 
     private static Dictionary<string, object?> PublicProperties(object aggregate) =>
