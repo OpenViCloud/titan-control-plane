@@ -42,6 +42,13 @@ public class LoadBalancerRepositoryStateTests
         return loadBalancer;
     }
 
+    private static LoadBalancer Updating(string name, int vipIndex, Vm backend)
+    {
+        LoadBalancer loadBalancer = Created(name, vipIndex, backend);
+        loadBalancer.Update([new LoadBalancerListenerSpec(LoadBalancerProtocol.UDP, 53, 53)], [backend]);
+        return loadBalancer;
+    }
+
     // Every shape, named; the name is what the assertions list. Each has its own backend VM, so IsBackendAsync is
     // asked of one load balancer at a time.
     private static (List<LoadBalancer> LoadBalancers, Dictionary<string, Guid> BackendOf) EveryShape()
@@ -64,7 +71,15 @@ public class LoadBalancerRepositoryStateTests
         LoadBalancer createFailed = Shape("create-failed", 6, Creating);
         createFailed.MarkRequestFailed("refused", null);
 
-        return ([Shape("creating", 1, Creating), Shape("created", 2, Created), deleting, deleted, notFound, createFailed], backendOf);
+        LoadBalancer updatingSeen = Shape("updating-seen", 7, Updating);
+        LoadBalancer updatingLost = Shape("updating-lost", 8, Updating);
+        updatingLost.MarkNotFound();
+        LoadBalancer deletingLost = Shape("deleting-lost", 9, Created);
+        deletingLost.MarkNotFound();
+        deletingLost.Delete();
+
+        return ([Shape("creating", 1, Creating), Shape("created", 2, Created), deleting, deleted, notFound, createFailed,
+            updatingSeen, updatingLost, deletingLost], backendOf);
     }
 
     private static async Task<(LoadBalancerRepository Repo, Dictionary<string, Guid> BackendOf)> SeededAsync(TitanDbContext db)
@@ -83,7 +98,7 @@ public class LoadBalancerRepositoryStateTests
 
         List<LoadBalancer> listed = await repo.ListByTenantAsync(Tenant);
 
-        Assert.Equal(new[] { "create-failed", "created", "creating", "deleting", "not-found" },
+        Assert.Equal(new[] { "create-failed", "created", "creating", "deleting", "deleting-lost", "not-found", "updating-lost", "updating-seen" },
             listed.Select(lb => lb.Name).OrderBy(n => n).ToArray());
     }
 
@@ -108,7 +123,7 @@ public class LoadBalancerRepositoryStateTests
 
         HashSet<int> taken = await repo.ListVipIndexesOfNetworkAsync(NetworkId);
 
-        Assert.Equal(new[] { 1, 2, 3, 5, 6 }, taken.OrderBy(i => i).ToArray()); // 4 is the deleted one
+        Assert.Equal(new[] { 1, 2, 3, 5, 6, 7, 8, 9 }, taken.OrderBy(i => i).ToArray()); // 4 is the deleted one
     }
 
     [Fact]
@@ -122,6 +137,19 @@ public class LoadBalancerRepositoryStateTests
             bool expectBackend = name != "deleted";
             Assert.True(expectBackend == await repo.IsBackendAsync(vmId), name);
         }
+    }
+
+    // The quota counts what Incus holds or is about to: an update counts only while Incus was seen holding the load
+    // balancer, a delete in flight and a load balancer Incus lost not at all.
+    [Fact]
+    public async Task Quota_CountsCreatingAvailableAndAnUpdateIncusStillHolds()
+    {
+        using var db = NewDb();
+        (LoadBalancerRepository repo, _) = await SeededAsync(db);
+
+        Assert.Equal(3, await repo.CountActiveByTenantAsync(Tenant));
+        List<LoadBalancer> counted = EveryShape().LoadBalancers.Where(lb => lb.OccupiesQuota).ToList();
+        Assert.Equal(new[] { "created", "creating", "updating-seen" }, counted.Select(lb => lb.Name).OrderBy(n => n).ToArray());
     }
 
     // The repository writes each condition in LINQ; the rule is the plain bool on LoadBalancer

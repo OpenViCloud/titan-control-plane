@@ -601,7 +601,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
     private const string LoadBalancerSubnet = "2001:db8:0:3::/64";
 
-    // A load balancer waiting on its create (kind Create), or one Incus holds that waits on its delete.
+    // A load balancer waiting on its create (Creating), or one Incus holds that waits on its delete (Deleting).
     private async Task<LoadBalancer> StoredLoadBalancerAsync(bool deleting)
     {
         Guid tenantId = TestTenant.WithRoomToSpare().Id;
@@ -613,7 +613,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             [backend]);
         if (deleting)
         {
-            lb.FinishOperation(lb.Pending!.Id, lb.Vip);
+            lb.CreateSucceeded(lb.Operation.PendingId!.Value, lb.Vip);
             lb.Delete();
         }
         using IServiceScope scope = factory.Services.CreateScope();
@@ -636,12 +636,12 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: false);
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", $$"""{"outcome":"Done","externalId":"{{lb.Vip}}"}""");
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Operation.PendingId!.Value}", $$"""{"outcome":"Done","externalId":"{{lb.Vip}}"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal((CurrentExistence.Exists, lb.Vip), (stored.CurrentExistence, stored.ExternalId));
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal((LoadBalancerStatus.Available, lb.Vip), (stored.Status, stored.ExternalId));
         Assert.All(stored.Listeners, l => Assert.True(l.IsApplied));
     }
 
@@ -651,14 +651,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}",
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Operation.PendingId!.Value}",
             """{"outcome":"Failed","reason":"The load balancer could not be deleted.","detail":"incus: busy"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal(DesiredExistence.Exists, stored.DesiredExistence);
-        Assert.Equal("The load balancer could not be deleted.", stored.OperationFailureReason);
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(LoadBalancerStatus.Available, stored.Status);
+        Assert.Equal("The load balancer could not be deleted.", stored.Operation.FailureReason);
     }
 
     // A report naming a request the load balancer does not wait on is ignored, and still 204: the worker has nothing to retry.
@@ -671,11 +671,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $"/internal/load-balancers/{lb.Id}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(LoadBalancerOperationKind.Delete, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerStatus.Deleting, (await ReloadLoadBalancerAsync(lb.Id)).Status);
     }
 
     [Fact]
-    public async Task ALoadBalancerObservation_InTheWorkersJson_WritesCurrent_AndLeavesItsDeleteWaiting()
+    public async Task ALoadBalancerObservation_InTheWorkersJson_WritesWhatWasSeen_AndLeavesItsDeleteWaiting()
     {
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
 
@@ -683,7 +683,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.NotFound, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((LoadBalancerStatus.Deleting, (LoadBalancerStatus?)null), (stored.Status, stored.InstanceStatus));
     }
 
     [Theory]
@@ -695,11 +695,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Pending!.Id)}", json);
+            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Operation.PendingId!.Value)}", json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.Exists, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((LoadBalancerStatus.Deleting, (LoadBalancerStatus?)LoadBalancerStatus.Available), (stored.Status, stored.InstanceStatus));
     }
 
     // A create's Done must name the VIP, or the load balancer would be left with nothing to delete through.
@@ -709,10 +709,10 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: false);
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/load-balancers/{lb.Id}/requests/{lb.Pending!.Id}", """{"outcome":"Done"}""");
+            $"/internal/load-balancers/{lb.Id}/requests/{lb.Operation.PendingId!.Value}", """{"outcome":"Done"}""");
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal(LoadBalancerOperationKind.Create, (await ReloadLoadBalancerAsync(lb.Id)).Pending!.Kind);
+        Assert.Equal(LoadBalancerStatus.Creating, (await ReloadLoadBalancerAsync(lb.Id)).Status);
     }
 
     [Theory]
@@ -734,11 +734,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         LoadBalancer lb = await StoredLoadBalancerAsync(deleting: true);
 
         HttpResponseMessage response = await PatchAsync(
-            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Pending!.Id)}", json, token: null);
+            $"/internal/load-balancers/{lb.Id}/{string.Format(route, lb.Operation.PendingId!.Value)}", json, token: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         LoadBalancer stored = await ReloadLoadBalancerAsync(lb.Id);
-        Assert.Equal((CurrentExistence.Exists, LoadBalancerOperationKind.Delete), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((LoadBalancerStatus.Deleting, (LoadBalancerStatus?)LoadBalancerStatus.Available), (stored.Status, stored.InstanceStatus));
     }
 
     // ---------- a template's routes, under its cluster ----------

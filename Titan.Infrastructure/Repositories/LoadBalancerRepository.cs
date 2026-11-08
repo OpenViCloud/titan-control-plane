@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Repositories;
@@ -26,7 +25,7 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
     // !LoadBalancer.IsDeleted
     public async Task<List<LoadBalancer>> ListByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await WithRows()
-            .Where(lb => lb.TenantId == tenantId && lb.CurrentExistence != CurrentExistence.Deleted)
+            .Where(lb => lb.TenantId == tenantId && lb.Status != LoadBalancerStatus.Deleted)
             .AsNoTracking()
             .OrderByDescending(lb => lb.CreatedAt)
             .ToListAsync(ct);
@@ -35,20 +34,21 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.LoadBalancers.CountAsync(
             lb => lb.TenantId == tenantId
-                  && lb.DesiredExistence == DesiredExistence.Exists
-                  && (lb.CurrentExistence == CurrentExistence.Exists
-                      || (lb.CurrentExistence == CurrentExistence.NotCreated && lb.PendingOperationId != null)), ct);
+                  && (lb.Status == LoadBalancerStatus.Creating
+                      || lb.Status == LoadBalancerStatus.Available
+                      || (lb.Status == LoadBalancerStatus.Updating
+                          && lb.Operation.LastSeenStatus == LoadBalancerStatus.Available)), ct);
 
     // !LoadBalancer.IsDeleted
     public async Task<bool> ExistsByNameAsync(Guid tenantId, string name, CancellationToken ct = default) =>
         await db.LoadBalancers.AnyAsync(
-            lb => lb.TenantId == tenantId && lb.Name == name && lb.CurrentExistence != CurrentExistence.Deleted, ct);
+            lb => lb.TenantId == tenantId && lb.Name == name && lb.Status != LoadBalancerStatus.Deleted, ct);
 
     // !LoadBalancer.IsDeleted
     public async Task<HashSet<int>> ListVipIndexesOfNetworkAsync(Guid networkId, CancellationToken ct = default)
     {
         var indexes = await db.LoadBalancers
-            .Where(lb => lb.NetworkId == networkId && lb.CurrentExistence != CurrentExistence.Deleted)
+            .Where(lb => lb.NetworkId == networkId && lb.Status != LoadBalancerStatus.Deleted)
             .Select(lb => lb.VipIndex)
             .ToListAsync(ct);
         return indexes.ToHashSet();
@@ -57,12 +57,12 @@ public class LoadBalancerRepository(TitanDbContext db) : ILoadBalancerRepository
     // !LoadBalancer.IsDeleted
     public async Task<bool> IsBackendAsync(Guid vmId, CancellationToken ct = default) =>
         await db.LoadBalancers.AnyAsync(
-            lb => lb.CurrentExistence != CurrentExistence.Deleted && lb.Backends.Any(b => b.VmId == vmId), ct);
+            lb => lb.Status != LoadBalancerStatus.Deleted && lb.Backends.Any(b => b.VmId == vmId), ct);
 
     // !LoadBalancer.IsDeleted with a provider id.
     public async Task<List<LoadBalancer>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) =>
         await db.LoadBalancers
-            .Where(lb => lb.ClusterId == clusterId && lb.ExternalId != null && lb.CurrentExistence != CurrentExistence.Deleted)
+            .Where(lb => lb.ClusterId == clusterId && lb.ExternalId != null && lb.Status != LoadBalancerStatus.Deleted)
             .AsNoTracking()
             .ToListAsync(ct);
 

@@ -29,7 +29,7 @@ public class UpdateLoadBalancerCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): the configuration already asked for,
         // whether Incus has it or the request still waits. Answer like the first request: nothing recorded, nothing
         // sent — the waiting command, if any, already carries it.
-        bool notBeingDeleted = loadBalancer.Transition != LoadBalancerTransition.Deleting && !loadBalancer.IsDeleted;
+        bool notBeingDeleted = !loadBalancer.IsDeletedOrDeleting;
         bool alreadyRequestedOrDone = notBeingDeleted && loadBalancer.HasDesiredSpec(listeners, backendVmIds);
         if (alreadyRequestedOrDone)
         {

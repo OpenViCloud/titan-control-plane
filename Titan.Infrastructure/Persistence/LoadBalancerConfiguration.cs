@@ -20,18 +20,20 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         builder.Property(lb => lb.VipIndex).HasColumnName("vip_index");
         builder.Property(lb => lb.Vip).HasColumnName("vip").IsRequired();
         builder.Property(lb => lb.ExternalId).HasColumnName("external_id");
-        // Incus has no status word for it: existence only (titan-ops features/load-balancer/design.md#lb-lifecycle).
-        builder.Property(lb => lb.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(lb => lb.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<LoadBalancerOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(lb => lb.Pending);
-        builder.Ignore(lb => lb.Transition);
-        builder.Property(lb => lb.OperationFailureReason).HasColumnName("request_failure_reason");
-        builder.Property(lb => lb.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(lb => lb.OperationFailedAt).HasColumnName("request_failed_at");
+        // titan-ops features/load-balancer/design.md#lb-lifecycle: status is the one status. The waiting operation and the
+        // last failure are a value object kept in this table's columns, never null; observed_state says whether Incus was
+        // last seen holding the load balancer while an operation waits.
+        builder.Property(lb => lb.Status).HasColumnName("status").HasConversion<string>().IsRequired();
+        builder.OwnsOne(lb => lb.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+            o.Property(x => x.LastSeenStatus).HasColumnName("observed_state").HasConversion<string>();
+        });
+        builder.Ignore(lb => lb.InstanceStatus);
         builder.Property(lb => lb.CreatedAt).HasColumnName("created_at");
 
         builder.Ignore(lb => lb.DesiredListeners);
@@ -46,13 +48,13 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         // The name stays taken until the delete command confirms it gone. Same filter as ExistsByNameAsync.
         builder.HasIndex(lb => new { lb.TenantId, lb.Name })
             .IsUnique()
-            .HasFilter("current_existence <> 'Deleted'");
+            .HasFilter("status <> 'Deleted'");
         // One VIP per live load balancer of a network: two creates that picked the same number race here
         // (titan-ops features/load-balancer/design.md#vip-in-network-64). Same condition as ListVipIndexesOfNetworkAsync.
         builder.HasIndex(lb => new { lb.NetworkId, lb.VipIndex })
             .IsUnique()
             .HasDatabaseName(VipIndexName)
-            .HasFilter("current_existence <> 'Deleted'");
+            .HasFilter("status <> 'Deleted'");
     }
 
     public const string VipIndexName = "ix_load_balancers_network_id_vip_index";

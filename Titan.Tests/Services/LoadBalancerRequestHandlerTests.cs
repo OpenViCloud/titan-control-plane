@@ -13,8 +13,8 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a load balancer, at the handler: a
-// report ends the request it names and records its outcome once; an observation writes current and ends nothing; the
-// row is locked. The requests' own repeat and lock rules are at the end.
+// report ends the operation it names and records its outcome once; an observation writes only what Incus showed and ends
+// nothing; the row is locked. The requests' own repeat and lock rules are at the end.
 public class LoadBalancerRequestHandlerTests
 {
     private const string Subnet = "2001:41d0:d00:d405::/64";
@@ -70,14 +70,11 @@ public class LoadBalancerRequestHandlerTests
         return lb;
     }
 
-    private static Guid Waiting(LoadBalancer lb) => lb.Pending!.Id;
+    private static Guid Waiting(LoadBalancer lb) => lb.Operation.PendingId!.Value;
 
     private IEnumerable<string> Outcomes() => _activity.Events.Where(e => e.OutcomeTenantId != null).Select(e => e.Action);
 
     private void NothingSaved() => _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
-
-    private static string Shape(LoadBalancer lb) =>
-        $"{lb.CurrentExistence}/{lb.DesiredExistence}/{(lb.Transition == null ? "-" : lb.Transition.Value.ToString())}";
 
     private Task End(LoadBalancer lb, Guid requestId, string outcome, string? externalId = null) =>
         EndHandler().HandleAsync(new EndLoadBalancerRequestCommand(lb.Id, requestId, outcome, externalId,
@@ -94,7 +91,7 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, create, "Done", lb.Vip);
         await End(lb, create, "Done", lb.Vip);
 
-        Assert.Equal("Exists/Exists/-", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(lb.Vip, lb.ExternalId);
         Assert.Single(lb.AppliedListeners);
         Assert.Equal(["load_balancer.created"], Outcomes());
@@ -112,7 +109,7 @@ public class LoadBalancerRequestHandlerTests
         BusinessException refused = await Assert.ThrowsAsync<BusinessException>(() => End(lb, Waiting(lb), "Done", externalId));
 
         Assert.Equal("INVALID_STATUS", refused.Code);
-        Assert.Equal(LoadBalancerTransition.Creating, lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Creating, lb.Status);
         NothingSaved();
     }
 
@@ -123,10 +120,10 @@ public class LoadBalancerRequestHandlerTests
 
         await End(lb, Waiting(lb), "Failed", lb.Vip);
 
-        Assert.Equal("Exists/Exists/-", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal(lb.Vip, lb.ExternalId);
-        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
-        Assert.Equal("raw", lb.OperationFailureDetail);
+        Assert.Equal("The load balancer request could not be completed.", lb.Operation.FailureReason);
+        Assert.Equal("raw", lb.Operation.FailureDetail);
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -141,7 +138,7 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, update, "Done");
         await End(lb, update, "Done");
 
-        Assert.Equal("Exists/Exists/-", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal([53], lb.AppliedListeners.Select(l => l.Port));
         Assert.Equal(["load_balancer.updated"], Outcomes());
     }
@@ -156,9 +153,9 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, update, "Failed");
         await End(lb, update, "Failed");
 
-        Assert.Equal("Exists/Exists/-", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
         Assert.Equal([80], lb.DesiredListeners.Select(l => l.Port));
-        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
+        Assert.Equal("The load balancer request could not be completed.", lb.Operation.FailureReason);
         Assert.Equal(["load_balancer.update_failed"], Outcomes());
     }
 
@@ -171,7 +168,7 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, delete, "Done");
         await End(lb, delete, "Done");
 
-        Assert.Equal("Deleted/Deleted/-", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Deleted, lb.Status);
         Assert.Equal(["load_balancer.deleted"], Outcomes());
     }
 
@@ -184,8 +181,8 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, delete, "Failed");
         await End(lb, delete, "Failed");
 
-        Assert.Equal("Exists/Exists/-", Shape(lb));
-        Assert.Equal("The load balancer request could not be completed.", lb.OperationFailureReason);
+        Assert.Equal(LoadBalancerStatus.Available, lb.Status);
+        Assert.Equal("The load balancer request could not be completed.", lb.Operation.FailureReason);
         Assert.Equal(["load_balancer.delete_failed"], Outcomes());
     }
 
@@ -198,7 +195,7 @@ public class LoadBalancerRequestHandlerTests
         await End(lb, Guid.NewGuid(), "Done");
         await End(lb, Guid.NewGuid(), "Failed");
 
-        Assert.Equal("Exists/Deleted/Deleting", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
         Assert.Empty(Outcomes());
         NothingSaved();
     }
@@ -230,7 +227,7 @@ public class LoadBalancerRequestHandlerTests
     // ---------- the observation ----------
 
     [Fact]
-    public async Task AnObservation_WritesExistence_AndEveryWaitingRequestKeepsWaiting()
+    public async Task AnObservation_WritesOnlyWhatWasSeen_AndEveryWaitingOperationKeepsWaiting()
     {
         LoadBalancer creating = Creating();
         LoadBalancer deleting = OnIncus();
@@ -239,19 +236,21 @@ public class LoadBalancerRequestHandlerTests
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(creating.Id, false));
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(deleting.Id, false));
 
-        Assert.Equal("NotFound/Exists/Creating", Shape(creating));
-        Assert.Equal("NotFound/Deleted/Deleting", Shape(deleting));
+        Assert.Equal(LoadBalancerStatus.Creating, creating.Status);
+        Assert.Equal(LoadBalancerStatus.Deleting, deleting.Status);
+        Assert.Null(creating.InstanceStatus);
+        Assert.Null(deleting.InstanceStatus);
         Assert.Empty(Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
 
         await ObserveHandler().HandleAsync(new ObserveLoadBalancerCommand(deleting.Id, true));
-        Assert.Equal("Exists/Deleted/Deleting", Shape(deleting));
+        Assert.Equal(LoadBalancerStatus.Deleting, deleting.Status);
     }
 
     // ---------- the replaced update ----------
 
     // The report of an update a delete replaced names a request no longer waiting, Done or Failed: the delete keeps
-    // waiting for its own (titan-ops architecture/desired-and-current.md#abandoned-request).
+    // waiting for its own (titan-ops architecture/desired-and-current.md#abandoned-operation).
     [Theory]
     [InlineData("Done")]
     [InlineData("Failed")]
@@ -264,7 +263,7 @@ public class LoadBalancerRequestHandlerTests
 
         await End(lb, update, outcome);
 
-        Assert.Equal("Exists/Deleted/Deleting", Shape(lb));
+        Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
         Assert.Empty(Outcomes());
         NothingSaved();
     }
@@ -303,7 +302,7 @@ public class LoadBalancerRequestHandlerTests
 
         await UpdateHandler().HandleAsync(new UpdateLoadBalancerCommand(lb.Id, [Http, Dns], backends));
 
-        Assert.Equal(LoadBalancerTransition.Updating, lb.Transition);
+        Assert.Equal(LoadBalancerStatus.Updating, lb.Status);
         Assert.NotEqual(replaced, Waiting(lb));
         _commands.Verify(c => c.EnqueueLoadBalancerUpdateAsync(lb, Waiting(lb), It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Once);

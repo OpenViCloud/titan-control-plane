@@ -372,12 +372,15 @@ public class QueryRuleDbTests(PostgresFixture pg)
         LoadBalancer.Create(_tenant.Id, $"lb-{Guid.NewGuid():N}"[..12], networkId, "net-ext", Subnet, "cluster-a",
             LoadBalancerVip.For(Subnet, vipIndex), [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [backend]);
 
+    // One row per shape (titan-ops features/load-balancer/design.md#lb-quota-and-billing): the SQL reads status and
+    // observed_state, so an update counts only while Incus was seen holding the load balancer.
     [Fact]
-    public async Task LoadBalancerQuota_CountsWhatExistsOrIsBeingCreated_NotAFailedCreate_OrADeleteAsked()
+    public async Task LoadBalancerQuota_CountsCreatingAvailableAndAnUpdateIncusStillHolds_NotFailedNotFoundOrADelete()
     {
         string offering = await OfferingAsync();
         Guid networkId = Guid.NewGuid();
         Vm backend = SeenVm(offering, "backend", VmStatus.Running, networkId);
+        LoadBalancerListenerSpec[] other = [new(LoadBalancerProtocol.UDP, 53, 53)];
         LoadBalancer created = NewLoadBalancer(networkId, 1, backend);
         created.MarkCreated(created.Vip);
         LoadBalancer leaving = NewLoadBalancer(networkId, 2, backend);
@@ -385,9 +388,31 @@ public class QueryRuleDbTests(PostgresFixture pg)
         leaving.Delete();
         LoadBalancer failed = NewLoadBalancer(networkId, 3, backend);
         failed.MarkRequestFailed("refused", null);
-        await SaveAsync(NewLoadBalancer(networkId, 4, backend), created, leaving, failed);
+        LoadBalancer updatingSeen = NewLoadBalancer(networkId, 5, backend);
+        updatingSeen.MarkCreated(updatingSeen.Vip);
+        updatingSeen.Update(other, [backend]);
+        LoadBalancer updatingLost = NewLoadBalancer(networkId, 6, backend);
+        updatingLost.MarkCreated(updatingLost.Vip);
+        updatingLost.Update(other, [backend]);
+        updatingLost.MarkNotFound();
+        LoadBalancer notFound = NewLoadBalancer(networkId, 7, backend);
+        notFound.MarkCreated(notFound.Vip);
+        notFound.MarkNotFound();
+        LoadBalancer leavingLost = NewLoadBalancer(networkId, 8, backend);
+        leavingLost.MarkCreated(leavingLost.Vip);
+        leavingLost.MarkNotFound();
+        leavingLost.Delete();
+        LoadBalancer deleted = NewLoadBalancer(networkId, 9, backend);
+        deleted.MarkCreated(deleted.Vip);
+        deleted.Delete();
+        deleted.MarkDeleted();
+        LoadBalancer creating = NewLoadBalancer(networkId, 4, backend);
+        LoadBalancer[] all = [creating, created, leaving, failed, updatingSeen, updatingLost, notFound, leavingLost, deleted];
+        await SaveAsync(all);
 
         await using TitanDbContext db = pg.NewDbContext();
-        Assert.Equal(2, await new LoadBalancerRepository(db).CountActiveByTenantAsync(_tenant.Id)); // creating, created
+        // creating, created, updating (seen)
+        Assert.Equal(3, await new LoadBalancerRepository(db).CountActiveByTenantAsync(_tenant.Id));
+        Assert.Equal(3, all.Count(lb => lb.OccupiesQuota));
     }
 }
