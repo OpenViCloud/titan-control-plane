@@ -100,7 +100,7 @@ public class VolumeRequestLifecycleTests
     }
 
     [Fact]
-    public void Done_OfTheCreate_RecordsTheIdAndExistence_AndEndsIt()
+    public void Done_OfTheCreate_RecordsTheIdAndStatus_AndEndsIt()
     {
         Volume volume = NewVolume();
         Guid createId = PendingOf(volume);
@@ -130,7 +130,7 @@ public class VolumeRequestLifecycleTests
     }
 
     [Fact] // Incus made the volume but the command gave up: it exists, and its create failed
-    public void Failed_OfTheCreate_WithAnId_KeepsTheIdAndExistence_AndRecordsTheReason()
+    public void Failed_OfTheCreate_WithAnId_KeepsTheIdAndStatus_AndRecordsTheReason()
     {
         Volume volume = NewVolume();
 

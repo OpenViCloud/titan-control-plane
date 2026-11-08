@@ -4,7 +4,8 @@ using System.Text.RegularExpressions;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the
-// control plane provisions to the provider keeps two states, except the VM, the network, the firewall rule and the VM snapshot, which keep one status (OneStatus below). A person's request writes DesiredState; only an
+// control plane provisions to the provider keeps two states, except the VM, the network, the firewall rule, the VM
+// snapshot, the volume and the volume snapshot, which keep one status (OneStatus below). A person's request writes DesiredState; only an
 // observation of the provider (Mark*, reached from the worker's callback), or a request's own report
 // (FinishOperation, FailOperation), writes CurrentState, apart from the allowlist below. The two
 // directions below are what makes "currentState is updated in the reconcile direction" a build failure
@@ -35,10 +36,11 @@ public class DesiredCurrentOwnershipTests
         @"(?<mods>(?:public|private|internal)(?: static)?) (?:void|[A-Za-z<>?.]+) (?<name>[A-Z]\w*)\([^)]*\)\s*(?<shape>=>|\{)",
         RegexOptions.Compiled);
 
-    // The existence pair, and a volume's attachment pair, have the same two writers as the state pair
-    // (titan-ops architecture/desired-and-current.md#existence-axis, titan-ops features/volume/design.md#volume-state-is-existence).
-    private static readonly Regex WritesCurrent = new(@"\bCurrent(?:State|Existence|Attached\w*)\s*=(?!=)", RegexOptions.Compiled);
-    private static readonly Regex WritesDesired = new(@"\bDesired(?:State|Existence|Attached\w*)\s*=(?!=)", RegexOptions.Compiled);
+    // The existence pair has the same two writers as the state pair
+    // (titan-ops architecture/desired-and-current.md#existence-axis). A volume's attachment pair is not scanned: the volume
+    // is in OneStatus and moves it only through its own attach and detach methods.
+    private static readonly Regex WritesCurrent = new(@"\bCurrent(?:State|Existence)\s*=(?!=)", RegexOptions.Compiled);
+    private static readonly Regex WritesDesired = new(@"\bDesired(?:State|Existence)\s*=(?!=)", RegexOptions.Compiled);
 
     [Fact]
     public void IntentMethods_DoNotWriteCurrentState()

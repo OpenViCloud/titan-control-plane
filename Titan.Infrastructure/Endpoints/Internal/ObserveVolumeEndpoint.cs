@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.Volume.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one volume (titan-ops architecture/resource-lifecycle.md#callback-routes): whether Incus
-// has it and what uses it. Writes current only.
+// has it and what uses it. Ends no request.
 public class ObserveVolumeEndpoint(ObserveVolumeCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVolumeBody>
 {

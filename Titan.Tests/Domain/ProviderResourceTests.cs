@@ -9,10 +9,11 @@ namespace Titan.Tests.Domain;
 
 // The pending operation and the last failure live once in ProviderResource (titan-ops
 // architecture/domain-methods.md#provider-resource), for roots and entities alike. Every Domain type that has a Pending
-// operation goes through it, so the state is never written again in a type of its own. Vm, Network, FirewallRule and
-// VmSnapshot are the named exceptions: each keeps one status that says which operation waits, and keeps that operation's
-// id and the last failure in an Operation value object of its own instead of a Pending (titan-ops
-// features/vm/design.md#vm-status, features/network/design.md#network-operation, features/vm/design.md#vm-snapshot).
+// operation goes through it, so the state is never written again in a type of its own. Vm, Network, FirewallRule,
+// VmSnapshot, Volume and VolumeSnapshot are the named exceptions: each keeps one status that says which operation waits,
+// and keeps that operation's id and the last failure in an Operation value object of its own instead of a Pending
+// (titan-ops features/vm/design.md#vm-status, features/network/design.md#network-operation,
+// features/vm/design.md#vm-snapshot, features/volume/design.md#volume-state-is-existence).
 public class ProviderResourceTests
 {
     private const BindingFlags Declared =

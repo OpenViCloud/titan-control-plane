@@ -56,7 +56,8 @@ public partial class Volume
     public bool SnapshotDeleteFailed(Guid snapshotId, Guid operationId, string? reason, string? detail) =>
         GetSnapshot(snapshotId).DeleteFailed(operationId, reason, detail);
 
-    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
+    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): they record
+    // what Incus has and finish no operation.
 
     public void MarkSnapshotObserved(Guid snapshotId) => GetSnapshot(snapshotId).MarkObserved();
 
