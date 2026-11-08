@@ -92,6 +92,27 @@ public class TemplateReconcilerTests
         Assert.Empty(heartbeat.Snapshot());
     }
 
+    [Fact] // the worker compares Exists and NotFound only: a re-sync that did not see the alias reads NotFound, one that did, Exists
+    public async Task TemplateEndpoint_AReSyncReadsExistsOnlyWhenItSawTheAlias()
+    {
+        using var db = NewDb();
+        var sawIt = SyncedIn("saw-it", "mock", "301");
+        sawIt.MarkNotFoundIn("mock");
+        sawIt.SyncIn("mock");
+        sawIt.MarkObservedIn("mock");
+        var didNotSeeIt = SyncedIn("did-not-see-it", "mock", "302");
+        didNotSeeIt.MarkNotFoundIn("mock");
+        didNotSeeIt.SyncIn("mock");
+        db.VmTemplates.AddRange(sawIt, didNotSeeIt);
+        await db.SaveChangesAsync();
+        var ep = TemplateEndpoint(db, new ReconcilerHeartbeat(), "secret", clusterId: "mock");
+
+        await ep.HandleAsync(CancellationToken.None);
+
+        var rows = ep.Response.OrderBy(r => r.ExternalTemplateId).Select(r => $"{r.ExternalTemplateId}:{r.CurrentExistence}").ToList();
+        Assert.Equal(new[] { "301:Exists", "302:NotFound" }, rows);
+    }
+
     [Fact] // the customer catalog: what the provider was last observed to hold — a template found gone is not offered
     public async Task TemplateCatalog_ListsOnlyWhatExists_NotALostOne()
     {
@@ -105,6 +126,38 @@ public class TemplateReconcilerTests
         var names = (await new VmTemplateRepository(db).ListSyncedInClusterAsync("mock")).Select(t => t.Name).ToList();
 
         Assert.Equal(new[] { "synced" }, names);
+    }
+
+    // VmTemplateCluster.IsSynced written in SQL: Available, or Syncing with the alias seen. A re-sync that did not see it,
+    // a lost alias and a give-up before any alias are not offered.
+    [Fact]
+    public async Task TemplateCatalog_OffersAnAvailableCluster_AndAReSyncThatSawTheAlias_AndNoOtherStatus()
+    {
+        using var db = NewDb();
+        var available = SyncedIn("available", "mock", "1");
+        var reSyncSawIt = SyncedIn("re-sync-saw-it", "mock", "2");
+        reSyncSawIt.MarkNotFoundIn("mock");
+        reSyncSawIt.SyncIn("mock");
+        reSyncSawIt.MarkObservedIn("mock");
+        var reSyncDidNot = SyncedIn("re-sync-did-not", "mock", "3");
+        reSyncDidNot.MarkNotFoundIn("mock");
+        reSyncDidNot.SyncIn("mock");
+        var lost = SyncedIn("lost", "mock", "4");
+        lost.MarkNotFoundIn("mock");
+        var firstSync = VmTemplate.Create("first-sync", null, "img", 10, "m");
+        firstSync.SyncIn("mock");
+        var gaveUp = VmTemplate.Create("gave-up", null, "img", 10, "m");
+        gaveUp.SyncIn("mock");
+        gaveUp.MarkRequestFailedIn("mock", "x", null);
+        db.VmTemplates.AddRange(available, reSyncSawIt, reSyncDidNot, lost, firstSync, gaveUp);
+        await db.SaveChangesAsync();
+        var repo = new VmTemplateRepository(db);
+
+        var inCluster = (await repo.ListSyncedInClusterAsync("mock")).Select(t => t.Name).Order().ToList();
+        var inAny = (await repo.ListSyncedInAnyClusterAsync()).Select(t => t.Name).Order().ToList();
+
+        Assert.Equal(new[] { "available", "re-sync-saw-it" }, inCluster);
+        Assert.Equal(inCluster, inAny);
     }
 
     [Fact] // a cluster asked into a template already saved is a NEW row, not an update of one that does not exist
@@ -125,8 +178,8 @@ public class TemplateReconcilerTests
         using (var db = NewDb("cluster-added"))
         {
             var reread = (await new VmTemplateRepository(db).ListAllAsync()).Single();
-            Assert.Equal(new[] { "mock:Exists", "singapore01:NotCreated" },
-                reread.Clusters.OrderBy(z => z.ClusterId).Select(z => $"{z.ClusterId}:{z.CurrentExistence}"));
+            Assert.Equal(new[] { "mock:Available", "singapore01:Syncing" },
+                reread.Clusters.OrderBy(z => z.ClusterId).Select(z => $"{z.ClusterId}:{z.Status}"));
         }
     }
 }

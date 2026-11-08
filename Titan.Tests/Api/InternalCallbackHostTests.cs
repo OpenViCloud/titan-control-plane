@@ -752,7 +752,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         VmTemplate template = VmTemplate.Create($"tpl-{Guid.NewGuid():N}"[..14], null, "ubuntu/22.04", 10, Offering);
         if (resync)
         {
-            template.FinishSyncOperation(TemplateCluster, template.SyncIn(TemplateCluster).Id, TemplateAlias);
+            template.SyncSucceededIn(TemplateCluster, template.SyncIn(TemplateCluster), TemplateAlias);
             template.MarkNotFoundIn(TemplateCluster);
         }
         template.SyncIn(TemplateCluster);
@@ -775,7 +775,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
     private static string TemplateRoute(VmTemplate template, string route) =>
         $"/internal/templates/{template.Id}/clusters/{TemplateCluster}/"
-        + string.Format(route, template.Clusters.Single(c => c.ClusterId == TemplateCluster).Pending!.Id);
+        + string.Format(route, template.Clusters.Single(c => c.ClusterId == TemplateCluster).Operation.PendingId!.Value);
 
     [Fact]
     public async Task ATemplateSyncDone_InTheWorkersJson_RecordsTheAlias_AndAnswers204()
@@ -787,8 +787,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal((CurrentExistence.Exists, TemplateAlias), (stored.CurrentExistence, stored.ExternalTemplateId));
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal((VmTemplateClusterStatus.Available, TemplateAlias), (stored.Status, stored.ExternalTemplateId));
     }
 
     [Fact]
@@ -801,8 +801,9 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Null(stored.Pending);
-        Assert.Equal(("Template sync failed due to a system error.", "incus: timeout"), (stored.OperationFailureReason, stored.OperationFailureDetail));
+        Assert.Null(stored.Operation.PendingId);
+        Assert.Equal(VmTemplateClusterStatus.Failed, stored.Status);
+        Assert.Equal(("Template sync failed due to a system error.", "incus: timeout"), (stored.Operation.FailureReason, stored.Operation.FailureDetail));
     }
 
     // A report naming a request the cluster does not wait on is ignored, and still 204: the worker has nothing to retry.
@@ -816,11 +817,11 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             $$"""{"outcome":"Done","externalId":"{{TemplateAlias}}"}""");
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.Equal(VmTemplateOperationKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+        Assert.Equal(VmTemplateClusterStatus.Syncing, (await ReloadTemplateClusterAsync(template.Id)).Status);
     }
 
     [Fact]
-    public async Task ATemplateObservation_InTheWorkersJson_WritesCurrent_AndLeavesTheSyncWaiting()
+    public async Task ATemplateObservation_InTheWorkersJson_IsSeenOnTheSync_AndLeavesItWaiting()
     {
         VmTemplate template = await StoredTemplateWaitingOnASyncAsync(resync: true);
 
@@ -828,7 +829,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.Exists, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal((VmTemplateClusterStatus.Syncing, VmTemplateClusterStatus.Available), (stored.Status, stored.InstanceStatus));
+        Assert.NotNull(stored.Operation.PendingId);
     }
 
     [Theory]
@@ -843,7 +845,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal(VmTemplateClusterStatus.Syncing, stored.Status);
+        Assert.NotNull(stored.Operation.PendingId);
     }
 
     // A sync's Done must name the alias while the cluster has none: a VM is created from it.
@@ -856,7 +859,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal(VmTemplateClusterStatus.Syncing, stored.Status);
+        Assert.NotNull(stored.Operation.PendingId);
     }
 
     [Theory]
@@ -878,7 +882,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
     public async Task ATemplateReport_ForAClusterNotConfigured_Is404_AndChangesNothing(string route, string json)
     {
         VmTemplate template = await StoredTemplateWaitingOnASyncAsync();
-        Guid requestId = template.Clusters.Single().Pending!.Id;
+        Guid requestId = template.Clusters.Single().Operation.PendingId!.Value;
 
         HttpResponseMessage response = await PatchAsync(
             $"/internal/templates/{template.Id}/clusters/vn-hcm-1/{string.Format(route, requestId)}", json);
@@ -886,7 +890,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("CLUSTER_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
-        Assert.Equal(VmTemplateOperationKind.Sync, (await ReloadTemplateClusterAsync(template.Id)).Pending!.Kind);
+        Assert.Equal(VmTemplateClusterStatus.Syncing, (await ReloadTemplateClusterAsync(template.Id)).Status);
     }
 
     [Theory]
@@ -900,7 +904,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         VmTemplateCluster stored = await ReloadTemplateClusterAsync(template.Id);
-        Assert.Equal((CurrentExistence.NotCreated, VmTemplateOperationKind.Sync), (stored.CurrentExistence, stored.Pending!.Kind));
+        Assert.Equal(VmTemplateClusterStatus.Syncing, stored.Status);
+        Assert.NotNull(stored.Operation.PendingId);
     }
 
     // What the control plane's environment sets on dev and prd, and one cluster for the template routes, which refuse a

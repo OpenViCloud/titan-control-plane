@@ -74,6 +74,8 @@ public class StateTransitionOwnershipTests
             "Incomplete only reports what barman wrote, and the next refresh rewrites it from the bucket",
         ["PaymentGatewayTransaction/PaymentGatewayTransaction"] = "no terminal risk: Status is set in Create() and never "
             + "mutated again — there is no observation path into this aggregate",
+        ["Entities/VmTemplateCluster"] = "no terminal state exists: a template is never removed from a cluster, so " +
+            "NotFound and Failed both take a new sync (titan-ops features/catalog/design.md#template-state-is-existence)",
     };
 
     // ── a caller may not assert a provider id the aggregate owns (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
@@ -263,10 +265,6 @@ public class StateTransitionOwnershipTests
     // Internal validation counts in three shapes: it throws; it consults IsDeleted (absorb instead
     // of refuse — the observation path, titan-ops architecture/intent-and-observation.md#observation-converges); or it delegates to an Ensure*() on itself
     // (EnsureSnapshottable, EnsureNoCreateWaiting, …), which a text scan looking only for `throw` would report as a violation.
-    private const string TemplateReport = "the report of a sync's own command, ignored unless it names the waiting " +
-        "request: that id check is the guard. No terminal state to absorb (a template is never Deleted), and no " +
-        "outcome is illegal from a waiting sync (titan-ops architecture/resource-lifecycle.md#shape).";
-
     private const string PartOfTheReport = "private helper, reached only from the type's FinishOperation and " +
         "FailOperation, which ignore a report that names another operation, and absorb one for a Deleted resource where " +
         "the type can be Deleted, before calling it; it records what the worker saw, which a waiting operation may always take. A check here would " +
@@ -274,13 +272,10 @@ public class StateTransitionOwnershipTests
 
     private static readonly Dictionary<string, string> NoInvariantAllowlist = new()
     {
-        ["VmTemplateCluster.MarkNotFound"] = "there is genuinely no invariant to enforce: NotFound is reachable " +
-            "from every existence, carries no required field, and has no terminal state to absorb. " +
-            "Inventing a check here would be a check that cannot fail — which is worse than none, " +
-            "because it reads like protection. Declared, not enforced.",
-        ["VmTemplateCluster.FinishOperation"] = TemplateReport,
+        ["VmTemplateCluster.MarkNotFound"] = "an observation, not an intent: there is no invariant to refuse. NotFound is " +
+            "reachable from every status but Failed (no alias to lose), which the method ignores with an early return " +
+            "the scan does not read as validation. Declared, not enforced.",
         ["LoadBalancer.RecordWhatTheWorkerSaw"] = PartOfTheReport,
-        ["VmTemplateCluster.RecordWhatTheWorkerSaw"] = PartOfTheReport,
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +
             "handler must recognise first.",

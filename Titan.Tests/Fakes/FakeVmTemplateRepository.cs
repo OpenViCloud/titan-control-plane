@@ -1,6 +1,5 @@
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 
 namespace Titan.Tests.Fakes;
 
@@ -30,7 +29,7 @@ public class FakeVmTemplateRepository(params VmTemplate[] seed) : IVmTemplateRep
         Task.FromResult(_items.Where(t => t.IsSyncedIn(clusterId)).ToList());
 
     public Task<List<VmTemplate>> ListSyncedInAnyClusterAsync(CancellationToken ct = default) =>
-        Task.FromResult(_items.Where(t => t.Clusters.Any(z => z.CurrentExistence == CurrentExistence.Exists)).ToList());
+        Task.FromResult(_items.Where(t => t.Clusters.Any(z => z.IsSynced)).ToList());
 
     public Task<List<VmTemplate>> ListReconcilableInClusterAsync(string clusterId, CancellationToken ct = default) =>
         Task.FromResult(_items.Where(t => t.Clusters.Any(z => z.ClusterId == clusterId && z.ExternalTemplateId != null)).ToList());

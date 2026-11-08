@@ -11,8 +11,8 @@ using Titan.Domain.Values;
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/resource-lifecycle.md#shape: every aggregate on the request shape has the same five methods (the
-// VM, the network, the firewall rule, the VM snapshot, the volume and the volume snapshot have one report method per move
-// instead of FinishOperation and FailOperation), its Mark* return nothing, a report with a foreign id changes nothing,
+// VM, the network, the firewall rule, the VM snapshot, the volume, the volume snapshot and the template in a cluster have
+// one report method per move instead of FinishOperation and FailOperation), its Mark* return nothing, a report with a foreign id changes nothing,
 // every lifecycle handler locks the row, and every command payload carries the request id. Reflection and a factory for
 // the first three; source text for the last two.
 //
@@ -22,17 +22,17 @@ namespace Titan.Tests.Domain;
 // VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
 // VmTemplateCluster) is on the shape with internal methods, reached through its root. Vm is on the shape without a
 // Pending property: its one status says what the waiting request asks, and it keeps only that request's id
-// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Network,
-// FirewallRule, VmSnapshot, Volume and VolumeSnapshot keep the waiting operation in an Operation of their own (titan-ops
-// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot, features/volume/design.md#volume-state-is-existence)
-// and are named here for the same reason.
+// (titan-ops features/vm/design.md#vm-status), so the scan cannot find it and it is named here instead. Vm, Network,
+// FirewallRule, VmSnapshot, Volume, VolumeSnapshot and VmTemplateCluster keep the waiting operation in an Operation of their own (titan-ops
+// features/network/design.md#network-operation, features/vm/design.md#vm-snapshot, features/volume/design.md#volume-state-is-existence,
+// features/catalog/design.md#template-state-is-existence) and are named here for the same reason.
 public class RequestLifecycleShapeTests
 {
     private const BindingFlags Declared = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
     // On the shape without a Pending property, each kept by name.
     private static readonly Type[] OnTheShapeWithoutPending =
-        [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot)];
+        [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot), typeof(VmTemplateCluster)];
 
     // Aggregates with a Pending property (titan-ops architecture/resource-lifecycle.md#rollout).
     private static List<Type> WithAPendingProperty() =>
@@ -145,8 +145,8 @@ public class RequestLifecycleShapeTests
 
     // The VM has one report method per move (titan-ops features/vm/design.md#vm-status); the network, the firewall rule, the
     // VM snapshot, the volume and the volume snapshot have one Succeeded and one Failed move per operation (NetworkReportMoves,
-    // VmSnapshotReportMoves, VolumeReportMoves and VolumeSnapshotReportMoves below); the other types end a request by
-    // FinishOperation and FailOperation.
+    // VmSnapshotReportMoves, VolumeReportMoves, VolumeSnapshotReportMoves and VmTemplateReportMoves below); the other type
+    // (the load balancer) ends a request by FinishOperation and FailOperation.
     private static readonly string[] VmReportMoves =
     [
         "CreateSucceeded", "CreateFailed", "StartSucceeded", "StartFailed",
@@ -172,6 +172,9 @@ public class RequestLifecycleShapeTests
     // A volume snapshot ends its create or delete by the status it waits in (titan-ops features/volume/design.md#volume-snapshot).
     private static readonly string[] VolumeSnapshotReportMoves = ["CreateSucceeded", "CreateFailed", "DeleteSucceeded", "DeleteFailed"];
 
+    // A template in a cluster ends its one operation, a sync, by the status it waits in (titan-ops features/catalog/design.md#template-reports).
+    private static readonly string[] VmTemplateReportMoves = ["SyncSucceeded", "SyncFailed"];
+
     private static IEnumerable<string> RequiredReportsOf(Type type)
     {
         if (type == typeof(Vm))
@@ -193,6 +196,10 @@ public class RequestLifecycleShapeTests
         if (type == typeof(VolumeSnapshot))
         {
             return [.. VolumeSnapshotReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(VmTemplateCluster))
+        {
+            return [.. VmTemplateReportMoves, "MarkObserved", "MarkNotFound"];
         }
         return ["FinishOperation", "FailOperation", "MarkObserved", "MarkNotFound"];
     }
@@ -315,6 +322,24 @@ public class RequestLifecycleShapeTests
         }
     }
 
+    // The same for a template in a cluster: its moves are internal to it and reached through its template.
+    [Fact]
+    public void EveryVmTemplateClusterMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in VmTemplateReportMoves)
+        {
+            VmTemplateCluster cluster = (VmTemplateCluster)WaitingOnARequest[typeof(VmTemplateCluster)]();
+            MethodInfo ending = typeof(VmTemplateCluster).GetMethod(move, BindingFlags.NonPublic | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(cluster);
+
+            object? result = ending.Invoke(cluster, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(cluster));
+        }
+    }
+
     private static Volume VolumeWaitingFor(string move)
     {
         Volume volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "shape", "cluster-a", "std", 10);
@@ -419,6 +444,10 @@ public class RequestLifecycleShapeTests
             {
                 continue; // EveryVolumeMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty and the snapshot's
             }
+            if (type == typeof(VmTemplateCluster))
+            {
+                continue; // EveryVmTemplateClusterMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty
+            }
             foreach (string method in new[] { "FinishOperation", "FailOperation" })
             {
                 object aggregate = build();
@@ -440,7 +469,7 @@ public class RequestLifecycleShapeTests
         object?[] seen;
         if (type == typeof(Network)) seen = ["foreign", NetworkStatus.Created, "10.8.0.0/24", "10.8.0.1"];
         else if (type == typeof(FirewallRule)) seen = ["foreign", FirewallRuleStatus.enabled];
-        else if (type == typeof(LoadBalancer) || type == typeof(VmTemplateCluster)) seen = ["foreign"];
+        else if (type == typeof(LoadBalancer)) seen = ["foreign"];
         else throw new InvalidOperationException($"no report for {type.Name}: add one with its rollout phase");
         if (method == "FinishOperation")
         {

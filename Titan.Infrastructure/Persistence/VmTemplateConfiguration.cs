@@ -95,19 +95,21 @@ public class VmTemplateClusterConfiguration : IEntityTypeConfiguration<VmTemplat
         builder.HasKey(z => new { z.TemplateId, z.ClusterId });
         builder.Property(z => z.TemplateId).HasColumnName("template_id");
         builder.Property(z => z.ClusterId).HasColumnName("cluster_id").HasColumnType("text");
-        // Incus has no status word for an image alias: existence only (titan-ops features/catalog/design.md#template-state-is-existence).
-        builder.Property(z => z.CurrentExistence).HasColumnName("current_existence").HasConversion<string>().IsRequired();
-        builder.Property(z => z.DesiredExistence).HasColumnName("desired_existence").HasConversion<string>().IsRequired();
-        // The one waiting request, as three columns (titan-ops architecture/resource-lifecycle.md#shape).
-        builder.Property<Guid?>("PendingOperationId").HasColumnName("pending_request_id");
-        builder.Property<VmTemplateOperationKind?>("PendingOperationKind").HasColumnName("pending_request_kind").HasConversion<string>();
-        builder.Property<DateTimeOffset?>("PendingOperationAskedAt").HasColumnName("pending_request_asked_at");
-        builder.Ignore(z => z.Pending);
-        builder.Property(z => z.OperationFailureReason).HasColumnName("request_failure_reason").HasColumnType("text");
-        builder.Property(z => z.OperationFailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
-        builder.Property(z => z.OperationFailedAt).HasColumnName("request_failed_at");
+        // Incus has no status word for an image alias: status is the one status, and the sync's waiting request and last
+        // failure are a value object kept in this table's columns, never null, with observed_state whether the cluster was
+        // last seen holding the alias while a sync waits (titan-ops features/catalog/design.md#template-state-is-existence).
+        builder.Property(z => z.Status).HasColumnName("status").HasConversion<string>().IsRequired();
+        builder.OwnsOne(z => z.Operation, o =>
+        {
+            o.Property(x => x.PendingId).HasColumnName("pending_request_id");
+            o.Property(x => x.AskedAt).HasColumnName("pending_request_asked_at");
+            o.Property(x => x.FailureReason).HasColumnName("request_failure_reason").HasColumnType("text");
+            o.Property(x => x.FailureDetail).HasColumnName("request_failure_detail").HasColumnType("text");
+            o.Property(x => x.FailedAt).HasColumnName("request_failed_at");
+            o.Property(x => x.LastSeenStatus).HasColumnName("observed_state").HasConversion<string>();
+        });
+        builder.Ignore(z => z.InstanceStatus);
         builder.Property(z => z.ExternalTemplateId).HasColumnName("external_template_id").HasColumnType("text");
         builder.Property(z => z.UpdatedAt).HasColumnName("updated_at");
-        builder.Ignore(z => z.Transition);
     }
 }

@@ -21,6 +21,12 @@ public record ReconcilableTemplateQueryResult(Guid Id, string ExternalTemplateId
         {
             throw new InvalidOperationException($"Template {t.Id} has no provider id in cluster {clusterId} and cannot be reconciled.");
         }
-        return new(t.Id, externalTemplateId, cluster!.CurrentExistence.ToString());
+        // The worker compares Exists and NotFound only: a row with an alias is one or the other.
+        string currentExistence = "NotFound";
+        if (cluster!.InstanceStatus == VmTemplateClusterStatus.Available)
+        {
+            currentExistence = "Exists";
+        }
+        return new(t.Id, externalTemplateId, currentExistence);
     }
 }

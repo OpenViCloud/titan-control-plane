@@ -198,6 +198,11 @@ public class DomainRoleFolderTests
     // far waits here; its row leaves when a second aggregate uses it — the stale check below says so.
     private static readonly Dictionary<string, string> SharedByTheRollout = new(StringComparer.Ordinal)
     {
+        // Only the load balancer still keeps the pending operation and the existence pair; it moves to one status and these
+        // types are deleted with it (titan-ops architecture/domain-methods.md#provider-resource).
+        ["PendingOperation"] = "LoadBalancer is the last type on ProviderResource",
+        ["CurrentExistence"] = "LoadBalancer is the last type with an existence axis",
+        ["DesiredExistence"] = "LoadBalancer is the last type with an existence axis",
     };
 
     [Fact]
@@ -219,7 +224,7 @@ public class DomainRoleFolderTests
         var offenders = new List<string>();
         foreach (var type in values)
         {
-            // A generic's reflection name carries its arity (PendingOperation`1); the source says PendingOperation<VmTemplateOperationKind>.
+            // A generic's reflection name carries its arity (PendingOperation`1); the source says PendingOperation<LoadBalancerOperationKind>.
             string name = type.Name.Split('`')[0];
             var users = sources.Where(s => Regex.IsMatch(s.Code, $@"\b{name}\b")).Select(s => s.Aggregate).ToList();
             if (users.Count < 2 && !SharedByTheRollout.ContainsKey(name))

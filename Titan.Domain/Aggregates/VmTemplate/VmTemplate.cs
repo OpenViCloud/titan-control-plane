@@ -1,6 +1,5 @@
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
-using Titan.Domain.Values;
 namespace Titan.Domain.Aggregates.VmTemplate;
 
 // A template answers "which operating system", never "how big" (titan-ops features/catalog/design.md#vm-offering-sizing).
@@ -79,7 +78,7 @@ public class VmTemplate : IAggregateRoot
         {
             return false;
         }
-        return cluster.CurrentExistence == CurrentExistence.Exists;
+        return cluster.IsSynced;
     }
 
     /// The image alias a VM in that cluster is created from, handed out only past the check
@@ -98,8 +97,7 @@ public class VmTemplate : IAggregateRoot
                 $"Template '{Name}' has not been synced to cluster '{clusterId}' yet.");
         }
         // An alias that went missing keeps its provider id, so the check above lets it through.
-        bool aliasIsThere = cluster!.CurrentExistence == CurrentExistence.Exists;
-        if (!aliasIsThere)
+        if (!cluster!.IsSynced)
         {
             throw new BusinessException("TEMPLATE_UNAVAILABLE",
                 $"Template '{Name}' is not available in cluster '{clusterId}' right now.");
@@ -108,27 +106,27 @@ public class VmTemplate : IAggregateRoot
     }
 
     /// Refused when that cluster has the alias or a sync waiting: the handler recognises the repeat first and sends
-    /// nothing (titan-ops architecture/resource-lifecycle.md#repeat). The operation has no provider id to hand out yet (the
-    /// worker names the alias), so the caller gets the operation itself for the command's key and payload.
-    public PendingOperation<VmTemplateOperationKind> SyncIn(string clusterId)
+    /// nothing (titan-ops architecture/resource-lifecycle.md#repeat). The sync has no provider id to hand out yet (the
+    /// worker names the alias), so the caller gets the sync's id for the command's key and payload.
+    public Guid SyncIn(string clusterId)
     {
-        PendingOperation<VmTemplateOperationKind> operation = GetOrAddCluster(clusterId).Sync();
+        Guid operationId = GetOrAddCluster(clusterId).Sync();
         UpdatedAt = DateTimeOffset.UtcNow;
-        return operation;
+        return operationId;
     }
 
     /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape):
-    /// ends that cluster's waiting sync when the report names it, else returns null and changes nothing. A cluster with
+    /// ends that cluster's waiting sync when the report names it, else returns false and changes nothing. A cluster with
     /// no row has nothing waiting, so no row is added for it.
-    public VmTemplateOperationKind? FinishSyncOperation(string clusterId, Guid operationId, string? externalId)
+    public bool SyncSucceededIn(string clusterId, Guid operationId, string? externalId)
     {
         VmTemplateCluster? cluster = FindCluster(clusterId);
         if (cluster == null)
         {
-            return null;
+            return false;
         }
-        VmTemplateOperationKind? ended = cluster.FinishOperation(operationId, externalId);
-        if (ended != null)
+        bool ended = cluster.SyncSucceeded(operationId, externalId);
+        if (ended)
         {
             UpdatedAt = DateTimeOffset.UtcNow;
         }
@@ -136,17 +134,16 @@ public class VmTemplate : IAggregateRoot
     }
 
     /// The report that a sync's command in one cluster gave up: ends that cluster's waiting sync and records the reason
-    /// when the report names it, else returns null and changes nothing. A cluster with no row has nothing waiting.
-    public VmTemplateOperationKind? FailSyncOperation(string clusterId, Guid operationId, string? externalId,
-        string? reason, string? detail)
+    /// when the report names it, else returns false and changes nothing. A cluster with no row has nothing waiting.
+    public bool SyncFailedIn(string clusterId, Guid operationId, string? externalId, string? reason, string? detail)
     {
         VmTemplateCluster? cluster = FindCluster(clusterId);
         if (cluster == null)
         {
-            return null;
+            return false;
         }
-        VmTemplateOperationKind? ended = cluster.FailOperation(operationId, externalId, reason, detail);
-        if (ended != null)
+        bool ended = cluster.SyncFailed(operationId, externalId, reason, detail);
+        if (ended)
         {
             UpdatedAt = DateTimeOffset.UtcNow;
         }

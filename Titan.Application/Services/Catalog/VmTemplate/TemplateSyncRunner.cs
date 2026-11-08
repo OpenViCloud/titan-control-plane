@@ -4,7 +4,6 @@ using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 using Titan.Application.Options;
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 
 namespace Titan.Application.Services.Catalog.VmTemplate;
 
@@ -59,8 +58,8 @@ public class TemplateSyncRunner(
                     {
                         continue;
                     }
-                    bool aliasIsThere = row.CurrentExistence == CurrentExistence.Exists;
-                    bool syncGaveUp = row.OperationFailureReason != null && row.Pending == null;
+                    bool aliasIsThere = row.IsSynced;
+                    bool syncGaveUp = row.Operation.FailureReason != null && row.Status != VmTemplateClusterStatus.Syncing;
                     if (aliasIsThere)
                     {
                         synced++;

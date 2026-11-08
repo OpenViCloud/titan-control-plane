@@ -9,7 +9,7 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a template in one cluster, at the
-// handler: a report ends the sync it names; an observation writes current and ends nothing; the template's row is
+// handler: a report ends the sync it names; an observation writes the status at rest or what is seen and ends nothing; the template's row is
 // locked (the fake finds a template only through the locked read). TemplateServiceTests keeps sync-all and what customers see.
 public class TemplateRequestHandlerTests
 {
@@ -25,7 +25,7 @@ public class TemplateRequestHandlerTests
     private static VmTemplate Waiting(out Guid requestId)
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        requestId = t.SyncIn(Mock).Id;
+        requestId = t.SyncIn(Mock);
         return t;
     }
 
@@ -34,7 +34,12 @@ public class TemplateRequestHandlerTests
     private static string Shape(VmTemplate t, string clusterId)
     {
         VmTemplateCluster row = Row(t, clusterId);
-        return $"{row.CurrentExistence}/{(row.Transition == null ? "-" : row.Transition.Value.ToString())}";
+        string held = "-";
+        if (row.InstanceStatus != null)
+        {
+            held = row.InstanceStatus.Value.ToString();
+        }
+        return $"{row.Status}/{held}";
     }
 
     private static Task End(FakeVmTemplateRepository repo, Guid templateId, Guid requestId, string outcome,
@@ -55,7 +60,7 @@ public class TemplateRequestHandlerTests
 
         await End(repo, t.Id, requestId, "Done", Alias);
 
-        Assert.Equal("Exists/-", Shape(t, Mock));
+        Assert.Equal("Available/Available", Shape(t, Mock));
         Assert.Equal(Alias, t.ProviderIdIn(Mock));
         Assert.True(repo.Saved);
         Assert.Equal([t.Id], repo.Locked);
@@ -69,21 +74,21 @@ public class TemplateRequestHandlerTests
 
         await End(repo, t.Id, requestId, "Failed", reason: Reason);
 
-        Assert.Equal("NotCreated/-", Shape(t, Mock));
-        Assert.Equal((Reason, "raw"), (Row(t, Mock).OperationFailureReason, Row(t, Mock).OperationFailureDetail));
+        Assert.Equal("Failed/-", Shape(t, Mock));
+        Assert.Equal((Reason, "raw"), (Row(t, Mock).Operation.FailureReason, Row(t, Mock).Operation.FailureDetail));
         Assert.True(repo.Saved);
     }
 
     [Fact] // a give-up that found the alias of the cluster's architecture: the template is there
-    public async Task Failed_CarryingTheAlias_RecordsItAndExists_AndKeepsTheReason()
+    public async Task Failed_CarryingTheAlias_RecordsItAndIsAvailable_AndKeepsTheReason()
     {
         VmTemplate t = Waiting(out Guid requestId);
         var repo = new FakeVmTemplateRepository(t);
 
         await End(repo, t.Id, requestId, "Failed", Alias, Reason);
 
-        Assert.Equal("Exists/-", Shape(t, Mock));
-        Assert.Equal((Alias, Reason), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).OperationFailureReason));
+        Assert.Equal("Available/Available", Shape(t, Mock));
+        Assert.Equal((Alias, Reason), (Row(t, Mock).ExternalTemplateId, Row(t, Mock).Operation.FailureReason));
     }
 
     [Fact] // 204 at the endpoint: the worker has nothing to retry
@@ -94,7 +99,7 @@ public class TemplateRequestHandlerTests
 
         await End(repo, t.Id, Guid.NewGuid(), "Done", Alias);
 
-        Assert.Equal(requestId, Row(t, Mock).Pending!.Id);
+        Assert.Equal(requestId, Row(t, Mock).Operation.PendingId);
         Assert.False(repo.Saved);
     }
 
@@ -102,17 +107,17 @@ public class TemplateRequestHandlerTests
     public async Task AReportOfOneCluster_LeavesTheOtherClusterAlone()
     {
         VmTemplate t = Waiting(out Guid inMock);
-        Guid inSingapore = t.SyncIn(Singapore).Id;
+        Guid inSingapore = t.SyncIn(Singapore);
         var repo = new FakeVmTemplateRepository(t);
 
         await End(repo, t.Id, inSingapore, "Done", Alias, clusterId: Singapore);
 
-        Assert.Equal(("NotCreated/Syncing", "Exists/-"), (Shape(t, Mock), Shape(t, Singapore)));
-        Assert.Equal(inMock, Row(t, Mock).Pending!.Id);
+        Assert.Equal(("Syncing/-", "Available/Available"), (Shape(t, Mock), Shape(t, Singapore)));
+        Assert.Equal(inMock, Row(t, Mock).Operation.PendingId);
     }
 
     // The alias is what a VM is created from: a Done that does not name it, on a cluster that has none, would leave the
-    // template Exists and unusable.
+    // template Available and unusable.
     [Fact]
     public async Task Done_WithoutTheAlias_WhenTheClusterHasNone_Is422_AndTheSyncKeepsWaiting()
     {
@@ -122,7 +127,7 @@ public class TemplateRequestHandlerTests
         var ex = await Assert.ThrowsAsync<BusinessException>(() => End(repo, t.Id, requestId, "Done"));
 
         Assert.Equal("INVALID_STATUS", ex.Code);
-        Assert.Equal(requestId, Row(t, Mock).Pending!.Id);
+        Assert.Equal(requestId, Row(t, Mock).Operation.PendingId);
         Assert.False(repo.Saved);
     }
 
@@ -130,14 +135,14 @@ public class TemplateRequestHandlerTests
     public async Task Done_WithoutTheAlias_OfAReSync_EndsIt()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
+        t.SyncSucceededIn(Mock, t.SyncIn(Mock), Alias);
         t.MarkNotFoundIn(Mock);
-        Guid resync = t.SyncIn(Mock).Id;
+        Guid resync = t.SyncIn(Mock);
         var repo = new FakeVmTemplateRepository(t);
 
         await End(repo, t.Id, resync, "Done");
 
-        Assert.Equal("Exists/-", Shape(t, Mock));
+        Assert.Equal("Available/Available", Shape(t, Mock));
     }
 
     [Theory] // a malformed report is the worker's bug, whatever the template: refused before anything is looked up
@@ -180,18 +185,18 @@ public class TemplateRequestHandlerTests
     // ---------- the reconciler's observation ----------
 
     [Fact] // the alias is back while a re-sync waits: the sync waits for its own report
-    public async Task SeeingTheAlias_WritesExists_AndLeavesTheSyncWaiting()
+    public async Task SeeingTheAlias_IsSeenOnTheSync_AndLeavesTheSyncWaiting()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
+        t.SyncSucceededIn(Mock, t.SyncIn(Mock), Alias);
         t.MarkNotFoundIn(Mock);
-        Guid resync = t.SyncIn(Mock).Id;
+        Guid resync = t.SyncIn(Mock);
         var repo = new FakeVmTemplateRepository(t);
 
         await Observe(repo, t.Id, exists: true);
 
-        Assert.Equal("Exists/Syncing", Shape(t, Mock));
-        Assert.Equal(resync, Row(t, Mock).Pending!.Id);
+        Assert.Equal("Syncing/Available", Shape(t, Mock));
+        Assert.Equal(resync, Row(t, Mock).Operation.PendingId);
         Assert.True(repo.Saved);
         Assert.Equal([t.Id], repo.Locked);
     }
@@ -200,7 +205,7 @@ public class TemplateRequestHandlerTests
     public async Task NotSeeingTheAlias_WritesNotFound_AndHidesItFromCustomers()
     {
         var t = VmTemplate.Create("Ubuntu", null, "img", 10, "s");
-        t.FinishSyncOperation(Mock, t.SyncIn(Mock).Id, Alias);
+        t.SyncSucceededIn(Mock, t.SyncIn(Mock), Alias);
         var repo = new FakeVmTemplateRepository(t);
 
         await Observe(repo, t.Id, exists: false);

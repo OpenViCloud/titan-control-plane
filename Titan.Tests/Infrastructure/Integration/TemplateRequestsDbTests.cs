@@ -74,8 +74,8 @@ public sealed class TemplateRequestsDbTests : IAsyncLifetime
             Assert.Equal(["cluster-a", "cluster-b"], template.Clusters.Select(c => c.ClusterId).OrderBy(id => id, StringComparer.Ordinal));
             foreach (VmTemplateCluster row in template.Clusters)
             {
-                Assert.Equal(VmTemplateOperationKind.Sync, row.Pending!.Kind);
-                expected.Add($"template-sync-{template.Id}-{row.ClusterId}-{row.Pending.Id}");
+                Assert.Equal(VmTemplateClusterStatus.Syncing, row.Status);
+                expected.Add($"template-sync-{template.Id}-{row.ClusterId}-{row.Operation.PendingId}");
             }
         }
         Assert.Equal(expected.OrderBy(k => k, StringComparer.Ordinal), (await TemplateSyncKeysAsync()).OrderBy(k => k, StringComparer.Ordinal));

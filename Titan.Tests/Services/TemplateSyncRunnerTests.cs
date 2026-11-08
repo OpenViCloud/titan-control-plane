@@ -52,7 +52,7 @@ public class TemplateSyncRunnerTests
 
         foreach (string clusterId in new[] { Mock, Singapore })
         {
-            Guid requestId = t.Clusters.Single(c => c.ClusterId == clusterId).Pending!.Id;
+            Guid requestId = t.Clusters.Single(c => c.ClusterId == clusterId).Operation.PendingId!.Value;
             _commands.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, requestId, "a", null, "img", null, 10,
                 It.IsAny<CancellationToken>()), Times.Once);
         }
@@ -137,6 +137,63 @@ public class TemplateSyncRunnerTests
         Assert.Equal(TemplateSyncOutcome.TimedOut, res.Outcome);
     }
 
+    // The verdict reads the status together with the reason of the last give-up, not the status alone: the two rows the old
+    // two-axis row counted by its reason are kept as they were.
+    [Fact] // a cluster whose alias is gone and whose last sync gave up is failed at once, not pending until the timeout
+    public async Task ANotFoundClusterCarryingTheOldReason_IsHasFailures_AtOnce()
+    {
+        _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "LostAfterAGiveUp")]);
+        var delays = 0;
+
+        var res = await Runner().RunAsync(5, TimeSpan.Zero, CountingDelay(() => delays++));
+
+        Assert.Equal(TemplateSyncOutcome.HasFailures, res.Outcome);
+        Assert.Equal((2, 1, 1, 0), (res.Total, res.Synced, res.Failed, res.Pending));
+        Assert.Equal(0, delays);
+    }
+
+    [Fact] // a give-up that found the alias leaves the cluster Available with the reason: synced, not failed
+    public async Task AnAvailableClusterCarryingAReason_CountsSynced()
+    {
+        _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "GaveUpWithTheAlias")]);
+
+        var res = await Runner().RunAsync(1, TimeSpan.Zero, CountingDelay(() => { }));
+
+        Assert.Equal(TemplateSyncOutcome.AllSynced, res.Outcome);
+        Assert.Equal((2, 2, 0, 0), (res.Total, res.Synced, res.Failed, res.Pending));
+    }
+
+    [Fact] // a cluster whose alias is gone and that never gave up has nothing to report yet
+    public async Task ANotFoundClusterWithNoReason_CountsPending()
+    {
+        _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "Lost")]);
+
+        var res = await Runner().RunAsync(1, TimeSpan.Zero, CountingDelay(() => { }));
+
+        Assert.Equal(TemplateSyncOutcome.TimedOut, res.Outcome);
+        Assert.Equal((2, 1, 0, 1), (res.Total, res.Synced, res.Failed, res.Pending));
+    }
+
+    [Fact] // a re-sync that saw the alias is synced though it waits (customers see it too), whatever reason it carries
+    public async Task ASyncingClusterThatSawTheAlias_CountsSynced()
+    {
+        _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "ReSyncingAfterAGiveUpSawTheAlias")]);
+
+        var res = await Runner().RunAsync(1, TimeSpan.Zero, CountingDelay(() => { }));
+
+        Assert.Equal(TemplateSyncOutcome.AllSynced, res.Outcome);
+    }
+
+    [Fact] // a re-sync that did not see the alias is pending, even with the reason of an earlier give-up
+    public async Task ASyncingClusterThatDidNotSeeTheAlias_CountsPending_EvenWithAReason()
+    {
+        _repo.Setup(r => r.ListAllAsync(default)).ReturnsAsync([Template("a", "Exists", "ReSyncingAfterAGiveUp")]);
+
+        var res = await Runner().RunAsync(1, TimeSpan.Zero, CountingDelay(() => { }));
+
+        Assert.Equal((2, 1, 0, 1), (res.Total, res.Synced, res.Failed, res.Pending));
+    }
+
     [Fact] // The verdict covers the whole catalog — one failed cluster fails the run though the other synced
     public async Task OneClusterFailed_IsHasFailures_EvenWhenTheOtherClusterSynced()
     {
@@ -170,7 +227,9 @@ public class TemplateSyncRunnerTests
         (_, _) => { onDelay(); return Task.CompletedTask; };
 
     // A template's sync in mock and in singapore01: "none" (never asked) | "Waiting" | "Exists" | "Failed" |
-    // "Retrying" (failed, then asked again).
+    // "Retrying" (failed, then asked again) | "Lost" (the alias was there, then not found) | "LostAfterAGiveUp" (lost, then
+    // a re-sync gave up) | "GaveUpWithTheAlias" (a give-up that carried the alias) | "ReSyncingAfterAGiveUp" (lost, a
+    // re-sync gave up, asked again) | "ReSyncingAfterAGiveUpSawTheAlias" (the same, with the alias seen back meanwhile).
     private static VmTemplate Template(string name, string inMock, string inSingapore)
     {
         var t = VmTemplate.Create(name, null, "os-image", 10, "m");
@@ -198,6 +257,31 @@ public class TemplateSyncRunnerTests
         {
             t.MarkRequestFailedIn(clusterId, "provider unreachable", null);
             t.SyncIn(clusterId);
+        }
+        if (state == "Lost")
+        {
+            t.MarkCreatedIn(clusterId, $"ext-{t.Name}-{clusterId}");
+            t.MarkNotFoundIn(clusterId);
+        }
+        if (state == "LostAfterAGiveUp" || state == "ReSyncingAfterAGiveUp" || state == "ReSyncingAfterAGiveUpSawTheAlias")
+        {
+            t.MarkCreatedIn(clusterId, $"ext-{t.Name}-{clusterId}");
+            t.MarkNotFoundIn(clusterId);
+            t.SyncIn(clusterId);
+            t.MarkRequestFailedIn(clusterId, "provider unreachable", null);
+        }
+        if (state == "ReSyncingAfterAGiveUp" || state == "ReSyncingAfterAGiveUpSawTheAlias")
+        {
+            t.SyncIn(clusterId);
+        }
+        if (state == "ReSyncingAfterAGiveUpSawTheAlias")
+        {
+            t.MarkObservedIn(clusterId);
+        }
+        if (state == "GaveUpWithTheAlias")
+        {
+            Guid waiting = t.Clusters.Single(c => c.ClusterId == clusterId).Operation.PendingId!.Value;
+            t.SyncFailedIn(clusterId, waiting, $"ext-{t.Name}-{clusterId}", "provider unreachable", null);
         }
     }
 }
