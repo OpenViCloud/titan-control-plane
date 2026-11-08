@@ -375,7 +375,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
     // One row per shape (titan-ops features/load-balancer/design.md#lb-quota-and-billing): the SQL reads status and
     // observed_state, so an update counts only while Incus was seen holding the load balancer.
     [Fact]
-    public async Task LoadBalancerQuota_CountsWhatExistsOrIsBeingCreated_NotAFailedCreate_OrADeleteAsked()
+    public async Task LoadBalancerQuota_CountsCreatingAvailableAndAnUpdateIncusStillHolds_NotFailedNotFoundOrADelete()
     {
         string offering = await OfferingAsync();
         Guid networkId = Guid.NewGuid();

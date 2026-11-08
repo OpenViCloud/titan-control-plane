@@ -53,7 +53,7 @@ public class OneStatusTypeListTests
     [Fact]
     public void TheScan_FindsTheListsItGuards()
     {
-        // A scan that finds nothing is green too: the lists in the guards below the Domain tests name them all.
+        // A scan that finds nothing is green too: the comment lists in the Domain tests and the CLAUDE.md bullets name them all.
         int lists = TestComments().Concat(ClaudeMdBullets())
             .SelectMany(entry => Run.Matches(entry.Text.Replace("`", "")).Select(run => NamesIn(run.Value)))
             .Count(named => named.Length >= ListStartsAt);

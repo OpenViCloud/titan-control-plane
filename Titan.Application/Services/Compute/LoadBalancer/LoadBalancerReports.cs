@@ -7,9 +7,10 @@ using Titan.Application.Exceptions;
 namespace Titan.Application.Services.Compute.LoadBalancer;
 
 /// <summary>
-/// What every load balancer callback handler does with a worker's report, in one place: parse the outcome, and record
-/// the outcome of a request that ended once (titan-ops features/activity/design.md#request-and-outcome-names). The new
-/// routes and the old one share it, so they cannot drift apart (titan-ops architecture/resource-lifecycle.md#callback-routes).
+/// What every load balancer callback handler does with a worker's report, in one place: parse the outcome, pick the
+/// domain method the status the load balancer waited in calls for, and record the outcome of a request that ended once
+/// (titan-ops features/activity/design.md#request-and-outcome-names). The new routes and the old one share it, so they
+/// cannot drift apart (titan-ops architecture/resource-lifecycle.md#callback-routes).
 /// </summary>
 public static class LoadBalancerReports
 {

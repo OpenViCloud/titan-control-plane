@@ -72,8 +72,8 @@ public class DesiredCurrentOwnershipTests
             .ToList();
 
         Assert.True(offenders.Count == 0,
-            "A second axis beside the one status. Existence, the kind of the waiting operation and the move for display are "
-            + "what the status says; write the status:\n  " + string.Join("\n  ", offenders));
+            "A second axis beside the one status. A desired or current state, or an existence, says again what the status "
+            + "says; write the status:\n  " + string.Join("\n  ", offenders));
     }
 
     [Fact]

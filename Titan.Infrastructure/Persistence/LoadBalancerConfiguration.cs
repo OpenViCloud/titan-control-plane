@@ -20,9 +20,9 @@ public class LoadBalancerConfiguration : IEntityTypeConfiguration<LoadBalancer>
         builder.Property(lb => lb.VipIndex).HasColumnName("vip_index");
         builder.Property(lb => lb.Vip).HasColumnName("vip").IsRequired();
         builder.Property(lb => lb.ExternalId).HasColumnName("external_id");
-        // titan-ops features/load-balancer/design.md#lb-lifecycle: status is the one status. The load balancer's own waiting
-        // operation and last failure are a value object kept in this table's columns, never null, with observed_state
-        // whether Incus was last seen holding the load balancer while an operation waits.
+        // titan-ops features/load-balancer/design.md#lb-lifecycle: status is the one status. The waiting operation and the
+        // last failure are a value object kept in this table's columns, never null; observed_state says whether Incus was
+        // last seen holding the load balancer while an operation waits.
         builder.Property(lb => lb.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.OwnsOne(lb => lb.Operation, o =>
         {

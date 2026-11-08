@@ -316,6 +316,7 @@ VALUES ({id}, {tenantId ?? Guid.NewGuid()}, {networkId ?? Guid.NewGuid()}, 'net-
     {
         await MigrateToAsync(MigrationBefore);
         Guid creating = await SeedOldAsync("NotCreated", "Exists", kind: "Create", hasVip: false);
+        Guid creatingSeen = await SeedOldAsync("Exists", "Exists", kind: "Create", hasVip: false);
         Guid updatingSeen = await SeedOldAsync("Exists", "Exists", kind: "Update");
         Guid updatingLost = await SeedOldAsync("NotFound", "Exists", kind: "Update");
         Guid deletingSeen = await SeedOldAsync("Exists", "Deleted", kind: "Delete");
@@ -333,6 +334,7 @@ VALUES ({id}, {tenantId ?? Guid.NewGuid()}, {networkId ?? Guid.NewGuid()}, 'net-
             "SELECT id::text || '|' || current_existence || '|' || desired_existence || '|' || coalesce(pending_request_kind, '-') AS \"Value\" FROM core.load_balancers")
             .ToListAsync();
         Assert.Contains($"{creating}|NotCreated|Exists|Create", rows);
+        Assert.Contains($"{creatingSeen}|Exists|Exists|Create", rows);
         Assert.Contains($"{updatingSeen}|Exists|Exists|Update", rows);
         Assert.Contains($"{updatingLost}|NotFound|Exists|Update", rows);
         Assert.Contains($"{deletingSeen}|Exists|Deleted|Delete", rows);
@@ -355,7 +357,7 @@ VALUES ({id}, {tenantId ?? Guid.NewGuid()}, {networkId ?? Guid.NewGuid()}, 'net-
         Assert.Equal(
             new Dictionary<Guid, string>
             {
-                [creating] = "Create", [updatingSeen] = "Update", [updatingLost] = "Update",
+                [creating] = "Create", [creatingSeen] = "Create", [updatingSeen] = "Update", [updatingLost] = "Update",
                 [deletingSeen] = "Delete", [deletingLost] = "Delete",
             },
             kinds);
