@@ -2637,8 +2637,7 @@
           "name",
           "networkId",
           "vmOfferingId",
-          "templateId",
-          "clusterId"
+          "templateId"
         ],
         "properties": {
           "name": {
@@ -2666,8 +2665,7 @@
           },
           "clusterId": {
             "type": "string",
-            "minLength": 1,
-            "nullable": false
+            "nullable": true
           },
           "diskSizeGb": {
             "type": "integer",

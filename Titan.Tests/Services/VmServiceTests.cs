@@ -419,6 +419,42 @@ public class VmServiceTests
         Assert.Empty(_commands.Invocations);
     }
 
+    // Without a cluster the VM takes its network's (titan-ops features/catalog/design.md#cluster-is-a-real-choice): the
+    // command goes to that cluster, with that cluster's template id.
+    [Fact]
+    public async Task Create_WithoutClusterId_TakesTheNetworksCluster_AndSendsTheCommandThere()
+    {
+        var network = ReadyToCreate(); // cluster-1
+
+        var result = await CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, null, null), default);
+
+        _repo.Verify(r => r.Add(It.Is<Vm>(v => v.Id == result.VmId && v.ClusterId == "cluster-1")), Times.Once);
+        _commands.Verify(w => w.EnqueueVmCreateAsync(
+            It.Is<Vm>(v => v.Id == result.VmId && v.ClusterId == "cluster-1"), It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // The network's cluster has since left the configuration: nowhere to send the command, so no VM either.
+    [Fact]
+    public async Task Create_WithoutClusterId_NetworkClusterNotConfigured_Is404_AndEnqueuesNothing()
+    {
+        SetupCurrentUser(TenantId);
+        SetupTenant();
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
+        var network = TestAggregates.Network(TenantIdOwner, "net-9", "retired");
+        network.MarkActive("cs-net-9", "10.9.0.0/24", "10.9.0.1");
+        _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
+
+        var ex = await Assert.ThrowsAsync<NotFoundException>(() => CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, null, null), default));
+
+        Assert.Equal("CLUSTER_NOT_FOUND", ex.Code);
+        _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
+        Assert.Empty(_commands.Invocations);
+    }
+
     // A VM is instantiated on its network's cluster; a network of another cluster is not there.
     [Fact]
     public async Task Create_NetworkOfAnotherCluster_ThrowsMismatch_AndAddsNoVm()

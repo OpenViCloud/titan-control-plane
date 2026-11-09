@@ -45,6 +45,16 @@ public class CreateVmValidatorTests
         _validator.TestValidate(Request(Enumerable.Repeat(id, 11).ToList())).ShouldNotHaveValidationErrorFor(r => r.SshKeyIds);
     }
 
+    // Absent means the network's cluster (titan-ops features/catalog/design.md#cluster-is-a-real-choice); an empty string
+    // is a value, and a wrong one.
+    [Fact]
+    public void AnEmptyClusterId_IsRejected_AMissingOne_IsAccepted()
+    {
+        _validator.TestValidate(Request(null) with { ClusterId = "" }).ShouldHaveValidationErrorFor(r => r.ClusterId);
+        _validator.TestValidate(Request(null) with { ClusterId = null }).ShouldNotHaveValidationErrorFor(r => r.ClusterId);
+        _validator.TestValidate(Request(null)).ShouldNotHaveValidationErrorFor(r => r.ClusterId);
+    }
+
     [Fact]
     public void NoSshKeyList_IsAccepted()
     {
