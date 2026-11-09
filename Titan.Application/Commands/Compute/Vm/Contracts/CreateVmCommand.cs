@@ -8,7 +8,9 @@ public record CreateVmCommand(
     Guid NetworkId,
     string VmOfferingId,
     string TemplateId,
-    string ClusterId,
+    // Absent: the network's cluster; another one than the network's is refused
+    // (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
+    string? ClusterId,
     int? DiskSizeGb,
     string? UserData = null,
     // Saved keys of the caller's tenant to put into the `ubuntu` user's authorized_keys at first boot

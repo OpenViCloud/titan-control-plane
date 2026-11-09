@@ -3,6 +3,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Services.Platform.Tenant;
 using Titan.Application.Options;
 using Titan.Application.Services.Compute;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
@@ -24,12 +25,12 @@ public class CreateVmCommandHandler(
     IActivityRecorder activity,
     ClusterOptions clusters)
 {
-    public async Task<CreateVmCommandResult> HandleAsync(CreateVmCommand command, CancellationToken ct = default)
+    public async Task<CreateVmCommandResult> HandleAsync(CreateVmCommand req, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the request shape (titan-ops architecture/code-structure.md#contracts)
         var callerId = currentUser.RequireTenantId();
+        int diskSizeGb = req.DiskSizeGb ?? VmAggregate.ImageDiskSize;
         ComputeInput.EnsureVmName(req.Name);
-        ComputeInput.EnsureDiskSize(req.DiskSizeGb ?? VmAggregate.ImageDiskSize);
+        ComputeInput.EnsureDiskSize(diskSizeGb);
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
@@ -44,20 +45,29 @@ public class CreateVmCommandHandler(
         // VM_NAME_TAKEN or NETWORK_NOT_FOUND.
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.Vm, activeVmCount);
 
-        clusters.ClusterOf(req.ClusterId);
+        // A cluster the customer names must exist, before the name check as before; none named means the network's
+        // (titan-ops features/catalog/design.md#cluster-is-a-real-choice).
+        if (req.ClusterId != null)
+        {
+            clusters.ClusterOf(req.ClusterId);
+        }
 
         if (await repo.ExistsByNameAsync(callerId, req.Name, ct))
             throw new ConflictException("VM_NAME_TAKEN", $"VM name '{req.Name}' is already taken.");
 
         // Locked, so a delete of the network waits for this request and then sees the VM
         // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
-        var network = await networkRepo.FindByIdForUpdateAsync(req.NetworkId, ct);
-        if (network is null || network.TenantId != callerId)
-            throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
+        var network = await NetworkOwnership.RequireNetworkForUpdateAsync(networkRepo, callerId, req.NetworkId, ct);
+
+        string clusterId = req.ClusterId ?? network.ClusterId;
+        if (req.ClusterId == null)
+        {
+            clusters.ClusterOf(clusterId); // a cluster since removed from the configuration gets no command either
+        }
 
         // The network answers whether it can host a VM and hands over the provider id in one call: no
         // `network.ExternalId!` at the enqueue below.
-        var externalNetworkId = network.ProviderIdForVm(req.ClusterId);
+        var externalNetworkId = network.ProviderIdForVm(clusterId);
 
         // Resolve the sizing tier here (titan-ops features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
         // the control plane passes the concrete CPU/vCPU/memory it sets on the instance.
@@ -78,9 +88,9 @@ public class CreateVmCommandHandler(
         {
             throw new NotFoundException("TEMPLATE_NOT_FOUND", $"Template '{req.TemplateId}' not found.");
         }
-        string externalTemplateId = template.ProviderIdIn(req.ClusterId);
+        string externalTemplateId = template.ProviderIdIn(clusterId);
 
-        string? vendorData = await VendorDataForKeysAsync(callerId, req.SshKeyIds, ct);
+        string? vendorData = await VmVendorData.ForKeysAsync(sshKeyRepo, callerId, req.SshKeyIds, ct);
 
         var vm = VmAggregate.Create(
             tenant.Id,
@@ -88,55 +98,20 @@ public class CreateVmCommandHandler(
             req.Name,
             req.VmOfferingId,
             req.TemplateId,
-            req.ClusterId,
-            req.DiskSizeGb ?? VmAggregate.ImageDiskSize,
+            clusterId,
+            diskSizeGb,
             req.UserData);
         repo.Add(vm);
         activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (titan-ops architecture/intent-and-observation.md#intent-has-identity)
 
         // Enqueued before the save, so the VM row and its provider command commit in one transaction: no VM
         // that the worker never hears of (titan-ops architecture/provider-and-worker.md#provider-command-table).
-        await commands.EnqueueVmCreateAsync(
-            vm.Id,
-            vm.Operation.PendingId!.Value, // the create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds)
-            vm.Name,
-            vm.VmOfferingId,
-            offering.CpuUnits,
-            offering.VcpuCount,
-            offering.MemoryMb,
-            externalTemplateId,
-            vm.ClusterId,
-            externalNetworkId,
-            TenantAggregate.ProjectNameFor(tenant.Id),
-            vm.DiskSizeGb,
-            vm.UserData,
-            vendorData,
-            ct);
+        // The create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds).
+        await commands.EnqueueVmCreateAsync(vm, vm.Operation.PendingId!.Value, offering, externalTemplateId, externalNetworkId,
+            TenantAggregate.ProjectNameFor(tenant.Id), vendorData, ct);
         await repo.SaveAsync(ct);
 
         return new CreateVmCommandResult(vm.Id);
     }
 
-    // Every picked key must be the caller's tenant's: a foreign id is indistinguishable from an unknown one.
-    private async Task<string?> VendorDataForKeysAsync(Guid tenantId, List<Guid>? sshKeyIds, CancellationToken ct)
-    {
-        if (sshKeyIds == null || sshKeyIds.Count == 0)
-        {
-            return null;
-        }
-
-        List<Guid> distinctIds = sshKeyIds.Distinct().ToList();
-        var keys = await sshKeyRepo.ListByIdsAsync(tenantId, distinctIds, ct);
-        foreach (Guid id in distinctIds)
-        {
-            bool found = keys.Any(k => k.Id == id);
-            if (!found)
-            {
-                throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{id}' not found.");
-            }
-        }
-
-        List<string> lines = distinctIds.Select(id => keys.First(k => k.Id == id).PublicKey).ToList();
-        return VmVendorData.ForKeys(lines);
-    }
 }

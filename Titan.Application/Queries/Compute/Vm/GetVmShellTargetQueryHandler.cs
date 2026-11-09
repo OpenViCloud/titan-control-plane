@@ -12,8 +12,7 @@ public class GetVmShellTargetQueryHandler(IVmRepository repo, ICurrentUser curre
     {
         Guid tenantId = currentUser.RequireTenantId();
         Domain.Aggregates.Vm.Vm vm = await ComputeOwnership.RequireVmAsync(repo, tenantId, query.VmId, ct);
-        vm.EnsureShellCanOpen();
-        string instanceName = vm.ExternalId!;
+        string instanceName = vm.GetShellInstanceName();
         return new VmShellTargetQueryResult(vm.ClusterId, TenantAggregate.ProjectNameFor(vm.TenantId), instanceName);
     }
 }

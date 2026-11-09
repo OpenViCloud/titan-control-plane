@@ -56,10 +56,26 @@ public partial class Vm
     /// status is then Stopping or Deleting; Snapshotting is refused too: only Running and Ready pass.
     public void EnsureShellCanOpen()
     {
-        bool guestRuns = Status == VmStatus.Running || Status == VmStatus.Ready;
-        if (!guestRuns)
+        if (!GuestRuns)
         {
-            throw new BusinessException("VM_INVALID_STATUS", "VM must be Running or Ready to open an SSH session.");
+            throw ShellCannotOpen();
         }
+    }
+
+    private bool GuestRuns => Status == VmStatus.Running || Status == VmStatus.Ready;
+
+    private static BusinessException ShellCannotOpen() =>
+        new("VM_INVALID_STATUS", "VM must be Running or Ready to open an SSH session.");
+
+    /// The instance a shell session execs into, handed out only past the check above
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    public string GetShellInstanceName()
+    {
+        if (!GuestRuns)
+        {
+            throw ShellCannotOpen();
+        }
+        EnsureOnTheProvider();
+        return ExternalId!;
     }
 }

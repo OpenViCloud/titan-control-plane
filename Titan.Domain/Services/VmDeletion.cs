@@ -13,15 +13,17 @@ public class VmDeletion(ILoadBalancerRepository loadBalancers)
 {
     /// The VM's own refusals come first (already deleted, a snapshot being created or reverted). A refusal here is
     /// thrown before anything is saved, so the status Delete wrote in memory goes with it. Afterwards the VM's status
-    /// tells the caller what happened: Deleting waits on a command under operationId, Deleted never reached the
-    /// provider and is gone already.
-    public async Task DeleteAsync(Vm vm, Guid operationId, CancellationToken ct = default)
+    /// tells the caller what happened: Deleting waits on a command under operationId and the instance name comes back
+    /// for it; Deleted never reached the provider, is gone already, and hands back null
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    public async Task<string?> DeleteAsync(Vm vm, Guid operationId, CancellationToken ct = default)
     {
-        vm.Delete(operationId);
+        string? instance = vm.Delete(operationId);
         if (await loadBalancers.IsBackendAsync(vm.Id, ct))
         {
             throw new BusinessException("VM_IS_LOAD_BALANCER_BACKEND",
                 "A load balancer still sends to this VM. Remove it from the load balancer first.");
         }
+        return instance;
     }
 }

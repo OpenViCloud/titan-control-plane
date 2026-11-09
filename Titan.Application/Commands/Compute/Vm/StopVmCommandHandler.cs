@@ -1,8 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
-using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
@@ -30,20 +28,18 @@ public class StopVmCommandHandler(
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat). A stop still waiting, or already
         // stopped with nothing else asked of it: answer like the first request, record and send nothing
         // (titan-ops architecture/resource-lifecycle.md#repeat).
-        bool stopIsWaiting = vm.Status == VmStatus.Stopping;
-        bool alreadyStopped = vm.Status == VmStatus.Stopped;
-        if (stopIsWaiting || alreadyStopped)
+        if (vm.IsStopWaitingOrStopped)
         {
             return;
         }
 
-        // The guard stays on the aggregate: any other status is refused there, and an accepted stop means the VM has its
-        // provider id (titan-ops features/vm/design.md#vm-status).
+        // The guard stays on the aggregate: any other status is refused there, and an accepted stop hands back the
+        // instance name (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
         Guid operationId = Guid.NewGuid();
-        vm.Stop(operationId);
+        string externalVmId = vm.Stop(operationId);
 
         activity.Stage("vm.stop_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStopAsync(vm.Id, operationId, vm.ExternalId!, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStopAsync(vm, operationId, externalVmId, projectName, ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

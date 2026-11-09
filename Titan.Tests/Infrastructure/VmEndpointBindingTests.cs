@@ -126,6 +126,31 @@ public class VmEndpointBindingTests
         _repo.Verify(r => r.ExistsByNameAsync(TenantId, "new-vm", default), Times.Once);
     }
 
+    [Fact] // POST /v1/tenant/vms without clusterId — the body binds and reaches the handler (the network is then looked up)
+    public async Task CreateVmEndpoint_WithoutClusterId_ReachesTheHandler()
+    {
+        var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
+        tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default)).ReturnsAsync(ActiveTenant());
+        var handler = new CreateVmCommandHandler(
+            _repo.Object,
+            new Mock<Titan.Domain.Repositories.INetworkRepository>().Object,
+            tenantRepo.Object, _currentUser.Object,
+            new Mock<IProviderCommandQueue>().Object,
+            new Mock<Titan.Domain.Repositories.IVmOfferingRepository>().Object,
+            new Mock<Titan.Domain.Repositories.IVmTemplateRepository>().Object,
+            new Titan.Tests.Fakes.FakeSshKeyRepository(),
+            new Titan.Tests.Fakes.FakeActivityRecorder(),
+            new Titan.Application.Options.ClusterOptions { Clusters = [new() { Id = "cluster-1", Name = "Cluster 1" }] });
+        var ep = Factory.Create<CreateVmEndpoint>(handler);
+        var req = new CreateVmCommand("new-vm", Guid.NewGuid(), "offering-1", Guid.NewGuid().ToString(), null, 40, null);
+
+        var ex = await Assert.ThrowsAsync<Titan.Domain.Exceptions.NotFoundException>(
+            () => ep.HandleAsync(req, CancellationToken.None));
+
+        Assert.Equal("NETWORK_NOT_FOUND", ex.Code); // past the name check and the (skipped) cluster check: the body arrived
+        _repo.Verify(r => r.ExistsByNameAsync(TenantId, "new-vm", default), Times.Once);
+    }
+
     // PATCH /v1/tenant/vms/{vmId} — rename carries BOTH the route id and the body, and answers 204
     // with no body (titan-ops architecture/http-contract.md#commands-return-no-data). The command side owns no read
     // shape, so a caller that wants the renamed VM reads it back from the query side.
@@ -145,15 +170,12 @@ public class VmEndpointBindingTests
     [Fact] // DELETE /v1/tenant/vms/{vmId}
     public async Task DeleteVmEndpoint_ReachesDeleteCommand_WithRouteVmId_And202()
     {
-        var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
-        tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
-            .ReturnsAsync(ActiveTenant());
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
-            _repo.Object, tenantRepo.Object, _currentUser.Object, commands.Object,
+            _repo.Object, _currentUser.Object, commands.Object,
             volumes.Object, new Titan.Tests.Fakes.FakeActivityRecorder(),
             new Titan.Domain.Services.VmDeletion(new Mock<ILoadBalancerRepository>().Object));
         // The delete reads the VM with its row locked (titan-ops architecture/domain-services.md#cross-aggregate-lock).
@@ -163,8 +185,7 @@ public class VmEndpointBindingTests
         await ep.HandleAsync(CancellationToken.None);
 
         _repo.Verify(r => r.FindByIdForUpdateAsync(VmId, default), Times.Once);
-        commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 
@@ -180,9 +201,8 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
-        commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 
@@ -201,9 +221,8 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
-        commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 }

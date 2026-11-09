@@ -19,7 +19,8 @@ public class CreateVmValidator : Validator<CreateVmCommand>
         RuleFor(x => x.NetworkId).NotEmpty();
         RuleFor(x => x.VmOfferingId).NotEmpty();
         RuleFor(x => x.TemplateId).NotEmpty();
-        RuleFor(x => x.ClusterId).NotEmpty();
+        // Absent means the network's cluster (titan-ops features/catalog/design.md#cluster-is-a-real-choice); sent, it has a value.
+        RuleFor(x => x.ClusterId).NotEmpty().When(x => x.ClusterId != null);
         RuleFor(x => x.DiskSizeGb).GreaterThan(0).When(x => x.DiskSizeGb.HasValue);
         When(x => x.UserData != null, () =>
             RuleFor(x => x.UserData)

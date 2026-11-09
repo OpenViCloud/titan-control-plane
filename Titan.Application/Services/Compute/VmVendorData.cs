@@ -1,5 +1,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Titan.Domain.Aggregates.SshKey;
+using Titan.Domain.Exceptions;
+using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Compute;
 
@@ -10,6 +13,29 @@ public static class VmVendorData
 {
     // A rebuilt key line: type, one space, base64. Nothing that could end the heredoc or reach the shell.
     private static readonly Regex KeyLine = new(@"\A[a-z0-9-]+ [A-Za-z0-9+/]+={0,2}\z", RegexOptions.CultureInvariant);
+
+    /// The vendor-data for the keys a customer picked: every id must be a key of the caller's tenant, since a foreign id
+    /// is indistinguishable from an unknown one (titan-ops features/vm/design.md#ssh-key); a repeated id goes in once.
+    public static async Task<string?> ForKeysAsync(ISshKeyRepository keys, Guid tenantId, List<Guid>? sshKeyIds, CancellationToken ct)
+    {
+        if (sshKeyIds == null || sshKeyIds.Count == 0)
+        {
+            return null;
+        }
+
+        List<Guid> distinctIds = sshKeyIds.Distinct().ToList();
+        Dictionary<Guid, SshKey> found = (await keys.ListByIdsAsync(tenantId, distinctIds, ct)).ToDictionary(k => k.Id);
+        var lines = new List<string>();
+        foreach (Guid id in distinctIds)
+        {
+            if (!found.TryGetValue(id, out SshKey? key))
+            {
+                throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{id}' not found.");
+            }
+            lines.Add(key.PublicKey);
+        }
+        return ForKeys(lines);
+    }
 
     /// Null when there is no key: the VM is created exactly as without this feature.
     public static string? ForKeys(IReadOnlyList<string> keyLines)

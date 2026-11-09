@@ -611,4 +611,47 @@ public class VmStateMachineTests
         vm.Rename("renamed");
         Assert.Equal("renamed", vm.Name);
     }
+
+    // ---- The aggregate hands out the instance name with the move it accepted; Application never reads ExternalId!
+    // (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+
+    [Fact]
+    public void StopStartAndAddSnapshot_HandBackTheInstanceName()
+    {
+        Assert.Equal("42", VmIn(Seed.Running).Stop(Guid.NewGuid()));
+        Assert.Equal("42", VmIn(Seed.Stopped).Start(Guid.NewGuid()));
+        Assert.Equal("42", VmIn(Seed.Running).AddSnapshot(Guid.NewGuid(), Guid.NewGuid(), "nightly"));
+    }
+
+    [Fact]
+    public void RequestDelete_HandsBackTheInstanceName_OrNullWhenDeletedAtOnce()
+    {
+        Assert.Equal("42", VmIn(Seed.Running).Delete(Guid.NewGuid()));
+        Assert.Null(VmIn(Seed.CreateFailed).Delete(Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void GetShellInstanceName_WhileTheGuestRuns_HandsBackTheName_OtherwiseRefuses()
+    {
+        Assert.Equal("42", VmIn(Seed.Running).GetShellInstanceName());
+        Assert.Equal("42", VmIn(Seed.Ready).GetShellInstanceName());
+        Assert.Equal("VM_INVALID_STATUS", Assert.Throws<BusinessException>(() => VmIn(Seed.Stopped).GetShellInstanceName()).Code);
+    }
+
+    [Fact] // the handler recognises a repeat before asking the aggregate, by the predicates the aggregate offers
+    public void StopAndStartRepeats_AreNamedByTheAggregate()
+    {
+        var stopping = VmIn(Seed.Running);
+        stopping.Stop(Guid.NewGuid());
+        Assert.True(stopping.IsStopWaitingOrStopped);
+        Assert.True(VmIn(Seed.Stopped).IsStopWaitingOrStopped);
+        Assert.False(VmIn(Seed.Running).IsStopWaitingOrStopped);
+
+        var starting = VmIn(Seed.Stopped);
+        starting.Start(Guid.NewGuid());
+        Assert.True(starting.IsStartWaitingOrRunning);
+        Assert.True(VmIn(Seed.Running).IsStartWaitingOrRunning);
+        Assert.True(VmIn(Seed.Ready).IsStartWaitingOrRunning);
+        Assert.False(VmIn(Seed.Stopped).IsStartWaitingOrRunning);
+    }
 }

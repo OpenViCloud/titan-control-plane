@@ -133,8 +133,8 @@ public partial class Vm : IAggregateRoot
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation): an operation from a person, refused when illegal.
     // What an operation may do in each Incus status is what Incus itself allows there
     // (titan-ops features/vm/design.md#operations-follow-incus). An intent only checks the move and writes the status,
-    // under the operation id the handler chose; an accepted Stop, Start, Delete toward the provider or snapshot means
-    // the VM has its ExternalId, which the handler then reads (titan-ops features/vm/design.md#vm-status).
+    // under the operation id the handler chose; an accepted Stop, Start, Delete toward the provider or snapshot hands
+    // the instance name back to the handler (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     // A repeat or an already-done operation is refused; the handler recognises it before calling
     // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
 

@@ -15,7 +15,8 @@ public partial class Vm
     /// (titan-ops architecture/desired-and-current.md#delete-locally); a create still waiting without a provider id may
     /// yet instantiate, so it is refused. Internal: VmDeletion is the only way in
     /// (titan-ops architecture/domain-services.md#cross-aggregate-lock).
-    internal void Delete(Guid operationId)
+    /// Hands back the instance name the delete command acts on, or null when the VM is Deleted here at once.
+    internal string? Delete(Guid operationId)
     {
         if (operationId == Guid.Empty)
         {
@@ -35,7 +36,7 @@ public partial class Vm
             EnsureNoCreateWaiting();
             Status = VmStatus.Deleted;
             Operation = Operation.ReturnedToRest();
-            return;
+            return null;
         }
 
         // A start, stop or snapshot still waiting finishes first: its report ends it, and only then is a delete asked
@@ -45,6 +46,7 @@ public partial class Vm
         VmStatus? seen = InstanceStatus;
         Status = VmStatus.Deleting;
         Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
+        return ExternalId;
     }
 
     /// A create still waiting without a provider id may yet instantiate on the provider, so there is nothing safe

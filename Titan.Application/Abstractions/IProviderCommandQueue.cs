@@ -1,4 +1,6 @@
 using Titan.Domain.Aggregates.LoadBalancer;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 
 namespace Titan.Application.Abstractions;
 
@@ -17,18 +19,20 @@ public interface IProviderCommandQueue
     Task EnqueueFirewallRuleCreateAsync(Guid ruleId, Guid requestId, Guid networkId, string direction, string protocol, int? startPort, int? endPort, string cidr, string externalNetworkId, string projectName, string clusterId, CancellationToken ct = default);
     Task EnqueueFirewallRuleDeleteAsync(Guid ruleId, Guid requestId, Guid networkId, string externalRuleId, string projectName, string clusterId, CancellationToken ct = default);
 
-    // cpuUnits/vcpuCount/memoryMb come from the selected VM offering (titan-ops features/catalog/design.md#vm-offering-sizing): the
-    // worker has no access to Titan's catalog, so the resolved sizing travels with the command. vendorData is Titan's own
-    // cloud-init script (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData.
-    // requestId is the VM's waiting request (Vm.Operation.PendingId): one command per request, the key and the payload carry
-    // the id, and the worker's report brings it back (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
-    Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId,
-        decimal cpuUnits, int vcpuCount, int memoryMb, string templateId, string clusterId,
-        string externalNetworkId, string projectName, int diskSizeGb,
-        string? userData, string? vendorData, CancellationToken ct = default);
-    Task EnqueueVmDeleteAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVmStopAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
-    Task EnqueueVmStartAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId, CancellationToken ct = default);
+    // The VM's own fields (id, name, cluster, disk size, user-data) travel from the aggregate; cpuUnits/vcpuCount/memoryMb
+    // from the VM offering the customer picked (titan-ops features/catalog/design.md#vm-offering-sizing): the worker has no
+    // access to Titan's catalog, so the resolved sizing travels and the offering id does not
+    // (titan-ops features/catalog/design.md#catalog-resolution-at-create). vendorData is Titan's own cloud-init script
+    // (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData. requestId is the VM's waiting
+    // request (Vm.Operation.PendingId): one command per request, the key and the payload carry the id, and the worker's
+    // report brings it back (titan-ops architecture/resource-lifecycle.md#one-key-per-request). externalVmId is the
+    // instance name the aggregate handed out with the move
+    // (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    Task EnqueueVmCreateAsync(VmAggregate vm, Guid requestId, VmOfferingAggregate offering, string externalTemplateId,
+        string externalNetworkId, string projectName, string? vendorData, CancellationToken ct = default);
+    Task EnqueueVmDeleteAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName, CancellationToken ct = default);
+    Task EnqueueVmStopAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName, CancellationToken ct = default);
+    Task EnqueueVmStartAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName, CancellationToken ct = default);
 
     // clusterId is the VM's: a snapshot lives on the VM's cluster. projectName is the tenant's Incus project, where the
     // instance, its snapshots and the custom volumes live (titan-ops architecture/tenancy-and-admin.md#project-name).

@@ -39,10 +39,10 @@ public class CreateVmSnapshotCommandHandler(
         // The VM checks itself (snapshottable) and adds the snapshot in one call.
         Guid snapshotId = Guid.NewGuid();
         Guid operationId = Guid.NewGuid();
-        vm.AddSnapshot(snapshotId, operationId, command.Name);
+        string externalVmId = vm.AddSnapshot(snapshotId, operationId, command.Name);
         activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshotId, command.Name); // atomic with the save
         string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotCreateAsync(snapshotId, operationId, vmId, vm.ExternalId!, command.Name,
+        await commands.EnqueueVmSnapshotCreateAsync(snapshotId, operationId, vmId, externalVmId, command.Name,
             projectName, vm.ClusterId, ct);
         await vmRepo.SaveAsync(ct);
 
