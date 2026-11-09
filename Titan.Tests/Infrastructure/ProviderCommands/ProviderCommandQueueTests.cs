@@ -2,6 +2,7 @@ using System.Text.Json;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Aggregates.Vm;
+using Titan.Domain.Aggregates.VmOffering;
 using Titan.Infrastructure.ProviderCommands;
 using Titan.Tests.Fakes;
 
@@ -16,26 +17,46 @@ public class ProviderCommandQueueTests
 
     private ProviderCommandQueue Queue() => new(_repo, _clock);
 
+    // The VM and the tier the queue reads a VM payload from (titan-ops features/catalog/design.md#catalog-resolution-at-create).
+    private static Vm AVm(string clusterId = "mock", string? userData = "#cloud-config\n") =>
+        Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-guid", clusterId, 20, userData);
+
+    private static readonly VmOffering Medium = VmOffering.Create("m", "m", 2m, 2, 4096, 1m);
+
+    // The resource of the "resource" key shape: the same VM each call, so the same key.
+    private readonly Vm _vmOfTheSameKey = AVm();
+
     [Fact]
     public async Task VmCreate_StagesOnePendingRow_KeyedOnTheRequest_WithTheWorkersPayload()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         Guid requestId = Guid.NewGuid();
 
-        await Queue().EnqueueVmCreateAsync(vmId, requestId, "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
-            "t-0123", 20, "#cloud-config\n", vendorData: null);
+        await Queue().EnqueueVmCreateAsync(vm, requestId, Medium, "tpl-a", "net-1", "t-0123", vendorData: null);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
-        Assert.Equal($"vm-create-{vmId}-{requestId}", row.Key);
+        Assert.Equal($"vm-create-{vm.Id}-{requestId}", row.Key);
         Assert.Equal(ProviderCommandKinds.VmCreate, row.Kind);
         Assert.Equal("mock", row.ClusterId);
         Assert.Equal(ProviderCommandStatus.Pending, row.Status);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
-        Assert.Equal(vmId.ToString(), payload.RootElement.GetProperty("vmId").GetString());
+        Assert.Equal(vm.Id.ToString(), payload.RootElement.GetProperty("vmId").GetString());
         Assert.Equal(requestId.ToString(), payload.RootElement.GetProperty("requestId").GetString());
         Assert.Equal("t-0123", payload.RootElement.GetProperty("projectName").GetString());
         Assert.Equal("tpl-a", payload.RootElement.GetProperty("templateId").GetString());
         Assert.Equal(4096, payload.RootElement.GetProperty("memoryMb").GetInt32());
+        Assert.Equal("web-1", payload.RootElement.GetProperty("name").GetString());
+        Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
+        Assert.Equal("net-1", payload.RootElement.GetProperty("externalNetworkId").GetString());
+        Assert.Equal(2m, payload.RootElement.GetProperty("cpuUnits").GetDecimal());
+        Assert.Equal(2, payload.RootElement.GetProperty("vcpuCount").GetInt32());
+        Assert.Equal(20, payload.RootElement.GetProperty("diskSizeGb").GetInt32());
+        Assert.Equal("#cloud-config\n", payload.RootElement.GetProperty("userData").GetString());
+        // Exactly the fields the worker reads (OpenViCloud/titan-incus-worker:resource/vm/create.go), nothing else: no
+        // vmOfferingId, the worker has no catalog (titan-ops features/catalog/design.md#catalog-resolution-at-create).
+        string[] fields = payload.RootElement.EnumerateObject().Select(f => f.Name).Order().ToArray();
+        Assert.Equal(["clusterId", "cpuUnits", "diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName",
+            "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"], fields);
     }
 
     // The worker reads the field as a string, empty meaning "none" (OpenViCloud/titan-incus-worker:resource/vm/create.go).
@@ -44,8 +65,7 @@ public class ProviderCommandQueueTests
     [InlineData(null, "")]
     public async Task VmCreate_CarriesTheVendorData_OrAnEmptyOne(string? vendorData, string expected)
     {
-        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
-            "t-0123", 20, null, vendorData);
+        await Queue().EnqueueVmCreateAsync(AVm(userData: null), Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-0123", vendorData);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
         Assert.Equal(expected, payload.RootElement.GetProperty("vendorData").GetString());
@@ -57,17 +77,17 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmDelete_EachRequest_GetsItsOwnRow_CarryingItsRequestId()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         Guid first = Guid.NewGuid();
         Guid second = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmDeleteAsync(vmId, first, "vm-x", "t-1", "mock");
-        await queue.EnqueueVmDeleteAsync(vmId, second, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmDeleteAsync(vm, first, "vm-x", "t-1");
+        await queue.EnqueueVmDeleteAsync(vm, second, "vm-x", "t-1");
 
         Assert.Equal(2, _repo.Rows.Count);
-        Assert.Equal($"vm-delete-{vmId}-{first}", _repo.Rows[0].Key);
-        Assert.Equal($"vm-delete-{vmId}-{second}", _repo.Rows[1].Key);
+        Assert.Equal($"vm-delete-{vm.Id}-{first}", _repo.Rows[0].Key);
+        Assert.Equal($"vm-delete-{vm.Id}-{second}", _repo.Rows[1].Key);
         Assert.Contains(second.ToString(), _repo.Rows[1].Payload);
     }
 
@@ -80,7 +100,7 @@ public class ProviderCommandQueueTests
     {
         if (shape == "resource")
         {
-            return queue.EnqueueVmDeleteAsync(resourceId, requestId, externalId, "t-1", "mock");
+            return queue.EnqueueVmDeleteAsync(_vmOfTheSameKey, requestId, externalId, "t-1");
         }
         return queue.EnqueueVmBackupAsync(resourceId, externalId, "t-1", requestId, "mock", new DateOnly(2026, 10, 26));
     }
@@ -219,16 +239,16 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmStopAndStart_AreKeyedOnTheirRequest()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         Guid stop = Guid.NewGuid();
         Guid start = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmStopAsync(vmId, stop, "vm-x", "t-1", "mock");
-        await queue.EnqueueVmStartAsync(vmId, start, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStopAsync(vm, stop, "vm-x", "t-1");
+        await queue.EnqueueVmStartAsync(vm, start, "vm-x", "t-1");
 
-        Assert.Equal($"vm-stop-{vmId}-{stop}", _repo.Rows[0].Key);
-        Assert.Equal($"vm-start-{vmId}-{start}", _repo.Rows[1].Key);
+        Assert.Equal($"vm-stop-{vm.Id}-{stop}", _repo.Rows[0].Key);
+        Assert.Equal($"vm-start-{vm.Id}-{start}", _repo.Rows[1].Key);
         Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
     }
 
@@ -274,13 +294,13 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task StopAndStart_CarryTheRequestId_AsRequestIdOnly()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         Guid stopRequest = Guid.NewGuid();
         Guid startRequest = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmStopAsync(vmId, stopRequest, "vm-x", "t-1", "mock");
-        await queue.EnqueueVmStartAsync(vmId, startRequest, "vm-x", "t-1", "mock");
+        await queue.EnqueueVmStopAsync(vm, stopRequest, "vm-x", "t-1");
+        await queue.EnqueueVmStartAsync(vm, startRequest, "vm-x", "t-1");
 
         using JsonDocument stop = JsonDocument.Parse(_repo.Rows[0].Payload);
         Assert.Equal(stopRequest.ToString(), stop.RootElement.GetProperty("requestId").GetString());
@@ -288,7 +308,7 @@ public class ProviderCommandQueueTests
         using JsonDocument start = JsonDocument.Parse(_repo.Rows[1].Payload);
         Assert.Equal(startRequest.ToString(), start.RootElement.GetProperty("requestId").GetString());
         Assert.False(start.RootElement.TryGetProperty("intentId", out _));
-        Assert.Equal($"vm-start-{vmId}-{startRequest}", _repo.Rows[1].Key);
+        Assert.Equal($"vm-start-{vm.Id}-{startRequest}", _repo.Rows[1].Key);
     }
 
     // A network's and a rule's keys carry the request id, as the volume's: each request its own row, and the payload names
@@ -455,11 +475,21 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmCreate_NoLongerCarriesEnablePublicIpv6()
     {
-        await Queue().EnqueueVmCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", 2m, 2, 4096, "tpl-a", "mock", "net-1",
-            "t-0123", 20, null, null);
+        await Queue().EnqueueVmCreateAsync(AVm(), Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-0123", null);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
         Assert.False(payload.RootElement.TryGetProperty("enablePublicIpv6", out _));
+    }
+
+    // The worker never read it (OpenViCloud/titan-incus-worker:resource/vm/create.go): the sizing travels as three numbers
+    // (titan-ops features/catalog/design.md#catalog-resolution-at-create).
+    [Fact]
+    public async Task VmCreate_CarriesNoVmOfferingId()
+    {
+        await Queue().EnqueueVmCreateAsync(AVm(), Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-0123", null);
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.False(payload.RootElement.TryGetProperty("vmOfferingId", out _));
     }
 
     // A rule lives in its network's ACL, inside the tenant's project (titan-ops features/network/design.md#firewall-on-incus).

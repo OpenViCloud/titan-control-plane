@@ -160,8 +160,7 @@ public class VmEndpointBindingTests
         await ep.HandleAsync(CancellationToken.None);
 
         _repo.Verify(r => r.FindByIdForUpdateAsync(VmId, default), Times.Once);
-        commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 
@@ -177,9 +176,8 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
-        commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 
@@ -198,9 +196,8 @@ public class VmEndpointBindingTests
 
         await ep.HandleAsync(CancellationToken.None);
 
-        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Guid>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), "cluster-1", default), Times.Once);
-        commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), "one-42", It.IsAny<string>(), default), Times.Once);
+        commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<VmAggregate>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
         Assert.Equal(202, ep.HttpContext.Response.StatusCode);
     }
 }

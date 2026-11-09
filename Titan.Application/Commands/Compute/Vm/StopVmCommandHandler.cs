@@ -41,7 +41,7 @@ public class StopVmCommandHandler(
         string externalVmId = vm.Stop(operationId);
 
         activity.Stage("vm.stop_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStopAsync(vm.Id, operationId, externalVmId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStopAsync(vm, operationId, externalVmId, projectName, ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

@@ -65,7 +65,7 @@ public class DeleteVmCommandHandler(
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId), vm.ClusterId, ct);
+        await commands.EnqueueVmDeleteAsync(vm, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId), ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

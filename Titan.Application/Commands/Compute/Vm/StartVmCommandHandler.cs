@@ -37,7 +37,7 @@ public class StartVmCommandHandler(
         string externalVmId = vm.Start(operationId);
 
         activity.Stage("vm.start_requested", "vm", vm.Id, vm.Name);
-        await commands.EnqueueVmStartAsync(vm.Id, operationId, externalVmId, projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmStartAsync(vm, operationId, externalVmId, projectName, ct);
         await repo.SaveAsync(ct);
     }
 }

@@ -3,6 +3,8 @@ using System.Text.Json;
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.ProviderCommand;
+using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 using Titan.Domain.Repositories;
 
 namespace Titan.Infrastructure.ProviderCommands;
@@ -58,30 +60,30 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // VM: one row per request, the key carries the request id, so no key is ever reused
     // (titan-ops architecture/resource-lifecycle.md#one-key-per-request). The payload carries requestId for the
     // worker's report.
-    public Task EnqueueVmCreateAsync(Guid vmId, Guid requestId, string name, string vmOfferingId, decimal cpuUnits,
-        int vcpuCount, int memoryMb, string templateId, string clusterId, string externalNetworkId, string projectName,
-        int diskSizeGb, string? userData, string? vendorData, CancellationToken ct = default) =>
-        EnqueueAsync(VmCreateKey(vmId, requestId), ProviderCommandKinds.VmCreate, clusterId,
+    public Task EnqueueVmCreateAsync(VmAggregate vm, Guid requestId, VmOfferingAggregate offering, string externalTemplateId,
+        string externalNetworkId, string projectName, string? vendorData, CancellationToken ct = default) =>
+        EnqueueAsync(VmCreateKey(vm.Id, requestId), ProviderCommandKinds.VmCreate, vm.ClusterId,
             new
             {
-                vmId, requestId, name, vmOfferingId, cpuUnits, vcpuCount, memoryMb, templateId, clusterId, externalNetworkId,
-                projectName, diskSizeGb, userData = userData ?? "", vendorData = vendorData ?? ""
+                vmId = vm.Id, requestId, name = vm.Name, cpuUnits = offering.CpuUnits, vcpuCount = offering.VcpuCount,
+                memoryMb = offering.MemoryMb, templateId = externalTemplateId, clusterId = vm.ClusterId, externalNetworkId,
+                projectName, diskSizeGb = vm.DiskSizeGb, userData = vm.UserData ?? "", vendorData = vendorData ?? ""
             }, ct);
 
-    public Task EnqueueVmDeleteAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmDeleteAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmDeleteKey(vmId, requestId), ProviderCommandKinds.VmDelete, clusterId,
-            new { vmId, requestId, externalVmId, projectName, clusterId }, ct);
+        EnqueueAsync(VmDeleteKey(vm.Id, requestId), ProviderCommandKinds.VmDelete, vm.ClusterId,
+            new { vmId = vm.Id, requestId, externalVmId, projectName, clusterId = vm.ClusterId }, ct);
 
-    public Task EnqueueVmStopAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmStopAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmStopKey(vmId, requestId), ProviderCommandKinds.VmStop, clusterId,
-            new { vmId, requestId, externalVmId, projectName, clusterId }, ct);
+        EnqueueAsync(VmStopKey(vm.Id, requestId), ProviderCommandKinds.VmStop, vm.ClusterId,
+            new { vmId = vm.Id, requestId, externalVmId, projectName, clusterId = vm.ClusterId }, ct);
 
-    public Task EnqueueVmStartAsync(Guid vmId, Guid requestId, string externalVmId, string projectName, string clusterId,
+    public Task EnqueueVmStartAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmStartKey(vmId, requestId), ProviderCommandKinds.VmStart, clusterId,
-            new { vmId, requestId, externalVmId, projectName, clusterId }, ct);
+        EnqueueAsync(VmStartKey(vm.Id, requestId), ProviderCommandKinds.VmStart, vm.ClusterId,
+            new { vmId = vm.Id, requestId, externalVmId, projectName, clusterId = vm.ClusterId }, ct);
 
     // `vm-{kind}-{vmId}-{requestId}`: the stuck-request query rebuilds the key from the VM's waiting request
     // (titan-ops architecture/resource-lifecycle.md#lost-and-stale).

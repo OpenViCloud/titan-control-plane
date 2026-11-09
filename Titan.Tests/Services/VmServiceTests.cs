@@ -176,10 +176,9 @@ public class VmServiceTests
             .Callback(() => calls.Add("save"))
             .Returns(Task.CompletedTask);
         _commands.Setup(w => w.EnqueueVmCreateAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            It.IsAny<Vm>(),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback(() => calls.Add("enqueue"))
             .Returns(Task.CompletedTask);
 
@@ -213,8 +212,9 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "77", "cluster-1",
-            "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops features/catalog/design.md#template-borrows-sizing — the customer's chosen tier is what
@@ -238,8 +238,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, chosenTier, _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", chosenTier, (decimal)cpu, vcpu, memoryMb, "77", "cluster-1",
-            "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == chosenTier && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == (decimal)cpu && o.VcpuCount == vcpu && o.MemoryMb == memoryMb),
+            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The debt ceiling gates NOTHING (titan-ops architecture/money-and-wallet.md#postpaid-no-brake): a tenant
@@ -286,8 +287,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "xl", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "xl", 4.0m, 8, 16384, "77", "cluster-1",
-            "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "xl" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 4.0m && o.VcpuCount == 8 && o.MemoryMb == 16384),
+            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Templates are a curated Titan catalog
@@ -309,8 +311,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "99", "cluster-1",
-            "cs-net-id", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            "99", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Each cluster has its own image alias: the VM gets the id of ITS cluster, never another cluster's.
@@ -332,8 +335,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", template.Id.ToString(), "cluster-2", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "web-01", "offering-1", 1.0m, 2, 4096, "3", "cluster-2",
-            "cs-net-2", TenantProject, 0, null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-2" && v.DiskSizeGb == 0 && v.UserData == null),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            "3", "cs-net-2", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Synced in another cluster only: in this cluster the template does not exist yet.
@@ -611,8 +615,7 @@ public class VmServiceTests
         Assert.Equal(VmStatus.Running, vm.InstanceStatus); // the Incus status is the worker's to record, not CP's
         Assert.Equal(VmStatus.Deleting, vm.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(vm, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
@@ -629,8 +632,7 @@ public class VmServiceTests
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
 
         Assert.Equal("VM_IS_LOAD_BALANCER_BACKEND", ex.Code);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -652,8 +654,7 @@ public class VmServiceTests
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The unprovisioned-VM shortcut (ExternalId == null → VmDeletion deletes it locally) must
@@ -671,8 +672,7 @@ public class VmServiceTests
             () => CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -685,8 +685,7 @@ public class VmServiceTests
 
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -703,8 +702,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Equal(VmStatus.Deleted, vm.Status);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A VM that provisioned (MarkRunning persisted an external id) and then failed on the provider
@@ -725,8 +723,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         // Must terminate the still-existing provider VM — not silently mark destroyed.
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(vm, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(VmStatus.Deleting, vm.Status); // only the delete command's Done ends the VM
     }
 
@@ -761,8 +758,7 @@ public class VmServiceTests
         Assert.Equal(VmStatus.Stopping, vm.Status);
         var operationId = Assert.IsType<Guid>(vm.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStopAsync(vm, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Stop follows Incus (titan-ops features/vm/design.md#requests-follow-incus): with no Incus status there is
@@ -782,8 +778,7 @@ public class VmServiceTests
             () => CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A snapshot create or revert runs on the instance: start and stop wait for its report, VM_INVALID_STATUS, no
@@ -807,10 +802,8 @@ public class VmServiceTests
         Assert.Equal("VM_INVALID_STATUS", stop.Code);
         Assert.Equal("VM_INVALID_STATUS", start.Code);
         Assert.Equal(VmStatus.Snapshotting, vm.Status);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // Incus force-stops Ready, Frozen and Error instances too (titan-ops features/vm/design.md#requests-follow-incus).
@@ -827,8 +820,7 @@ public class VmServiceTests
         await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
 
         var operationId = Assert.IsType<Guid>(vm.Operation.PendingId);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStopAsync(vm, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A VM owned by another tenant is invisible (404), never stopped.
@@ -843,8 +835,7 @@ public class VmServiceTests
             () => CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default));
 
         Assert.Equal("VM_NOT_FOUND", ex.Code);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // Starting a Stopped VM enqueues the command and moves the VM to Starting; it writes no Incus status: the start's
@@ -862,8 +853,7 @@ public class VmServiceTests
         Assert.Equal(VmStatus.Starting, vm.Status);
         var operationId = Assert.IsType<Guid>(vm.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            vm.Id, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStartAsync(vm, operationId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Start follows Incus: only Stopped and Frozen (a resume); Error is offered stop and delete only.
@@ -883,8 +873,7 @@ public class VmServiceTests
             () => CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact] // Start on a Frozen instance is Incus's resume (titan-ops features/vm/design.md#requests-follow-incus)
@@ -896,8 +885,7 @@ public class VmServiceTests
 
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", It.IsAny<string>(), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStartAsync(vm, It.IsAny<Guid>(), "cs-vm-id", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact] // Ready is running: a start is already done, answered like the first request with nothing sent
@@ -911,8 +899,7 @@ public class VmServiceTests
 
         Assert.Null(vm.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A VM owned by another tenant is invisible (404), never started.
@@ -1330,10 +1317,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null, userData), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-            userData, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.UserData == userData),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1349,10 +1335,9 @@ public class VmServiceTests
         await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-            null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<Vm>(v => v.UserData == null),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── SSH keys picked at create (titan-ops features/vm/design.md#ssh-key) ──────
@@ -1377,11 +1362,10 @@ public class VmServiceTests
         _sshKeys.Saved.AddRange([ed, rsa]);
         string? vendorData = null;
         _commands.Setup(w => w.EnqueueVmCreateAsync(
-                It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[13])) // requestId sits at index 1
+            It.IsAny<Vm>(),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[6])) // vm, requestId, offering, template, network, project, vendorData, ct
             .Returns(Task.CompletedTask);
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand(
@@ -1405,10 +1389,9 @@ public class VmServiceTests
             "web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-            It.IsAny<string?>(), null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<Vm>(),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1439,10 +1422,9 @@ public class VmServiceTests
         Assert.Equal("SSH_KEY_NOT_FOUND", refused.Code);
         _repo.Verify(r => r.Add(It.IsAny<Vm>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<decimal>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-            It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<Vm>(),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1684,10 +1666,8 @@ public class VmServiceTests
         Assert.Equal("vm.delete_requested", Assert.Single(_activity.Events).Action);
         Assert.Equal(firstRequest, vm.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the repeat changes nothing, so it saves nothing
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, firstRequest, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(vm, firstRequest, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1703,10 +1683,8 @@ public class VmServiceTests
 
         Assert.Equal("vm.stop_requested", Assert.Single(_activity.Events).Action);
         Assert.Equal(requestId, vm.Operation.PendingId);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, requestId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStopAsync(vm, requestId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
@@ -1721,8 +1699,7 @@ public class VmServiceTests
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
         Assert.Equal("vm.start_requested", Assert.Single(_activity.Events).Action);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the repeat changes nothing, so it saves nothing
     }
 
@@ -1739,8 +1716,7 @@ public class VmServiceTests
 
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1753,8 +1729,7 @@ public class VmServiceTests
         await CreateStartHandler().HandleAsync(new StartVmCommand(vm.Id), default);
 
         Assert.Empty(_activity.Events);
-        _commands.Verify(w => w.EnqueueVmStartAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmStartAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1769,8 +1744,7 @@ public class VmServiceTests
 
         Assert.Empty(_activity.Events);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -1878,8 +1852,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
 
         Assert.Null(vm.Operation.FailureReason);
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(vm, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(VmStatus.Deleting, vm.Status);
     }
 
@@ -1897,8 +1870,7 @@ public class VmServiceTests
         await CreateDeleteHandler().HandleAsync(new DeleteVmCommand(vm.Id), default);
         await EndWaiting(vm, "Done");
 
-        _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmDeleteAsync(vm, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "vm.created", "vm.delete_requested", "vm.deleted" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -1994,8 +1966,7 @@ public class VmServiceTests
 
         Guid secondStopId = Assert.IsType<Guid>(vm.Operation.PendingId);
         Assert.NotEqual(firstStopId, secondStopId);
-        _commands.Verify(w => w.EnqueueVmStopAsync(
-            vm.Id, secondStopId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmStopAsync(vm, secondStopId, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

@@ -81,8 +81,7 @@ public class DeleteAdminVmCommandHandler(
         // the worker never deletes a VM the audit log does not show
         // (titan-ops architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
-        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId),
-            vm.ClusterId, ct);
+        await commands.EnqueueVmDeleteAsync(vm, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId), ct);
         await vms.SaveAsync(ct);
     }
 }

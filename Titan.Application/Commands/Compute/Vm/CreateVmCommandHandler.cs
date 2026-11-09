@@ -96,22 +96,9 @@ public class CreateVmCommandHandler(
 
         // Enqueued before the save, so the VM row and its provider command commit in one transaction: no VM
         // that the worker never hears of (titan-ops architecture/provider-and-worker.md#provider-command-table).
-        await commands.EnqueueVmCreateAsync(
-            vm.Id,
-            vm.Operation.PendingId!.Value, // the create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds)
-            vm.Name,
-            vm.VmOfferingId,
-            offering.CpuUnits,
-            offering.VcpuCount,
-            offering.MemoryMb,
-            externalTemplateId,
-            vm.ClusterId,
-            externalNetworkId,
-            TenantAggregate.ProjectNameFor(tenant.Id),
-            vm.DiskSizeGb,
-            vm.UserData,
-            vendorData,
-            ct);
+        // The create is the VM's first request; its command's Done ends it (titan-ops architecture/resource-lifecycle.md#kinds).
+        await commands.EnqueueVmCreateAsync(vm, vm.Operation.PendingId!.Value, offering, externalTemplateId, externalNetworkId,
+            TenantAggregate.ProjectNameFor(tenant.Id), vendorData, ct);
         await repo.SaveAsync(ct);
 
         return new CreateVmCommandResult(vm.Id);
