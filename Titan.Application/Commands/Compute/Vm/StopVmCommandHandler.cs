@@ -1,8 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
-using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
-using Titan.Domain.Values;
 using Titan.Application.Commands.Compute.Vm.Contracts;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 

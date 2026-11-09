@@ -2,7 +2,6 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 using Titan.Application.Abstractions;
 using Titan.Application.Services.Compute;
 using Titan.Domain.Aggregates.Vm;
-using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
