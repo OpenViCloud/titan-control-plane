@@ -52,8 +52,9 @@ public class ProviderCommandQueueTests
         Assert.Equal(2, payload.RootElement.GetProperty("vcpuCount").GetInt32());
         Assert.Equal(20, payload.RootElement.GetProperty("diskSizeGb").GetInt32());
         Assert.Equal("#cloud-config\n", payload.RootElement.GetProperty("userData").GetString());
-        // Exactly the fields the worker reads (OpenViCloud/titan-incus-worker:resource/vm/create.go), nothing else: no
-        // vmOfferingId, the worker has no catalog (titan-ops features/catalog/design.md#catalog-resolution-at-create).
+        // The thirteen fields of the payload: the twelve the worker reads (OpenViCloud/titan-incus-worker:resource/vm/create.go
+        // createPayload) and clusterId, which every VM payload carries; nothing else — no vmOfferingId, the worker has no
+        // catalog (titan-ops features/catalog/design.md#catalog-resolution-at-create).
         string[] fields = payload.RootElement.EnumerateObject().Select(f => f.Name).Order().ToArray();
         Assert.Equal(["clusterId", "cpuUnits", "diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName",
             "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"], fields);
