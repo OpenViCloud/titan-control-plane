@@ -145,15 +145,12 @@ public class VmEndpointBindingTests
     [Fact] // DELETE /v1/tenant/vms/{vmId}
     public async Task DeleteVmEndpoint_ReachesDeleteCommand_WithRouteVmId_And202()
     {
-        var tenantRepo = new Mock<Titan.Domain.Repositories.ITenantRepository>();
-        tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default))
-            .ReturnsAsync(ActiveTenant());
         var commands = new Mock<IProviderCommandQueue>();
         var volumes = new Mock<IVolumeRepository>();
         volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
-            _repo.Object, tenantRepo.Object, _currentUser.Object, commands.Object,
+            _repo.Object, _currentUser.Object, commands.Object,
             volumes.Object, new Titan.Tests.Fakes.FakeActivityRecorder(),
             new Titan.Domain.Services.VmDeletion(new Mock<ILoadBalancerRepository>().Object));
         // The delete reads the VM with its row locked (titan-ops architecture/domain-services.md#cross-aggregate-lock).

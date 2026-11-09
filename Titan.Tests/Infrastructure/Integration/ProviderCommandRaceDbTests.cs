@@ -49,7 +49,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
         await using (TitanDbContext db = pg.NewDbContext())
         {
             var caller = Callers.TenantMember(tenant.Id);
-            var handler = new DeleteVmCommandHandler(new VmRepository(db), new TenantRepository(db), caller,
+            var handler = new DeleteVmCommandHandler(new VmRepository(db), caller,
                 new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
                 new VolumeRepository(db), new ActivityRecorder(new ActivityEventRepository(db), caller),
                 new VmDeletion(new LoadBalancerRepository(db)));

@@ -50,7 +50,7 @@ public class DeleteAdminVmCommandHandler(
         // still sends to it (VM_IS_LOAD_BALANCER_BACKEND), for an admin as for the tenant
         // (titan-ops features/vm/design.md#vm-snapshot · titan-ops architecture/domain-services.md#cross-aggregate-lock).
         Guid operationId = Guid.NewGuid();
-        await deletion.DeleteAsync(vm, operationId, ct);
+        string? externalVmId = await deletion.DeleteAsync(vm, operationId, ct);
 
         // Audited with the destructive request (titan-ops architecture/tenancy-and-admin.md#admin-audit). Two sinks on
         // purpose: a structured log line for the log aggregator, and a durable append-only row that survives log loss.
@@ -69,10 +69,9 @@ public class DeleteAdminVmCommandHandler(
             volume.ReleaseFromVmDelete(vm.Id);
         }
 
-        // Errored before provisioning — nothing at the provider, no reconciler running. The audit row
-        // and the local delete persist together in one SaveChanges (same DbContext).
-        bool finishedLocally = vm.IsDeleted;
-        if (finishedLocally)
+        // Errored before provisioning (no instance name came back): nothing at the provider, no reconciler running.
+        // The audit row and the local delete persist together in one SaveChanges (same DbContext).
+        if (externalVmId == null)
         {
             await vms.SaveAsync(ct);
             return;
@@ -82,7 +81,7 @@ public class DeleteAdminVmCommandHandler(
         // the worker never deletes a VM the audit log does not show
         // (titan-ops architecture/provider-and-worker.md#provider-command-table).
         // The project name derives from the owner's id, so no tenant lookup can fail between the audit row and its save.
-        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, vm.ExternalId!, TenantAggregate.ProjectNameFor(vm.TenantId),
+        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId),
             vm.ClusterId, ct);
         await vms.SaveAsync(ct);
     }

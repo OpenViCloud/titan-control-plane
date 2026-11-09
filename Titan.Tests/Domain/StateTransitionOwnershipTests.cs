@@ -82,27 +82,15 @@ public class StateTransitionOwnershipTests
     //
     // `x.ExternalId!` is a claim the application layer cannot prove — that a resource on the provider carries an id is
     // an invariant of the aggregate, so a Domain method that throws without it hands it out (Volume.Attach,
-    // Network.ProviderIdForVm, …). The VM's rows in the allowlist are the named exception.
+    // Network.ProviderIdForVm, Vm.Stop, Vm.Start, Vm.Delete, Vm.AddSnapshot, Vm.GetShellInstanceName). The allowlist is
+    // empty: a row names the one place that cannot, with why.
     //
     // Only `req.X!` passes: worker callback payload, already checked by a FastEndpoints validator, owned by no
     // aggregate. Comments are stripped before matching, so prose that names the pattern does not trip the guard.
     private static readonly Regex ProviderIdAssertion =
         new(@"(?<recv>\w+)\.(?<prop>ExternalTemplateId|ExternalId)!", RegexOptions.Compiled);
 
-    // The VM hands out no id (titan-ops features/vm/design.md#vm-status, Tôn Chủ 2026-11-05): the intent the handler
-    // called just before refused every VM without one, so its status proves the id is there.
-    private const string VmIdFollowsTheIntent = "the VM intent called just before refuses a VM without a provider id";
-
-
-    private static readonly Dictionary<string, string> ProviderIdAssertionAllowlist = new()
-    {
-        ["StopVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent,
-        ["StartVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent,
-        ["DeleteVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (Deleting; Deleted returned before)",
-        ["DeleteAdminVmCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (Deleting; Deleted returned before)",
-        ["CreateVmSnapshotCommandHandler.cs|vm.ExternalId"] = VmIdFollowsTheIntent + " (AddSnapshot)",
-        ["GetVmShellTargetQueryHandler.cs|vm.ExternalId"] = "EnsureShellCanOpen passes only Running or Ready, which only a report carrying the id reaches",
-    };
+    private static readonly Dictionary<string, string> ProviderIdAssertionAllowlist = new();
 
     [Fact]
     public void NoCallerAssertsAnAggregateProviderId()

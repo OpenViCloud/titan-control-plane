@@ -18,8 +18,9 @@ public partial class Vm
 
     /// Intent: a new snapshot of this VM, with the ids the handler chose: the snapshot's and its create's. The VM must
     /// accept a snapshot (EnsureSnapshottable) and is Snapshotting until the create reports. The create is the
-    /// snapshot's own operation, not the VM's; its command snapshots the instance ExternalId names.
-    public void AddSnapshot(Guid snapshotId, Guid operationId, string name)
+    /// snapshot's own operation, not the VM's; its command snapshots the instance whose name this hands back
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    public string AddSnapshot(Guid snapshotId, Guid operationId, string name)
     {
         if (operationId == Guid.Empty)
         {
@@ -31,6 +32,7 @@ public partial class Vm
         _snapshots.Add(snapshot);
         Operation = Operation.Asked(null, null, InstanceStatus);
         Status = VmStatus.Snapshotting;
+        return ExternalId!;
     }
 
     /// A snapshot this VM does not have answers like a missing one, the same 404 a snapshot of another VM gets

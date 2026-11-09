@@ -4,7 +4,13 @@ namespace Titan.Domain.Aggregates.Vm;
 
 public partial class Vm
 {
-    public void Stop(Guid operationId)
+    /// A stop still waits, or the VM is already stopped: a later stop is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsStopWaitingOrStopped => Status == VmStatus.Stopping || Status == VmStatus.Stopped;
+
+    /// Intent: the VM goes Stopping under operationId and hands back the instance name the stop command acts on
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
+    public string Stop(Guid operationId)
     {
         if (operationId == Guid.Empty)
         {
@@ -31,6 +37,7 @@ public partial class Vm
         VmStatus? seen = InstanceStatus;
         Status = VmStatus.Stopping;
         Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
+        return ExternalId!;
     }
 
     /// The stop command's Done: the status is the one Incus reports; without one, Unknown, as StartSucceeded.

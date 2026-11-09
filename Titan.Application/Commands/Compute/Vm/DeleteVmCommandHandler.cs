@@ -15,7 +15,6 @@ namespace Titan.Application.Commands.Compute.Vm;
 
 public class DeleteVmCommandHandler(
     IVmRepository repo,
-    ITenantRepository tenantRepo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
     IVolumeRepository volumeRepo,
@@ -25,8 +24,6 @@ public class DeleteVmCommandHandler(
     public async Task HandleAsync(DeleteVmCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
-            ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
         // Locked, so a load balancer naming this VM as a backend waits for this request and then sees it
         // (titan-ops architecture/domain-services.md#cross-aggregate-lock).
@@ -46,7 +43,7 @@ public class DeleteVmCommandHandler(
         // A load balancer still sending to it refuses too, rather than editing the load balancer behind the customer's
         // back (titan-ops features/load-balancer/design.md#lb-and-vm-network).
         Guid operationId = Guid.NewGuid();
-        await deletion.DeleteAsync(vm, operationId, ct);
+        string? externalVmId = await deletion.DeleteAsync(vm, operationId, ct);
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
 
@@ -59,17 +56,16 @@ public class DeleteVmCommandHandler(
             volume.ReleaseFromVmDelete(vm.Id);
         }
 
-        // Never reached the provider — no external resource, no reconciler running. The request and
-        // its outcome happen here at once, so both rows go in the SaveChanges with the local delete.
-        bool finishedLocally = vm.IsDeleted;
-        if (finishedLocally)
+        // Never reached the provider (no instance name came back): no external resource, no reconciler running. The
+        // request and its outcome happen here at once, so both rows go in the SaveChanges with the local delete.
+        if (externalVmId == null)
         {
             activity.StageOutcome(vm.TenantId, "vm.deleted", "vm", vm.Id, vm.Name);
             await repo.SaveAsync(ct);
             return;
         }
 
-        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, vm.ExternalId!, TenantAggregate.ProjectNameFor(tenant.Id), vm.ClusterId, ct);
+        await commands.EnqueueVmDeleteAsync(vm.Id, operationId, externalVmId, TenantAggregate.ProjectNameFor(vm.TenantId), vm.ClusterId, ct);
         await repo.SaveAsync(ct); // request, request event and provider command together
     }
 }

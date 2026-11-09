@@ -4,8 +4,14 @@ namespace Titan.Domain.Aggregates.Vm;
 
 public partial class Vm
 {
-    /// Start on a Frozen instance resumes it: Incus answers `start` from Frozen by thawing the guest.
-    public void Start(Guid operationId)
+    /// A start still waits, or the guest already runs (Ready is running with a guest that said so): a later start is a
+    /// repeat, answered like the first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsStartWaitingOrRunning => Status == VmStatus.Starting || Status == VmStatus.Running || Status == VmStatus.Ready;
+
+    /// Intent: the VM goes Starting under operationId and hands back the instance name the start command acts on
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id). Start on a Frozen instance
+    /// resumes it: Incus answers `start` from Frozen by thawing the guest.
+    public string Start(Guid operationId)
     {
         if (operationId == Guid.Empty)
         {
@@ -30,6 +36,7 @@ public partial class Vm
         VmStatus? seen = InstanceStatus;
         Status = VmStatus.Starting;
         Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, seen);
+        return ExternalId!;
     }
 
     /// The start command's Done: the status is the one Incus reports. Without one the old may be stale, so it is

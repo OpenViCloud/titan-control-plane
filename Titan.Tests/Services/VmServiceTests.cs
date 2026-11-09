@@ -82,7 +82,7 @@ public class VmServiceTests
     private readonly Mock<ILoadBalancerRepository> _loadBalancerRepo = new();
 
     private DeleteVmCommandHandler CreateDeleteHandler() =>
-        new(_repo.Object, _tenantRepo.Object, _currentUser.Object, _commands.Object,
+        new(_repo.Object, _currentUser.Object, _commands.Object,
             _volumeRepo.Object, _activity, new Titan.Domain.Services.VmDeletion(_loadBalancerRepo.Object));
 
     private StopVmCommandHandler CreateStopHandler() =>
@@ -612,7 +612,7 @@ public class VmServiceTests
         Assert.Equal(VmStatus.Deleting, vm.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the request, request event and provider command together
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops features/load-balancer/design.md#lb-and-vm-network: refused rather than silently editing the load balancer.
@@ -726,7 +726,7 @@ public class VmServiceTests
 
         // Must terminate the still-existing provider VM — not silently mark destroyed.
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(VmStatus.Deleting, vm.Status); // only the delete command's Done ends the VM
     }
 
@@ -1685,7 +1685,7 @@ public class VmServiceTests
         Assert.Equal(firstRequest, vm.Operation.PendingId);
         _repo.Verify(r => r.SaveAsync(default), Times.Once); // the repeat changes nothing, so it saves nothing
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, firstRequest, "cs-vm-id", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, firstRequest, "cs-vm-id", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
             It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -1879,7 +1879,7 @@ public class VmServiceTests
 
         Assert.Null(vm.Operation.FailureReason);
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(VmStatus.Deleting, vm.Status);
     }
 
@@ -1898,7 +1898,7 @@ public class VmServiceTests
         await EndWaiting(vm, "Done");
 
         _commands.Verify(w => w.EnqueueVmDeleteAsync(
-            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", TenantProject, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            vm.Id, It.IsAny<Guid>(), "cs-vm-abc", Tenant.ProjectNameFor(vm.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "vm.created", "vm.delete_requested", "vm.deleted" }, _activity.Events.Select(e => e.Action));
     }
 
