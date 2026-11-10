@@ -28,7 +28,6 @@ public class RecordVmMetricsEndpoint(RecordVmMetricsCommandHandler handler, ICon
             return;
         }
 
-        // A JSON null binds as no body at all.
         if (ValidationFailed || body == null)
         {
             await SendErrorsAsync(400, ct);
