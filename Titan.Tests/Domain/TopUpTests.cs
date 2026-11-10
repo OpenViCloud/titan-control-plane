@@ -86,4 +86,37 @@ public class TopUpTests
         var ex = Assert.Throws<BusinessException>(() => t.Fail("too late"));
         Assert.Equal("TOPUP_INVALID_STATE", ex.Code);
     }
+
+    // The webhook finds the reference in SePay's parsed code or in the raw transfer text
+    // (titan-ops features/billing/topup/design.md#sepay-flow), in the alphabet the generator writes
+    // (titan-ops features/billing/topup/design.md#topup-lifecycle).
+    [Fact]
+    public void FindPaymentRef_FindsTheGeneratedReference_InTheCodeOrTheText()
+    {
+        TopUp t = TopUp.Create(Tenant, 100_000, "VND");
+
+        Assert.Equal(t.PaymentRef, TopUp.FindPaymentRef(t.PaymentRef, null));
+        Assert.Equal(t.PaymentRef, TopUp.FindPaymentRef(null, $"chuyen khoan {t.PaymentRef} cam on"));
+        Assert.Equal(t.PaymentRef, TopUp.FindPaymentRef("no reference here", $"{t.PaymentRef}"));
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("TITAN-0000000", "short by one")]
+    [InlineData("TITAN-0000000I", "I is not in the alphabet")]
+    [InlineData("titan-00000000", "lower case is not the generator's")]
+    public void FindPaymentRef_FindsNothing_OutsideTheGeneratorsShape(string? code, string? content)
+    {
+        Assert.Null(TopUp.FindPaymentRef(code, content));
+    }
+
+    [Fact]
+    public void IsPaidBy_IsTheExactAmount_NotAFractionMore()
+    {
+        TopUp t = TopUp.Create(Tenant, 100_000, "VND");
+
+        Assert.True(t.IsPaidBy(100_000m));
+        Assert.False(t.IsPaidBy(100_000.5m));
+        Assert.False(t.IsPaidBy(99_999m));
+    }
 }

@@ -90,7 +90,7 @@ public class InvoiceServiceTests
 
         public async Task<InvoiceQueryResult> MarkPaidAsync(Guid id, CancellationToken ct)
         {
-            await new MarkInvoicePaidCommandHandler(invoiceRepo, mutationRepo, currentUser).HandleAsync(new MarkInvoicePaidCommand(id), ct);
+            await new MarkInvoicePaidCommandHandler(invoiceRepo, mutationRepo, currentUser, TimeProvider.System).HandleAsync(new MarkInvoicePaidCommand(id), ct);
             return Assert.Single(await ListAllAsync(null, ct), i => i.Id == id);
         }
 

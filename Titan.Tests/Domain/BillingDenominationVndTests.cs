@@ -11,9 +11,20 @@ public class BillingDenominationVndTests
     public void DefaultCurrency_IsVnd() =>
         Assert.Equal("VND", BillingConstants.DefaultCurrency);
 
+    // One currency, one place (titan-ops architecture/money-and-wallet.md#money-is-long-vnd): no type of
+    // Titan.Application.Options, the settings a deployment binds, can name another one next to
+    // BillingConstants.DefaultCurrency.
     [Fact]
-    public void CreditOptions_DefaultsToVnd() =>
-        Assert.Equal("VND", new CreditOptions().Currency);
+    public void NoOption_CarriesACurrency()
+    {
+        string[] withACurrency = typeof(CreditOptions).Assembly.GetTypes()
+            .Where(t => t.Namespace == typeof(CreditOptions).Namespace)
+            .SelectMany(t => t.GetProperties().Where(p => p.Name.Contains("Currency", StringComparison.Ordinal))
+                .Select(p => $"{t.Name}.{p.Name}"))
+            .ToArray();
+
+        Assert.Empty(withACurrency);
+    }
 
     // Prices belong to their offerings (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering), and
     // their VND magnitude is pinned on the seed in OfferingPricingSchemaTests. This guards that no price is in config.

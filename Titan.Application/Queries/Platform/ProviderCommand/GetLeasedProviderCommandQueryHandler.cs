@@ -18,7 +18,7 @@ public class GetLeasedProviderCommandQueryHandler(IProviderCommandRepository rep
         {
             throw NothingLeased(query.LeaseId);
         }
-        bool leaseHoldsWork = leased.Status == ProviderCommandStatus.Leased;
+        bool leaseHoldsWork = leased.IsLeased;
         if (!leaseHoldsWork)
         {
             throw NothingLeased(query.LeaseId);

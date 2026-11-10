@@ -25,6 +25,8 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
     public Task<ProviderCommand?> FindByLeaseAsync(Guid leaseId, CancellationToken ct) =>
         db.ProviderCommands.FirstOrDefaultAsync(c => c.LeaseId == leaseId, ct);
 
+    // ProviderCommand.IsClaimable, written in SQL (titan-ops architecture/domain-methods.md#plain-code);
+    // ProviderCommandRepositoryStateTests runs every shape through both.
     public async Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct)
     {

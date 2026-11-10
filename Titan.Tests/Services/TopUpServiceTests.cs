@@ -34,7 +34,7 @@ public class TopUpServiceTests
     private readonly Mock<IWalletMutationRepository> _mutationRepo = new();
     private readonly Mock<IWalletMutationPublisher> _bus = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
-    private readonly CreditOptions _options = new() { MaxGrantAmount = 100_000_000m, Currency = "VND" };
+    private readonly CreditOptions _options = new() { MaxGrantAmount = 100_000_000m };
     private static readonly Guid Tenant = Guid.NewGuid();
 
     public TopUpServiceTests()
@@ -63,7 +63,7 @@ public class TopUpServiceTests
         CreditOptions options)
     {
         public Task<RequestTopUpCommandResult> RequestAsync(decimal amount, CancellationToken ct = default)
-            => new RequestTopUpCommandHandler(repo, currentUser, options).HandleAsync(new RequestTopUpCommand(amount), ct);
+            => new RequestTopUpCommandHandler(repo, currentUser).HandleAsync(new RequestTopUpCommand(amount), ct);
 
         public Task ConfirmAsync(
             Guid topUpId, TopUpSource source, string confirmedBy, string? paymentTxnRef,

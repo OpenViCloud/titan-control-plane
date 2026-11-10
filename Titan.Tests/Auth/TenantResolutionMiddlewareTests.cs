@@ -34,7 +34,7 @@ public class TenantResolutionMiddlewareTests
         _repo.Object,
         new BootstrapTenantCommandHandler(_repo.Object),
         new ApproveDeclaredAccountCommandHandler(_repo.Object, _walletRepo.Object,
-            new TenantActivation(_walletRepo.Object), new CreditOptions { Currency = "VND" }));
+            new TenantActivation(_walletRepo.Object)));
 
     private void VerifyNoWalletOpened() =>
         _walletRepo.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);

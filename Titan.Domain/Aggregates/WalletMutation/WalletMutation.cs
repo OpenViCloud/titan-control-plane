@@ -75,6 +75,9 @@ public class WalletMutation : IAggregateRoot
     /// It does not guard the money: WalletMutationApply moves it before MarkApplied (titan-ops features/billing/wallet/design.md#wallet-debts).
     public bool IsTerminal => Status is WalletMutationStatus.Applied or WalletMutationStatus.Failed;
 
+    /// Queued and not yet applied by the consumer.
+    public bool IsPending => Status == WalletMutationStatus.Pending;
+
     /// A reopen moves QueuedAt; Create sets it equal to CreatedAt.
     public bool WasReopened => QueuedAt != CreatedAt;
 

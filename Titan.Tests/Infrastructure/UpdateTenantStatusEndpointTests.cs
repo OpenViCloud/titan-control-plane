@@ -38,7 +38,7 @@ public class UpdateTenantStatusEndpointTests
             ctx => ctx.Request.RouteValues["tenantId"] = tenantId.ToString(),
             new UpdateTenantStatusCommandHandler(_tenantRepo.Object),
             new ActivateTenantCommandHandler(_tenantRepo.Object, _walletRepo.Object,
-                new TenantActivation(_walletRepo.Object), new CreditOptions { Currency = "VND" }));
+                new TenantActivation(_walletRepo.Object)));
 
     private Tenant Known(Tenant tenant)
     {

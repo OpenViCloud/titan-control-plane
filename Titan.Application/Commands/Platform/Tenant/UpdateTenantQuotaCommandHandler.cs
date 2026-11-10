@@ -21,24 +21,15 @@ public class UpdateTenantQuotaCommandHandler(ITenantRepository repo)
         TenantQuota updated = TenantQuota.Create(
             command.MaxVms,
             command.MaxNetworks,
-            KeepOrReplace(command.MaxVolumes, current.MaxVolumes),
-            KeepOrReplace(command.MaxVmSnapshotsPerVm, current.MaxVmSnapshotsPerVm),
-            KeepOrReplace(command.MaxVolumeSnapshotsPerVolume, current.MaxVolumeSnapshotsPerVolume),
-            KeepOrReplace(command.MaxFirewallRulesPerNetwork, current.MaxFirewallRulesPerNetwork),
-            KeepOrReplace(command.MaxPublicIpv6, current.MaxPublicIpv6),
-            KeepOrReplace(command.MaxSshKeys, current.MaxSshKeys),
-            KeepOrReplace(command.MaxLoadBalancers, current.MaxLoadBalancers));
+            command.MaxVolumes ?? current.MaxVolumes,
+            command.MaxVmSnapshotsPerVm ?? current.MaxVmSnapshotsPerVm,
+            command.MaxVolumeSnapshotsPerVolume ?? current.MaxVolumeSnapshotsPerVolume,
+            command.MaxFirewallRulesPerNetwork ?? current.MaxFirewallRulesPerNetwork,
+            command.MaxPublicIpv6 ?? current.MaxPublicIpv6,
+            command.MaxSshKeys ?? current.MaxSshKeys,
+            command.MaxLoadBalancers ?? current.MaxLoadBalancers);
 
         tenant.UpdateQuota(updated);
         await repo.SaveAsync(ct);
-    }
-
-    private static int KeepOrReplace(int? requested, int current)
-    {
-        if (requested.HasValue)
-        {
-            return requested.Value;
-        }
-        return current;
     }
 }

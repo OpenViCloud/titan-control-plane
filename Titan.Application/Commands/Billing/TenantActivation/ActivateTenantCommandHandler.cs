@@ -1,5 +1,5 @@
 using Titan.Application.Commands.Billing.TenantActivation.Contracts;
-using Titan.Application.Options;
+using Titan.Application.Services.Billing;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -14,8 +14,7 @@ namespace Titan.Application.Commands.Billing.TenantActivation;
 public class ActivateTenantCommandHandler(
     ITenantRepository tenants,
     IWalletRepository wallets,
-    ActivationService activation,
-    CreditOptions options)
+    ActivationService activation)
 {
     public async Task HandleAsync(ActivateTenantCommand command, CancellationToken ct = default)
     {
@@ -24,13 +23,12 @@ public class ActivateTenantCommandHandler(
 
         // A press after the tenant is already Active is the same request with its result already there
         // (titan-ops architecture/intent-and-observation.md#intent-has-identity): answer 204, save nothing.
-        bool alreadyActive = tenant.Status == TenantStatus.Active;
-        if (alreadyActive)
+        if (tenant.IsActive)
         {
             return;
         }
 
-        await activation.ActivateAsync(tenant, options.Currency, ct);
+        await activation.ActivateAsync(tenant, BillingConstants.DefaultCurrency, ct);
         // The wallet repository's save, since the wallet is the one insert here.
         await wallets.SaveChangesAsync(ct);
     }

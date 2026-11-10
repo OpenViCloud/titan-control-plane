@@ -12,8 +12,7 @@ public class FailProviderCommandCommandHandler(IProviderCommandRepository reposi
     {
         ProviderCommandAggregate leased = await ProviderCommandLease.RequireAsync(repository, command.LeaseId, ct);
         // The row still names this lease but is no longer Leased: the first report of this failure landed.
-        bool alreadyReported = leased.Status != ProviderCommandStatus.Leased;
-        if (alreadyReported)
+        if (!leased.IsLeased)
         {
             return;
         }

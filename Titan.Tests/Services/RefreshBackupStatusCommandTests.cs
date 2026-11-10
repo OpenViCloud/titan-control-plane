@@ -1,3 +1,4 @@
+using Titan.Application.Services.Platform.Backup;
 using System.Text;
 using Moq;
 using Titan.Application.Abstractions;

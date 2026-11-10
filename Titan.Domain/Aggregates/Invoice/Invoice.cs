@@ -16,6 +16,12 @@ public class Invoice : IAggregateRoot
     public int PeriodMonth { get; private set; }
     /// A concurrency token: the double-pay guard (titan-ops architecture/money-and-wallet.md#double-pay-guard).
     public InvoiceStatus Status { get; private set; }
+
+    /// Outside money was recorded on it (MarkPaid): a later mark is a repeat.
+    public bool IsMarkedPaid => Status == InvoiceStatus.Paid;
+
+    /// The wallet paid it: a later press of pay is a repeat.
+    public bool IsSettledByWallet => Status == InvoiceStatus.SettledByWallet;
     public DateTimeOffset IssuedAt { get; private set; }
     public DateTimeOffset DueAt { get; private set; }
     public DateTimeOffset? PaidAt { get; private set; }
@@ -80,7 +86,8 @@ public class Invoice : IAggregateRoot
         PaidBy = paidBy;
     }
 
-    /// A person pressed pay (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
+    /// The wallet's debit for the invoice was applied, after a person pressed pay
+    /// (titan-ops architecture/money-and-wallet.md#human-confirmed-debit). From New only; being past
     /// DueAt does not matter — overdue only reminds (titan-ops architecture/money-and-wallet.md#postpaid-no-brake).
     internal void SettleFromWallet(DateTimeOffset paidAt)
     {

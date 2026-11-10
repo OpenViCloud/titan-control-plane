@@ -10,12 +10,10 @@ public class UpdateTenantDebtCeilingCommandHandler(ITenantRepository repo)
 {
     public async Task HandleAsync(UpdateTenantDebtCeilingCommand command, CancellationToken ct = default)
     {
-        var (tenantId, debtCeiling) = command;
-
-        var tenant = await repo.FindByIdAsync(tenantId, ct)
+        var tenant = await repo.FindByIdAsync(command.TenantId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        tenant.UpdateDebtCeiling((long)debtCeiling);
+        tenant.UpdateDebtCeiling((long)command.DebtCeiling);
         await repo.SaveAsync(ct);
     }
 }
