@@ -6,8 +6,6 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
 using Titan.Application.Commands.Compute.Vm.Contracts;
-using Titan.Domain.Aggregates.Volume;
-using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
@@ -16,7 +14,6 @@ public class DeleteVmCommandHandler(
     IVmRepository repo,
     ICurrentUser currentUser,
     IProviderCommandQueue commands,
-    IVolumeRepository volumeRepo,
     IActivityRecorder activity,
     VmDeletion deletion)
 {
@@ -45,15 +42,6 @@ public class DeleteVmCommandHandler(
         string? externalVmId = await deletion.DeleteAsync(vm, operationId, ct);
 
         activity.Stage("vm.delete_requested", "vm", vm.Id, vm.Name);
-
-        // The volumes go with the VM's delete (titan-ops features/volume/design.md#vm-delete-releases-volumes), and it is
-        // not a request of theirs (titan-ops architecture/resource-lifecycle.md#kinds): a volume with nothing waiting is no
-        // longer asked to be attached; one with its own attach or detach waiting is left to that request.
-        List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmLockedAsync(vm.Id, ct);
-        foreach (VolumeAggregate volume in attachedVolumes)
-        {
-            volume.ReleaseFromVmDelete(vm.Id);
-        }
 
         // Never reached the provider (no instance name came back): no external resource, no reconciler running. The
         // request and its outcome happen here at once, so both rows go in the SaveChanges with the local delete.

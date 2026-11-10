@@ -39,8 +39,8 @@ public class DeleteVolumeCommandHandler(
             await repo.SaveAsync(ct);
             return;
         }
-        string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDeleteAsync(volume.Id, ticket.OperationId, ticket.ProviderId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDeleteAsync(volume, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(volume.TenantId), ct);
         await repo.SaveAsync(ct);
     }
 }

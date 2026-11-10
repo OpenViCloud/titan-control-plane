@@ -136,8 +136,7 @@ public class TemplateServiceTests
     }
 
     private static void VerifySync(Mock<IProviderCommandQueue> wf, Times times) =>
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), times);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.IsAny<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()), times);
 
     private static Guid WaitingSyncOf(VmTemplate t, string clusterId) =>
         t.Clusters.Single(candidate => candidate.ClusterId == clusterId).Operation.PendingId!.Value;
@@ -161,8 +160,7 @@ public class TemplateServiceTests
         await RunNeverAsked(repo, wf);
 
         Assert.Equal("Syncing", Shape(t, Singapore));
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Singapore, WaitingSyncOf(t, Singapore), It.IsAny<string>(),
-            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a38 => a38.Id == t.Id), Singapore, WaitingSyncOf(t, Singapore), It.IsAny<CancellationToken>()), Times.Once);
         Assert.True(repo.Saved);
     }
 
@@ -248,8 +246,7 @@ public class TemplateServiceTests
 
         await svc.SyncAllAsync();
 
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, Mock, WaitingSyncOf(t, Mock), "a", null, "img", url, 10,
-            It.IsAny<CancellationToken>()), Times.Once);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a39 => a39.Id == t.Id && a39.Name == "a" && a39.OsImageName == "img" && a39.ImageUrl == url), Mock, WaitingSyncOf(t, Mock), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -508,10 +505,8 @@ public class TemplateServiceTests
         // fresh: both clusters · synced: singapore01 only · failed: both · waiting: singapore01 only
         Assert.Equal(6, result);
         VerifySync(wf, Times.Exactly(6));
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(synced.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(waiting.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a40 => a40.Id == synced.Id), Mock, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a41 => a41.Id == waiting.Id), Mock, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact] // one command per cluster, each carrying its cluster — the worker resolves that cluster from it
@@ -524,8 +519,7 @@ public class TemplateServiceTests
 
         foreach (string clusterId in new[] { Mock, Singapore })
         {
-            wf.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, WaitingSyncOf(t, clusterId), "a", null, "img", null, 10,
-                It.IsAny<CancellationToken>()), Times.Once);
+            wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a42 => a42.Id == t.Id && a42.Name == "a" && a42.OsImageName == "img" && a42.ImageUrl == null), clusterId, WaitingSyncOf(t, clusterId), It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 
@@ -582,8 +576,7 @@ public class TemplateServiceTests
         var t = VmTemplate.Create("a", null, "img", 10, TierS);
         var (svc, repo, wf) = Make(t);
         List<bool> savedAtEnqueue = new();
-        wf.Setup(w => w.EnqueueTemplateSyncAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        wf.Setup(w => w.EnqueueTemplateSyncAsync(It.IsAny<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(), It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .Callback(() => savedAtEnqueue.Add(repo.Saved))
             .Returns(Task.CompletedTask);
 
@@ -637,10 +630,8 @@ public class TemplateServiceTests
 
         Assert.Equal("Syncing", Shape(lost, Mock));
         Assert.Equal("Available", Shape(there, Mock));
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(lost.Id, Mock, WaitingSyncOf(lost, Mock), It.IsAny<string>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Once);
-        wf.Verify(w => w.EnqueueTemplateSyncAsync(there.Id, Mock, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string?>(),
-            It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()), Times.Never);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a44 => a44.Id == lost.Id), Mock, WaitingSyncOf(lost, Mock), It.IsAny<CancellationToken>()), Times.Once);
+        wf.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a45 => a45.Id == there.Id), Mock, It.IsAny<Guid>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -660,8 +651,7 @@ public class TemplateServiceTests
         var a = VmTemplate.Create("a", null, "img", 10, TierS);
         var b = VmTemplate.Create("b", null, "img", 10, TierS);
         var (svc, repo, wf) = Make(a, b);
-        wf.Setup(w => w.EnqueueTemplateSyncAsync(a.Id, Singapore, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<int?>(), It.IsAny<CancellationToken>()))
+        wf.Setup(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a46 => a46.Id == a.Id), Singapore, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("command queue unavailable"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => svc.SyncAllAsync());

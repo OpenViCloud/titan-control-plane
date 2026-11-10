@@ -15,8 +15,8 @@ using Titan.Application.Exceptions;
 namespace Titan.Tests.Services;
 
 // The request routes of titan-ops architecture/resource-lifecycle.md#callback-routes for a network and its firewall rules,
-// at the handler: a report ends the request it names and records its outcome once; an observation writes current and
-// ends nothing.
+// at the handler: a report ends the request it names and records its outcome once; an observation records what Incus
+// has and ends nothing.
 public class NetworkRequestHandlerTests
 {
     private const string Block56 = "2001:41d0:d00:d400::/56";

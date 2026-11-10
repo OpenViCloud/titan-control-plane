@@ -20,6 +20,10 @@ public class ClusterConfig
     public string? StoragePool { get; set; }
     public string? Ipv6Block { get; set; }
 
+    // A cluster has public IPv6 when its configuration names both the uplink and the /56
+    // (titan-ops infra/incus/design.md#ipv6-address-plan).
+    public bool HasPublicIpv6 => OvnUplinkNetwork != null && Ipv6Block != null;
+
     public const int MaxProviderNameLength = 64;
 
     public static string NormalizeEndpoint(string? endpoint)

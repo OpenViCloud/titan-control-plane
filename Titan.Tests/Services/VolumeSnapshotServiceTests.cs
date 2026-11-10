@@ -99,8 +99,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal(VolumeSnapshotStatus.Creating, added.Status);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotCreateAsync(
-            added.Id, added.Operation.PendingId!.Value, volume.Id, "cs-vol-1", Project, volume.ClusterId,
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a81 => a81.Id == volume.Id && a81.ClusterId == volume.ClusterId), It.Is<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(a82 => a82.Id == added.Id), added.Operation.PendingId!.Value, "cs-vol-1", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The volume is loaded locked (titan-ops architecture/code-structure.md#child-entity): the cap is counted on what
@@ -162,8 +161,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal(3, volume.Snapshots.Count);
         _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVolumeSnapshotCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The handler asks about quota before the volume checks itself (titan-ops architecture/code-structure.md#quota-gate).
@@ -273,8 +271,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-1", Project, volume.ClusterId,
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a85 => a85.Id == volume.Id && a85.ClusterId == volume.ClusterId), It.Is<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(a86 => a86.Id == snapshot.Id), snapshot.Operation.PendingId!.Value, "cs-snap-1", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -305,7 +302,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-9", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a87 => a87.Id == volume.Id && a87.ClusterId == volume.ClusterId), It.Is<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(a88 => a88.Id == snapshot.Id), snapshot.Operation.PendingId!.Value, "cs-snap-9", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -324,8 +321,7 @@ public class VolumeSnapshotServiceTests
         Assert.Equal(before, (snapshot.Status, snapshot.Operation.PendingId));
         _volumeRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -379,8 +375,7 @@ public class VolumeSnapshotServiceTests
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         // The restore is the new volume's create, so the command carries that volume's request id.
         _commands.Verify(w => w.EnqueueVolumeSnapshotRestoreAsync(
-            snapshot.Id, result.NewVolumeId, added!.Operation.PendingId!.Value, "cs-snap-1", "vol-restored-01", "t-" + _tenant.Id.ToString("N"), volume.ClusterId,
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a91 => a91.Id == result.NewVolumeId && a91.Name == "vol-restored-01" && a91.ClusterId == volume.ClusterId), added!.Operation.PendingId!.Value, "cs-snap-1", "t-" + _tenant.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Only the snapshot must rest on Incus: a source volume the reconciler no longer finds still restores
@@ -517,7 +512,7 @@ public class VolumeSnapshotServiceTests
         await CreateService().DeleteAsync(volume.Id, snapshot.Id, default);
 
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "vol1/s1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a92 => a92.Id == volume.Id && a92.ClusterId == volume.ClusterId), It.Is<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(a93 => a93.Id == snapshot.Id), snapshot.Operation.PendingId!.Value, "vol1/s1", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -539,7 +534,7 @@ public class VolumeSnapshotServiceTests
 
         Assert.Equal(VolumeSnapshotStatus.Deleting, snapshot.Status);
         _commands.Verify(w => w.EnqueueVolumeSnapshotDeleteAsync(
-            snapshot.Id, snapshot.Operation.PendingId!.Value, volume.Id, "cs-snap-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a94 => a94.Id == volume.Id && a94.ClusterId == volume.ClusterId), It.Is<global::Titan.Domain.Aggregates.Volume.VolumeSnapshot>(a95 => a95.Id == snapshot.Id), snapshot.Operation.PendingId!.Value, "cs-snap-1", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

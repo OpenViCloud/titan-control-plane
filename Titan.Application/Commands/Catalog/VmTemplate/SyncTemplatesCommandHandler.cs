@@ -31,7 +31,7 @@ public class SyncTemplatesCommandHandler(
         // again under the lock: the second sees what the first left waiting (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
         List<VmTemplateAggregate> templates = await repo.ListAllAsync(ct);
         List<Guid> toAsk = templates
-            .Where(t => clusters.Clusters.Any(cluster => NeedsASyncRequest(t, cluster.Id)))
+            .Where(t => clusters.Clusters.Any(cluster => t.NeedsSyncIn(cluster.Id)))
             .Select(t => t.Id)
             .OrderBy(id => id)
             .ToList();
@@ -46,13 +46,12 @@ public class SyncTemplatesCommandHandler(
             }
             foreach (ClusterConfig cluster in clusters.Clusters)
             {
-                if (!NeedsASyncRequest(locked, cluster.Id))
+                if (!locked.NeedsSyncIn(cluster.Id))
                 {
                     continue;
                 }
                 Guid requestId = locked.SyncIn(cluster.Id);
-                await commands.EnqueueTemplateSyncAsync(locked.Id, cluster.Id, requestId, locked.Name, locked.Description,
-                    locked.OsImageName, locked.ImageUrl, locked.RootDiskSizeGb, ct);
+                await commands.EnqueueTemplateSyncAsync(locked, cluster.Id, requestId, ct);
                 enqueued++;
             }
         }
@@ -62,15 +61,5 @@ public class SyncTemplatesCommandHandler(
         logger.LogInformation(
             "Template sync-all: {Enqueued} enqueued, {Untouched} there or waiting, of {Total} (templates × clusters)",
             enqueued, total - enqueued, total);
-    }
-
-    private static bool NeedsASyncRequest(VmTemplateAggregate template, string clusterId)
-    {
-        VmTemplateCluster? row = template.Clusters.FirstOrDefault(candidate => candidate.ClusterId == clusterId);
-        if (row == null)
-        {
-            return true;
-        }
-        return row.Status == VmTemplateClusterStatus.Failed || row.Status == VmTemplateClusterStatus.NotFound;
     }
 }

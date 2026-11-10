@@ -13,7 +13,7 @@ public partial class Volume
         if (!available)
             throw new BusinessException("VOLUME_INVALID_STATE", "Volume must be on Incus, unattached, with nothing waiting, to attach.");
         vm.EnsureVolumeCanAttach();
-        string vmExternalId = vm.ExternalId!;
+        string vmExternalId = vm.GetExternalId();
         if (ClusterId != vm.ClusterId)
             throw new BusinessException("VOLUME_CLUSTER_MISMATCH", "Volume and VM must be in the same cluster.");
 
@@ -23,6 +23,31 @@ public partial class Volume
         Status = VolumeStatus.Attaching;
         DesiredAttachedVmId = vm.Id;
         return new VolumeAttachProviderIds(operationId, externalVolumeId, vmExternalId);
+    }
+
+    /// An attach to this VM was asked and waits, or the volume rests attached as asked to it: a later attach to the same
+    /// VM is a repeat, answered like the first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    /// Another VM is not a repeat: Attach refuses it.
+    public bool IsAttachWaitingOrAttachedTo(Guid vmId)
+    {
+        bool attachIsWaiting = Status == VolumeStatus.Attaching;
+        bool restsAttached = Operation.PendingId == null && CurrentAttachedVmId == DesiredAttachedVmId;
+        return (attachIsWaiting || restsAttached) && DesiredAttachedVmId == vmId;
+    }
+
+    /// A detach was asked and waits, or no instance uses the volume and none is asked for: a later detach is a repeat,
+    /// answered like the first. One used outside Titan is not: Detach refuses it.
+    public bool IsDetachWaitingOrDetached
+    {
+        get
+        {
+            bool detachIsWaiting = Status == VolumeStatus.Detaching;
+            bool restsUnattached = Operation.PendingId == null
+                                   && CurrentAttachedVmId == null
+                                   && DesiredAttachedVmId == null
+                                   && !CurrentAttachedElsewhere;
+            return detachIsWaiting || restsUnattached;
+        }
     }
 
     /// The detach command removes the disk from every instance using the volume, so a volume an instance outside

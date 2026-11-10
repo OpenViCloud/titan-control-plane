@@ -49,18 +49,6 @@ public static class VmReports
         [VmSnapshotStatus.Deleting] = "vm_snapshot.delete_failed",
     };
 
-    public static OperationOutcome ParseOutcome(string outcome)
-    {
-        switch (outcome)
-        {
-            case "Done":
-                return OperationOutcome.Done;
-            case "Failed":
-                return OperationOutcome.Failed;
-            default:
-                throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
-        }
-    }
 
     // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     // Matched by name, exactly: Enum.TryParse would also take "1" or "running".

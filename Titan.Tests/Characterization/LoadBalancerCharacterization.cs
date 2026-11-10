@@ -235,6 +235,7 @@ public class LoadBalancerCharacterization
             "public DeleteFailed(Guid, String, String, String): Boolean",
             "public DeleteSucceeded(Guid, String): Boolean",
             "public InstanceStatus: LoadBalancerStatus?",
+            "public IsUpdateWaitingOrDone(IReadOnlyList<LoadBalancerListenerSpec>, IReadOnlyList<Guid>): Boolean",
             "public Operation: LoadBalancerOperation",
             "public Status: LoadBalancerStatus",
             "public UpdateFailed(Guid, String, String, String): Boolean",

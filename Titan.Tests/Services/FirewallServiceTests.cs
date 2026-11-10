@@ -86,8 +86,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.create_requested", "firewall_rule", added.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         _networkRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            added.Id, added.Operation.PendingId!.Value, NetworkId, "Ingress", "TCP", 80, 80, "0.0.0.0/0",
-            "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a1 => a1.Id == network.Id && a1.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Network.FirewallRule>(a2 => a2.Id == added.Id && string.Equals(a2.Direction.ToString(), "Ingress", StringComparison.OrdinalIgnoreCase) && string.Equals(a2.Protocol.ToString(), "TCP", StringComparison.OrdinalIgnoreCase) && a2.StartPort == 80 && a2.EndPort == 80 && a2.Cidr.Value == "0.0.0.0/0"), added.Operation.PendingId!.Value, Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The network is loaded locked (titan-ops architecture/code-structure.md#child-entity): the cap is counted on what
@@ -108,13 +107,12 @@ public class FirewallServiceTests
     public async Task Create_EgressUdp_EnqueuesTheCommandWithEgressDirection()
     {
         SetupCurrentUser();
-        SetupActiveNetwork();
+        Network network = SetupActiveNetwork();
 
         await CreateService().CreateAsync(NetworkId, new CreateFirewallRuleRequest("Egress", "UDP", 53, 53, "0.0.0.0/0"), default);
 
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), NetworkId, "Egress", "UDP", 53, 53, "0.0.0.0/0",
-            "cs-net-id", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a3 => a3.Id == network.Id && a3.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Network.FirewallRule>(a4 => string.Equals(a4.Direction.ToString(), "Egress", StringComparison.OrdinalIgnoreCase) && string.Equals(a4.Protocol.ToString(), "UDP", StringComparison.OrdinalIgnoreCase) && a4.StartPort == 53 && a4.EndPort == 53 && a4.Cidr.Value == "0.0.0.0/0"), It.IsAny<Guid>(), Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -164,9 +162,7 @@ public class FirewallServiceTests
         Assert.Equal(20, network.FirewallRules.Count);
         _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueFirewallRuleCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<int?>(), It.IsAny<int?>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<global::Titan.Domain.Aggregates.Network.FirewallRule>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The handler asks about quota before the network checks itself (titan-ops architecture/code-structure.md#quota-gate).
@@ -313,7 +309,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, "Ingress TCP 80 from 0.0.0.0/0"), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a7 => a7.Id == network.Id && a7.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Network.FirewallRule>(a8 => a8.Id == rule.Id), rule.Operation.PendingId!.Value, "cs-rule-abc", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Locked, so two deletes of the rule take turns and the second sees the first waiting
@@ -346,7 +342,7 @@ public class FirewallServiceTests
 
         Assert.Equal(first, rule.Operation.PendingId!.Value);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<global::Titan.Domain.Aggregates.Network.FirewallRule>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", It.IsAny<string>(), It.IsAny<Guid>(), It.IsAny<string>()), Times.Once);
         _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -368,7 +364,7 @@ public class FirewallServiceTests
         _networkRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _activity.VerifyNoOtherCalls();
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<global::Titan.Domain.Aggregates.Network.FirewallRule>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A rule whose create failed never gets an ExternalId, so refusing it as NOT_READY would make it
@@ -387,7 +383,7 @@ public class FirewallServiceTests
 
         Assert.Equal("Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-7", It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a13 => a13.Id == network.Id), It.Is<global::Titan.Domain.Aggregates.Network.FirewallRule>(a14 => a14.Id == rule.Id), rule.Operation.PendingId!.Value, "cs-rule-7", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -405,7 +401,7 @@ public class FirewallServiceTests
         _activity.Verify(a => a.Stage("firewall_rule.delete_requested", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _activity.Verify(a => a.StageOutcome(TenantId, "firewall_rule.deleted", "firewall_rule", rule.Id, It.IsAny<string>()), Times.Once);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<global::Titan.Domain.Aggregates.Network.FirewallRule>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -423,7 +419,7 @@ public class FirewallServiceTests
 
         Assert.Equal("Deleting", Shape(rule));
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            rule.Id, rule.Operation.PendingId!.Value, NetworkId, "cs-rule-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a17 => a17.Id == network.Id && a17.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Network.FirewallRule>(a18 => a18.Id == rule.Id), rule.Operation.PendingId!.Value, "cs-rule-abc", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -439,7 +435,7 @@ public class FirewallServiceTests
 
         Assert.Equal("FIREWALL_RULE_NOT_READY", ex.Code);
         _commands.Verify(w => w.EnqueueFirewallRuleDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<global::Titan.Domain.Aggregates.Network.FirewallRule>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

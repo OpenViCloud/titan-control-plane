@@ -92,13 +92,18 @@ public partial class LoadBalancer : IAggregateRoot
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => Status == LoadBalancerStatus.Deleting || IsDeleted;
 
+    /// Exactly this configuration was asked, whether Incus has it or its create or update still waits, and no delete was: a later
+    /// PUT of it is a repeat, answered like the first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsUpdateWaitingOrDone(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Guid> backendVmIds) =>
+        !IsDeletedOrDeleting && ListenersAre(listeners) && BackendsAre(backendVmIds);
+
     /// Incus holds it and nothing waits: an update starts only from here.
     private bool RestsOnIncus => Status == LoadBalancerStatus.Available;
 
     // ---- Intent (titan-ops architecture/intent-and-observation.md#intent-versus-observation); Create, Update and Delete are
     // in LoadBalancer.Creation.cs, LoadBalancer.Update.cs and LoadBalancer.Deletion.cs.
 
-    /// Whether the last operation already asks for exactly this; the handler answers such a PUT itself
+    /// Whether the last operation already asks for exactly this, the lists IsUpdateWaitingOrDone reads
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool HasDesiredSpec(IReadOnlyList<LoadBalancerListenerSpec> listeners, IReadOnlyList<Guid> backendVmIds)
     {
@@ -186,7 +191,7 @@ public partial class LoadBalancer : IAggregateRoot
                 throw new BusinessException("LOAD_BALANCER_BACKEND_INVALID", $"VM '{vm.Id}' is not one of this tenant's.");
             }
             vm.EnsureLoadBalancerCanSendTo(NetworkId);
-            asked.Add((vm.Id, vm.ExternalId!));
+            asked.Add((vm.Id, vm.GetExternalId()));
         }
 
         foreach (LoadBalancerListener row in _listeners)

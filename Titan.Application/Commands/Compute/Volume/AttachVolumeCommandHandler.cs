@@ -20,22 +20,15 @@ public class AttachVolumeCommandHandler(
         var callerId = currentUser.RequireTenantId();
         var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(repo, callerId, command.VolumeId, ct);
 
-        var vm = await vmRepo.FindByIdAsync(command.VmId, ct);
-        if (vm is null || vm.TenantId != callerId)
-            throw new NotFoundException("VM_NOT_FOUND", "VM not found.");
+        var vm = await ComputeOwnership.RequireVmAsync(vmRepo, callerId, command.VmId, ct);
 
         // Volume state, VM state and cluster match are all checked inside Attach — one call, and the
         // transition cannot happen with any of them skipped (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
 
         // The aggregate refuses a repeat, so it is recognised here first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): this volume is already attaching
-        // or attached to THIS VM. A repeat succeeds like the first request and sends nothing. Another VM falls
-        // through and is refused.
-        bool attachIsWaiting = volume.Status == VolumeStatus.Attaching;
-        bool restsAttached = volume.Operation.PendingId == null && volume.CurrentAttachedVmId == volume.DesiredAttachedVmId;
-        bool attachingOrAttached = attachIsWaiting || restsAttached;
-        bool toThisVm = volume.DesiredAttachedVmId == vm.Id;
-        if (attachingOrAttached && toThisVm)
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): a repeat succeeds like the first
+        // request and sends nothing.
+        if (volume.IsAttachWaitingOrAttachedTo(vm.Id))
         {
             return;
         }
@@ -43,9 +36,8 @@ public class AttachVolumeCommandHandler(
         VolumeAttachProviderIds providerIds = volume.Attach(vm);
 
         activity.Stage("volume.attach_requested", "volume", volume.Id, volume.Name); // atomic with Attach
-        string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeAttachAsync(
-            volume.Id, providerIds.OperationId, providerIds.ExternalVolumeId, providerIds.ExternalVmId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeAttachAsync(volume, providerIds.OperationId, providerIds.ExternalVolumeId,
+            providerIds.ExternalVmId, TenantAggregate.ProjectNameFor(volume.TenantId), ct);
         await repo.SaveAsync(ct);
     }
 }

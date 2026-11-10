@@ -36,18 +36,17 @@ public class DeleteNetworkCommandHandler(
         // Null: the create failed before Incus had it, so the network is gone here, the tenant can reclaim the name,
         // and no command is enqueued.
         OperationTicket? ticket = await deletion.DeleteAsync(network, ct);
+        activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the save
         if (ticket is null)
         {
             // Never provisioned: the request and its outcome happen here at once (titan-ops architecture/intent-and-observation.md#intent-has-identity).
-            activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the local delete
             activity.StageOutcome(network.TenantId, "network.deleted", "network", network.Id, network.Name.Value);
             await repo.SaveAsync(ct);
             return;
         }
 
-        activity.Stage("network.delete_requested", "network", network.Id, network.Name.Value); // atomic with the delete request
-        await commands.EnqueueNetworkDeleteAsync(network.Id, ticket.OperationId, ticket.ProviderId,
-            TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
+        await commands.EnqueueNetworkDeleteAsync(network, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(network.TenantId), ct);
         // The rules stay as Incus holds them: the delete command takes the ACL with the network, and its Done ends
         // them (titan-ops features/network/design.md#network-lifecycle).
         await repo.SaveAsync(ct);

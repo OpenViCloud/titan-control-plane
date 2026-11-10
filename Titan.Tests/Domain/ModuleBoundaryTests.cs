@@ -344,7 +344,8 @@ public class ModuleBoundaryTests
             + "its public /64) must be verified.",
         [("Compute", "Platform")] =
             "The VM, volume, VM snapshot, volume snapshot, SSH key and load balancer create handlers need the tenant: "
-            + "every resource cap lives on it (docs/architecture/tenancy-and-admin.md#tenant-quota), and the VM delete handler loads it, refusing a VM whose tenant is gone (TENANT_NOT_FOUND).",
+            + "every resource cap lives on it (docs/architecture/tenancy-and-admin.md#tenant-quota). RestoreVolumeSnapshotCommandHandler "
+            + "too: a restore creates a volume.",
         [("Networking", "Platform")] =
             "CreateNetworkCommandHandler needs the tenant for quota, and the cluster for the "
             + "uplink and IPv6 block a public /64 comes from (docs/infra/incus/design.md#ipv6-address-plan); "
@@ -355,15 +356,15 @@ public class ModuleBoundaryTests
         // hold. That test, not this comment, is the guarantee.
         [("Admin", "Compute")] =
             "ListAdminVmsQueryHandler lists VMs ACROSS tenants for the admin portal, and "
-            + "DeleteAdminVmCommandHandler deletes one (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write), reading snapshots for the in-progress "
-            + "guard and the attached volumes it detaches. A separate path on purpose: the tenant Vm handlers require a tenant "
+            + "DeleteAdminVmCommandHandler deletes one through VmDeletion (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write), "
+            + "which also releases its attached volumes. A separate path on purpose: the tenant Vm handlers require a tenant "
             + "(RequireTenantId), so reusing them would mean growing a bypass flag on the tenant path. "
             + "ScheduleBackupsCommandHandler and ListDiskBackupsQueryHandler read every tenant's VMs and volumes for the platform's "
             + "backups (docs/features/backup/design.md#incus-backup): Platform cannot, Compute already reads Platform.",
         [("Admin", "Networking")] =
             "ListAdminNetworksQueryHandler lists networks across tenants for the admin portal (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).",
         [("Admin", "Platform")] =
-            "DeleteAdminVmCommandHandler resolves the owning tenant's provider account and writes an "
+            "DeleteAdminVmCommandHandler names the owning tenant's Incus project and writes an "
             + "admin audit entry for every cross-tenant delete (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write). "
             + "ScheduleBackupsCommandHandler names each tenant's Incus project; ListDiskBackupsQueryHandler reads the backup cache "
             + "and its health rule (docs/features/backup/design.md#incus-backup).",

@@ -6,7 +6,7 @@ using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one firewall rule (titan-ops architecture/resource-lifecycle.md#callback-routes): whether
-// its network's ACL has it and its state. Writes current only.
+// its network's ACL has it and its state. Ends no request.
 public class ObserveFirewallRuleEndpoint(ObserveFirewallRuleCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveFirewallRuleBody>
 {

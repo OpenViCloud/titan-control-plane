@@ -43,9 +43,8 @@ public class CreateVolumeCommandHandler(
         clusters.ClusterOf(volume.ClusterId); // titan-ops features/catalog/design.md#cluster-is-a-real-choice
         repo.Add(volume);
         activity.Stage("volume.create_requested", "volume", volume.Id, volume.Name); // atomic with the volume insert
-        string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeCreateAsync(
-            volume.Id, volume.Operation.PendingId!.Value, volume.Name, volume.ClusterId, volume.SizeGb, projectName, ct);
+        await commands.EnqueueVolumeCreateAsync(volume, volume.Operation.PendingId!.Value,
+            TenantAggregate.ProjectNameFor(volume.TenantId), ct);
         await repo.SaveAsync(ct);
 
         return new CreateVolumeCommandResult(volume.Id);

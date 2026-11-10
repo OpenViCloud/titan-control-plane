@@ -139,7 +139,7 @@ public partial class Vm
         Status = resting;
     }
 
-    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): current only.
+    // Observations of one snapshot (titan-ops architecture/intent-and-observation.md#observation-converges): what Incus holds.
 
     public void MarkSnapshotObserved(Guid snapshotId) => GetSnapshot(snapshotId).MarkObserved();
 

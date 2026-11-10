@@ -1,8 +1,11 @@
 using System.Text.Json;
 using Titan.Domain.Aggregates.LoadBalancer;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.VmTemplate;
+using Titan.Domain.Aggregates.Volume;
 using Titan.Infrastructure.ProviderCommands;
 using Titan.Tests.Fakes;
 
@@ -26,6 +29,47 @@ public class ProviderCommandQueueTests
     // The resource of the "resource" key shape: the same VM each call, so the same key.
     private readonly Vm _vmOfTheSameKey = AVm();
 
+    private static readonly Titan.Domain.Aggregates.Tenant.Tenant Owner = TestTenant.WithRoomToSpare();
+
+    private static Network ANetwork(string clusterId = "mock", FirewallPolicy ingress = FirewallPolicy.Allow,
+        FirewallPolicy egress = FirewallPolicy.Allow, string? cidr = null) =>
+        TestAggregates.Network(Owner, "backend", clusterId, ingress, egress, cidr);
+
+    // A rule goes only on a network Incus has created (Network.AddFirewallRule).
+    private static (Network Network, FirewallRule Rule) ARule()
+    {
+        Network network = ANetwork();
+        network.MarkActive("net-x", "10.40.0.0/24", "10.40.0.1");
+        FirewallRule rule = network.WithFirewallRule(FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22, "10.0.0.0/8");
+        return (network, rule);
+    }
+
+    private static Volume AVolume(string clusterId = "mock") => Volume.Create(Owner.Id, "data-1", clusterId, "std", 50);
+
+    private static (Volume Volume, VolumeSnapshot Snapshot) AVolumeSnapshot()
+    {
+        Volume volume = AVolume();
+        volume.MarkCreated("vol-x");
+        return (volume, volume.WithSnapshot("nightly"));
+    }
+
+    private static (Vm Vm, VmSnapshot Snapshot) AVmSnapshot()
+    {
+        Vm vm = AVm();
+        vm.MarkRunning("vm-x", "10.0.0.5");
+        return (vm, vm.WithSnapshot("nightly"));
+    }
+
+    private static VmTemplate ATemplate(string? imageUrl = null)
+    {
+        VmTemplate template = VmTemplate.Create("Alma-9-DB", "a description", "almalinux/9", 40, "m");
+        if (imageUrl != null)
+        {
+            TemplateSeedFields.WithImageUrl(template, imageUrl);
+        }
+        return template;
+    }
+
     [Fact]
     public async Task VmCreate_StagesOnePendingRow_KeyedOnTheRequest_WithTheWorkersPayload()
     {
@@ -46,18 +90,12 @@ public class ProviderCommandQueueTests
         Assert.Equal("tpl-a", payload.RootElement.GetProperty("templateId").GetString());
         Assert.Equal(4096, payload.RootElement.GetProperty("memoryMb").GetInt32());
         Assert.Equal("web-1", payload.RootElement.GetProperty("name").GetString());
-        Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
         Assert.Equal("net-1", payload.RootElement.GetProperty("externalNetworkId").GetString());
         Assert.Equal(2m, payload.RootElement.GetProperty("cpuUnits").GetDecimal());
         Assert.Equal(2, payload.RootElement.GetProperty("vcpuCount").GetInt32());
         Assert.Equal(20, payload.RootElement.GetProperty("diskSizeGb").GetInt32());
         Assert.Equal("#cloud-config\n", payload.RootElement.GetProperty("userData").GetString());
-        // The thirteen fields of the payload: the twelve the worker reads (OpenViCloud/titan-incus-worker:resource/vm/create.go
-        // createPayload) and clusterId, which every VM payload carries; nothing else — no vmOfferingId, the worker has no
-        // catalog (titan-ops features/catalog/design.md#catalog-resolution-at-create).
-        string[] fields = payload.RootElement.EnumerateObject().Select(f => f.Name).Order().ToArray();
-        Assert.Equal(["clusterId", "cpuUnits", "diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName",
-            "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"], fields);
+        Assert.False(payload.RootElement.TryGetProperty("clusterId", out _));
     }
 
     // The worker reads the field as a string, empty meaning "none" (OpenViCloud/titan-incus-worker:resource/vm/create.go).
@@ -103,7 +141,7 @@ public class ProviderCommandQueueTests
         {
             return queue.EnqueueVmDeleteAsync(_vmOfTheSameKey, requestId, externalId, "t-1");
         }
-        return queue.EnqueueVmBackupAsync(resourceId, externalId, "t-1", requestId, "mock", new DateOnly(2026, 10, 26));
+        return queue.EnqueueVmBackupAsync(_vmOfTheSameKey, externalId, "t-1", new DateOnly(2026, 10, 26));
     }
 
     private static ProviderCommand Finish(ProviderCommand row, ProviderCommandStatus status, DateTimeOffset now)
@@ -186,7 +224,7 @@ public class ProviderCommandQueueTests
 
         await queue.EnqueueLoadBalancerCreateAsync(lb, create, "t-1");
         await queue.EnqueueLoadBalancerUpdateAsync(lb, update, "t-1");
-        await queue.EnqueueLoadBalancerDeleteAsync(lb.Id, delete, "net-x", lb.Vip, "t-1", "cluster-a");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb, delete, lb.Vip, "t-1");
 
         Assert.Equal(
             [
@@ -212,26 +250,27 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task LoadBalancerDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
     {
-        Guid lbId = Guid.NewGuid();
+        LoadBalancer lb = ALoadBalancer();
+        Guid lbId = lb.Id;
         Guid first = Guid.NewGuid();
         Guid second = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueLoadBalancerDeleteAsync(lbId, first, "net-x", "2001:db8::1:1", "t-1", "mock");
-        await queue.EnqueueLoadBalancerDeleteAsync(lbId, second, "net-x", "2001:db8::1:1", "t-1", "mock");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb, first, lb.Vip, "t-1");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb, second, lb.Vip, "t-1");
 
         Assert.Equal([$"load-balancer-delete-{lbId}-{first}", $"load-balancer-delete-{lbId}-{second}"], _repo.Rows.Select(r => r.Key));
         Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandStatus.Pending, r.Status));
     }
 
-    private static LoadBalancer ALoadBalancer()
+    private static LoadBalancer ALoadBalancer(string clusterId = "cluster-a")
     {
         const string subnet = "2001:db8:0:1::/64";
         Guid tenantId = TestTenant.WithRoomToSpare().Id;
         Guid networkId = Guid.NewGuid();
-        Vm vm = Vm.Create(tenantId, networkId, "vm-q", "m", "tpl", "cluster-a", 20);
+        Vm vm = Vm.Create(tenantId, networkId, "vm-q", "m", "tpl", clusterId, 20);
         vm.CreateSucceeded(vm.Operation.PendingId!.Value, "vmq", VmStatus.Running, "10.0.0.5", null);
-        return LoadBalancer.Create(tenantId, "web", networkId, "net-x", subnet, "cluster-a", LoadBalancerVip.For(subnet, 1),
+        return LoadBalancer.Create(tenantId, "web", networkId, "net-x", subnet, clusterId, LoadBalancerVip.For(subnet, 1),
             [new LoadBalancerListenerSpec(LoadBalancerProtocol.TCP, 80, 8080)], [vm]);
     }
 
@@ -258,8 +297,9 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VolumeAndSnapshotRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
-        Guid volumeId = Guid.NewGuid();
-        Guid snapshotId = Guid.NewGuid();
+        (Volume volume, VolumeSnapshot snapshot) = AVolumeSnapshot();
+        Guid volumeId = volume.Id;
+        Guid snapshotId = snapshot.Id;
         Guid firstAttach = Guid.NewGuid();
         Guid secondAttach = Guid.NewGuid();
         Guid detach = Guid.NewGuid();
@@ -268,12 +308,12 @@ public class ProviderCommandQueueTests
         Guid snapshotDelete = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVolumeAttachAsync(volumeId, firstAttach, "vol-x", "vm-x", "t-1", "mock");
-        await queue.EnqueueVolumeAttachAsync(volumeId, secondAttach, "vol-x", "vm-y", "t-1", "mock");
-        await queue.EnqueueVolumeDetachAsync(volumeId, detach, "vol-x", "t-1", "mock");
-        await queue.EnqueueVolumeDeleteAsync(volumeId, delete, "vol-x", "t-1", "mock");
-        await queue.EnqueueVolumeSnapshotCreateAsync(snapshotId, snapshotCreate, volumeId, "vol-x", "t-1", "mock");
-        await queue.EnqueueVolumeSnapshotDeleteAsync(snapshotId, snapshotDelete, volumeId, "vol-x/s-x", "t-1", "mock");
+        await queue.EnqueueVolumeAttachAsync(volume, firstAttach, "vol-x", "vm-x", "t-1");
+        await queue.EnqueueVolumeAttachAsync(volume, secondAttach, "vol-x", "vm-y", "t-1");
+        await queue.EnqueueVolumeDetachAsync(volume, detach, "vol-x", "t-1");
+        await queue.EnqueueVolumeDeleteAsync(volume, delete, "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotCreateAsync(volume, snapshot, snapshotCreate, "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotDeleteAsync(volume, snapshot, snapshotDelete, "vol-x/s-x", "t-1");
 
         Assert.Equal(
             [
@@ -317,18 +357,19 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task NetworkAndFirewallRuleRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
-        Guid networkId = Guid.NewGuid();
-        Guid ruleId = Guid.NewGuid();
+        (Network network, FirewallRule rule) = ARule();
+        Guid networkId = network.Id;
+        Guid ruleId = rule.Id;
         Guid networkCreate = Guid.NewGuid();
         Guid networkDelete = Guid.NewGuid();
         Guid ruleCreate = Guid.NewGuid();
         Guid ruleDelete = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueNetworkCreateAsync(networkId, networkCreate, "backend", "mock", "t-1", "10.40.0.0/24", "Deny", "Allow", null, null);
-        await queue.EnqueueNetworkDeleteAsync(networkId, networkDelete, "net-x", "t-1", "mock");
-        await queue.EnqueueFirewallRuleCreateAsync(ruleId, ruleCreate, networkId, "Ingress", "TCP", 22, 22, "10.0.0.0/8", "net-x", "t-1", "mock");
-        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, ruleDelete, networkId, "acl-x/rule", "t-1", "mock");
+        await queue.EnqueueNetworkCreateAsync(network, networkCreate, "t-1", null);
+        await queue.EnqueueNetworkDeleteAsync(network, networkDelete, "net-x", "t-1");
+        await queue.EnqueueFirewallRuleCreateAsync(network, rule, ruleCreate, "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, ruleDelete, "acl-x/rule", "t-1");
 
         Assert.Equal(
             [
@@ -353,15 +394,16 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task NetworkAndFirewallRuleDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
     {
-        Guid networkId = Guid.NewGuid();
-        Guid ruleId = Guid.NewGuid();
+        (Network network, FirewallRule rule) = ARule();
+        Guid networkId = network.Id;
+        Guid ruleId = rule.Id;
         Guid[] requests = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueNetworkDeleteAsync(networkId, requests[0], "net-x", "t-1", "mock");
-        await queue.EnqueueNetworkDeleteAsync(networkId, requests[1], "net-x", "t-1", "mock");
-        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, requests[2], networkId, "acl-x/rule", "t-1", "mock");
-        await queue.EnqueueFirewallRuleDeleteAsync(ruleId, requests[3], networkId, "acl-x/rule", "t-1", "mock");
+        await queue.EnqueueNetworkDeleteAsync(network, requests[0], "net-x", "t-1");
+        await queue.EnqueueNetworkDeleteAsync(network, requests[1], "net-x", "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, requests[2], "acl-x/rule", "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, requests[3], "acl-x/rule", "t-1");
 
         Assert.Equal(
             [
@@ -377,16 +419,17 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmSnapshotRequests_EachGetTheirOwnRow_CarryingTheirRequestId()
     {
-        Guid snapshotId = Guid.NewGuid();
-        Guid vmId = Guid.NewGuid();
+        (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
+        Guid snapshotId = snapshot.Id;
+        Guid vmId = vm.Id;
         Guid create = Guid.NewGuid();
         Guid revert = Guid.NewGuid();
         Guid delete = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmSnapshotCreateAsync(snapshotId, create, vmId, "vm-x", "nightly", "t-1", "mock");
-        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, revert, vmId, "vm-x/s-x", "t-1", "mock");
-        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, delete, vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotCreateAsync(vm, snapshot, create, "vm-x", "t-1");
+        await queue.EnqueueVmSnapshotRevertAsync(vm, snapshot, revert, "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotDeleteAsync(vm, snapshot, delete, "vm-x/s-x", "t-1");
 
         Assert.Equal(
             [
@@ -412,15 +455,15 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmSnapshotRevertAndDelete_TwoRequestsWhileTheFirstIsOpen_EachGetTheirOwnPendingRow()
     {
-        Guid snapshotId = Guid.NewGuid();
-        Guid vmId = Guid.NewGuid();
+        (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
+        Guid snapshotId = snapshot.Id;
         Guid[] requests = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, requests[0], vmId, "vm-x/s-x", "t-1", "mock");
-        await queue.EnqueueVmSnapshotRevertAsync(snapshotId, requests[1], vmId, "vm-x/s-x", "t-1", "mock");
-        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, requests[2], vmId, "vm-x/s-x", "t-1", "mock");
-        await queue.EnqueueVmSnapshotDeleteAsync(snapshotId, requests[3], vmId, "vm-x/s-x", "t-1", "mock");
+        await queue.EnqueueVmSnapshotRevertAsync(vm, snapshot, requests[0], "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotRevertAsync(vm, snapshot, requests[1], "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotDeleteAsync(vm, snapshot, requests[2], "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotDeleteAsync(vm, snapshot, requests[3], "vm-x/s-x", "t-1");
 
         Assert.Equal(
             [
@@ -435,10 +478,10 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task FirewallRuleDelete_CarriesTheNetworkIdTheCallbackNeeds()
     {
-        Guid ruleId = Guid.NewGuid();
-        Guid networkId = Guid.NewGuid();
+        (Network network, FirewallRule rule) = ARule();
+        Guid networkId = network.Id;
 
-        await Queue().EnqueueFirewallRuleDeleteAsync(ruleId, Guid.NewGuid(), networkId, "acl-1", "t-1", "mock");
+        await Queue().EnqueueFirewallRuleDeleteAsync(network, rule, Guid.NewGuid(), "acl-1", "t-1");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -450,7 +493,7 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task NetworkCreate_CarriesBothPolicies()
     {
-        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "backend", "mock", "t-1", "10.40.0.0/24", "Deny", "Allow", null, null);
+        await Queue().EnqueueNetworkCreateAsync(ANetwork(ingress: FirewallPolicy.Deny, cidr: "10.40.0.0/24"), Guid.NewGuid(), "t-1", null);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -465,7 +508,13 @@ public class ProviderCommandQueueTests
     [InlineData(null, null, "", "")]
     public async Task NetworkCreate_CarriesThePublicIpv6_OrEmptyStrings(string? subnet, string? router, string wantSubnet, string wantRouter)
     {
-        await Queue().EnqueueNetworkCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "backend", "singapore01", "t-1", null, "Allow", "Allow", subnet, router);
+        Network network = ANetwork("singapore01");
+        if (subnet != null)
+        {
+            network.ReceivePublicIpv6(subnet);
+        }
+
+        await Queue().EnqueueNetworkCreateAsync(network, Guid.NewGuid(), "t-1", router);
 
         using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
         Assert.Equal(wantSubnet, payload.RootElement.GetProperty("publicIpv6Subnet").GetString());
@@ -498,15 +547,16 @@ public class ProviderCommandQueueTests
     public async Task FirewallRuleCreateAndDelete_CarryTheProject()
     {
         ProviderCommandQueue queue = Queue();
+        (Network network, FirewallRule rule) = ARule();
 
-        await queue.EnqueueFirewallRuleCreateAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "Ingress", "TCP", 22, 22, "10.0.0.0/8", "net-x", "t-1", "mock");
-        await queue.EnqueueFirewallRuleDeleteAsync(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "acl-x/rule", "t-1", "mock");
+        await queue.EnqueueFirewallRuleCreateAsync(network, rule, Guid.NewGuid(), "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, Guid.NewGuid(), "acl-x/rule", "t-1");
 
         foreach (ProviderCommand row in _repo.Rows)
         {
             using JsonDocument payload = JsonDocument.Parse(row.Payload);
             Assert.Equal("t-1", payload.RootElement.GetProperty("projectName").GetString());
-            Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
+            Assert.Equal("mock", row.ClusterId);
         }
         Assert.Equal(2, _repo.Rows.Count);
     }
@@ -516,17 +566,16 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VolumeRestore_IsKeyedAsTheNewVolumesCreate_NotOnTheSnapshot()
     {
-        Guid snapshotId = Guid.NewGuid();
-        Guid firstVolume = Guid.NewGuid();
-        Guid secondVolume = Guid.NewGuid();
+        Volume firstVolume = AVolume();
+        Volume secondVolume = AVolume();
         Guid secondRequest = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, firstVolume, Guid.NewGuid(), "vol-src/snap-1", "a", "t-1", "mock");
-        await queue.EnqueueVolumeSnapshotRestoreAsync(snapshotId, secondVolume, secondRequest, "vol-src/snap-1", "b", "t-1", "mock");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(firstVolume, Guid.NewGuid(), "vol-src/snap-1", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(secondVolume, secondRequest, "vol-src/snap-1", "t-1");
 
         Assert.Equal(2, _repo.Rows.Count);
-        Assert.Equal($"volume-create-{secondVolume}-{secondRequest}", _repo.Rows[1].Key);
+        Assert.Equal($"volume-create-{secondVolume.Id}-{secondRequest}", _repo.Rows[1].Key);
         Assert.Equal(ProviderCommandKinds.VolumeSnapshotRestore, _repo.Rows[1].Kind);
     }
 
@@ -535,7 +584,7 @@ public class ProviderCommandQueueTests
     public async Task TemplateSync_CarriesTheImageAlias_AndNoSizing()
     {
         Guid requestId = Guid.NewGuid();
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", requestId, "Alma-9-DB", null, "almalinux/9", null, 40);
+        await Queue().EnqueueTemplateSyncAsync(ATemplate(), "mock", requestId);
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -552,8 +601,8 @@ public class ProviderCommandQueueTests
     public async Task TemplateSync_CarriesTheImageUrl_OrAnEmptyOne()
     {
         const string url = "https://cloud-images.ubuntu.com/releases/jammy/release/ubuntu-22.04-server-cloudimg-{arch}.img";
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", Guid.NewGuid(), "Ubuntu-22.04-Standard", null, "ubuntu/22.04", url, 25);
-        await Queue().EnqueueTemplateSyncAsync(Guid.NewGuid(), "mock", Guid.NewGuid(), "Alma-9-DB", null, "almalinux/9", null, 40);
+        await Queue().EnqueueTemplateSyncAsync(ATemplate(url), "mock", Guid.NewGuid());
+        await Queue().EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
 
         Assert.Equal(2, _repo.Rows.Count);
         using JsonDocument withUrl = JsonDocument.Parse(_repo.Rows[0].Payload);
@@ -567,13 +616,14 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task TemplateSync_IsKeyedPerTemplatePerClusterPerRequest()
     {
-        Guid templateId = Guid.NewGuid();
+        VmTemplate template = ATemplate();
+        Guid templateId = template.Id;
         Guid inSingapore = Guid.NewGuid(), inMock = Guid.NewGuid(), inMockAgain = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueTemplateSyncAsync(templateId, "singapore01", inSingapore, "Alma-9-DB", null, "almalinux/9", null, 40);
-        await queue.EnqueueTemplateSyncAsync(templateId, "mock", inMock, "Alma-9-DB", null, "almalinux/9", null, 40);
-        await queue.EnqueueTemplateSyncAsync(templateId, "mock", inMockAgain, "Alma-9-DB", null, "almalinux/9", null, 40);
+        await queue.EnqueueTemplateSyncAsync(template, "singapore01", inSingapore);
+        await queue.EnqueueTemplateSyncAsync(template, "mock", inMock);
+        await queue.EnqueueTemplateSyncAsync(template, "mock", inMockAgain);
 
         Assert.Equal(
             new[]
@@ -589,10 +639,11 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmBackup_KeyIsTheVmAndTheDay_PayloadCarriesTenantAndProject()
     {
-        Guid vmId = Guid.NewGuid();
-        Guid tenantId = Guid.NewGuid();
+        Vm vm = AVm();
+        Guid vmId = vm.Id;
+        Guid tenantId = vm.TenantId;
 
-        await Queue().EnqueueVmBackupAsync(vmId, "vm-x", "t-0123", tenantId, "mock", new DateOnly(2026, 10, 26));
+        await Queue().EnqueueVmBackupAsync(vm, "vm-x", "t-0123", new DateOnly(2026, 10, 26));
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal($"vm-backup-{vmId}-20261026", row.Key);
@@ -608,10 +659,11 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VolumeBackup_KeyIsTheVolumeAndTheDay_PayloadCarriesTenantAndProject()
     {
-        Guid volumeId = Guid.NewGuid();
-        Guid tenantId = Guid.NewGuid();
+        Volume volume = AVolume();
+        Guid volumeId = volume.Id;
+        Guid tenantId = volume.TenantId;
 
-        await Queue().EnqueueVolumeBackupAsync(volumeId, "vol-x", "t-0123", tenantId, "mock", new DateOnly(2026, 10, 26));
+        await Queue().EnqueueVolumeBackupAsync(volume, "vol-x", "t-0123", new DateOnly(2026, 10, 26));
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal($"volume-backup-{volumeId}-20261026", row.Key);
@@ -626,16 +678,16 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmBackup_SameDayAfterItRan_IsNotRunAgain()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         DateOnly day = new(2026, 10, 26);
         ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", day);
         ProviderCommand row = Assert.Single(_repo.Rows);
         Guid lease = Guid.NewGuid();
         row.Lease(lease, _clock.GetUtcNow());
         row.Complete(lease, _clock.GetUtcNow());
 
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", day);
 
         Assert.Equal(ProviderCommandStatus.Done, Assert.Single(_repo.Rows).Status);
     }
@@ -643,16 +695,16 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmBackup_SameDayAfterItFailed_RunsAgain()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         DateOnly day = new(2026, 10, 26);
         ProviderCommandQueue queue = Queue();
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", day);
         ProviderCommand row = Assert.Single(_repo.Rows);
         Guid lease = Guid.NewGuid();
         row.Lease(lease, _clock.GetUtcNow());
         row.Fail(lease, "upload refused", retryable: false, _clock.GetUtcNow());
 
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", day);
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", day);
 
         Assert.Equal(ProviderCommandStatus.Pending, Assert.Single(_repo.Rows).Status);
     }
@@ -660,12 +712,13 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmBackup_KeyHasTheGregorianDay_UnderABuddhistCalendarCulture()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
+        Guid vmId = vm.Id;
         System.Globalization.CultureInfo before = System.Globalization.CultureInfo.CurrentCulture;
         System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
         try
         {
-            await Queue().EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 26));
+            await Queue().EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 10, 26));
         }
         finally
         {
@@ -678,11 +731,11 @@ public class ProviderCommandQueueTests
     [Fact]
     public async Task VmBackup_NextDay_IsANewRow()
     {
-        Guid vmId = Guid.NewGuid();
+        Vm vm = AVm();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 26));
-        await queue.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", new DateOnly(2026, 10, 27));
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 10, 26));
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 10, 27));
 
         Assert.Equal(2, _repo.Rows.Count);
     }
@@ -700,22 +753,22 @@ public class ProviderCommandQueueTests
 
     [Theory]
     [MemberData(nameof(StorageAndSnapshotKinds))]
-    public async Task StorageAndSnapshotCommands_CarryTheTenantsProject_AndTheCluster(string kind)
+    public async Task StorageAndSnapshotCommands_CarryTheTenantsProject_AndTheirRowTheCluster(string kind)
     {
-        await EnqueueOne(Queue(), kind, project: "t-0123", cluster: "mock");
+        await EnqueueOne(Queue(), kind, project: "t-0123");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         Assert.Equal(kind, row.Kind);
+        Assert.Equal("mock", row.ClusterId);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal("t-0123", payload.RootElement.GetProperty("projectName").GetString());
-        Assert.Equal("mock", payload.RootElement.GetProperty("clusterId").GetString());
     }
 
     // The worker has no catalog: an offering id is a Titan id the provider cannot use; the pool comes from the cluster.
     [Fact]
     public async Task VolumeCreate_CarriesTheSize_NotTheOfferingId()
     {
-        await Queue().EnqueueVolumeCreateAsync(Guid.NewGuid(), Guid.NewGuid(), "data-1", "mock", 50, "t-0123");
+        await Queue().EnqueueVolumeCreateAsync(AVolume(), Guid.NewGuid(), "t-0123");
 
         ProviderCommand row = Assert.Single(_repo.Rows);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
@@ -723,38 +776,160 @@ public class ProviderCommandQueueTests
         Assert.False(payload.RootElement.TryGetProperty("volumeOfferingId", out _));
     }
 
-    private static Task EnqueueOne(ProviderCommandQueue queue, string kind, string project, string cluster)
+    private static Task EnqueueOne(ProviderCommandQueue queue, string kind, string project)
     {
-        Guid id = Guid.NewGuid();
-        Guid other = Guid.NewGuid();
+        Guid request = Guid.NewGuid();
         switch (kind)
         {
             case ProviderCommandKinds.VolumeCreate:
-                return queue.EnqueueVolumeCreateAsync(id, other, "data-1", cluster, 10, project);
+                return queue.EnqueueVolumeCreateAsync(AVolume(), request, project);
             case ProviderCommandKinds.VolumeAttach:
-                return queue.EnqueueVolumeAttachAsync(id, other, "vol-x", "vm-x", project, cluster);
+                return queue.EnqueueVolumeAttachAsync(AVolume(), request, "vol-x", "vm-x", project);
             case ProviderCommandKinds.VolumeDetach:
-                return queue.EnqueueVolumeDetachAsync(id, other, "vol-x", project, cluster);
+                return queue.EnqueueVolumeDetachAsync(AVolume(), request, "vol-x", project);
             case ProviderCommandKinds.VolumeDelete:
-                return queue.EnqueueVolumeDeleteAsync(id, other, "vol-x", project, cluster);
+                return queue.EnqueueVolumeDeleteAsync(AVolume(), request, "vol-x", project);
             case ProviderCommandKinds.VolumeSnapshotCreate:
-                return queue.EnqueueVolumeSnapshotCreateAsync(id, other, Guid.NewGuid(), "vol-x", project, cluster);
+            {
+                (Volume volume, VolumeSnapshot snapshot) = AVolumeSnapshot();
+                return queue.EnqueueVolumeSnapshotCreateAsync(volume, snapshot, request, "vol-x", project);
+            }
             case ProviderCommandKinds.VolumeSnapshotDelete:
-                return queue.EnqueueVolumeSnapshotDeleteAsync(id, other, Guid.NewGuid(), "vol-x/snap-x", project, cluster);
+            {
+                (Volume volume, VolumeSnapshot snapshot) = AVolumeSnapshot();
+                return queue.EnqueueVolumeSnapshotDeleteAsync(volume, snapshot, request, "vol-x/snap-x", project);
+            }
             case ProviderCommandKinds.VolumeSnapshotRestore:
-                return queue.EnqueueVolumeSnapshotRestoreAsync(id, other, Guid.NewGuid(), "vol-x/snap-x", "restored", project, cluster);
+                return queue.EnqueueVolumeSnapshotRestoreAsync(AVolume(), request, "vol-x/snap-x", project);
             case ProviderCommandKinds.VmSnapshotCreate:
-                return queue.EnqueueVmSnapshotCreateAsync(id, Guid.NewGuid(), other, "vm-x", "before-upgrade", project, cluster);
+            {
+                (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
+                return queue.EnqueueVmSnapshotCreateAsync(vm, snapshot, request, "vm-x", project);
+            }
             case ProviderCommandKinds.VmSnapshotRevert:
-                return queue.EnqueueVmSnapshotRevertAsync(id, Guid.NewGuid(), other, "vm-x/snap-x", project, cluster);
+            {
+                (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
+                return queue.EnqueueVmSnapshotRevertAsync(vm, snapshot, request, "vm-x/snap-x", project);
+            }
             case ProviderCommandKinds.VmSnapshotDelete:
-                return queue.EnqueueVmSnapshotDeleteAsync(id, Guid.NewGuid(), other, "vm-x/snap-x", project, cluster);
+            {
+                (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
+                return queue.EnqueueVmSnapshotDeleteAsync(vm, snapshot, request, "vm-x/snap-x", project);
+            }
             case ProviderCommandKinds.VmBackup:
-                return queue.EnqueueVmBackupAsync(id, "vm-x", project, other, cluster, new DateOnly(2026, 10, 26));
+                return queue.EnqueueVmBackupAsync(AVm(), "vm-x", project, new DateOnly(2026, 10, 26));
             case ProviderCommandKinds.VolumeBackup:
-                return queue.EnqueueVolumeBackupAsync(id, "vol-x", project, other, cluster, new DateOnly(2026, 10, 26));
+                return queue.EnqueueVolumeBackupAsync(AVolume(), "vol-x", project, new DateOnly(2026, 10, 26));
+            case ProviderCommandKinds.NetworkCreate:
+                return queue.EnqueueNetworkCreateAsync(ANetwork(), request, project, null);
+            case ProviderCommandKinds.NetworkDelete:
+                return queue.EnqueueNetworkDeleteAsync(ANetwork(), request, "net-x", project);
+            case ProviderCommandKinds.FirewallRuleCreate:
+            {
+                (Network network, FirewallRule rule) = ARule();
+                return queue.EnqueueFirewallRuleCreateAsync(network, rule, request, project);
+            }
+            case ProviderCommandKinds.FirewallRuleDelete:
+            {
+                (Network network, FirewallRule rule) = ARule();
+                return queue.EnqueueFirewallRuleDeleteAsync(network, rule, request, "acl-x/rule", project);
+            }
+            case ProviderCommandKinds.VmCreate:
+                return queue.EnqueueVmCreateAsync(AVm(), request, Medium, "tpl-a", "net-1", project, null);
+            case ProviderCommandKinds.VmDelete:
+                return queue.EnqueueVmDeleteAsync(AVm(), request, "vm-x", project);
+            case ProviderCommandKinds.VmStop:
+                return queue.EnqueueVmStopAsync(AVm(), request, "vm-x", project);
+            case ProviderCommandKinds.VmStart:
+                return queue.EnqueueVmStartAsync(AVm(), request, "vm-x", project);
+            case ProviderCommandKinds.LoadBalancerCreate:
+                return queue.EnqueueLoadBalancerCreateAsync(ALoadBalancer("mock"), request, project);
+            case ProviderCommandKinds.LoadBalancerUpdate:
+                return queue.EnqueueLoadBalancerUpdateAsync(ALoadBalancer("mock"), request, project);
+            case ProviderCommandKinds.LoadBalancerDelete:
+            {
+                LoadBalancer lb = ALoadBalancer("mock");
+                return queue.EnqueueLoadBalancerDeleteAsync(lb, request, lb.Vip, project);
+            }
+            case ProviderCommandKinds.TemplateSync:
+                return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
             default:
-                throw new ArgumentOutOfRangeException(nameof(kind), kind, "not a storage or snapshot kind");
+                throw new ArgumentOutOfRangeException(nameof(kind), kind, "a kind the queue does not enqueue");
         }
+    }
+
+    // What each worker handler reads (its payload.X reads under OpenViCloud/titan-incus-worker:resource/), and nothing
+    // else: a field no handler reads is a promise of the contract that no one keeps. A few structs there still declare a
+    // field this list drops; it decodes to empty. The cluster is on the row,
+    // which the worker reads from the lease (titan-ops architecture/provider-and-worker.md#provider-command-lease).
+    public static TheoryData<string, string[]> FieldsTheWorkerReads() => new()
+    {
+        { ProviderCommandKinds.NetworkCreate, ["cidr", "defaultEgressPolicy", "defaultIngressPolicy", "name", "networkId", "projectName", "publicIpv6RouterAddress", "publicIpv6Subnet", "requestId"] },
+        { ProviderCommandKinds.NetworkDelete, ["externalNetworkId", "networkId", "projectName", "requestId"] },
+        { ProviderCommandKinds.FirewallRuleCreate, ["cidr", "direction", "endPort", "networkId", "projectName", "protocol", "requestId", "ruleId", "startPort"] },
+        { ProviderCommandKinds.FirewallRuleDelete, ["externalRuleId", "networkId", "projectName", "requestId", "ruleId"] },
+        { ProviderCommandKinds.VmCreate, ["cpuUnits", "diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName", "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"] },
+        { ProviderCommandKinds.VmDelete, ["externalVmId", "projectName", "requestId", "vmId"] },
+        { ProviderCommandKinds.VmStop, ["externalVmId", "projectName", "requestId", "vmId"] },
+        { ProviderCommandKinds.VmStart, ["externalVmId", "projectName", "requestId", "vmId"] },
+        { ProviderCommandKinds.VmSnapshotCreate, ["externalVmId", "projectName", "requestId", "snapshotId", "vmId"] },
+        { ProviderCommandKinds.VmSnapshotRevert, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "vmId"] },
+        { ProviderCommandKinds.VmSnapshotDelete, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "vmId"] },
+        { ProviderCommandKinds.VolumeCreate, ["name", "projectName", "requestId", "sizeGb", "volumeId"] },
+        { ProviderCommandKinds.VolumeAttach, ["externalVmId", "externalVolumeId", "projectName", "requestId", "volumeId"] },
+        { ProviderCommandKinds.VolumeDetach, ["externalVolumeId", "projectName", "requestId", "volumeId"] },
+        { ProviderCommandKinds.VolumeDelete, ["externalVolumeId", "projectName", "requestId", "volumeId"] },
+        { ProviderCommandKinds.VolumeSnapshotCreate, ["externalVolumeId", "projectName", "requestId", "snapshotId", "volumeId"] },
+        { ProviderCommandKinds.VolumeSnapshotDelete, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "volumeId"] },
+        { ProviderCommandKinds.VolumeSnapshotRestore, ["externalSnapshotId", "name", "newVolumeId", "projectName", "requestId"] },
+        { ProviderCommandKinds.VmBackup, ["externalVmId", "projectName", "tenantId", "vmId"] },
+        { ProviderCommandKinds.VolumeBackup, ["externalVolumeId", "projectName", "tenantId", "volumeId"] },
+        { ProviderCommandKinds.LoadBalancerCreate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
+        { ProviderCommandKinds.LoadBalancerUpdate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
+        { ProviderCommandKinds.LoadBalancerDelete, ["externalNetworkId", "loadBalancerId", "projectName", "requestId", "vip"] },
+        { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
+    };
+
+    [Theory]
+    [MemberData(nameof(FieldsTheWorkerReads))]
+    public async Task EveryKind_CarriesExactlyTheFieldsTheWorkerReads(string kind, string[] fields)
+    {
+        await EnqueueOne(Queue(), kind, project: "t-0123");
+
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Assert.Equal(kind, row.Kind);
+        Assert.Equal("mock", row.ClusterId);
+        using JsonDocument payload = JsonDocument.Parse(row.Payload);
+        Assert.Equal(fields, payload.RootElement.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal).ToArray());
+    }
+
+    // A load balancer backend is named by its instance: the worker reads its address from Incus
+    // (OpenViCloud/titan-incus-worker:resource/loadbalancer/spec.go).
+    [Fact]
+    public async Task LoadBalancerBackends_CarryTheInstanceOnly()
+    {
+        await Queue().EnqueueLoadBalancerCreateAsync(ALoadBalancer("mock"), Guid.NewGuid(), "t-0123");
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        JsonElement backend = Assert.Single(payload.RootElement.GetProperty("backends").EnumerateArray());
+        Assert.Equal(["externalVmId"], backend.EnumerateObject().Select(f => f.Name).ToArray());
+    }
+
+    // The worker lower-cases both before it maps them (OpenViCloud/titan-incus-worker:resource/firewall/rule.go AclRule);
+    // the queue writes the rule the network holds, not the customer's spelling.
+    [Fact]
+    public async Task FirewallRuleCreate_CarriesTheRuleTheNetworkHolds()
+    {
+        (Network network, FirewallRule rule) = ARule();
+
+        await Queue().EnqueueFirewallRuleCreateAsync(network, rule, Guid.NewGuid(), "t-0123");
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal("ingress", payload.RootElement.GetProperty("direction").GetString());
+        Assert.Equal("tcp", payload.RootElement.GetProperty("protocol").GetString());
+        Assert.Equal(22, payload.RootElement.GetProperty("startPort").GetInt32());
+        Assert.Equal(22, payload.RootElement.GetProperty("endPort").GetInt32());
+        Assert.Equal("10.0.0.0/8", payload.RootElement.GetProperty("cidr").GetString());
+        Assert.Equal(network.Id.ToString(), payload.RootElement.GetProperty("networkId").GetString());
     }
 }

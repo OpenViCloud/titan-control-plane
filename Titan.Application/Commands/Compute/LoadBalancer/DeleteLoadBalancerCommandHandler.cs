@@ -39,8 +39,8 @@ public class DeleteLoadBalancerCommandHandler(
             await repo.SaveAsync(ct);
             return;
         }
-        await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer.Id, ticket.OperationId, loadBalancer.ExternalNetworkId, ticket.ProviderId,
-            TenantAggregate.ProjectNameFor(loadBalancer.TenantId), loadBalancer.ClusterId, ct);
+        await commands.EnqueueLoadBalancerDeleteAsync(loadBalancer, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(loadBalancer.TenantId), ct);
         await repo.SaveAsync(ct);
     }
 }

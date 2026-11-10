@@ -84,8 +84,8 @@ public class VmDeletionRaceDbTests(PostgresFixture pg)
         var caller = Callers.TenantMember(tenantId);
         return new DeleteVmCommandHandler(new VmRepository(db), caller,
             new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
-            new VolumeRepository(db), new ActivityRecorder(new ActivityEventRepository(db), caller),
-            new VmDeletion(new LoadBalancerRepository(db)));
+            new ActivityRecorder(new ActivityEventRepository(db), caller),
+            new VmDeletion(new LoadBalancerRepository(db), new VolumeRepository(db)));
     }
 
     private static CreateLoadBalancerCommandHandler CreateLoadBalancerHandler(TitanDbContext db, Guid tenantId)

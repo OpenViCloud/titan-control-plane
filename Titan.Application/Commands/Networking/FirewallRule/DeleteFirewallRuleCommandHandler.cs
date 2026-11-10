@@ -52,8 +52,8 @@ public class DeleteFirewallRuleCommandHandler(
             await networkRepo.SaveAsync(ct);
             return;
         }
-        await commands.EnqueueFirewallRuleDeleteAsync(rule.Id, ticket.OperationId, networkId, ticket.ProviderId,
-            TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
+        await commands.EnqueueFirewallRuleDeleteAsync(network, rule, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(network.TenantId), ct);
         await networkRepo.SaveAsync(ct);
     }
 }

@@ -60,9 +60,10 @@ public class AdminResourceServiceTests
             new ListAdminVmsQueryHandler(vmRepo),
             new ListAdminNetworksQueryHandler(netRepo ?? new StubNetworkRepo()),
             new DeleteAdminVmCommandHandler(
-                vmRepo, volumes.Object, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance,
+                vmRepo, audit.Object, wf.Object, user, NullLogger<DeleteAdminVmCommandHandler>.Instance,
                 new Titan.Domain.Services.VmDeletion(Mock.Of<ILoadBalancerRepository>(
-                    r => r.IsBackendAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()) == Task.FromResult(isLoadBalancerBackend)))));
+                    r => r.IsBackendAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()) == Task.FromResult(isLoadBalancerBackend)),
+                    volumes.Object)));
         return (svc, wf, audit);
     }
 
@@ -345,6 +346,9 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
         var items = tenantId is null ? _vms : _vms.Where(v => v.TenantId == tenantId);
         return Task.FromResult(items.ToList());
     }
+
+    public Task<List<Vm>> ListWithAnInstanceAsync(CancellationToken ct = default) =>
+        Task.FromResult(_vms.Where(v => v.HasAnInstance).ToList());
 
     public Task<Vm?> FindByIdAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(_vms.FirstOrDefault(v => v.Id == id));

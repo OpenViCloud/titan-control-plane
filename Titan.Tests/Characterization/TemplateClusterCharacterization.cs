@@ -149,6 +149,7 @@ public class TemplateClusterCharacterization
         _output.WriteLine($"VmTemplate surface\n{root}\nVmTemplateCluster surface\n{entity}");
         Assert.Equal(
         [
+            "public NeedsSyncIn(String): Boolean",
             "public SyncFailedIn(String, Guid, String, String, String): Boolean",
             "public SyncIn(String): Guid",
             "public SyncSucceededIn(String, Guid, String): Boolean",

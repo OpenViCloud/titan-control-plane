@@ -6,7 +6,7 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one network (titan-ops architecture/resource-lifecycle.md#callback-routes): whether Incus
-// has it and its status. Writes current only.
+// has it and its status. Ends no request.
 public class ObserveNetworkEndpoint(ObserveNetworkCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveNetworkBody>
 {

@@ -53,8 +53,7 @@ public class TemplateSyncRunnerTests
         foreach (string clusterId in new[] { Mock, Singapore })
         {
             Guid requestId = t.Clusters.Single(c => c.ClusterId == clusterId).Operation.PendingId!.Value;
-            _commands.Verify(w => w.EnqueueTemplateSyncAsync(t.Id, clusterId, requestId, "a", null, "img", null, 10,
-                It.IsAny<CancellationToken>()), Times.Once);
+            _commands.Verify(w => w.EnqueueTemplateSyncAsync(It.Is<global::Titan.Domain.Aggregates.VmTemplate.VmTemplate>(a47 => a47.Id == t.Id && a47.Name == "a" && a47.OsImageName == "img" && a47.ImageUrl == null), clusterId, requestId, It.IsAny<CancellationToken>()), Times.Once);
         }
     }
 

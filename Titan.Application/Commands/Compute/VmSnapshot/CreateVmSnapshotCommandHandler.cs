@@ -8,6 +8,7 @@ using Titan.Domain.Values;
 // Inside this namespace the bare name `VmSnapshot` binds to the namespace, not to the entity
 // (CS0118, titan-ops architecture/code-structure.md#aggregate-alias). Same for `Vm`. The aliases say which one is meant.
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
+using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Compute.VmSnapshot;
@@ -23,11 +24,10 @@ public class CreateVmSnapshotCommandHandler(
     {
         var callerId = currentUser.RequireTenantId();
         ComputeInput.EnsureVmSnapshotName(command.Name);
-        var vmId = command.VmId;
 
         // Locked: the per-VM cap is counted on the snapshots loaded with the VM, so a second request at the cap waits
         // here and then counts this one (titan-ops architecture/code-structure.md#child-entity).
-        VmAggregate vm = await ComputeOwnership.RequireVmForUpdateAsync(vmRepo, callerId, vmId, ct);
+        VmAggregate vm = await ComputeOwnership.RequireVmForUpdateAsync(vmRepo, callerId, command.VmId, ct);
 
         // The cap is per VM and lives on the tenant (titan-ops architecture/tenancy-and-admin.md#tenant-quota), so it is
         // configurable per customer.
@@ -40,10 +40,10 @@ public class CreateVmSnapshotCommandHandler(
         Guid snapshotId = Guid.NewGuid();
         Guid operationId = Guid.NewGuid();
         string externalVmId = vm.AddSnapshot(snapshotId, operationId, command.Name);
+        VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, snapshotId);
         activity.Stage("vm_snapshot.create_requested", "vm_snapshot", snapshotId, command.Name); // atomic with the save
-        string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotCreateAsync(snapshotId, operationId, vmId, externalVmId, command.Name,
-            projectName, vm.ClusterId, ct);
+        await commands.EnqueueVmSnapshotCreateAsync(vm, snapshot, operationId, externalVmId,
+            TenantAggregate.ProjectNameFor(vm.TenantId), ct);
         await vmRepo.SaveAsync(ct);
 
         return new CreateVmSnapshotCommandResult(snapshotId);

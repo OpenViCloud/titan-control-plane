@@ -6,7 +6,7 @@ using Titan.Application.Commands.Catalog.VmTemplate.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The template reconciler's observation of one cluster (titan-ops architecture/resource-lifecycle.md#callback-routes):
-// whether it holds the alias. Writes current only.
+// whether it holds the alias. Ends no request.
 public class ObserveTemplateEndpoint(ObserveTemplateCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveTemplateBody>
 {

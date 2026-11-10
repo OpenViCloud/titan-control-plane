@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.LoadBalancer.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one load balancer (titan-ops architecture/resource-lifecycle.md#callback-routes):
-// whether its VIP is on its network on Incus. Writes current only.
+// whether its VIP is on its network on Incus. Ends no request.
 public class ObserveLoadBalancerEndpoint(ObserveLoadBalancerCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveLoadBalancerBody>
 {

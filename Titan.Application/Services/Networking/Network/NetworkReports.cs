@@ -41,18 +41,6 @@ public static class NetworkReports
         [FirewallRuleStatus.Deleting] = "firewall_rule.delete_failed",
     };
 
-    public static OperationOutcome ParseOutcome(string outcome)
-    {
-        switch (outcome)
-        {
-            case "Done":
-                return OperationOutcome.Done;
-            case "Failed":
-                return OperationOutcome.Failed;
-            default:
-                throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
-        }
-    }
 
     // The worker sends the Incus status word for word (titan-ops architecture/desired-and-current.md#provider-state-is-verbatim).
     // Matched by name, exactly: Enum.TryParse would also take "1" or "created". Only the five words of Incus pass: Creating,
@@ -141,7 +129,38 @@ public static class NetworkReports
         return ended;
     }
 
-    public static void RecordRuleEnded(FirewallRuleEntity rule, FirewallRuleStatus ended,
+    /// Ends the rule's waiting operation with the report, the status the rule waits in saying which report it is, and
+    /// records its outcome once. False when the report names no waiting operation: nothing is recorded.
+    public static bool EndRuleOperation(NetworkAggregate network, FirewallRuleEntity rule, OperationOutcome outcome,
+        Guid operationId, string? externalId, FirewallRuleStatus? state, string? reason, string? detail,
+        IActivityRecorder activity)
+    {
+        FirewallRuleStatus waiting = rule.Status;
+        bool ended;
+        switch (waiting)
+        {
+            case FirewallRuleStatus.Creating:
+                ended = outcome == OperationOutcome.Done
+                    ? network.FirewallRuleCreateSucceeded(rule.Id, operationId, externalId, state)
+                    : network.FirewallRuleCreateFailed(rule.Id, operationId, externalId, state, reason, detail);
+                break;
+            case FirewallRuleStatus.Deleting:
+                ended = outcome == OperationOutcome.Done
+                    ? network.FirewallRuleDeleteSucceeded(rule.Id, operationId)
+                    : network.FirewallRuleDeleteFailed(rule.Id, operationId, state, reason, detail);
+                break;
+            default:
+                ended = false;
+                break;
+        }
+        if (ended)
+        {
+            RecordRuleEnded(rule, waiting, outcome, activity);
+        }
+        return ended;
+    }
+
+    private static void RecordRuleEnded(FirewallRuleEntity rule, FirewallRuleStatus ended,
         OperationOutcome outcome, IActivityRecorder activity)
     {
         Dictionary<FirewallRuleStatus, string> actions = outcome == OperationOutcome.Done ? RuleDoneAction : RuleFailedAction;

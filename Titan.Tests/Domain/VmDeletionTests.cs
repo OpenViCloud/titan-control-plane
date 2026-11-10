@@ -17,7 +17,13 @@ public class VmDeletionTests
     private readonly Mock<ILoadBalancerRepository> _loadBalancers = new();
     private readonly Tenant _tenant = TestTenant.Active("vd", "kc-vd", "vd@titan.local");
 
-    private VmDeletion Deletion() => new(_loadBalancers.Object);
+    private readonly Mock<IVolumeRepository> _volumes = new();
+
+    public VmDeletionTests() =>
+        _volumes.Setup(v => v.ListAttachedToVmLockedAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
+
+    private VmDeletion Deletion() => new(_loadBalancers.Object, _volumes.Object);
 
     private Vm OnIncus()
     {

@@ -176,8 +176,8 @@ public class VmEndpointBindingTests
             .ReturnsAsync(new List<Titan.Domain.Aggregates.Volume.Volume>());
         var handler = new DeleteVmCommandHandler(
             _repo.Object, _currentUser.Object, commands.Object,
-            volumes.Object, new Titan.Tests.Fakes.FakeActivityRecorder(),
-            new Titan.Domain.Services.VmDeletion(new Mock<ILoadBalancerRepository>().Object));
+            new Titan.Tests.Fakes.FakeActivityRecorder(),
+            new Titan.Domain.Services.VmDeletion(new Mock<ILoadBalancerRepository>().Object, volumes.Object));
         // The delete reads the VM with its row locked (titan-ops architecture/domain-services.md#cross-aggregate-lock).
         _repo.Setup(r => r.FindByIdForUpdateAsync(VmId, default)).Returns(() => _repo.Object.FindByIdAsync(VmId, default));
         var ep = Factory.Create<DeleteVmEndpoint>(WithVmIdRoute, handler);

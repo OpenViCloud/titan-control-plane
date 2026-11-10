@@ -163,6 +163,20 @@ public class VmRepositoryStateTests
             watched.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 
+    // A backup exports what Incus holds: every VM with an instance, a stopped one and a create that gave up after the
+    // instance was made included; not one Incus lost nor one whose delete ended (titan-ops features/backup/design.md#incus-backup).
+    [Fact]
+    public async Task Backup_ListsEveryVmWithAnInstance_NotOneLostNorDeleted()
+    {
+        using var db = NewDb();
+        VmRepository repo = await SeededAsync(db);
+
+        List<Vm> held = await repo.ListWithAnInstanceAsync();
+
+        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "ready", "running", "stopped" },
+            held.Select(v => v.Name).OrderBy(n => n).ToArray());
+    }
+
     // The repository writes each condition in LINQ; the rule is the plain bool on Vm
     // (titan-ops architecture/domain-methods.md#plain-code). Every shape through both, so the two cannot drift apart.
     [Fact]
@@ -178,6 +192,7 @@ public class VmRepositoryStateTests
         Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
         Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListAllAsync(null)));
         Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("cluster-a")));
+        Assert.Equal(ByName(shapes.Where(v => v.HasAnInstance)), ByName(await repo.ListWithAnInstanceAsync()));
         foreach (Vm vm in shapes)
         {
             Assert.True(!vm.IsDeleted == await repo.ExistsByNameAsync(Tenant, vm.Name), vm.Name);
