@@ -70,7 +70,7 @@ public class CreateVmCommandHandler(
         var externalNetworkId = network.ProviderIdForVm(clusterId);
 
         // Resolve the sizing tier here (titan-ops features/catalog/design.md#vm-offering-sizing): the worker has no access to Titan's catalog, so
-        // the control plane passes the concrete CPU/vCPU/memory it sets on the instance.
+        // the control plane passes the concrete vCPU and memory it sets on the instance.
         var offering = await offeringRepo.FindByIdAsync(req.VmOfferingId, ct)
             ?? throw new NotFoundException("VM_OFFERING_NOT_FOUND",
                 $"VM offering '{req.VmOfferingId}' not found.");

@@ -196,7 +196,6 @@ public class VmOfferingServiceTests
 
     private const string Actor = "kc-admin-1";
 
-    // CPU units follow the catalog rule CPU = vCPU × 0.5 so the fixtures stay honest.
     private static VmOffering Offering(string id, int vcpu, int memoryMb) =>
         VmOffering.Create(id, id.ToUpperInvariant(), vcpu, memoryMb, DefaultPrice);
 

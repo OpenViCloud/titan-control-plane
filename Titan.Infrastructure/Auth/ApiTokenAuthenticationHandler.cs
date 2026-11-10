@@ -44,7 +44,7 @@ public class ApiTokenAuthenticationHandler(
         }
 
         // A member who left (or whose tenant changed) must not keep acting through an old token. Without this a
-        // `sub` with no member would reach BootstrapTenant, which needs an email claim the token does not carry.
+        // `sub` with no member would reach the first-login bootstrap, which needs an email claim the token does not carry.
         var membership = await tenants.FindTenantByMemberAsync(token.KeycloakUserId, Context.RequestAborted);
         if (membership == null || membership.Value.TenantId != token.TenantId)
         {

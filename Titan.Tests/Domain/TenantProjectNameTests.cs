@@ -15,7 +15,7 @@ public class TenantProjectNameTests
         Assert.Equal(expected, Tenant.ProjectNameFor(t.Id));
     }
 
-    [Fact] // the oracle is the id alone: name, email and status do not take part
+    [Fact] // the oracle is the id alone: name and status do not take part
     public void ProjectName_DoesNotDependOnAnythingButTheId()
     {
         var t = Tenant.CreatePending("acme", "owner-1");

@@ -27,7 +27,7 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
         SeedOfferings(builder);
     }
 
-    // CPU = vCPU × 0.5, the 2:1 overcommit ratio. HasData needs constant values: no Guid.NewGuid()/UtcNow.
+    // HasData needs constant values: no Guid.NewGuid()/UtcNow.
     //
     // Positioning: half of Vultr for the equivalent instance.
     // Source: Vultr's public plan API (api.vultr.com/v2/plans?type=vc2), converted at

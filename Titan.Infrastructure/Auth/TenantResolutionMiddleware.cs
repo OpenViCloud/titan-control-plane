@@ -32,7 +32,7 @@ public class TenantResolutionMiddleware(
             var username = context.User.FindFirst("preferred_username")?.Value
                         ?? context.User.FindFirst("email")?.Value
                         ?? keycloakUserId;
-            // The claim is not stored; it is still required so that no tenant is named after `sub`
+            // The tenant keeps no email; the claim is still required, so the name above never falls back to `sub`
             // (titan-ops architecture/tenancy-and-admin.md#tenant-name-taken).
             bool hasEmail = context.User.FindFirst("email")?.Value != null;
             if (!hasEmail)

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Titan.Infrastructure.Migrations
 {
     /// Drops ten columns that no code and no view read. Their values are not kept: Down brings the columns back with a
-    /// default, and the seed values of the catalog rows.
+    /// default (finished_at as null), and the seed values of the catalog rows.
     public partial class AggregateFieldsClean : Migration
     {
         /// <inheritdoc />
