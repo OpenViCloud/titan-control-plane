@@ -23,7 +23,7 @@ public class BootstrapTenantCommandHandler(ITenantRepository repo)
             return;
         }
 
-        TenantAggregate tenant = TenantAggregate.CreatePending(command.Username, keycloakUserId, command.Email);
+        TenantAggregate tenant = TenantAggregate.CreatePending(command.Username, keycloakUserId);
         repo.Add(tenant);
         try
         {

@@ -23,7 +23,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoCreatesOneBelowTheCap_OneIs202_TheOtherIsQuotaExceeded_AndTheCapHolds()
     {
-        Tenant tenant = TestTenant.Active($"vms-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vms-race@titan.local");
+        Tenant tenant = TestTenant.Active($"vms-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         string offeringId = await SeedOfferingAsync();
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..20]); // on Incus, running: snapshottable
@@ -64,7 +64,7 @@ public class VmSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoCreatesTwoBelowTheCap_OneIs202_TheOtherIsInvalidStatus_AndTheVmIsStoredSnapshotting()
     {
-        Tenant tenant = TestTenant.Active($"vms-snap-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vms-snap@titan.local");
+        Tenant tenant = TestTenant.Active($"vms-snap-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         string offeringId = await SeedOfferingAsync();
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], offeringId, "tpl-1", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..20]);

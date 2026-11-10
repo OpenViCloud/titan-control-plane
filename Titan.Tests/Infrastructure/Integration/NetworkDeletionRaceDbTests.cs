@@ -31,7 +31,7 @@ public class NetworkDeletionRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task DeleteAndAVmCreateOnTheSameNetwork_OneIsRefused_AndNoVmLivesOnADeletedNetwork()
     {
-        Tenant tenant = TestTenant.Active($"nd-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "nd-race@titan.local");
+        Tenant tenant = TestTenant.Active($"nd-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         Network network = TestAggregates.Network(tenant, $"net-{Guid.NewGuid():N}"[..12], Cluster);
         network.MarkActive($"net{Guid.NewGuid():N}"[..20], "10.0.0.0/24", "10.0.0.1");
         VmTemplate template = VmTemplate.Create($"tpl-{Guid.NewGuid():N}"[..12], null, "Ubuntu-22.04", 20, "l");

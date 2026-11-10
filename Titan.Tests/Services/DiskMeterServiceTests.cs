@@ -28,7 +28,7 @@ public class DiskMeterServiceTests
     private readonly FakeUsageRecordRepository _usageRepo = new();
 
     public DiskMeterServiceTests() =>
-        _offerings.Seed(VolumeOffering.Create(OfferingId, "Standard", 0, true, Rate));
+        _offerings.Seed(VolumeOffering.Create(OfferingId, "Standard", Rate));
 
     private DiskMeterService CreateService(int intervalMinutes = 10) => new(
         _volumeRepo.Object, _usageRepo, _offerings,

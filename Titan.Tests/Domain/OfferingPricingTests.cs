@@ -13,7 +13,7 @@ public class OfferingPricingTests
     [Fact]
     public void VmOffering_CarriesItsOwnPrice()
     {
-        var offering = VmOffering.Create("m", "Medium", 1.0m, 2, 4096, pricePerHour: 311.256m);
+        var offering = VmOffering.Create("m", "Medium", 2, 4096, pricePerHour: 311.256m);
 
         Assert.Equal(311.256m, offering.PricePerHour.PerUnit);
     }
@@ -27,7 +27,7 @@ public class OfferingPricingTests
     public void VmOffering_RejectsNonPositivePrice(decimal price)
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            VmOffering.Create("m", "Medium", 1.0m, 2, 4096, price));
+            VmOffering.Create("m", "Medium", 2, 4096, price));
 
         Assert.Equal("pricePerHour", ex.ParamName);
     }
@@ -37,7 +37,7 @@ public class OfferingPricingTests
     [Fact]
     public void VmOffering_PreservesSixDecimalPlaces()
     {
-        var offering = VmOffering.Create("s", "Small", 0.5m, 1, 2048, 161.388001m);
+        var offering = VmOffering.Create("s", "Small", 1, 2048, 161.388001m);
 
         Assert.Equal(161.388001m, offering.PricePerHour.PerUnit);
     }
@@ -47,7 +47,7 @@ public class OfferingPricingTests
     [Fact]
     public void VolumeOffering_CarriesItsOwnPrice()
     {
-        var offering = VolumeOffering.Create("standard", "Standard", 0, true, pricePerGbPerHour: 1.57914m);
+        var offering = VolumeOffering.Create("standard", "Standard", pricePerGbPerHour: 1.57914m);
 
         Assert.Equal(1.57914m, offering.PricePerGbPerHour.PerUnit);
     }
@@ -58,7 +58,7 @@ public class OfferingPricingTests
     public void VolumeOffering_RejectsNonPositivePrice(decimal price)
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            VolumeOffering.Create("standard", "Standard", 0, true, price));
+            VolumeOffering.Create("standard", "Standard", price));
 
         Assert.Equal("pricePerGbPerHour", ex.ParamName);
     }
@@ -107,7 +107,7 @@ public class OfferingPricingTests
     [Fact]
     public void VmOffering_ChangePrice_ReplacesPrice()
     {
-        var offering = VmOffering.Create("m", "Medium", 1.0m, 2, 4096, 311.256m);
+        var offering = VmOffering.Create("m", "Medium", 2, 4096, 311.256m);
 
         offering.ChangePrice(400_000m);
 
@@ -122,7 +122,7 @@ public class OfferingPricingTests
     [InlineData(-5)]
     public void VmOffering_ChangePrice_RejectsNonPositive(decimal price)
     {
-        var offering = VmOffering.Create("m", "Medium", 1.0m, 2, 4096, 311.256m);
+        var offering = VmOffering.Create("m", "Medium", 2, 4096, 311.256m);
 
         var ex = Assert.Throws<ArgumentException>(() => offering.ChangePrice(price));
 

@@ -94,7 +94,7 @@ public class RefreshBackupStatusCommandHandler(
         }
 
         ReplaceRows(known, snapshot.Folders.Select(f => new SeenBackup(BackupRecord.PostgresKind,
-            BackupLayout.PostgresResourceName, f.Key, f.TakenAt, f.Size, f.Status, null)), now);
+            BackupLayout.PostgresResourceName, f.Key, f.TakenAt, f.Size, f.Status, null)));
         observation.RecordRead(snapshot.Outcome, snapshot.LastWalAt, now);
     }
 
@@ -131,12 +131,12 @@ public class RefreshBackupStatusCommandHandler(
 
         // A VM's or volume's archive is always complete: the bucket shows an upload only once it has finished.
         ReplaceRows(known, kept.Select(k => new SeenBackup(k.Key.Kind, k.Key.ResourceId.ToString(), k.Key.BackupKey,
-            k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, k.Key.TenantId)), now);
+            k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, k.Key.TenantId)));
         observation.RecordRead(BackupReadOutcome.Read, null, now);
     }
 
     // The bucket is the truth: a row it no longer shows goes, a backup it shows is added or brought up to date.
-    private void ReplaceRows(List<BackupRecord> known, IEnumerable<SeenBackup> seen, DateTimeOffset now)
+    private void ReplaceRows(List<BackupRecord> known, IEnumerable<SeenBackup> seen)
     {
         List<SeenBackup> shown = seen.ToList();
         foreach (BackupRecord gone in known.Where(r => !shown.Any(b => IsRowOf(r, b))))
@@ -149,11 +149,11 @@ public class RefreshBackupStatusCommandHandler(
             if (existing is null)
             {
                 records.Add(BackupRecord.Create(backup.Kind, backup.ResourceName, backup.BackupKey, backup.TakenAt,
-                    backup.Size, backup.Status, now, backup.TenantId));
+                    backup.Size, backup.Status, backup.TenantId));
             }
             else
             {
-                existing.Observe(backup.TakenAt, backup.Size, backup.Status, now);
+                existing.Observe(backup.TakenAt, backup.Size, backup.Status);
             }
         }
     }

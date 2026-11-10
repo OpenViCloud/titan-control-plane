@@ -34,7 +34,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
         return vm;
@@ -195,7 +195,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('{VolumeOffering}', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.volume_offerings (id, name, price_per_gb_per_hour) VALUES ('{VolumeOffering}', 'v', 0.0001) ON CONFLICT (id) DO NOTHING");
         db.Volumes.Add(volume);
         await db.SaveChangesAsync();
         return volume;
@@ -458,7 +458,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
         return vm;
@@ -759,7 +759,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         using IServiceScope scope = factory.Services.CreateScope();
         TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         db.VmTemplates.Add(template);
         await db.SaveChangesAsync();
         return template;

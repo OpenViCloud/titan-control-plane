@@ -140,6 +140,7 @@ public class TemplateClusterCharacterization
 
     // The change in one list: the two report methods answer a bool and SyncIn answers the sync's id, the status and the operation replace the two
     // existence axes, the derived transition and the base class's pending operation.
+    // UpdatedAt left both types: nothing read it.
     [Fact]
     public void TemplateCluster_SurfaceOfFrozenCopyAgainstLive_IsExactlyTheChange()
     {
@@ -159,6 +160,7 @@ public class TemplateClusterCharacterization
             "public FailSyncOperation(String, Guid, String, String, String): VmTemplateOperationKind?",
             "public FinishSyncOperation(String, Guid, String): VmTemplateOperationKind?",
             "public SyncIn(String): PendingOperation<VmTemplateOperationKind>",
+            "public UpdatedAt: DateTimeOffset",
         ], root.Removed);
         Assert.Equal(
         [
@@ -183,6 +185,7 @@ public class TemplateClusterCharacterization
             "public Pending: PendingOperation<VmTemplateOperationKind>",
             "public PendingOperationId: Guid?",
             "public Transition: VmTemplateTransition?",
+            "public UpdatedAt: DateTimeOffset",
         ], entity.Removed);
     }
 }

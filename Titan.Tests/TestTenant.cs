@@ -7,12 +7,12 @@ namespace Titan.Tests;
 internal static class TestTenant
 {
     /// Default TenantQuota: 10 VMs, 10 volumes, 3 snapshots per VM/volume, 20 firewall rules, 10 public IPv6.
-    internal static Tenant WithRoomToSpare() => Active("test-tenant", "kc-test", "test@titan.local");
+    internal static Tenant WithRoomToSpare() => Active("test-tenant", "kc-test");
 
     /// An approved tenant: approval is activation (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
-    internal static Tenant Active(string name, string ownerKeycloakId, string email, int maxVms = 10, int maxNetworks = 1)
+    internal static Tenant Active(string name, string ownerKeycloakId, int maxVms = 10, int maxNetworks = 1)
     {
-        Tenant tenant = Tenant.CreatePending(name, ownerKeycloakId, email, maxVms, maxNetworks);
+        Tenant tenant = Tenant.CreatePending(name, ownerKeycloakId, maxVms, maxNetworks);
         tenant.Approve();
         return tenant;
     }

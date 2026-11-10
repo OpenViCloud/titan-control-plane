@@ -88,7 +88,7 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
     public async Task EveryLiveNetworkWithASubnet_HoldsExactlyOneRoute_AndEveryHeldRouteBelongsToOne()
     {
         string cluster = $"cluster-{Guid.NewGuid():N}";
-        Tenant tenant = TestTenant.Active($"route-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "route@titan.local", maxNetworks: 10);
+        Tenant tenant = TestTenant.Active($"route-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", maxNetworks: 10);
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             seed.Tenants.Add(tenant);

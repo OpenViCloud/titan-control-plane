@@ -41,7 +41,6 @@ public class VmOfferingServiceTests
         var dto = Assert.Single(await svc.ListAsync());
 
         Assert.Equal("m", dto.Id);
-        Assert.Equal(1.0m, dto.Cpu);      // CPU = vCPU × 0.5 — 2:1 overcommit (titan-ops features/catalog/design.md#vm-offering-sizing)
         Assert.Equal(2, dto.Vcpu);
         Assert.Equal(4096, dto.MemoryMb);
     }
@@ -64,14 +63,7 @@ public class VmOfferingServiceTests
     public void Create_NonPositiveSizing_Throws(int vcpu, int memoryMb)
     {
         Assert.Throws<ArgumentException>(() =>
-            VmOffering.Create("bad", "Bad", 1.0m, vcpu, memoryMb, DefaultPrice));
-    }
-
-    [Fact]
-    public void Create_NonPositiveCpuUnits_Throws()
-    {
-        Assert.Throws<ArgumentException>(() =>
-            VmOffering.Create("bad", "Bad", 0m, 2, 4096, DefaultPrice));
+            VmOffering.Create("bad", "Bad", vcpu, memoryMb, DefaultPrice));
     }
 
     // ── UpdatePriceAsync (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering) ───────────────────────────────────
@@ -206,7 +198,7 @@ public class VmOfferingServiceTests
 
     // CPU units follow the catalog rule CPU = vCPU × 0.5 so the fixtures stay honest.
     private static VmOffering Offering(string id, int vcpu, int memoryMb) =>
-        VmOffering.Create(id, id.ToUpperInvariant(), vcpu * 0.5m, vcpu, memoryMb, DefaultPrice);
+        VmOffering.Create(id, id.ToUpperInvariant(), vcpu, memoryMb, DefaultPrice);
 
     // Any positive number — these tests are about ordering and DTO shape, not about the price table.
     private const decimal DefaultPrice = 311.256m;

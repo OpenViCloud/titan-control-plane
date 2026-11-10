@@ -109,7 +109,7 @@ public class TenantResolutionMiddlewareTests
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
 
-        VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "alice" && t.Email == "alice@example.com");
+        VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "alice");
     }
 
     // titan-ops architecture/tenancy-and-admin.md#approval-is-activation: a first login of an account with the realm role
@@ -165,7 +165,7 @@ public class TenantResolutionMiddlewareTests
 
         await CreateMiddleware().InvokeAsync(ctx, _next.Object);
 
-        VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "bob" && t.Email == "bob@openvicloud.com"
+        VerifyBootstrapped(t => OwnedBy(t, "user-1") && t.Name == "bob"
                                 && t.Status == TenantStatus.PendingApproval);
         VerifyNoWalletOpened();
     }
@@ -335,7 +335,7 @@ public class TenantResolutionMiddlewareTests
     [Fact]
     public async Task PendingApproval_DeclaredAccount_IsApproved_WithItsWallet_InOneSave_AndPassesThrough()
     {
-        var pending = Tenant.CreatePending("bob", "user-1", "bob@openvicloud.com");
+        var pending = Tenant.CreatePending("bob", "user-1");
         _repo.SetupSequence(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
              .ReturnsAsync((pending.Id, TenantStatus.PendingApproval))
              .ReturnsAsync((pending.Id, TenantStatus.Active));
@@ -362,7 +362,7 @@ public class TenantResolutionMiddlewareTests
     [Fact]
     public async Task PendingApproval_WhoseWalletIsAlreadyOpen_IsApproved_WithoutASecondWallet()
     {
-        var pending = Tenant.CreatePending("bob", "user-1", "bob@openvicloud.com");
+        var pending = Tenant.CreatePending("bob", "user-1");
         _repo.SetupSequence(r => r.FindTenantByMemberAsync("user-1", It.IsAny<CancellationToken>()))
              .ReturnsAsync((pending.Id, TenantStatus.PendingApproval))
              .ReturnsAsync((pending.Id, TenantStatus.Active));

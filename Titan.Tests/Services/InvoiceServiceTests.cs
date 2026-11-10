@@ -1014,7 +1014,7 @@ public class InvoiceServiceTests
     private static Titan.Domain.Aggregates.Tenant.Tenant MakeTenant(
         Guid id, string name, long? debtCeiling = null)
     {
-        var tenant = TestTenant.Active(name, $"owner-{name}", $"{name}@x.com");
+        var tenant = TestTenant.Active(name, $"owner-{name}");
         if (debtCeiling.HasValue)
             tenant.UpdateDebtCeiling(debtCeiling.Value);
         typeof(Titan.Domain.Aggregates.Tenant.Tenant)

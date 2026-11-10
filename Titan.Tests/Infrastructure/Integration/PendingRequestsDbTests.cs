@@ -27,7 +27,7 @@ public class PendingRequestsDbTests(PostgresFixture pg)
         vm.MarkRunning($"ext-{vm.Id:N}", "10.0.0.5");
         await using TitanDbContext db = pg.NewDbContext();
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('{Offering}', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
         return vm;

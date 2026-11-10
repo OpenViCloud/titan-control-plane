@@ -42,7 +42,7 @@ public class ListDiskBackupsQueryTests
     }
 
     private void Backup(string kind, Guid id, Guid tenantId, TimeSpan age, long size = 100) =>
-        _records.Rows.Add(BackupRecord.Create(kind, id.ToString(), $"k{age.Ticks}", Now - age, size, BackupRecordStatus.Complete, Now, tenantId));
+        _records.Rows.Add(BackupRecord.Create(kind, id.ToString(), $"k{age.Ticks}", Now - age, size, BackupRecordStatus.Complete, tenantId));
 
     private static Vm RunningVm(string name)
     {

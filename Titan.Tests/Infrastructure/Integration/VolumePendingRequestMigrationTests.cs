@@ -173,7 +173,7 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, 's', 'Exists', {desiredExistence}, {
         await using (TitanDbContext db = NewDbContext())
         {
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('vol-mig', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
+                "INSERT INTO core.volume_offerings (id, name, price_per_gb_per_hour) VALUES ('vol-mig', 'v', 0.0001) ON CONFLICT (id) DO NOTHING");
             volume.CreateSucceeded(volume.Operation.PendingId!.Value, "vol-after", false, null, false);
             volume.AddSnapshot(Guid.NewGuid(), "s");
             db.Volumes.Add(volume);

@@ -46,7 +46,7 @@ public class VmEndpointBindingTests
     }
 
     private static Titan.Domain.Aggregates.Tenant.Tenant ActiveTenant() =>
-        TestTenant.Active("acme", "owner-1", "admin@acme.com");
+        TestTenant.Active("acme", "owner-1");
 
     // A VM owned by TenantId and already Running, so the ownership check passes and Stop has a
     // legal state to hand an external id out of.

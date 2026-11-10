@@ -33,7 +33,7 @@ public class ProviderCommandRepositoryStateTests
     private static List<ProviderCommand> EveryShape()
     {
         ProviderCommand done = Leased("done", Now.AddHours(-1));
-        done.Complete(done.LeaseId!.Value, Now.AddHours(-1));
+        done.Complete(done.LeaseId!.Value);
         ProviderCommand failed = Leased("failed", Now.AddHours(-1));
         failed.Fail(failed.LeaseId!.Value, "gave up", retryable: false, Now.AddHours(-1));
         ProviderCommand retryWaiting = Leased("retry-waiting", Now);

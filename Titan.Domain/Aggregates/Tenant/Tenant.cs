@@ -6,7 +6,6 @@ public class Tenant : IAggregateRoot
 {
     public Guid Id { get; private set; }
     public string Name { get; private set; } = default!;
-    public string Email { get; private set; } = default!;
     public TenantStatus Status { get; private set; }
     /// titan-ops architecture/tenancy-and-admin.md#tenant-quota — read by TenantQuotaGate in Titan.Application.
     public TenantQuota Quota { get; private set; } = TenantQuota.Default;
@@ -40,13 +39,12 @@ public class Tenant : IAggregateRoot
 
     // Every signup lands here; the middleware approves one whose account has the realm role auto-approve in the same operation,
     // every other waits for an admin (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
-    public static Tenant CreatePending(string name, string ownerKeycloakId, string email, int maxVms = 10, int maxNetworks = 1)
+    public static Tenant CreatePending(string name, string ownerKeycloakId, int maxVms = 10, int maxNetworks = 1)
     {
         var tenant = new Tenant
         {
             Id = Guid.NewGuid(),
             Name = name,
-            Email = email,
             Status = TenantStatus.PendingApproval,
             Quota = TenantQuota.Default.WithVmAndNetworkCaps(maxVms, maxNetworks),
             DebtCeiling = DefaultDebtCeiling,

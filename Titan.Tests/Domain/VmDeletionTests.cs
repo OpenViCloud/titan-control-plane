@@ -15,7 +15,7 @@ namespace Titan.Tests.Domain;
 public class VmDeletionTests
 {
     private readonly Mock<ILoadBalancerRepository> _loadBalancers = new();
-    private readonly Tenant _tenant = TestTenant.Active("vd", "kc-vd", "vd@titan.local");
+    private readonly Tenant _tenant = TestTenant.Active("vd", "kc-vd");
 
     private readonly Mock<IVolumeRepository> _volumes = new();
 

@@ -30,9 +30,9 @@ public class VolumeRequestsDbTests(PostgresFixture pg)
     private async Task SeedOfferingsAsync(TitanDbContext db)
     {
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('{VmOffering}', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('{VmOffering}', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         await db.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO core.volume_offerings (id, name, size_gb, is_customized, price_per_gb_per_hour) VALUES ('{VolumeOffering}', 'v', 10, false, 0.0001) ON CONFLICT (id) DO NOTHING");
+            $"INSERT INTO core.volume_offerings (id, name, price_per_gb_per_hour) VALUES ('{VolumeOffering}', 'v', 0.0001) ON CONFLICT (id) DO NOTHING");
     }
 
     // A VM on Incus and a volume attached to it, nothing waiting on the volume; the VM waits on its delete when asked.

@@ -32,6 +32,13 @@ public sealed class VmTemplateClusterSingleStatusMigrationTests : IAsyncLifetime
         await db.GetService<IMigrator>().MigrateAsync(migration);
     }
 
+    // The model of today writes the schema of today, not the one this migration left.
+    private async Task MigrateToLatestAsync()
+    {
+        await using TitanDbContext db = NewDbContext();
+        await db.Database.MigrateAsync();
+    }
+
     // The migrations seed the catalog: the tests put their cluster rows under its first template.
     private async Task<Guid> SeededTemplateAsync()
     {
@@ -204,7 +211,7 @@ VALUES ({templateId}, {clusterId}, {currentExistence}, 'Exists', {alias}, {reque
     [Fact]
     public async Task AClusterWrittenNow_StoresItsStatusAndObservedStateByName()
     {
-        await MigrateToAsync(ThisMigration);
+        await MigrateToLatestAsync();
         Guid templateId = await SeededTemplateAsync();
         Guid request;
         await using (TitanDbContext db = NewDbContext())

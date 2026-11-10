@@ -24,7 +24,7 @@ public class ApiTokenAuthTests(RealHostFactory factory) : IClassFixture<RealHost
     private async Task<Tenant> SeedTenantAsync(Action<Tenant>? change = null, bool approve = true)
     {
         string kc = "kc-" + Guid.NewGuid();
-        Tenant tenant = Tenant.CreatePending("t-" + Guid.NewGuid().ToString("N")[..8], kc, kc + "@titan.test");
+        Tenant tenant = Tenant.CreatePending("t-" + Guid.NewGuid().ToString("N")[..8], kc);
         if (approve)
         {
             tenant.Approve();

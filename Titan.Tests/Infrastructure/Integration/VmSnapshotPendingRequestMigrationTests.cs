@@ -171,7 +171,7 @@ UPDATE core.provider_commands SET status = 'Done' WHERE key = {"vm-snapshot-reve
         await using (TitanDbContext db = NewDbContext())
         {
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+                "INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
             db.Vms.Add(vm);
             await db.SaveChangesAsync();
         }

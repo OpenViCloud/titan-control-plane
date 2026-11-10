@@ -49,7 +49,7 @@ public class StateFieldJsonTests
     [Fact]
     public void Tenant_StatusIsSentAsItsName()
     {
-        var tenant = Tenant.CreatePending("bob", "user-1", "bob@openvicloud.com");
+        var tenant = Tenant.CreatePending("bob", "user-1");
         tenant.Approve();
 
         Assert.Equal("Active", Json(TenantQueryResult.From(tenant)).GetProperty("status").GetString());

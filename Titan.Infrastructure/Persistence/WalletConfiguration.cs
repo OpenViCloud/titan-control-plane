@@ -24,8 +24,6 @@ public class WalletConfiguration : IEntityTypeConfiguration<Wallet>
         // `AND version = @loaded` on every wallet UPDATE: a payer who read a stale balance loses at commit
         // instead of overdrawing (titan-ops architecture/money-and-wallet.md#version-token).
         builder.Property(w => w.Version).HasColumnName("version").IsConcurrencyToken();
-        builder.Property(w => w.CreatedAt).HasColumnName("created_at").IsRequired();
-        builder.Property(w => w.UpdatedAt).HasColumnName("updated_at").IsRequired();
 
         // One wallet per tenant, unfiltered: a wallet is never deleted or closed. TenantActivation opens one under the
         // tenant's row lock, so two activations take turns; the index still refuses a second wallet

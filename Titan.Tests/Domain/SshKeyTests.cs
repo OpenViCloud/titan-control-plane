@@ -9,7 +9,7 @@ public class SshKeyTests
     [Fact]
     public void Create_KeepsTheTenantTheNameAndTheParsedKey()
     {
-        var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        var tenant = TestTenant.Active("acme", "kc-1");
 
         SshKey key = SshKey.Create(tenant.Id, "  laptop  ", SshPublicKeyTests.Ed25519);
 
@@ -24,7 +24,7 @@ public class SshKeyTests
     [Fact]
     public void Create_MalformedKey_IsRefused()
     {
-        var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        var tenant = TestTenant.Active("acme", "kc-1");
 
         Assert.Equal("INVALID_SSH_KEY",
             Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, "laptop", "ssh-ed25519 nope")).Code);
@@ -35,7 +35,7 @@ public class SshKeyTests
     [InlineData("   ")]
     public void Create_BlankName_IsRefused(string name)
     {
-        var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        var tenant = TestTenant.Active("acme", "kc-1");
 
         Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, name, SshPublicKeyTests.Ed25519));
     }
@@ -43,7 +43,7 @@ public class SshKeyTests
     [Fact]
     public void Create_NameLongerThan64_IsRefused()
     {
-        var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        var tenant = TestTenant.Active("acme", "kc-1");
 
         Assert.Throws<BusinessException>(() => SshKey.Create(tenant.Id, new string('k', 65), SshPublicKeyTests.Ed25519));
         Assert.NotNull(SshKey.Create(tenant.Id, new string('k', 64), SshPublicKeyTests.Ed25519));

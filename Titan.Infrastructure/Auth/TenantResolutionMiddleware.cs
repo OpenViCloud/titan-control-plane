@@ -32,10 +32,15 @@ public class TenantResolutionMiddleware(
             var username = context.User.FindFirst("preferred_username")?.Value
                         ?? context.User.FindFirst("email")?.Value
                         ?? keycloakUserId;
-            var email = context.User.FindFirst("email")?.Value
-                ?? throw new InvalidOperationException($"JWT for user {keycloakUserId} is missing required 'email' claim.");
+            // The claim is not stored; it is still required so that no tenant is named after `sub`
+            // (titan-ops architecture/tenancy-and-admin.md#tenant-name-taken).
+            bool hasEmail = context.User.FindFirst("email")?.Value != null;
+            if (!hasEmail)
+            {
+                throw new InvalidOperationException($"JWT for user {keycloakUserId} is missing required 'email' claim.");
+            }
             await bootstrapTenant.HandleAsync(
-                new BootstrapTenantCommand(keycloakUserId, username, email), context.RequestAborted);
+                new BootstrapTenantCommand(keycloakUserId, username), context.RequestAborted);
             result = await tenantRepository.FindTenantByMemberAsync(keycloakUserId, context.RequestAborted);
         }
 

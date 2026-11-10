@@ -6,7 +6,7 @@ using ProviderCommandAggregate = Titan.Domain.Aggregates.ProviderCommand.Provide
 
 namespace Titan.Application.Commands.Platform.ProviderCommand;
 
-public class CompleteProviderCommandCommandHandler(IProviderCommandRepository repository, TimeProvider clock)
+public class CompleteProviderCommandCommandHandler(IProviderCommandRepository repository)
 {
     public async Task HandleAsync(CompleteProviderCommandCommand command, CancellationToken ct = default)
     {
@@ -16,7 +16,7 @@ public class CompleteProviderCommandCommandHandler(IProviderCommandRepository re
         {
             return;
         }
-        leased.Complete(command.LeaseId, clock.GetUtcNow());
+        leased.Complete(command.LeaseId);
         await repository.SaveChangesAsync(ct);
     }
 }

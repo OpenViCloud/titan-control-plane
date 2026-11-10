@@ -22,7 +22,6 @@ public class WalletTests
         Assert.Equal("VND", wallet.Currency);
         Assert.Equal(0L, wallet.AvailableAmount);
         Assert.NotEqual(Guid.Empty, wallet.Id);
-        Assert.Equal(wallet.CreatedAt, wallet.UpdatedAt);
     }
 
     [Theory]

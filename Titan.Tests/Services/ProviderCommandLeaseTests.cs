@@ -79,7 +79,7 @@ public class ProviderCommandLeaseTests
         ProviderCommand command = Seed("vm-provision-1", ProviderCommandKinds.VmCreate, T0);
         Guid leaseId = Guid.NewGuid();
         await LeaseAsync(leaseId, ProviderCommandKinds.VmCreate);
-        var handler = new CompleteProviderCommandCommandHandler(_repo, _clock);
+        var handler = new CompleteProviderCommandCommandHandler(_repo);
 
         await handler.HandleAsync(new CompleteProviderCommandCommand(leaseId));
         await handler.HandleAsync(new CompleteProviderCommandCommand(leaseId));
@@ -106,7 +106,7 @@ public class ProviderCommandLeaseTests
     [Fact]
     public async Task Report_ByALeaseThatHoldsNothing_Is404()
     {
-        var handler = new CompleteProviderCommandCommandHandler(_repo, _clock);
+        var handler = new CompleteProviderCommandCommandHandler(_repo);
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(
             () => handler.HandleAsync(new CompleteProviderCommandCommand(Guid.NewGuid())));
@@ -125,7 +125,7 @@ public class ProviderCommandLeaseTests
         await LeaseAsync(Guid.NewGuid(), ProviderCommandKinds.VmCreate);
 
         NotFoundException ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => new CompleteProviderCommandCommandHandler(_repo, _clock).HandleAsync(new CompleteProviderCommandCommand(first)));
+            () => new CompleteProviderCommandCommandHandler(_repo).HandleAsync(new CompleteProviderCommandCommand(first)));
         Assert.Equal("PROVIDER_COMMAND_LEASE_NOT_FOUND", ex.Code);
     }
 

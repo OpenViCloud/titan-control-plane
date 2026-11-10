@@ -50,7 +50,7 @@ public class LoadBalancerServiceTests
 
     private Network NetworkWithIpv6(bool usable = true, Guid? tenantId = null)
     {
-        Tenant owner = tenantId == null ? _tenant : TestTenant.Active("other", "kc-o", "o@o.com");
+        Tenant owner = tenantId == null ? _tenant : TestTenant.Active("other", "kc-o");
         var network = TestNetworks.CreatingWithPublicIpv6(owner, $"net-{Guid.NewGuid():N}"[..12], "cluster-1");
         if (usable)
         {

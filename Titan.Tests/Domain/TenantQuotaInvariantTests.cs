@@ -12,7 +12,7 @@ namespace Titan.Tests.Domain;
 public class TenantQuotaInvariantTests
 {
     private static TenantAggregate NewTenant() =>
-        TestTenant.Active("acme", "kc-1", "a@b.c");
+        TestTenant.Active("acme", "kc-1");
 
     // Each row: the guard, the count that must be refused at, and the error code callers already
     // depend on. The codes are load-bearing — the portal branches on res.data.code.

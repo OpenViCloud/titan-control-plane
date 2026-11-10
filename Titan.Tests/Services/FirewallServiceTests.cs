@@ -35,7 +35,7 @@ public class FirewallServiceTests
     public FirewallServiceTests()
         => _tenantRepo
             .Setup(r => r.FindByIdAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(TestTenant.Active("t", "kc", "t@x.io"));
+            .ReturnsAsync(TestTenant.Active("t", "kc"));
 
     // Facade over the firewall command and query handlers so the tests keep one call shape.
     private FirewallFacade CreateService() =>

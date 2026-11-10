@@ -74,7 +74,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync(VmCreateKey(vm.Id, requestId), ProviderCommandKinds.VmCreate, vm.ClusterId,
             new
             {
-                vmId = vm.Id, requestId, name = vm.Name, cpuUnits = offering.CpuUnits, vcpuCount = offering.VcpuCount,
+                vmId = vm.Id, requestId, name = vm.Name, vcpuCount = offering.VcpuCount,
                 memoryMb = offering.MemoryMb, templateId = externalTemplateId, externalNetworkId,
                 projectName, diskSizeGb = vm.DiskSizeGb, userData = vm.UserData ?? "", vendorData = vendorData ?? ""
             }, ct);

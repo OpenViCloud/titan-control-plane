@@ -21,7 +21,6 @@ public partial class VmTemplateCluster
         Guid operationId = Guid.NewGuid();
         Operation = Operation.Asked(operationId, DateTimeOffset.UtcNow, null);
         Status = VmTemplateClusterStatus.Syncing;
-        UpdatedAt = DateTimeOffset.UtcNow;
         return operationId;
     }
 
@@ -43,7 +42,6 @@ public partial class VmTemplateCluster
         RecordTheAlias(externalId);
         Operation = Operation.Done();
         Status = VmTemplateClusterStatus.Available;
-        UpdatedAt = DateTimeOffset.UtcNow;
         return true;
     }
 
@@ -73,7 +71,6 @@ public partial class VmTemplateCluster
         }
         Operation = Operation.Failed(reason, detail, DateTimeOffset.UtcNow);
         Status = resting;
-        UpdatedAt = DateTimeOffset.UtcNow;
         return true;
     }
 }

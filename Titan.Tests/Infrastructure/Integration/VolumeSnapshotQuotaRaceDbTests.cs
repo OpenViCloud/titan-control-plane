@@ -23,7 +23,7 @@ public class VolumeSnapshotQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoCreatesOneBelowTheCap_OneIs202_TheOtherIsQuotaExceeded_AndTheCapHolds()
     {
-        Tenant tenant = TestTenant.Active($"vs-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vs-race@titan.local");
+        Tenant tenant = TestTenant.Active($"vs-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         string offeringId = await SeedOfferingAsync();
         Volume volume = Volume.Create(tenant.Id, $"vol-{Guid.NewGuid():N}"[..12], "cluster-1", offeringId, 20);
         volume.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);

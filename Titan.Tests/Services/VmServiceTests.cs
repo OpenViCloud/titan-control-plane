@@ -115,9 +115,9 @@ public class VmServiceTests
     private GetVmQueryHandler CreateGetHandler() =>
         new(_repo.Object, _currentUser.Object);
 
-    private void SetupOffering(string id = "offering-1", decimal cpu = 1.0m, int vcpu = 2, int memoryMb = 4096) =>
+    private void SetupOffering(string id = "offering-1", int vcpu = 2, int memoryMb = 4096) =>
         _offeringRepo.Setup(r => r.FindByIdAsync(id, default))
-            .ReturnsAsync(VmOffering.Create(id, id, cpu, vcpu, memoryMb, pricePerHour: 311.256m));
+            .ReturnsAsync(VmOffering.Create(id, id, vcpu, memoryMb, pricePerHour: 311.256m));
 
     // Templates resolve out of a lookup so an id the fixture never registered returns null —
     // that is what the unknown-template test asserts on.
@@ -213,7 +213,7 @@ public class VmServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
-            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
             "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -221,15 +221,15 @@ public class VmServiceTests
     // provisions the VM. The template points at a DIFFERENT tier ("l"), so the two sources disagree by
     // construction and the assertion below can only be satisfied by the offering, across three tiers.
     [Theory]
-    [InlineData("s", 0.5, 1, 2048)]
-    [InlineData("m", 1.0, 2, 4096)]
-    [InlineData("xl", 4.0, 8, 16384)]
+    [InlineData("s", 1, 2048)]
+    [InlineData("m", 2, 4096)]
+    [InlineData("xl", 8, 16384)]
     public async Task Create_ProvisionsTheTierTheCustomerChose_NotTheOneTheTemplatePointsAt(
-        string chosenTier, double cpu, int vcpu, int memoryMb)
+        string chosenTier, int vcpu, int memoryMb)
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
-        SetupOffering(chosenTier, (decimal)cpu, vcpu, memoryMb);
+        SetupOffering(chosenTier, vcpu, memoryMb);
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
         var network = MakeActiveNetwork();
@@ -239,7 +239,7 @@ public class VmServiceTests
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == chosenTier && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
-            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == (decimal)cpu && o.VcpuCount == vcpu && o.MemoryMb == memoryMb),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == vcpu && o.MemoryMb == memoryMb),
             "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -278,7 +278,7 @@ public class VmServiceTests
     {
         SetupCurrentUser(TenantId);
         SetupTenant();
-        SetupOffering("xl", cpu: 4.0m, vcpu: 8, memoryMb: 16384);
+        SetupOffering("xl", vcpu: 8, memoryMb: 16384);
         _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-01", default)).ReturnsAsync(false);
         var network = MakeActiveNetwork();
@@ -288,7 +288,7 @@ public class VmServiceTests
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "xl" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
-            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 4.0m && o.VcpuCount == 8 && o.MemoryMb == 16384),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 8 && o.MemoryMb == 16384),
             "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -312,7 +312,7 @@ public class VmServiceTests
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
-            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
             "99", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -336,7 +336,7 @@ public class VmServiceTests
 
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-2" && v.DiskSizeGb == 0 && v.UserData == null),
-            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.CpuUnits == 1.0m && o.VcpuCount == 2 && o.MemoryMb == 4096),
+            It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
             "3", "cs-net-2", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -2034,7 +2034,7 @@ public class VmServiceTests
 
     private void SetupTenant(int maxVms = 10, decimal? debtCeiling = null)
     {
-        var tenant = TestTenant.Active("acme", "owner-1", "admin@acme.com", maxVms: maxVms);
+        var tenant = TestTenant.Active("acme", "owner-1", maxVms: maxVms);
         if (debtCeiling.HasValue)
             tenant.UpdateDebtCeiling((long)debtCeiling.Value);
         _tenant = tenant;

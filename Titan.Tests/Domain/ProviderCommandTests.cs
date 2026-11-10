@@ -70,10 +70,9 @@ public class ProviderCommandTests
         Guid leaseId = Guid.NewGuid();
         ProviderCommand command = Leased(leaseId);
 
-        command.Complete(leaseId, T0);
+        command.Complete(leaseId);
 
         Assert.Equal(ProviderCommandStatus.Done, command.Status);
-        Assert.Equal(T0, command.FinishedAt);
     }
 
     [Fact]
@@ -81,7 +80,7 @@ public class ProviderCommandTests
     {
         ProviderCommand command = Leased(Guid.NewGuid());
 
-        ConflictException ex = Assert.Throws<ConflictException>(() => command.Complete(Guid.NewGuid(), T0));
+        ConflictException ex = Assert.Throws<ConflictException>(() => command.Complete(Guid.NewGuid()));
         Assert.Equal("PROVIDER_COMMAND_LEASE_LOST", ex.Code);
     }
 
@@ -147,7 +146,7 @@ public class ProviderCommandTests
         Guid last = Guid.NewGuid();
         command.Lease(last, now);
 
-        command.Complete(last, now);
+        command.Complete(last);
 
         Assert.Equal(ProviderCommand.MaxAttempts, command.Attempts);
         Assert.Equal(ProviderCommandStatus.Done, command.Status);
@@ -215,7 +214,7 @@ public class ProviderCommandTests
     {
         Guid leaseId = Guid.NewGuid();
         ProviderCommand command = Leased(leaseId);
-        command.Complete(leaseId, T0);
+        command.Complete(leaseId);
 
         Assert.False(command.Reopen("{\"b\":2}", T0));
         Assert.Equal(ProviderCommandStatus.Done, command.Status);
@@ -236,7 +235,6 @@ public class ProviderCommandTests
         Assert.Equal("{\"b\":2}", command.Payload);
         Assert.Equal(later, command.AvailableAt);
         Assert.Null(command.LastError);
-        Assert.Null(command.FinishedAt);
     }
 
     // The retention rule: a finished row older than the cutoff goes; an open row stays however old, since a worker may
@@ -259,7 +257,7 @@ public class ProviderCommandTests
             command.Lease(leaseId, createdAt);
             if (status == ProviderCommandStatus.Done)
             {
-                command.Complete(leaseId, createdAt);
+                command.Complete(leaseId);
             }
             if (status == ProviderCommandStatus.Failed)
             {

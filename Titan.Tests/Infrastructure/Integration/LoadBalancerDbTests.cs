@@ -42,7 +42,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoLiveLoadBalancersOfANetwork_OnTheSameVip_TheSecondIs409VipConflict()
     {
-        var tenant = TestTenant.Active("a", "kc-a", "a@a.com");
+        var tenant = TestTenant.Active("a", "kc-a");
         Guid networkId = Guid.NewGuid();
         Vm vm = VmOnIncus(tenant, networkId);
         await SaveAsync(NewLoadBalancer(tenant, networkId, 1, vm));
@@ -55,7 +55,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
     [Fact]
     public async Task ADeletedLoadBalancersVip_IsFreeAgain_InTheIndexAndTheQuery()
     {
-        var tenant = TestTenant.Active("a", "kc-a", "a@a.com");
+        var tenant = TestTenant.Active("a", "kc-a");
         Guid networkId = Guid.NewGuid();
         Vm vm = VmOnIncus(tenant, networkId);
         LoadBalancer gone = NewLoadBalancer(tenant, networkId, 1, vm);
@@ -77,7 +77,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
     [Fact]
     public async Task AnUpdatesRows_RoundTrip_AndTheAppliedReportDropsTheOldOnes()
     {
-        var tenant = TestTenant.Active("a", "kc-a", "a@a.com");
+        var tenant = TestTenant.Active("a", "kc-a");
         Guid networkId = Guid.NewGuid();
         Vm a = VmOnIncus(tenant, networkId);
         Vm b = VmOnIncus(tenant, networkId);
@@ -114,7 +114,7 @@ public class LoadBalancerDbTests(PostgresFixture pg)
     [Fact]
     public async Task IsBackend_AndHasLiveLoadBalancers_IgnoreDeletedLoadBalancers()
     {
-        var tenant = TestTenant.Active("a", "kc-a", "a@a.com");
+        var tenant = TestTenant.Active("a", "kc-a");
         Guid networkId = Guid.NewGuid();
         Vm vm = VmOnIncus(tenant, networkId);
         LoadBalancer lb = NewLoadBalancer(tenant, networkId, 1, vm);

@@ -26,7 +26,7 @@ public class FirewallRuleQuotaRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoCreatesOneBelowTheCap_OneIs201_TheOtherIsQuotaExceeded_AndTheCapHolds()
     {
-        Tenant tenant = TestTenant.Active($"fw-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "fw-race@titan.local");
+        Tenant tenant = TestTenant.Active($"fw-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         Network network = TestAggregates.Network(tenant, $"net-{Guid.NewGuid():N}"[..12], "cluster-1");
         network.MarkActive($"net{Guid.NewGuid():N}"[..20], "10.0.0.0/24", "10.0.0.1");
         int cap = tenant.Quota.MaxFirewallRulesPerNetwork;

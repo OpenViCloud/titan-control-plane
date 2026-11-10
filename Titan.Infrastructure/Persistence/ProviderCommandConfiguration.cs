@@ -25,7 +25,6 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.LeaseUntil).HasColumnName("lease_until");
         builder.Property(c => c.LastError).HasColumnName("last_error");
         builder.Property(c => c.CreatedAt).HasColumnName("created_at").IsRequired();
-        builder.Property(c => c.FinishedAt).HasColumnName("finished_at");
         // Two leases of the same row: the second UPDATE ... AND version = N matches 0 rows.
         builder.Property(c => c.Version).HasColumnName("version").IsConcurrencyToken();
 

@@ -18,7 +18,6 @@ public class BackupRecordConfiguration : IEntityTypeConfiguration<BackupRecord>
         builder.Property(r => r.TakenAt).HasColumnName("taken_at").IsRequired();
         builder.Property(r => r.SizeBytes).HasColumnName("size_bytes").IsRequired();
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();
-        builder.Property(r => r.ObservedAt).HasColumnName("observed_at").IsRequired();
         // One row per backup the bucket shows: the refresh upserts by this key.
         builder.HasIndex(r => new { r.Kind, r.ResourceName, r.BackupKey }).IsUnique();
     }
