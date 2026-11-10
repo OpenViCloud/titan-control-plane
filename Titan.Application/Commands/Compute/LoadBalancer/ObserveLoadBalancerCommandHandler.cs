@@ -6,7 +6,7 @@ using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 namespace Titan.Application.Commands.Compute.LoadBalancer;
 
 // The reconciler's observation of one load balancer (titan-ops architecture/resource-lifecycle.md#callback-routes): what
-// Incus has, written to current; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants).
+// Incus has; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants).
 // Authenticated by X-Internal-Token at the endpoint, acting for no tenant. Locked like every lifecycle handler, so an
 // observation and a request on the same load balancer take turns.
 public class ObserveLoadBalancerCommandHandler(ILoadBalancerRepository repo)

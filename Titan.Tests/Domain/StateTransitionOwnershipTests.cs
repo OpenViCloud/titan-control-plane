@@ -31,18 +31,14 @@ public class StateTransitionOwnershipTests
         // --- Payload / parse validation: NOT transition legality. These reject a malformed request
         // before any aggregate is consulted ("what is 'Frobnicated'?"), which is the adapter layer's
         // job. They are BadRequestException (400), not BusinessException (422).
-        ["EndTemplateSyncRequestCommandHandler.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's template sync report",
+        ["OperationOutcomes.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from any request report of the worker",
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|Invalid status"] = "parse: unknown enum value from the admin request",
         // PendingApproval parses as TenantStatus but is not an admin target.
         ["UpdateTenantStatusCommandHandler.cs|INVALID_STATUS|A tenant can only be set to"] = "parse: only Active and Suspended are admin targets",
         ["VmReports.cs|INVALID_STATUS|Unknown VM status"] = "parse: unknown enum value from the worker callback, shared by every VM callback handler",
-        ["VmReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's VM or VM snapshot request report",
         ["ObserveVmCommandHandler.cs|INVALID_STATUS|Observed is required when the instance exists"] = "payload: an observation of an existing instance that does not say its status",
-        ["VolumeReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's volume or volume snapshot request report",
-        ["NetworkReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's network or firewall rule request report",
         ["NetworkReports.cs|INVALID_STATUS|Unknown network status"] = "parse: unknown enum value from the worker callback, shared by every network callback handler",
         ["NetworkReports.cs|INVALID_STATUS|Unknown firewall rule state"] = "parse: unknown enum value from the worker callback, shared by every firewall rule callback handler",
-        ["LoadBalancerReports.cs|INVALID_STATUS|Unknown request outcome"] = "parse: unknown outcome word from the worker's load balancer request report",
         ["CreateLoadBalancerCommandHandler.cs|LOAD_BALANCER_INVALID_STATE|This network has no free load balancer address left"] = "capacity: every VIP number of the network is taken, a count over many aggregates, not one's state",
     };
 
@@ -119,6 +115,30 @@ public class StateTransitionOwnershipTests
             "The application layer asserts a provider id it cannot prove. Have the aggregate RETURN "
             + "the id from the method that validates the state (F-11), or add an allowlist row saying "
             + "why it cannot:\n  " + string.Join("\n  ", offenders.Distinct().OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    // The same rule inside the Domain: an aggregate reads another aggregate's provider id through the method that
+    // proves it (Vm.GetExternalId), never with `!`. Its own id after its own Ensure is not matched: no receiver.
+    [Fact]
+    public void NoDomainMethod_AssertsAnotherAggregatesProviderId()
+    {
+        var scanned = 0;
+        var offenders = new List<string>();
+
+        foreach (var (file, src) in ReadSources(Path.Combine(FindRepoDir(), "Titan.Domain")))
+        {
+            scanned++;
+            var code = Regex.Replace(src, @"//.*$", "", RegexOptions.Multiline);
+            foreach (var m in ProviderIdAssertion.Matches(code).Cast<Match>())
+            {
+                offenders.Add($"{Path.GetFileName(file)}|{m.Groups["recv"].Value}.{m.Groups["prop"].Value}");
+            }
+        }
+
+        Assert.True(scanned >= 40, $"Only {scanned} Domain source files scanned — the guard is blind.");
+        Assert.True(offenders.Count == 0,
+            "A Domain method asserts another aggregate's provider id. Read it through the method that proves it "
+            + "(GetExternalId):\n  " + string.Join("\n  ", offenders.Distinct().OrderBy(x => x, StringComparer.Ordinal)));
     }
 
     [Fact] // other direction — a row for an assertion already removed is also a failure

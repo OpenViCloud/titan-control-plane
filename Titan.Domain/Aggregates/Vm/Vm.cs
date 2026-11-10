@@ -157,6 +157,15 @@ public partial class Vm : IAggregateRoot
         }
     }
 
+    /// The instance name, handed out only once one came back from Incus
+    /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id): for another aggregate that has
+    /// checked this VM through one of its Ensure* guards, or a caller that listed VMs with an instance.
+    public string GetExternalId()
+    {
+        EnsureOnTheProvider();
+        return ExternalId!;
+    }
+
     /// Intent, Titan-side display name only. The aggregate carries it out itself, so the check sits inside
     /// the mutation (titan-ops architecture/intent-and-observation.md#validate-inside-the-mutation).
     public void Rename(string newName)

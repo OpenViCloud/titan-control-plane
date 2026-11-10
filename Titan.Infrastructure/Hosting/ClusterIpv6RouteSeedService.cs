@@ -46,8 +46,7 @@ public class ClusterIpv6RouteSeedService(
     {
         foreach (var cluster in clusters.Clusters)
         {
-            bool hasPublicIpv6 = cluster.OvnUplinkNetwork != null && cluster.Ipv6Block != null;
-            if (hasPublicIpv6)
+            if (cluster.HasPublicIpv6)
             {
                 await routes.EnsureRoutesAsync(cluster.Id, ct);
             }

@@ -83,7 +83,7 @@ public class VmServiceTests
 
     private DeleteVmCommandHandler CreateDeleteHandler() =>
         new(_repo.Object, _currentUser.Object, _commands.Object,
-            _volumeRepo.Object, _activity, new Titan.Domain.Services.VmDeletion(_loadBalancerRepo.Object));
+            _activity, new Titan.Domain.Services.VmDeletion(_loadBalancerRepo.Object, _volumeRepo.Object));
 
     private StopVmCommandHandler CreateStopHandler() =>
         new(_repo.Object, _currentUser.Object, _commands.Object, _activity);

@@ -92,13 +92,15 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     [Fact]
     public async Task SameKey_FromTwoScopes_LeavesOneRow()
     {
-        Guid vmId = Guid.NewGuid();
+        global::Titan.Domain.Aggregates.Vm.Vm backupVm =
+            global::Titan.Domain.Aggregates.Vm.Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "vm-x", "m", "tpl", "mock", 20);
+        Guid vmId = backupVm.Id;
         string key = $"vm-backup-{vmId}-20261103";
 
         await using (TitanDbContext first = pg.NewDbContext())
         {
             await new ProviderCommandQueue(new ProviderCommandRepository(first), TimeProvider.System)
-                .EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", BackupDay);
+                .EnqueueVmBackupAsync(backupVm, "vm-x", "t-1", BackupDay);
             await first.SaveChangesAsync();
         }
         await using (TitanDbContext second = pg.NewDbContext())
@@ -121,7 +123,9 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     [Fact]
     public async Task TwoConcurrentReopens_OfOneFailedRow_TheSecondIs409()
     {
-        Guid vmId = Guid.NewGuid();
+        global::Titan.Domain.Aggregates.Vm.Vm backupVm =
+            global::Titan.Domain.Aggregates.Vm.Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "vm-x", "m", "tpl", "mock", 20);
+        Guid vmId = backupVm.Id;
         Guid leaseId = Guid.NewGuid();
         await using (TitanDbContext seed = pg.NewDbContext())
         {
@@ -137,9 +141,8 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         var queueA = new ProviderCommandQueue(new ProviderCommandRepository(dbA), TimeProvider.System);
         var queueB = new ProviderCommandQueue(new ProviderCommandRepository(dbB), TimeProvider.System);
 
-        Guid tenantId = Guid.NewGuid();
-        await queueA.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", tenantId, "mock", BackupDay);
-        await queueB.EnqueueVmBackupAsync(vmId, "vm-x", "t-1", tenantId, "mock", BackupDay);
+        await queueA.EnqueueVmBackupAsync(backupVm, "vm-x", "t-1", BackupDay);
+        await queueB.EnqueueVmBackupAsync(backupVm, "vm-x", "t-1", BackupDay);
         await dbA.SaveChangesAsync();
         DbUpdateConcurrencyException lost = await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => dbB.SaveChangesAsync());
 

@@ -1,8 +1,8 @@
 namespace Titan.Application.Services;
 
 /// How the worker says an operation's command ended (titan-ops architecture/resource-lifecycle.md#shape). Done: the
-/// provider did what was asked, so the handler calls the resource's FinishOperation. Failed: the command gave up, so it
-/// calls FailOperation, and desired goes back to current according to the operation's kind.
+/// provider did what was asked. Failed: the command gave up. The handler passes it to the resource's Succeeded or Failed
+/// method of the status the resource waits in (OperationOutcomes.Parse reads the word).
 public enum OperationOutcome
 {
     Done,

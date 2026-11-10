@@ -105,8 +105,7 @@ public class VolumeServiceTests
                                                 && v.Status == VolumeStatus.Creating)), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVolumeCreateAsync(
-            result.VolumeId, added!.Operation.PendingId!.Value, "vol-01", "cluster-1", 50,
-            "t-" + _tenant!.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a70 => a70.Id == result.VolumeId && a70.Name == "vol-01" && a70.ClusterId == "cluster-1" && a70.SizeGb == 50), added!.Operation.PendingId!.Value, "t-" + _tenant!.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A volume Incus holds without a price stops the disk meter (titan-ops features/volume/design.md#offering-must-exist).
@@ -124,8 +123,7 @@ public class VolumeServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Volume>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVolumeCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(),
-            It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // The offering id is a key, not a name: the display name in another case is still unknown.
@@ -199,7 +197,7 @@ public class VolumeServiceTests
         Assert.Equal(VolumeStatus.Attaching, volume.Status);
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         _commands.Verify(w => w.EnqueueVolumeAttachAsync(
-            volume.Id, volume.Operation.PendingId!.Value, "cs-vol-1", "cs-vm-1", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a72 => a72.Id == volume.Id && a72.ClusterId == volume.ClusterId), volume.Operation.PendingId!.Value, "cs-vol-1", "cs-vm-1", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -294,7 +292,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeStatus.Detaching, volume.Status);
         _commands.Verify(w => w.EnqueueVolumeDetachAsync(
-            volume.Id, volume.Operation.PendingId!.Value, "cs-vol-2", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a73 => a73.Id == volume.Id && a73.ClusterId == volume.ClusterId), volume.Operation.PendingId!.Value, "cs-vol-2", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -310,7 +308,7 @@ public class VolumeServiceTests
 
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDetachAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact] // a repeat attach to the same VM succeeds like the first, without a second command
@@ -328,7 +326,7 @@ public class VolumeServiceTests
         Assert.Equal(vm.Id, volume.DesiredAttachedVmId);
         Assert.Equal("volume.attach_requested", Assert.Single(_activity.Events).Action);
         _commands.Verify(w => w.EnqueueVolumeAttachAsync(
-            volume.Id, It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a75 => a75.Id == volume.Id), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── DeleteAsync ───────────────────────────────────────────────────────
@@ -344,7 +342,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeStatus.Deleting, volume.Status);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, volume.Operation.PendingId!.Value, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a76 => a76.Id == volume.Id && a76.ClusterId == volume.ClusterId), volume.Operation.PendingId!.Value, "cs-vol-3", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory] // titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat: the aggregate refuses a repeat; the handler recognises it and answers quietly
@@ -362,7 +360,7 @@ public class VolumeServiceTests
         Assert.Equal(before, Shape(volume));
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -395,7 +393,7 @@ public class VolumeServiceTests
         Assert.Equal(before, Shape(volume));
         Assert.Empty(_activity.Events);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Volume.Volume>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -716,7 +714,7 @@ public class VolumeServiceTests
 
         Assert.Equal(VolumeStatus.Deleting, volume.Status);
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, volume.Operation.PendingId!.Value, "cs-vol-3", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a79 => a79.Id == volume.Id && a79.ClusterId == volume.ClusterId), volume.Operation.PendingId!.Value, "cs-vol-3", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Only the delete command ends a delete: the reconciler not finding the volume is only remembered as seen gone.
@@ -794,7 +792,7 @@ public class VolumeServiceTests
         await CreateService().DeleteAsync(volume.Id, default);
 
         _commands.Verify(w => w.EnqueueVolumeDeleteAsync(
-            volume.Id, volume.Operation.PendingId!.Value, "vol7", Project, volume.ClusterId, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a80 => a80.Id == volume.Id && a80.ClusterId == volume.ClusterId), volume.Operation.PendingId!.Value, "vol7", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

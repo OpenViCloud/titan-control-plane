@@ -41,7 +41,9 @@ public class ProviderCommandRetentionDbTests(PostgresFixture pg)
         DateTimeOffset old = now.AddDays(-31);
         DateTimeOffset young = now.AddDays(-29);
         string run = Guid.NewGuid().ToString("N");
-        Guid vmId = Guid.NewGuid();
+        global::Titan.Domain.Aggregates.Vm.Vm backupVm =
+            global::Titan.Domain.Aggregates.Vm.Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "vm-x", "m", "tpl", "mock", 20);
+        Guid vmId = backupVm.Id;
         DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
         string backupKey = $"vm-backup-{vmId}-{today.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
         var rows = new Dictionary<string, ProviderCommand>
@@ -77,7 +79,7 @@ public class ProviderCommandRetentionDbTests(PostgresFixture pg)
         // The schedule's next ask of the day still finds the failed backup and runs it again.
         await using TitanDbContext again = pg.NewDbContext();
         await new ProviderCommandQueue(new ProviderCommandRepository(again), TimeProvider.System)
-            .EnqueueVmBackupAsync(vmId, "vm-x", "t-1", Guid.NewGuid(), "mock", today);
+            .EnqueueVmBackupAsync(backupVm, "vm-x", "t-1", today);
         await again.SaveChangesAsync();
         await using TitanDbContext after = pg.NewDbContext();
         ProviderCommand backup = await after.ProviderCommands.SingleAsync(c => c.Key == backupKey);

@@ -8,8 +8,6 @@ using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
-using Titan.Domain.Aggregates.Volume;
-using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Commands.Admin.Vm;
 
@@ -21,7 +19,6 @@ namespace Titan.Application.Commands.Admin.Vm;
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.
 public class DeleteAdminVmCommandHandler(
     IVmRepository vms,
-    IVolumeRepository volumeRepo,
     IAdminAuditLogRepository auditLog,
     IProviderCommandQueue commands,
     ICurrentUser currentUser,
@@ -59,15 +56,6 @@ public class DeleteAdminVmCommandHandler(
             "admin cross-tenant action {Action} by actor {Actor} on vm {VmId} owned by tenant {OwnerTenantId}",
             action, currentUser.KeycloakUserId, vm.Id, vm.TenantId);
         auditLog.Add(AdminAuditLog.Create(action, currentUser.KeycloakUserId, "vm", vm.Id, vm.TenantId));
-
-        // The volumes go with the VM's delete (titan-ops features/volume/design.md#vm-delete-releases-volumes), and it is
-        // not a request of theirs (titan-ops architecture/resource-lifecycle.md#kinds): a volume with nothing waiting is no
-        // longer asked to be attached; one with its own attach or detach waiting is left to that request.
-        List<VolumeAggregate> attachedVolumes = await volumeRepo.ListAttachedToVmLockedAsync(vm.Id, ct);
-        foreach (VolumeAggregate volume in attachedVolumes)
-        {
-            volume.ReleaseFromVmDelete(vm.Id);
-        }
 
         // Errored before provisioning (no instance name came back): nothing at the provider, no reconciler running.
         // The audit row and the local delete persist together in one SaveChanges (same DbContext).

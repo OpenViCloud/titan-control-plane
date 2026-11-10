@@ -102,8 +102,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("before-upgrade", created.Name);
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotCreateAsync(
-            result.SnapshotId, created.Operation.PendingId!.Value, vm.Id, vm.ExternalId!, "before-upgrade",
-            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a54 => a54.Id == vm.Id && a54.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a55 => a55.Id == result.SnapshotId && a55.Name == "before-upgrade"), created.Operation.PendingId!.Value, vm.ExternalId!, Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The cap is counted on the snapshots loaded with the VM, under a lock on its row: the handler must take the
@@ -136,8 +135,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
         Assert.Empty(vm.Snapshots);
         _commands.Verify(w => w.EnqueueVmSnapshotCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Vm.Vm>(), It.IsAny<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Quota exceeded ───────────────────────────────────────
@@ -314,8 +312,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Reverting/Available", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotRevertAsync(
-            snap.Id, snap.Operation.PendingId!.Value, vm.Id, snap.ExternalId!,
-            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a58 => a58.Id == vm.Id && a58.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a59 => a59.Id == snap.Id), snap.Operation.PendingId!.Value, snap.ExternalId!, Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Revert snapshot not Ready ────────────────────────────
@@ -407,8 +404,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Deleting/Available", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            snap.Id, snap.Operation.PendingId!.Value, vm.Id, snap.ExternalId!,
-            Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a60 => a60.Id == vm.Id && a60.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a61 => a61.Id == snap.Id), snap.Operation.PendingId!.Value, snap.ExternalId!, Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Delete snapshot not Ready ────────────────────────────
@@ -440,7 +436,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("Reverting/Available", Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmSnapshotRevertAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Vm.Vm>(), It.IsAny<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Theory]
@@ -458,7 +454,7 @@ public class VmSnapshotServiceTests
         Assert.Equal(before, Shape(snap));
         _vmRepo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Vm.Vm>(), It.IsAny<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -487,7 +483,7 @@ public class VmSnapshotServiceTests
         Assert.Equal("VM_SNAPSHOT_NOT_FOUND", ex.Code);
         Assert.Equal("Available/Available", Shape(snap));
         _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Vm.Vm>(), It.IsAny<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Callbacks (titan-ops features/vm/design.md#vm-snapshot-reports) ───────────
@@ -771,7 +767,7 @@ public class VmSnapshotServiceTests
         await CreateService().DeleteAsync(vm.Id, snap.Id, default);
 
         Assert.Equal("Deleting/Available", Shape(snap));
-        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(snap.Id, snap.Operation.PendingId!.Value, vm.Id, "cs-snap-abc", Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueVmSnapshotDeleteAsync(It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a68 => a68.Id == vm.Id && a68.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a69 => a69.Id == snap.Id), snap.Operation.PendingId!.Value, "cs-snap-abc", Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

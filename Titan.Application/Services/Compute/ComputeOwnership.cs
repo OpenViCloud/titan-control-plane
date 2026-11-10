@@ -1,4 +1,5 @@
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
+using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
@@ -96,6 +97,18 @@ public static class ComputeOwnership
             throw new NotFoundException("VOLUME_NOT_FOUND", "Volume not found.");
 
         return volume;
+    }
+
+    public static async Task<SshKeyAggregate> RequireSshKeyAsync(
+        ISshKeyRepository keyRepo, Guid tenantId, Guid sshKeyId, CancellationToken ct)
+    {
+        var key = await keyRepo.FindByIdAsync(sshKeyId, ct)
+            ?? throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{sshKeyId}' not found.");
+
+        if (key.TenantId != tenantId)
+            throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{sshKeyId}' not found.");
+
+        return key;
     }
 
     public static VmSnapshot RequireVmSnapshot(VmAggregate vm, Guid snapshotId)

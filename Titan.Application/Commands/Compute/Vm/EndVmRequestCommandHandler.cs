@@ -22,7 +22,7 @@ public class EndVmRequestCommandHandler(
     public async Task HandleAsync(EndVmRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the VM is loaded: a malformed report is the worker's bug, whatever the VM.
-        OperationOutcome outcome = VmReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = OperationOutcomes.Parse(command.Outcome);
         VmStatus? observedStatus = VmReports.ParseObservedStatus(command.Observed);
         string? observedIpAddress = VmReports.ObservedIpAddress(command.Observed);
         string? observedPublicIpv6Address = VmReports.ObservedPublicIpv6Address(command.Observed);

@@ -25,7 +25,8 @@ public class ScheduleBackupsCommandTests
 
     private void Holds(List<Vm> vms, List<Volume> volumes)
     {
-        _vms.Setup(r => r.ListAllAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(vms);
+        // The repository's SQL is Vm.HasAnInstance (VmRepositoryStateTests pins the two to agree).
+        _vms.Setup(r => r.ListWithAnInstanceAsync(It.IsAny<CancellationToken>())).ReturnsAsync(vms.Where(v => v.HasAnInstance).ToList());
         _volumes.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
     }
 

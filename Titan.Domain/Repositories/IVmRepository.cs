@@ -21,6 +21,8 @@ public interface IVmRepository
     /// VM, or one tenant's when tenantId is given. Not scoped to a caller; ListByTenantAsync stays the
     /// tenant path.
     Task<List<Vm>> ListAllAsync(Guid? tenantId, CancellationToken ct = default);
+    /// Every VM whose instance Incus holds as far as Titan last knew (Vm.HasAnInstance), across tenants.
+    Task<List<Vm>> ListWithAnInstanceAsync(CancellationToken ct = default);
     /// The tenant's VMs with these provider ids (Incus instance names), whatever their state. Only that tenant: the
     /// storage callback resolves the instances using a volume, and must never match another tenant's VM.
     Task<List<Vm>> ListByExternalIdsAsync(Guid tenantId, IReadOnlyCollection<string> externalIds, CancellationToken ct = default);

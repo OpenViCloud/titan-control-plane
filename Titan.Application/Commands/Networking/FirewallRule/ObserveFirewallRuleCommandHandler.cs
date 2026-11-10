@@ -8,8 +8,9 @@ using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 namespace Titan.Application.Commands.Networking.FirewallRule;
 
 // The reconciler's observation of one firewall rule (titan-ops architecture/resource-lifecycle.md#callback-routes): what
-// the network's ACL has, written to current; no request ends here. Authenticated by X-Internal-Token at the endpoint.
-// Locked through the network like every lifecycle handler.
+// the network's ACL has; no request ends here. Authenticated by X-Internal-Token at the endpoint. Locked through the
+// network like every lifecycle handler. A rule the network does not have answers 404 from the network itself
+// (Network.GetFirewallRule).
 public class ObserveFirewallRuleCommandHandler(INetworkRepository networkRepo)
 {
     public async Task HandleAsync(ObserveFirewallRuleCommand command, CancellationToken ct = default)
@@ -23,15 +24,13 @@ public class ObserveFirewallRuleCommandHandler(INetworkRepository networkRepo)
 
         NetworkAggregate network = await networkRepo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("FIREWALL_RULE_NOT_FOUND", "Firewall rule not found.");
-        Guid ruleId = NetworkOwnership.RequireFirewallRule(network, command.RuleId).Id;
-
         if (state != null)
         {
-            network.MarkFirewallRuleObserved(ruleId, state.Value);
+            network.MarkFirewallRuleObserved(command.RuleId, state.Value);
         }
         else
         {
-            network.MarkFirewallRuleNotFound(ruleId);
+            network.MarkFirewallRuleNotFound(command.RuleId);
         }
         await networkRepo.SaveAsync(ct);
     }

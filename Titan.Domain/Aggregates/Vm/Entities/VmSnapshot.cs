@@ -71,6 +71,10 @@ public partial class VmSnapshot : IEntity
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
     public bool IsDeletedOrDeleting => Status == VmSnapshotStatus.Deleting || IsDeleted;
 
+    /// A revert was asked and still waits: a later revert is a repeat, answered like the first
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsReverting => Status == VmSnapshotStatus.Reverting;
+
     /// Counted by occupancy toward MaxVmSnapshotsPerVm (titan-ops features/vm/design.md#vm-snapshot-counting): what Incus
     /// holds or is about to hold, a revert in flight included. A delete asked for stops counting at once; a failed
     /// create with nothing on Incus, and a snapshot Incus lost, do not count.

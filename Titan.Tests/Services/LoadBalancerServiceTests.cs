@@ -331,7 +331,7 @@ public class LoadBalancerServiceTests
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
         Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, lb.Operation.PendingId!.Value, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(It.Is<global::Titan.Domain.Aggregates.LoadBalancer.LoadBalancer>(a22 => a22.Id == lb.Id && a22.ExternalNetworkId == "net-ext" && a22.ClusterId == "cluster-1"), lb.Operation.PendingId!.Value, lb.Vip, Project, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.delete_requested" }, _activity.Events.Select(e => e.Action));
     }
 
@@ -619,7 +619,7 @@ public class LoadBalancerServiceTests
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
         Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, lb.Operation.PendingId!.Value, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(It.Is<global::Titan.Domain.Aggregates.LoadBalancer.LoadBalancer>(a23 => a23.Id == lb.Id && a23.ExternalNetworkId == "net-ext" && a23.ClusterId == "cluster-1"), lb.Operation.PendingId!.Value, lb.Vip, Project, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -638,7 +638,7 @@ public class LoadBalancerServiceTests
 
         Assert.NotEqual(update, delete);
         Assert.Equal(LoadBalancerStatus.Deleting, lb.Status);
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, delete, "net-ext", lb.Vip, Project, "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(It.Is<global::Titan.Domain.Aggregates.LoadBalancer.LoadBalancer>(a24 => a24.Id == lb.Id && a24.ExternalNetworkId == "net-ext" && a24.ClusterId == "cluster-1"), delete, lb.Vip, Project, It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "load_balancer.delete_requested" }, _activity.Events.Select(e => e.Action));
     }
 

@@ -51,8 +51,8 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
             var caller = Callers.TenantMember(tenant.Id);
             var handler = new DeleteVmCommandHandler(new VmRepository(db), caller,
                 new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
-                new VolumeRepository(db), new ActivityRecorder(new ActivityEventRepository(db), caller),
-                new VmDeletion(new LoadBalancerRepository(db)));
+                new ActivityRecorder(new ActivityEventRepository(db), caller),
+                new VmDeletion(new LoadBalancerRepository(db), new VolumeRepository(db)));
 
             await handler.HandleAsync(new DeleteVmCommand(vm.Id));
         }

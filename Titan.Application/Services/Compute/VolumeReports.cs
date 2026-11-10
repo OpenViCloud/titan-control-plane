@@ -44,18 +44,6 @@ public static class VolumeReports
         [VolumeSnapshotStatus.Deleting] = "volume_snapshot.delete_failed",
     };
 
-    public static OperationOutcome ParseOutcome(string outcome)
-    {
-        switch (outcome)
-        {
-            case "Done":
-                return OperationOutcome.Done;
-            case "Failed":
-                return OperationOutcome.Failed;
-            default:
-                throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
-        }
-    }
 
     // The worker reports instance names as Incus lists them; which of them are Titan VMs is Titan's to say
     // (titan-ops features/volume/design.md#attachment-from-used-by). Only the volume's own tenant is searched: an instance

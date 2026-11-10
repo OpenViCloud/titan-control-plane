@@ -20,17 +20,9 @@ public class DetachVolumeCommandHandler(
         var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(repo, callerId, command.VolumeId, ct);
 
         // The aggregate refuses a repeat, so the handler recognises it first
-        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
-        // A detach is already running, or no instance uses the volume and none is asked for. One used outside Titan
-        // is not a repeat: the aggregate refuses it.
-        // Answer like the first request: nothing recorded, nothing sent.
-        bool detachIsWaiting = volume.Status == VolumeStatus.Detaching;
-        bool restsUnattached = volume.Operation.PendingId == null
-                            && volume.CurrentAttachedVmId == null
-                            && volume.DesiredAttachedVmId == null
-                            && !volume.CurrentAttachedElsewhere;
-        bool alreadyDetachingOrNotAttached = detachIsWaiting || restsUnattached;
-        if (alreadyDetachingOrNotAttached)
+        // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): answered like the first request,
+        // nothing recorded, nothing sent.
+        if (volume.IsDetachWaitingOrDetached)
         {
             return;
         }
@@ -38,8 +30,8 @@ public class DetachVolumeCommandHandler(
         OperationTicket ticket = volume.Detach();
 
         activity.Stage("volume.detach_requested", "volume", volume.Id, volume.Name); // atomic with Detach
-        string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeDetachAsync(volume.Id, ticket.OperationId, ticket.ProviderId, projectName, volume.ClusterId, ct);
+        await commands.EnqueueVolumeDetachAsync(volume, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(volume.TenantId), ct);
         await repo.SaveAsync(ct);
     }
 }

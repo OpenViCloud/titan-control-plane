@@ -18,8 +18,7 @@ public class DeleteVolumeSnapshotCommandHandler(
     public async Task HandleAsync(DeleteVolumeSnapshotCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var volumeId = command.VolumeId;
-        var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(volumeRepo, callerId, volumeId, ct);
+        var volume = await ComputeOwnership.RequireVolumeForUpdateAsync(volumeRepo, callerId, command.VolumeId, ct);
 
         // A snapshot of another volume answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
         VolumeSnapshotEntity snapshot = ComputeOwnership.RequireVolumeSnapshot(volume, command.SnapshotId);
@@ -43,9 +42,8 @@ public class DeleteVolumeSnapshotCommandHandler(
             return;
         }
 
-        string projectName = TenantAggregate.ProjectNameFor(volume.TenantId);
-        await commands.EnqueueVolumeSnapshotDeleteAsync(snapshot.Id, ticket.OperationId, volumeId, ticket.ProviderId, projectName,
-            volume.ClusterId, ct);
+        await commands.EnqueueVolumeSnapshotDeleteAsync(volume, snapshot, ticket.OperationId, ticket.ProviderId,
+            TenantAggregate.ProjectNameFor(volume.TenantId), ct);
         await volumeRepo.SaveAsync(ct);
     }
 }

@@ -22,7 +22,6 @@ public class CreateFirewallRuleCommandHandler(
 {
     public async Task<CreateFirewallRuleCommandResult> HandleAsync(CreateFirewallRuleCommand command, CancellationToken ct = default)
     {
-        var req = command;   // the command IS the wire contract (titan-ops architecture/code-structure.md#command-is-wire-contract)
         var networkId = command.NetworkId;
 
         // Locked: the per-network cap is counted on the rules loaded with the network, so a second request adding a
@@ -33,16 +32,16 @@ public class CreateFirewallRuleCommandHandler(
         var tenant = await tenantRepo.FindByIdAsync(network.TenantId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        var direction = Enum.Parse<FirewallDirection>(req.Direction, ignoreCase: true);
-        var protocol = Enum.Parse<FirewallProtocol>(req.Protocol, ignoreCase: true);
+        var direction = Enum.Parse<FirewallDirection>(command.Direction, ignoreCase: true);
+        var protocol = Enum.Parse<FirewallProtocol>(command.Protocol, ignoreCase: true);
         // The validator already paired the ports with the protocol and answered 400 for a bad shape; these are the
         // Domain's own words for the same rules.
         PortRange? ports = null;
-        if (req.StartPort != null && req.EndPort != null)
+        if (command.StartPort != null && command.EndPort != null)
         {
-            ports = PortRange.Of(req.StartPort.Value, req.EndPort.Value);
+            ports = PortRange.Of(command.StartPort.Value, command.EndPort.Value);
         }
-        FirewallCidr cidr = FirewallCidr.Parse(req.Cidr);
+        FirewallCidr cidr = FirewallCidr.Parse(command.Cidr);
 
         TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage);
 
@@ -52,10 +51,8 @@ public class CreateFirewallRuleCommandHandler(
         FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, ruleId);
 
         activity.Stage("firewall_rule.create_requested", "firewall_rule", ruleId, FirewallRuleLabel.Describe(rule)); // atomic with the save
-        await commands.EnqueueFirewallRuleCreateAsync(
-            ruleId, ticket.OperationId, networkId, req.Direction, req.Protocol,
-            req.StartPort, req.EndPort, req.Cidr,
-            ticket.ProviderId, TenantAggregate.ProjectNameFor(network.TenantId), network.ClusterId, ct);
+        await commands.EnqueueFirewallRuleCreateAsync(network, rule, ticket.OperationId,
+            TenantAggregate.ProjectNameFor(network.TenantId), ct);
         await networkRepo.SaveAsync(ct);
 
         return new CreateFirewallRuleCommandResult(ruleId);

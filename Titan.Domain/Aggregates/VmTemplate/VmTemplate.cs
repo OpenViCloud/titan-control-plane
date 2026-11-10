@@ -81,6 +81,18 @@ public class VmTemplate : IAggregateRoot
         return cluster.IsSynced;
     }
 
+    /// Nothing holds or waits in that cluster: it has no row, its sync failed, or its alias went missing. SyncIn refuses
+    /// the rest, so a sync-all asks only these (titan-ops architecture/resource-lifecycle.md#repeat).
+    public bool NeedsSyncIn(string clusterId)
+    {
+        VmTemplateCluster? cluster = FindCluster(clusterId);
+        if (cluster == null)
+        {
+            return true;
+        }
+        return cluster.Status == VmTemplateClusterStatus.Failed || cluster.Status == VmTemplateClusterStatus.NotFound;
+    }
+
     /// The image alias a VM in that cluster is created from, handed out only past the check
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).
     public string ProviderIdIn(string clusterId)

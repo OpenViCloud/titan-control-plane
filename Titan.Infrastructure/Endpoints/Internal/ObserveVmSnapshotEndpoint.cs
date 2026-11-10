@@ -6,7 +6,7 @@ using Titan.Application.Commands.Compute.VmSnapshot.Contracts;
 namespace Titan.Infrastructure.Endpoints.Internal;
 
 // The reconciler's observation of one VM snapshot (titan-ops architecture/resource-lifecycle.md#callback-routes): whether
-// its instance on Incus has it. Writes current only.
+// its instance on Incus has it. Ends no request.
 public class ObserveVmSnapshotEndpoint(ObserveVmSnapshotCommandHandler handler, IConfiguration config)
     : Endpoint<ObserveVmSnapshotBody>
 {

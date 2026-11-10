@@ -23,7 +23,7 @@ public class EndNetworkRequestCommandHandler(
     public async Task HandleAsync(EndNetworkRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the network is loaded: a malformed report is the worker's bug, whatever the network.
-        OperationOutcome outcome = NetworkReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = OperationOutcomes.Parse(command.Outcome);
         NetworkStatus? status = null;
         if (command.Status != null)
         {

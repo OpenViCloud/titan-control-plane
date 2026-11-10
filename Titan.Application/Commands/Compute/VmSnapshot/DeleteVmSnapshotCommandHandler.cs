@@ -17,10 +17,9 @@ public class DeleteVmSnapshotCommandHandler(
     public async Task HandleAsync(DeleteVmSnapshotCommand command, CancellationToken ct = default)
     {
         var callerId = currentUser.RequireTenantId();
-        var vmId = command.VmId;
         // Locked, so two deletes of the snapshot take turns and the second sees the first waiting
         // (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
-        var vm = await ComputeOwnership.RequireVmForUpdateAsync(vmRepo, callerId, vmId, ct);
+        var vm = await ComputeOwnership.RequireVmForUpdateAsync(vmRepo, callerId, command.VmId, ct);
 
         // A snapshot of another VM answers like a missing one (titan-ops architecture/code-structure.md#child-entity).
         VmSnapshotEntity snapshot = ComputeOwnership.RequireVmSnapshot(vm, command.SnapshotId);
@@ -45,9 +44,8 @@ public class DeleteVmSnapshotCommandHandler(
             return;
         }
 
-        string projectName = TenantAggregate.ProjectNameFor(vm.TenantId);
-        await commands.EnqueueVmSnapshotDeleteAsync(snapshot.Id, operationId, vmId, snapshot.GetExternalId(), projectName,
-            vm.ClusterId, ct);
+        await commands.EnqueueVmSnapshotDeleteAsync(vm, snapshot, operationId, snapshot.GetExternalId(),
+            TenantAggregate.ProjectNameFor(vm.TenantId), ct);
         await vmRepo.SaveAsync(ct);
     }
 }

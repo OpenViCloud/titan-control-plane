@@ -6,7 +6,7 @@ using Titan.Domain.Repositories;
 namespace Titan.Application.Commands.Networking.Network;
 
 // The reconciler's observation of one network (titan-ops architecture/resource-lifecycle.md#callback-routes): what Incus
-// has, written to current; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated
+// has; no request ends here (titan-ops architecture/resource-lifecycle.md#invariants). Authenticated
 // by X-Internal-Token at the endpoint, acting for no tenant. Locked like every lifecycle handler, so an observation and a
 // request on the same network take turns.
 public class ObserveNetworkCommandHandler(INetworkRepository repo)

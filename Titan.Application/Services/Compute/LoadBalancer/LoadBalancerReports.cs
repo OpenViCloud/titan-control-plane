@@ -30,18 +30,6 @@ public static class LoadBalancerReports
         [LoadBalancerStatus.Deleting] = "load_balancer.delete_failed",
     };
 
-    public static OperationOutcome ParseOutcome(string? outcome)
-    {
-        switch (outcome)
-        {
-            case "Done":
-                return OperationOutcome.Done;
-            case "Failed":
-                return OperationOutcome.Failed;
-            default:
-                throw new BadRequestException("INVALID_STATUS", $"Unknown request outcome: '{outcome}'");
-        }
-    }
 
     /// Ends the load balancer's waiting operation with a Done and records its outcome once. The status the load balancer
     /// waited in says which method ends it, read before the call. Null when the report names no waiting operation:

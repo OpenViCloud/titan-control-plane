@@ -20,7 +20,7 @@ public class EndLoadBalancerRequestCommandHandler(ILoadBalancerRepository repo, 
     public async Task HandleAsync(EndLoadBalancerRequestCommand command, CancellationToken ct = default)
     {
         // Parsed before the load balancer is loaded: a malformed report is the worker's bug, whatever the load balancer.
-        OperationOutcome outcome = LoadBalancerReports.ParseOutcome(command.Outcome);
+        OperationOutcome outcome = OperationOutcomes.Parse(command.Outcome);
 
         LoadBalancerAggregate loadBalancer = await repo.FindByIdForUpdateAsync(command.LoadBalancerId, ct)
             ?? throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");

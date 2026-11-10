@@ -1,6 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.SshKey.Contracts;
-using Titan.Domain.Exceptions;
+using Titan.Application.Services.Compute;
 using Titan.Domain.Repositories;
 using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 
@@ -13,11 +13,7 @@ public class DeleteSshKeyCommandHandler(ISshKeyRepository repo, ICurrentUser cur
     public async Task HandleAsync(DeleteSshKeyCommand command, CancellationToken ct = default)
     {
         Guid tenantId = currentUser.RequireTenantId();
-        SshKeyAggregate? key = await repo.FindByIdAsync(command.SshKeyId, ct);
-        if (key == null || key.TenantId != tenantId)
-        {
-            throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{command.SshKeyId}' not found.");
-        }
+        SshKeyAggregate key = await ComputeOwnership.RequireSshKeyAsync(repo, tenantId, command.SshKeyId, ct);
 
         repo.Remove(key);
         activity.Stage("ssh_key.delete_requested", "ssh_key", key.Id, key.Name);

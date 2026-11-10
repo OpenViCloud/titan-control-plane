@@ -280,8 +280,7 @@ public class LoadBalancerRequestHandlerTests
         await DeleteHandler().HandleAsync(new DeleteLoadBalancerCommand(lb.Id));
 
         Assert.Equal(first, Waiting(lb));
-        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(lb.Id, first, "net-ext", lb.Vip, It.IsAny<string>(),
-            "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueLoadBalancerDeleteAsync(It.Is<global::Titan.Domain.Aggregates.LoadBalancer.LoadBalancer>(a21 => a21.Id == lb.Id && a21.ExternalNetworkId == "net-ext" && a21.ClusterId == "cluster-1"), first, lb.Vip, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(["load_balancer.delete_requested"], _activity.Events.Select(e => e.Action));
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

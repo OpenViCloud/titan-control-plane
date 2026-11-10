@@ -307,8 +307,7 @@ public class VmSnapshotRequestHandlerTests
         await RevertHandler().HandleAsync(new RevertVmSnapshotCommand(vm.Id, snapshot.Id));
 
         Assert.Equal(first, Waiting(snapshot));
-        _commands.Verify(c => c.EnqueueVmSnapshotRevertAsync(snapshot.Id, first, vm.Id, "vm42/s1", It.IsAny<string>(),
-            "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueVmSnapshotRevertAsync(It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a48 => a48.Id == vm.Id && a48.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a49 => a49.Id == snapshot.Id), first, "vm42/s1", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(["vm_snapshot.revert_requested"], _activity.Events.Select(e => e.Action));
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -324,8 +323,7 @@ public class VmSnapshotRequestHandlerTests
         await DeleteHandler().HandleAsync(new DeleteVmSnapshotCommand(vm.Id, snapshot.Id));
 
         Assert.Equal(first, Waiting(snapshot));
-        _commands.Verify(c => c.EnqueueVmSnapshotDeleteAsync(snapshot.Id, first, vm.Id, "vm42/s1", It.IsAny<string>(),
-            "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueVmSnapshotDeleteAsync(It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a50 => a50.Id == vm.Id && a50.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a51 => a51.Id == snapshot.Id), first, "vm42/s1", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(["vm_snapshot.delete_requested"], _activity.Events.Select(e => e.Action));
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -343,8 +341,7 @@ public class VmSnapshotRequestHandlerTests
         await RevertHandler().HandleAsync(new RevertVmSnapshotCommand(vm.Id, snapshot.Id));
 
         Assert.NotEqual(first, Waiting(snapshot));
-        _commands.Verify(c => c.EnqueueVmSnapshotRevertAsync(snapshot.Id, Waiting(snapshot), vm.Id, "vm42/s1",
-            It.IsAny<string>(), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(c => c.EnqueueVmSnapshotRevertAsync(It.Is<global::Titan.Domain.Aggregates.Vm.Vm>(a52 => a52.Id == vm.Id && a52.ClusterId == "cluster-1"), It.Is<global::Titan.Domain.Aggregates.Vm.VmSnapshot>(a53 => a53.Id == snapshot.Id), Waiting(snapshot), "vm42/s1", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Locked, so a report and a request on the same snapshot take turns

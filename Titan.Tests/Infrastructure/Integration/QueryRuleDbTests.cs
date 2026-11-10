@@ -96,6 +96,26 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Assert.Equal(vms.Take(4).Select(v => v.Id).OrderBy(i => i), billed.OrderBy(i => i));
     }
 
+    // Vm.HasAnInstance in SQL: a provider id, and neither NotFound nor Deleted.
+    [Fact]
+    public async Task VmBackupList_IsEveryVmWithAnInstance_NotOneWithoutAnId_LostOrDeleted()
+    {
+        string offering = await OfferingAsync();
+        Vm lost = SeenVm(offering, "lost", VmStatus.Running);
+        lost.MarkNotFound();
+        Vm deleted = SeenVm(offering, "deleted", VmStatus.Running);
+        deleted.Delete(Guid.NewGuid());
+        deleted.MarkDeleted();
+        Vm running = SeenVm(offering, "running", VmStatus.Running);
+        Vm stopped = SeenVm(offering, "stopped", VmStatus.Stopped);
+        await SaveAsync(running, stopped, NewVm(offering, "creating"), lost, deleted);
+
+        await using TitanDbContext db = pg.NewDbContext();
+        var held = (await new VmRepository(db).ListWithAnInstanceAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
+
+        Assert.Equal(new[] { running.Id, stopped.Id }.OrderBy(i => i), held.OrderBy(i => i));
+    }
+
     // A VM holds its network while Incus has the instance (a delete in flight included) or its create waits
     // (titan-ops features/vm/design.md#counting-and-billing); one network per shape, so one holder cannot hide another.
     [Fact]

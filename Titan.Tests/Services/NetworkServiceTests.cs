@@ -115,7 +115,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a25 => a25.Id == added.Id && a25.Name.Value == "my-net" && a25.ClusterId == "cluster-1" && (a25.ChosenCidr == null ? null : a25.ChosenCidr.Value) == null && a25.DefaultIngressPolicy.ToString() == "Allow" && a25.DefaultEgressPolicy.ToString() == "Allow" && a25.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class NetworkServiceTests
         await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", null, FirewallPolicy.Deny, FirewallPolicy.Allow), default);
 
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), "my-net", "cluster-1", TenantProject, null, "Deny", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a26 => a26.Name.Value == "my-net" && a26.ClusterId == "cluster-1" && (a26.ChosenCidr == null ? null : a26.ChosenCidr.Value) == null && a26.DefaultIngressPolicy.ToString() == "Deny" && a26.DefaultEgressPolicy.ToString() == "Allow" && a26.PublicIpv6Subnet == null), It.IsAny<Guid>(), TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A cluster Titan does not have must not fall through to a default cluster
@@ -300,7 +300,7 @@ public class NetworkServiceTests
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         // The command carries the request it was sent for, so only its own report ends it.
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a27 => a27.Id == network.Id && a27.ClusterId == "cluster-1"), network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.FindByIdForUpdateAsync(network.Id, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -335,7 +335,7 @@ public class NetworkServiceTests
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // A load balancer lives on the network on Incus (titan-ops features/load-balancer/design.md#lb-and-vm-network).
@@ -353,7 +353,7 @@ public class NetworkServiceTests
 
         Assert.Equal("NETWORK_NOT_EMPTY", ex.Code);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -385,7 +385,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkStatus.Deleting, network.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a30 => a30.Id == network.Id && a30.ClusterId == "cluster-1"), network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -403,7 +403,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkStatus.Deleted, network.Status);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── RenameAsync ───────────────────────────────────────────────
@@ -679,7 +679,7 @@ public class NetworkServiceTests
         Assert.NotNull(added);
         Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.ChosenCidr);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, "10.0.0.0/24", "Allow", "Allow", null, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a32 => a32.Id == added.Id && a32.Name.Value == "my-net" && a32.ClusterId == "cluster-1" && (a32.ChosenCidr == null ? null : a32.ChosenCidr.Value) == "10.0.0.0/24" && a32.DefaultIngressPolicy.ToString() == "Allow" && a32.DefaultEgressPolicy.ToString() == "Allow" && a32.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A delete that failed leaves the customer free to press Delete again — a new request, a new command.
@@ -696,7 +696,7 @@ public class NetworkServiceTests
         await CreateService().DeleteAsync(network.Id, default);
 
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            network.Id, It.IsAny<Guid>(), "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a33 => a33.Id == network.Id && a33.ClusterId == "cluster-1"), It.IsAny<Guid>(), "cs-net-id", Tenant.ProjectNameFor(network.TenantId), It.IsAny<CancellationToken>()), Times.Exactly(2));
         Assert.Equal(NetworkStatus.Deleting, network.Status);
     }
 
@@ -820,7 +820,7 @@ public class NetworkServiceTests
         await FailedAsync(network, "Network creation failed.", "cs-net-id", "10.0.0.0/24", "10.0.0.1");
         await CreateService().DeleteAsync(network.Id, default);
 
-        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(network.Id, network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), "cluster-1", It.IsAny<CancellationToken>()), Times.Once);
+        _commands.Verify(w => w.EnqueueNetworkDeleteAsync(It.Is<global::Titan.Domain.Aggregates.Network.Network>(a34 => a34.Id == network.Id && a34.ClusterId == "cluster-1"), network.Operation.PendingId!.Value, "cs-net-id", Tenant.ProjectNameFor(network.TenantId), It.IsAny<CancellationToken>()), Times.Once);
         Assert.NotEqual(NetworkStatus.Deleted, network.Status);
     }
 
@@ -905,7 +905,7 @@ public class NetworkServiceTests
         Assert.Equal(NetworkStatus.Deleting, network.Status);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
         _commands.Verify(w => w.EnqueueNetworkDeleteAsync(
-            It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+            It.IsAny<global::Titan.Domain.Aggregates.Network.Network>(), It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     // ── Public IPv6: one route of the cluster per network ──
@@ -971,8 +971,7 @@ public class NetworkServiceTests
         Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
         Assert.Equal(added.Id, RouteRow(3).NetworkId);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            added.Id, added.Operation.PendingId!.Value, "my-net", "cluster-1", TenantProject, null, "Allow", "Allow",
-            "2001:41d0:d00:d403::/64", "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a36 => a36.Id == added.Id && a36.Name.Value == "my-net" && a36.ClusterId == "cluster-1" && (a36.ChosenCidr == null ? null : a36.ChosenCidr.Value) == null && a36.DefaultIngressPolicy.ToString() == "Allow" && a36.DefaultEgressPolicy.ToString() == "Allow" && a36.PublicIpv6Subnet == "2001:41d0:d00:d403::/64"), added.Operation.PendingId!.Value, TenantProject, "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 

@@ -1,7 +1,6 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Admin.Backup.Contracts;
 using Titan.Domain.Repositories;
-using VolumeStatus = Titan.Domain.Aggregates.Volume.VolumeStatus;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Admin.Backup;
@@ -20,26 +19,20 @@ public class ScheduleBackupsCommandHandler(
     {
         DateOnly today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
-        foreach (var vm in await vms.ListAllAsync(null, ct))
+        foreach (var vm in await vms.ListWithAnInstanceAsync(ct))
         {
-            string? externalId = vm.ExternalId;
-            if (!vm.HasAnInstance || externalId == null)
-            {
-                continue;
-            }
-            await commands.EnqueueVmBackupAsync(vm.Id, externalId, TenantAggregate.ProjectNameFor(vm.TenantId),
-                vm.TenantId, vm.ClusterId, today, ct);
+            await commands.EnqueueVmBackupAsync(vm, vm.GetExternalId(), TenantAggregate.ProjectNameFor(vm.TenantId), today, ct);
         }
 
+        // Billed is what Incus holds (Volume.IsBilled): the volumes a backup can export.
         foreach (var volume in await volumes.ListBillableAsync(ct))
         {
             string? externalId = volume.ExternalId;
-            if (volume.InstanceStatus != VolumeStatus.Available || externalId == null)
+            if (externalId == null)
             {
                 continue;
             }
-            await commands.EnqueueVolumeBackupAsync(volume.Id, externalId, TenantAggregate.ProjectNameFor(volume.TenantId),
-                volume.TenantId, volume.ClusterId, today, ct);
+            await commands.EnqueueVolumeBackupAsync(volume, externalId, TenantAggregate.ProjectNameFor(volume.TenantId), today, ct);
         }
 
         // One DbContext carries every repository: this saves the commands of both loops.

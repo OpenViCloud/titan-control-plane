@@ -61,6 +61,56 @@ public class OneStatusTypeListTests
         Assert.True(lists >= 3, $"Expected the existing lists to be found, found {lists}.");
     }
 
+    // Every type above keeps one status, so neither an observation nor a failed report has a second axis to write to or
+    // fall back to. A comment that says so describes the two-axis shape the types left; wrapped comment lines are read as
+    // one. The frozen copies of the old aggregates (Characterization/Old) keep their words.
+    private static readonly Regex CurrentAxis = new(
+        @"current\s+only|written\s+to\s+current|writes\s+current|back\s+to\s+current", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    [Fact]
+    public void NoComment_DescribesTheCurrentAxis()
+    {
+        var stale = new List<string>();
+        int scanned = 0;
+        foreach (string project in new[] { "Titan.Application", "Titan.Infrastructure", "Titan.Domain", "Titan.Host", "Titan.Tests" })
+        {
+            foreach (string file in Directory.EnumerateFiles(Path.Combine(RepoDir(), project), "*.cs", SearchOption.AllDirectories))
+            {
+                char sep = Path.DirectorySeparatorChar;
+                bool skipped = file.Contains($"{sep}obj{sep}") || file.Contains($"{sep}bin{sep}") || file.Contains($"{sep}Migrations{sep}")
+                               || file.Contains($"{sep}Characterization{sep}Old{sep}");
+                if (skipped)
+                {
+                    continue;
+                }
+                scanned++;
+                string[] lines = File.ReadAllLines(file);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    int at = lines[i].IndexOf("//", StringComparison.Ordinal);
+                    if (at < 0)
+                    {
+                        continue;
+                    }
+                    string text = lines[i][(at + 2)..];
+                    int nextAt = i + 1 < lines.Length ? lines[i + 1].IndexOf("//", StringComparison.Ordinal) : -1;
+                    if (nextAt >= 0)
+                    {
+                        text += " " + lines[i + 1][(nextAt + 2)..];
+                    }
+                    if (CurrentAxis.IsMatch(text))
+                    {
+                        stale.Add($"{Path.GetRelativePath(RepoDir(), file)}:{i + 1}");
+                    }
+                }
+            }
+        }
+
+        Assert.True(scanned > 900, $"Only {scanned} files scanned: the scan is blind.");
+        Assert.True(stale.Count == 0, "Comments that describe the current axis the one-status types left: "
+            + string.Join(", ", stale.Distinct()));
+    }
+
     [Fact]
     public void AListOfSixTypes_IsStale()
     {
