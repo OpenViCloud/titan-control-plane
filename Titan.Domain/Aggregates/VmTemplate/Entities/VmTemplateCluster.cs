@@ -16,7 +16,6 @@ public partial class VmTemplateCluster : IEntity
     public VmTemplateOperation Operation { get; private set; } = VmTemplateOperation.None;
     /// The image alias tpl-<templateId> on this cluster.
     public string? ExternalTemplateId { get; private set; }
-    public DateTimeOffset UpdatedAt { get; private set; }
 
     private VmTemplateCluster() { }
 
@@ -26,7 +25,6 @@ public partial class VmTemplateCluster : IEntity
         TemplateId = templateId,
         ClusterId = clusterId,
         Status = VmTemplateClusterStatus.NotFound,
-        UpdatedAt = DateTimeOffset.UtcNow,
     };
 
     /// Whether the cluster holds the alias as far as Titan last knew: Available, or null. While a sync waits it is what

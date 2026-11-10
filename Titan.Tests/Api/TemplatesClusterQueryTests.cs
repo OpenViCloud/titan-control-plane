@@ -17,7 +17,7 @@ public class TemplatesClusterQueryTests(RealHostFactory factory) : IClassFixture
     private async Task<HttpClient> ClientOfANewTenantAsync()
     {
         string kc = "kc-" + Guid.NewGuid();
-        Tenant tenant = Tenant.CreatePending("t-" + Guid.NewGuid().ToString("N")[..8], kc, kc + "@titan.test");
+        Tenant tenant = Tenant.CreatePending("t-" + Guid.NewGuid().ToString("N")[..8], kc);
         tenant.Approve();
         string secret = "ovc_" + Convert.ToBase64String(Guid.NewGuid().ToByteArray().Concat(Guid.NewGuid().ToByteArray()).ToArray())
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');

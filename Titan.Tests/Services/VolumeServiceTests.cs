@@ -36,7 +36,7 @@ public class VolumeServiceTests
     {
         var offerings = new FakeVolumeOfferingRepository();
         offerings.Seed(Titan.Domain.Aggregates.VolumeOffering.VolumeOffering.Create(
-            "offering-1", "Standard", 50, false, 1.5m));
+            "offering-1", "Standard", 1.5m));
         return offerings;
     }
 
@@ -507,7 +507,7 @@ public class VolumeServiceTests
 
     private void SetupTenant()
     {
-        var tenant = TestTenant.Active("tenant-1", "owner-keycloak-id", "t1@example.com");
+        var tenant = TestTenant.Active("tenant-1", "owner-keycloak-id");
 
         _tenant = tenant;
         _tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default)).ReturnsAsync(tenant);

@@ -54,7 +54,7 @@ public class UpdateTenantStatusEndpointTests
     [InlineData("active")] // the status is parsed case-insensitively; the wallet must follow it
     public async Task Active_OnAPendingSignup_OpensItsWallet_AndActivates_InOneSave_Returns204(string status)
     {
-        var tenant = Known(Tenant.CreatePending("acme", "kc-1", "a@acme.com"));
+        var tenant = Known(Tenant.CreatePending("acme", "kc-1"));
         var ep = Endpoint(tenant.Id);
 
         await ep.HandleAsync(new UpdateStatusRequest(status), CancellationToken.None);
@@ -74,7 +74,7 @@ public class UpdateTenantStatusEndpointTests
     [InlineData("Active ")]
     public async Task ANonCanonicalActive_IsRefused_AndActivatesNothing_OpensNoWallet(string status)
     {
-        var tenant = Known(Tenant.CreatePending("acme", "kc-1", "a@acme.com"));
+        var tenant = Known(Tenant.CreatePending("acme", "kc-1"));
 
         var ex = await Assert.ThrowsAsync<BadRequestException>(
             () => Endpoint(tenant.Id).HandleAsync(new UpdateStatusRequest(status), CancellationToken.None));
@@ -109,7 +109,7 @@ public class UpdateTenantStatusEndpointTests
     [Fact] // a suspended tenant already has its wallet: coming back keeps it, no second one
     public async Task Active_OnASuspendedTenantWithAWallet_KeepsThatWallet()
     {
-        var tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+        var tenant = TestTenant.Active("acme", "kc-1");
         tenant.Suspend();
         Known(tenant);
         _walletRepo.Setup(w => w.GetByTenantForUpdateAsync(tenant.Id, It.IsAny<CancellationToken>()))
@@ -137,7 +137,7 @@ public class UpdateTenantStatusEndpointTests
     [InlineData("Deleted")]
     public async Task AnythingButActive_OpensNoWallet(string status)
     {
-        var tenant = Known(TestTenant.Active("acme", "kc-1", "a@acme.com"));
+        var tenant = Known(TestTenant.Active("acme", "kc-1"));
 
         try
         {

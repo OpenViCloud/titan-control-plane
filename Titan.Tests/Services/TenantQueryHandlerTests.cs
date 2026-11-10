@@ -20,7 +20,7 @@ public class TenantQueryHandlerTests
 
     private Tenant CallerTenant()
     {
-        var tenant = TestTenant.Active("acme", "kc-owner", "acme@example.com");
+        var tenant = TestTenant.Active("acme", "kc-owner");
         _currentUser.SetupGet(u => u.TenantId).Returns(tenant.Id);
         _repo.Setup(r => r.FindByIdAsync(tenant.Id, It.IsAny<CancellationToken>())).ReturnsAsync(tenant);
         return tenant;
@@ -114,8 +114,8 @@ public class TenantQueryHandlerTests
     [Fact]
     public async Task ListTenants_ReturnsEveryTenant_AcrossThePlatform()
     {
-        var a = TestTenant.Active("a", "kc-a", "a@example.com");
-        var b = Tenant.CreatePending("b", "kc-b", "b@example.com");
+        var a = TestTenant.Active("a", "kc-a");
+        var b = Tenant.CreatePending("b", "kc-b");
         _repo.Setup(r => r.ListAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<Tenant> { a, b });
 
         var result = await new ListTenantsQueryHandler(_repo.Object).HandleAsync(new ListTenantsQuery());
@@ -128,7 +128,7 @@ public class TenantQueryHandlerTests
     [Fact]
     public async Task ListTenants_CarriesAllNineCaps_AndTheDebtCeiling()
     {
-        var tenant = TestTenant.Active("a", "kc-a", "a@example.com");
+        var tenant = TestTenant.Active("a", "kc-a");
         tenant.UpdateQuota(TenantQuota.Create(1, 2, 3, 4, 5, 6, 7, 8, 9));
         _repo.Setup(r => r.ListAllAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new List<Tenant> { tenant });
 

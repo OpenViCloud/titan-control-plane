@@ -21,7 +21,6 @@ public class VmTemplateConfiguration : IEntityTypeConfiguration<VmTemplate>
         builder.Property(t => t.IsListed).HasColumnName("is_listed").IsRequired();
         builder.Property(t => t.VmOfferingId).HasColumnName("vm_offering_id").HasColumnType("text").IsRequired();
         builder.Property(t => t.CreatedAt).HasColumnName("created_at");
-        builder.Property(t => t.UpdatedAt).HasColumnName("updated_at");
 
         // No soft-delete filter, unlike Network: templates are never soft-deleted.
         builder.HasIndex(t => t.Name).IsUnique().HasDatabaseName("UX_vm_templates_name");
@@ -80,7 +79,6 @@ public class VmTemplateConfiguration : IEntityTypeConfiguration<VmTemplate>
             RootDiskSizeGb = (int?)rootDiskSizeGb,
             VmOfferingId = vmOfferingId,
             CreatedAt = ts,
-            UpdatedAt = ts,
         };
 }
 
@@ -110,6 +108,5 @@ public class VmTemplateClusterConfiguration : IEntityTypeConfiguration<VmTemplat
         });
         builder.Ignore(z => z.InstanceStatus);
         builder.Property(z => z.ExternalTemplateId).HasColumnName("external_template_id").HasColumnType("text");
-        builder.Property(z => z.UpdatedAt).HasColumnName("updated_at");
     }
 }

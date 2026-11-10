@@ -37,9 +37,9 @@ public class TenantServiceTests
 
     private sealed class TenantFacade(ITenantRepository repo, IWalletRepository wallets)
     {
-        public Task BootstrapAsync(string keycloakUserId, string username, string email, CancellationToken ct = default)
+        public Task BootstrapAsync(string keycloakUserId, string username, CancellationToken ct = default)
             => new TenantCmd.BootstrapTenantCommandHandler(repo)
-                .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username, email), ct);
+                .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username), ct);
 
         public Task ApproveDeclaredAccountAsync(Guid tenantId, CancellationToken ct = default)
             => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets))
@@ -377,7 +377,7 @@ public class TenantServiceTests
     {
         // Same shape as MaxVms/MaxNetworks: the default is baked in at creation, so every tenant row
         // carries a real number and no reader has to consult config to know what applies.
-        var tenant = TestTenant.Active("acme", "kc-1", "a@b.c");
+        var tenant = TestTenant.Active("acme", "kc-1");
 
         Assert.Equal(500_000L, tenant.DebtCeiling);
     }
@@ -435,29 +435,25 @@ public class TenantServiceTests
     {
         _repo.Setup(r => r.ExistsByOwnerAsync("user-1", default)).ReturnsAsync(true);
 
-        await CreateService().BootstrapAsync("user-1", "alice", "alice@example.com");
+        await CreateService().BootstrapAsync("user-1", "alice");
 
         _repo.Verify(r => r.Add(It.IsAny<Tenant>()), Times.Never);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    // Every signup starts pending, whatever the domain: the middleware approves one whose account has the realm role auto-approve
+    // Every signup starts pending: the middleware approves one whose account has the realm role auto-approve
     // in the same request, its wallet in the approval's save, so there is one approval path, not two.
-    [Theory]
-    [InlineData("alice@gmail.com")]
-    [InlineData("bob@openvicloud.com")]
-    [InlineData("sv@university.edu.vn")]
-    public async Task Bootstrap_CreatesAPendingTenant_ForAnyDomain(string email)
+    [Fact]
+    public async Task Bootstrap_CreatesAPendingTenant()
     {
         _repo.Setup(r => r.ExistsByOwnerAsync("user-1", default)).ReturnsAsync(false);
         Tenant? saved = null;
         _repo.Setup(r => r.Add(It.IsAny<Tenant>())).Callback<Tenant>(t => saved = t);
 
-        await CreateService().BootstrapAsync("user-1", "u", email);
+        await CreateService().BootstrapAsync("user-1", "u");
 
         Assert.NotNull(saved);
         Assert.Equal(TenantStatus.PendingApproval, saved!.Status);
-        Assert.Equal(email, saved.Email);
         Assert.Equal("u", saved.Name);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
@@ -470,7 +466,7 @@ public class TenantServiceTests
         _repo.SetupSequence(r => r.ExistsByOwnerAsync("user-1", default)).ReturnsAsync(false).ReturnsAsync(true);
         _repo.Setup(r => r.SaveAsync(default)).ThrowsAsync(new ConcurrencyConflictException("TENANT_CREATE_CONFLICT", "lost"));
 
-        await CreateService().BootstrapAsync("user-1", "alice", "alice@example.com");
+        await CreateService().BootstrapAsync("user-1", "alice");
 
         _repo.Verify(r => r.ExistsByOwnerAsync("user-1", default), Times.Exactly(2));
     }
@@ -483,7 +479,7 @@ public class TenantServiceTests
         _repo.Setup(r => r.SaveAsync(default)).ThrowsAsync(new ConcurrencyConflictException("TENANT_CREATE_CONFLICT", "lost"));
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
-            () => CreateService().BootstrapAsync("user-2", "alice", "other@example.com"));
+            () => CreateService().BootstrapAsync("user-2", "alice"));
 
         Assert.Equal("TENANT_NAME_TAKEN", ex.Code);
     }
@@ -535,8 +531,8 @@ public class TenantServiceTests
     private static Tenant MakeTenant(TenantStatus status)
     {
         if (status == TenantStatus.PendingApproval)
-            return Tenant.CreatePending("acme", "user-1", "admin@acme.com");
-        var tenant = TestTenant.Active("acme", "user-1", "admin@acme.com");
+            return Tenant.CreatePending("acme", "user-1");
+        var tenant = TestTenant.Active("acme", "user-1");
         if (status == TenantStatus.Suspended) tenant.Suspend();
         return tenant;
     }

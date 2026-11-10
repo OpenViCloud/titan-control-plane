@@ -33,7 +33,7 @@ public class ComputeMeterServiceTests
         Options.Create(new BillingMeterOptions { IntervalMinutes = intervalMinutes }));
 
     private static VmOffering Offering(string id = OfferingId, decimal price = Price) =>
-        VmOffering.Create(id, "Medium", 1.0m, 2, 4096, price);
+        VmOffering.Create(id, "Medium", 2, 4096, price);
 
     private static Vm RunningVm(string offeringId = OfferingId)
     {

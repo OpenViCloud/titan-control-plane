@@ -31,7 +31,7 @@ public class VmDeletionRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task DeleteAndALoadBalancerCreateNamingTheVm_OneIsRefused_AndNoLoadBalancerSendsToADeletedVm()
     {
-        Tenant tenant = TestTenant.Active($"vd-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}", "vd-race@titan.local");
+        Tenant tenant = TestTenant.Active($"vd-race-{Guid.NewGuid():N}"[..20], $"kc-{Guid.NewGuid():N}");
         Network network = Network.Create(tenant.Id, NetworkName.Parse($"net-{Guid.NewGuid():N}"[..12]), Cluster, null, wantsPublicIpv6: true);
         network.ReceivePublicIpv6(Subnet);
         network.MarkActive($"net{Guid.NewGuid():N}"[..20], "10.0.0.0/24", "10.0.0.1");

@@ -12,7 +12,6 @@ public class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.HasKey(t => t.Id);
         builder.Property(t => t.Id).HasColumnName("id");
         builder.Property(t => t.Name).HasColumnName("name").IsRequired();
-        builder.Property(t => t.Email).HasColumnName("email").IsRequired();
         builder.Property(t => t.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         // A value object, so ComplexProperty: columns in this table, no identity. OwnsOne would hand the model an
         // owned-entity key it does not need (titan-ops architecture/tenancy-and-admin.md#tenant-quota).

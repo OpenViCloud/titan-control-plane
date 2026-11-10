@@ -34,7 +34,7 @@ public class VolumeSnapshotServiceTests
 
     // titan-ops architecture/tenancy-and-admin.md#tenant-quota — the handlers load the tenant to enforce its
     // quota; Tenant.Create's default caps are what the quota assertions in this file count against.
-    private readonly Tenant _tenant = TestTenant.Active("t", "kc", "t@x.io");
+    private readonly Tenant _tenant = TestTenant.Active("t", "kc");
 
     public VolumeSnapshotServiceTests()
         => _tenantRepo

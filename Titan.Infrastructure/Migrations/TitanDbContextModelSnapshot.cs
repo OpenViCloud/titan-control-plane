@@ -278,10 +278,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("kind");
 
-                    b.Property<DateTimeOffset>("ObservedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("observed_at");
-
                     b.Property<string>("ResourceName")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -791,10 +787,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<DateTimeOffset?>("FinishedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("finished_at");
-
                     b.Property<string>("Key")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -972,11 +964,6 @@ namespace Titan.Infrastructure.Migrations
                     b.Property<long>("DebtCeiling")
                         .HasColumnType("bigint")
                         .HasColumnName("debt_ceiling");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("email");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1299,10 +1286,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("id");
 
-                    b.Property<decimal>("CpuUnits")
-                        .HasColumnType("numeric(5,2)")
-                        .HasColumnName("cpu_units");
-
                     b.Property<int>("MemoryMb")
                         .HasColumnType("integer")
                         .HasColumnName("memory_mb");
@@ -1328,7 +1311,6 @@ namespace Titan.Infrastructure.Migrations
                         new
                         {
                             Id = "s",
-                            CpuUnits = 0.5m,
                             MemoryMb = 2048,
                             Name = "Small",
                             PricePerHour = 161.388m,
@@ -1337,7 +1319,6 @@ namespace Titan.Infrastructure.Migrations
                         new
                         {
                             Id = "m",
-                            CpuUnits = 1.0m,
                             MemoryMb = 4096,
                             Name = "Medium",
                             PricePerHour = 311.256m,
@@ -1346,7 +1327,6 @@ namespace Titan.Infrastructure.Migrations
                         new
                         {
                             Id = "l",
-                            CpuUnits = 2.0m,
                             MemoryMb = 8192,
                             Name = "Large",
                             PricePerHour = 634.050m,
@@ -1355,7 +1335,6 @@ namespace Titan.Infrastructure.Migrations
                         new
                         {
                             Id = "xl",
-                            CpuUnits = 4.0m,
                             MemoryMb = 16384,
                             Name = "Extra Large",
                             PricePerHour = 1268.100m,
@@ -1400,10 +1379,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("root_disk_size_gb");
 
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
                     b.Property<string>("VmOfferingId")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1430,7 +1405,6 @@ namespace Titan.Infrastructure.Migrations
                             Name = "Ubuntu-22.04-Standard",
                             OsImageName = "ubuntu/22.04",
                             RootDiskSizeGb = 25,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             VmOfferingId = "m"
                         },
                         new
@@ -1442,7 +1416,6 @@ namespace Titan.Infrastructure.Migrations
                             Name = "Alma-9-DB",
                             OsImageName = "almalinux/9",
                             RootDiskSizeGb = 40,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             VmOfferingId = "l"
                         },
                         new
@@ -1454,7 +1427,6 @@ namespace Titan.Infrastructure.Migrations
                             Name = "Rocky-9-App",
                             OsImageName = "rockylinux/9",
                             RootDiskSizeGb = 30,
-                            UpdatedAt = new DateTimeOffset(new DateTime(2026, 7, 1, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
                             VmOfferingId = "l"
                         });
                 });
@@ -1477,10 +1449,6 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("status");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
 
                     b.HasKey("TemplateId", "ClusterId");
 
@@ -1600,10 +1568,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("id");
 
-                    b.Property<bool>("IsCustomized")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_customized");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1613,10 +1577,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("decimal(18,10)")
                         .HasColumnName("price_per_gb_per_hour");
 
-                    b.Property<int>("SizeGb")
-                        .HasColumnType("integer")
-                        .HasColumnName("size_gb");
-
                     b.HasKey("Id");
 
                     b.ToTable("volume_offerings", "core");
@@ -1625,10 +1585,8 @@ namespace Titan.Infrastructure.Migrations
                         new
                         {
                             Id = "standard",
-                            IsCustomized = true,
                             Name = "Standard",
-                            PricePerGbPerHour = 1.57914m,
-                            SizeGb = 0
+                            PricePerGbPerHour = 1.57914m
                         });
                 });
 
@@ -1643,10 +1601,6 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("available_amount");
 
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
                     b.Property<string>("Currency")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1655,10 +1609,6 @@ namespace Titan.Infrastructure.Migrations
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()

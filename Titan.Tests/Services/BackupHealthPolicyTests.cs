@@ -20,7 +20,7 @@ public class BackupHealthPolicyTests
     }
 
     private static BackupRecord Base(TimeSpan age, BackupRecordStatus status = BackupRecordStatus.Complete) =>
-        BackupRecord.Create(BackupRecord.PostgresKind, "titan-db", $"k{age.Ticks}-{status}", Now - age, 100, status, Now);
+        BackupRecord.Create(BackupRecord.PostgresKind, "titan-db", $"k{age.Ticks}-{status}", Now - age, 100, status);
 
     [Fact]
     public void NoReadingYet_IsUnknown()

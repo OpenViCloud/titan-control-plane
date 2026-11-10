@@ -9,16 +9,16 @@ public class TenantProjectNameTests
     [Fact]
     public void ProjectName_IsTheTenantIdWithoutDashes_BehindAPrefix()
     {
-        var t = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
+        var t = Tenant.CreatePending("acme", "owner-1");
 
         string expected = "t-" + t.Id.ToString("N");
         Assert.Equal(expected, Tenant.ProjectNameFor(t.Id));
     }
 
-    [Fact] // the oracle is the id alone: name, email and status do not take part
+    [Fact] // the oracle is the id alone: name and status do not take part
     public void ProjectName_DoesNotDependOnAnythingButTheId()
     {
-        var t = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
+        var t = Tenant.CreatePending("acme", "owner-1");
         string before = Tenant.ProjectNameFor(t.Id);
 
         t.Approve();
@@ -31,8 +31,8 @@ public class TenantProjectNameTests
     [Fact]
     public void TwoTenants_GetTwoProjects()
     {
-        var a = Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
-        var b = Tenant.CreatePending("acme", "owner-2", "admin@acme.com");
+        var a = Tenant.CreatePending("acme", "owner-1");
+        var b = Tenant.CreatePending("acme", "owner-2");
 
         Assert.NotEqual(Tenant.ProjectNameFor(a.Id), Tenant.ProjectNameFor(b.Id));
     }

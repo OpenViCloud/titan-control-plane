@@ -24,7 +24,7 @@ public class ProviderCommandRetentionTests
         }
         if (status == ProviderCommandStatus.Done)
         {
-            row.Complete(lease, createdAt);
+            row.Complete(lease);
         }
         if (status == ProviderCommandStatus.Failed)
         {

@@ -22,7 +22,7 @@ public class TenantActivationTests
         _wallets.Setup(w => w.GetByTenantForUpdateAsync(tenant.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Wallet.Open(tenant.Id, "VND"));
 
-    private static Tenant Pending() => Tenant.CreatePending("acme", "owner-1", "admin@acme.com");
+    private static Tenant Pending() => Tenant.CreatePending("acme", "owner-1");
 
     private static Tenant Active()
     {

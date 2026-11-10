@@ -40,7 +40,6 @@ public class ProviderCommand : IAggregateRoot
     public DateTimeOffset? LeaseUntil { get; private set; }
     public string? LastError { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset? FinishedAt { get; private set; }
 
     /// Concurrency token: two workers leasing the same row at once both read version N; the second write matches 0 rows.
     public int Version { get; private set; }
@@ -69,12 +68,9 @@ public class ProviderCommand : IAggregateRoot
             LeaseUntil = null,
             LastError = null,
             CreatedAt = now,
-            FinishedAt = null,
             Version = 0
         };
     }
-
-    public bool IsOpen => Status is ProviderCommandStatus.Pending or ProviderCommandStatus.Leased;
 
     /// The command ended well: a later report of it is a repeat that already landed
     /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
@@ -111,7 +107,6 @@ public class ProviderCommand : IAggregateRoot
         LeaseId = null;
         LeaseUntil = null;
         LastError = null;
-        FinishedAt = null;
         Version++;
         return true;
     }
@@ -145,13 +140,12 @@ public class ProviderCommand : IAggregateRoot
 
     /// The worker finished the provider work. Accepted from the lease that did it even when the lease ran out, as long
     /// as no other lease took the row since: the work happened.
-    public void Complete(Guid leaseId, DateTimeOffset now)
+    public void Complete(Guid leaseId)
     {
         if (!IsHeldBy(leaseId))
             throw LeaseLost(leaseId);
         Status = ProviderCommandStatus.Done;
         LeaseUntil = null;
-        FinishedAt = now;
         Version++;
     }
 
@@ -173,7 +167,6 @@ public class ProviderCommand : IAggregateRoot
             return;
         }
         Status = ProviderCommandStatus.Failed;
-        FinishedAt = now;
     }
 
     internal static TimeSpan BackoffAfter(int attempts)

@@ -27,7 +27,6 @@ public class VmTemplate : IAggregateRoot
     public string VmOfferingId { get; private set; } = default!;
 
     public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset UpdatedAt { get; private set; }
 
     /// One sync state per cluster the template was asked into or observed in
     /// (titan-ops features/catalog/design.md#template-per-cluster).
@@ -54,7 +53,6 @@ public class VmTemplate : IAggregateRoot
             VmOfferingId = vmOfferingId,
             IsListed = true,
             CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
         };
     }
 
@@ -122,9 +120,7 @@ public class VmTemplate : IAggregateRoot
     /// worker names the alias), so the caller gets the sync's id for the command's key and payload.
     public Guid SyncIn(string clusterId)
     {
-        Guid operationId = GetOrAddCluster(clusterId).Sync();
-        UpdatedAt = DateTimeOffset.UtcNow;
-        return operationId;
+        return GetOrAddCluster(clusterId).Sync();
     }
 
     /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape):
@@ -137,12 +133,7 @@ public class VmTemplate : IAggregateRoot
         {
             return false;
         }
-        bool ended = cluster.SyncSucceeded(operationId, externalId);
-        if (ended)
-        {
-            UpdatedAt = DateTimeOffset.UtcNow;
-        }
-        return ended;
+        return cluster.SyncSucceeded(operationId, externalId);
     }
 
     /// The report that a sync's command in one cluster gave up: ends that cluster's waiting sync and records the reason
@@ -154,12 +145,7 @@ public class VmTemplate : IAggregateRoot
         {
             return false;
         }
-        bool ended = cluster.SyncFailed(operationId, externalId, reason, detail);
-        if (ended)
-        {
-            UpdatedAt = DateTimeOffset.UtcNow;
-        }
-        return ended;
+        return cluster.SyncFailed(operationId, externalId, reason, detail);
     }
 
     // Observations converge (titan-ops architecture/intent-and-observation.md#observation-converges): a report for a
@@ -169,13 +155,11 @@ public class VmTemplate : IAggregateRoot
     public void MarkObservedIn(string clusterId)
     {
         GetOrAddCluster(clusterId).MarkObserved();
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public void MarkNotFoundIn(string clusterId)
     {
         GetOrAddCluster(clusterId).MarkNotFound();
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private VmTemplateCluster GetOrAddCluster(string clusterId)

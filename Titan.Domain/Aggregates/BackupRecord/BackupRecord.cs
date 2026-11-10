@@ -31,13 +31,12 @@ public class BackupRecord : IAggregateRoot
 
     /// The backup finished: the only kind the backup health and the newest-backup list count.
     public bool IsComplete => Status == BackupRecordStatus.Complete;
-    public DateTimeOffset ObservedAt { get; private set; }
 
     private BackupRecord() { }
 
     public static BackupRecord Create(
         string kind, string resourceName, string backupKey, DateTimeOffset takenAt, long sizeBytes,
-        BackupRecordStatus status, DateTimeOffset observedAt, Guid? tenantId = null)
+        BackupRecordStatus status, Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(kind) || string.IsNullOrWhiteSpace(resourceName) || string.IsNullOrWhiteSpace(backupKey))
         {
@@ -50,11 +49,11 @@ public class BackupRecord : IAggregateRoot
         return new BackupRecord
         {
             Id = Guid.NewGuid(), Kind = kind, ResourceName = resourceName, BackupKey = backupKey,
-            TakenAt = takenAt, SizeBytes = sizeBytes, Status = status, ObservedAt = observedAt, TenantId = tenantId,
+            TakenAt = takenAt, SizeBytes = sizeBytes, Status = status, TenantId = tenantId,
         };
     }
 
-    public void Observe(DateTimeOffset takenAt, long sizeBytes, BackupRecordStatus status, DateTimeOffset observedAt)
+    public void Observe(DateTimeOffset takenAt, long sizeBytes, BackupRecordStatus status)
     {
         if (sizeBytes < 0)
         {
@@ -63,6 +62,5 @@ public class BackupRecord : IAggregateRoot
         TakenAt = takenAt;
         SizeBytes = sizeBytes;
         Status = status;
-        ObservedAt = observedAt;
     }
 }

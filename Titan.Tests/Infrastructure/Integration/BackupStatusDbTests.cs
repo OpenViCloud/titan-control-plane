@@ -64,9 +64,9 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
     private async Task SeedAsync(DateTimeOffset baseAt, DateTimeOffset lastWalAt)
     {
         await using TitanDbContext db = pg.NewDbContext();
-        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromDays(3)), 100, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
-        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K2", baseAt, 5000, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
-        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K3", Ago(TimeSpan.FromMinutes(5)), 700, BackupRecordStatus.Incomplete, DateTimeOffset.UtcNow));
+        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromDays(3)), 100, BackupRecordStatus.Complete));
+        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K2", baseAt, 5000, BackupRecordStatus.Complete));
+        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K3", Ago(TimeSpan.FromMinutes(5)), 700, BackupRecordStatus.Incomplete));
         var observation = BackupObservation.Create("postgres", "titan-db");
         observation.RecordRead(BackupReadOutcome.Read, lastWalAt, DateTimeOffset.UtcNow);
         db.BackupObservations.Add(observation);
@@ -113,7 +113,7 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         await using (TitanDbContext db = pg.NewDbContext())
         {
             await db.Backups.ExecuteDeleteAsync();
-            db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "OLD", Ago(TimeSpan.FromHours(30)), 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
+            db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "OLD", Ago(TimeSpan.FromHours(30)), 1, BackupRecordStatus.Complete));
             await db.SaveChangesAsync();
         }
 
@@ -125,8 +125,8 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
     public async Task TwoRowsForTheSameBackup_AreRefusedByTheDatabase()
     {
         await using TitanDbContext db = pg.NewDbContext();
-        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", DateTimeOffset.UtcNow, 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
-        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", DateTimeOffset.UtcNow, 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
+        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", DateTimeOffset.UtcNow, 1, BackupRecordStatus.Complete));
+        db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", DateTimeOffset.UtcNow, 1, BackupRecordStatus.Complete));
 
         await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
@@ -140,8 +140,8 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         await using (TitanDbContext db = pg.NewDbContext())
         {
             db.Backups.Add(BackupRecord.Create(BackupRecord.VmKind, vmId.ToString(), "20261026T020709Z",
-                Ago(TimeSpan.FromHours(1)), 667, BackupRecordStatus.Complete, DateTimeOffset.UtcNow, tenantId));
-            db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromHours(1)), 1, BackupRecordStatus.Complete, DateTimeOffset.UtcNow));
+                Ago(TimeSpan.FromHours(1)), 667, BackupRecordStatus.Complete, tenantId));
+            db.Backups.Add(BackupRecord.Create("postgres", "titan-db", "K1", Ago(TimeSpan.FromHours(1)), 1, BackupRecordStatus.Complete));
             await db.SaveChangesAsync();
         }
 

@@ -14,7 +14,6 @@ public class VmOffering : IAggregateRoot
 {
     public string Id { get; private set; } = default!;
     public string Name { get; private set; } = default!;
-    public decimal CpuUnits { get; private set; }
     public int VcpuCount { get; private set; }
     public int MemoryMb { get; private set; }
 
@@ -25,13 +24,12 @@ public class VmOffering : IAggregateRoot
     private VmOffering() { }
 
     public static VmOffering Create(
-        string id, string name, decimal cpuUnits, int vcpuCount, int memoryMb, decimal pricePerHour)
+        string id, string name, int vcpuCount, int memoryMb, decimal pricePerHour)
     {
         if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("id must not be empty", nameof(id));
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("name must not be empty", nameof(name));
         // Guard here rather than at create: a non-positive size is rejected by the provider far
         // downstream, where the error no longer points back at the catalog row that caused it.
-        if (cpuUnits <= 0) throw new ArgumentException("cpuUnits must be > 0", nameof(cpuUnits));
         if (vcpuCount <= 0) throw new ArgumentException("vcpuCount must be > 0", nameof(vcpuCount));
         if (memoryMb <= 0) throw new ArgumentException("memoryMb must be > 0", nameof(memoryMb));
         ValidatePrice(pricePerHour);
@@ -40,7 +38,6 @@ public class VmOffering : IAggregateRoot
         {
             Id = id,
             Name = name,
-            CpuUnits = cpuUnits,
             VcpuCount = vcpuCount,
             MemoryMb = memoryMb,
             PricePerHour = Rate.Of(pricePerHour)

@@ -21,24 +21,18 @@ public class Wallet : IAggregateRoot
     /// two writers who read the same balance cannot both commit.
     public int Version { get; private set; }
 
-    public DateTimeOffset CreatedAt { get; private set; }
-    public DateTimeOffset UpdatedAt { get; private set; }
-
     private Wallet() { }
 
     /// Opened by TenantActivation, which looks for the wallet under the tenant's row lock, so two activations take
     /// turns; UNIQUE(tenant_id) still refuses a second wallet whatever opens it.
     public static Wallet Open(Guid tenantId, string currency)
     {
-        var now = DateTimeOffset.UtcNow;
         return new Wallet
         {
             Id = Guid.NewGuid(),
             TenantId = tenantId,
             Currency = currency,
-            AvailableAmount = 0,
-            CreatedAt = now,
-            UpdatedAt = now
+            AvailableAmount = 0
         };
     }
 
@@ -50,7 +44,7 @@ public class Wallet : IAggregateRoot
                 nameof(amount), amount, "A wallet credit must be a positive amount.");
 
         AvailableAmount += amount;
-        Touch();
+        Version++;
     }
 
     /// The non-negative invariant lives here, whoever is asking. InvoiceWalletPayment's balance read only gives a
@@ -65,12 +59,6 @@ public class Wallet : IAggregateRoot
                 $"Wallet balance {AvailableAmount} cannot cover {amount}.");
 
         AvailableAmount -= amount;
-        Touch();
-    }
-
-    private void Touch()
-    {
-        UpdatedAt = DateTimeOffset.UtcNow;
         Version++;
     }
 }

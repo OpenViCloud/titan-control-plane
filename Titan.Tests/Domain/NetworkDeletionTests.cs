@@ -15,7 +15,7 @@ namespace Titan.Tests.Domain;
 public class NetworkDeletionTests
 {
     private readonly Mock<INetworkRepository> _networks = new();
-    private readonly Tenant _tenant = TestTenant.Active("nd", "kc-nd", "nd@titan.local");
+    private readonly Tenant _tenant = TestTenant.Active("nd", "kc-nd");
 
     private NetworkDeletion Deletion() => new(_networks.Object);
 

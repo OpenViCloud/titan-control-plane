@@ -24,7 +24,7 @@ public class ProviderCommandQueueTests
     private static Vm AVm(string clusterId = "mock", string? userData = "#cloud-config\n") =>
         Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-guid", clusterId, 20, userData);
 
-    private static readonly VmOffering Medium = VmOffering.Create("m", "m", 2m, 2, 4096, 1m);
+    private static readonly VmOffering Medium = VmOffering.Create("m", "m", 2, 4096, 1m);
 
     // The resource of the "resource" key shape: the same VM each call, so the same key.
     private readonly Vm _vmOfTheSameKey = AVm();
@@ -91,7 +91,6 @@ public class ProviderCommandQueueTests
         Assert.Equal(4096, payload.RootElement.GetProperty("memoryMb").GetInt32());
         Assert.Equal("web-1", payload.RootElement.GetProperty("name").GetString());
         Assert.Equal("net-1", payload.RootElement.GetProperty("externalNetworkId").GetString());
-        Assert.Equal(2m, payload.RootElement.GetProperty("cpuUnits").GetDecimal());
         Assert.Equal(2, payload.RootElement.GetProperty("vcpuCount").GetInt32());
         Assert.Equal(20, payload.RootElement.GetProperty("diskSizeGb").GetInt32());
         Assert.Equal("#cloud-config\n", payload.RootElement.GetProperty("userData").GetString());
@@ -154,7 +153,7 @@ public class ProviderCommandQueueTests
         }
         if (status == ProviderCommandStatus.Done)
         {
-            row.Complete(lease, now);
+            row.Complete(lease);
             return row;
         }
         row.Fail(lease, "gave up", retryable: false, now);
@@ -590,7 +589,6 @@ public class ProviderCommandQueueTests
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal("almalinux/9", payload.RootElement.GetProperty("osImageName").GetString());
         Assert.Equal(requestId, payload.RootElement.GetProperty("requestId").GetGuid());
-        Assert.False(payload.RootElement.TryGetProperty("cpuUnits", out _));
         Assert.False(payload.RootElement.TryGetProperty("memoryMb", out _));
         Assert.False(payload.RootElement.TryGetProperty("vcpuCount", out _));
     }
@@ -685,7 +683,7 @@ public class ProviderCommandQueueTests
         ProviderCommand row = Assert.Single(_repo.Rows);
         Guid lease = Guid.NewGuid();
         row.Lease(lease, _clock.GetUtcNow());
-        row.Complete(lease, _clock.GetUtcNow());
+        row.Complete(lease);
 
         await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", day);
 
@@ -868,7 +866,7 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.NetworkDelete, ["externalNetworkId", "networkId", "projectName", "requestId"] },
         { ProviderCommandKinds.FirewallRuleCreate, ["cidr", "direction", "endPort", "networkId", "projectName", "protocol", "requestId", "ruleId", "startPort"] },
         { ProviderCommandKinds.FirewallRuleDelete, ["externalRuleId", "networkId", "projectName", "requestId", "ruleId"] },
-        { ProviderCommandKinds.VmCreate, ["cpuUnits", "diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName", "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"] },
+        { ProviderCommandKinds.VmCreate, ["diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName", "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"] },
         { ProviderCommandKinds.VmDelete, ["externalVmId", "projectName", "requestId", "vmId"] },
         { ProviderCommandKinds.VmStop, ["externalVmId", "projectName", "requestId", "vmId"] },
         { ProviderCommandKinds.VmStart, ["externalVmId", "projectName", "requestId", "vmId"] },

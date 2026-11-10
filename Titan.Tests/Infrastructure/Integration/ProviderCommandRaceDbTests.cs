@@ -29,7 +29,7 @@ public class ProviderCommandRaceDbTests(PostgresFixture pg)
     [Fact]
     public async Task ANewVmDelete_BesideAFailedRowUnderTheOldKey_GetsItsOwnRow_AndTheOldOneStaysFailed()
     {
-        Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}", "race@titan.local");
+        Tenant tenant = TestTenant.Active("race", $"kc-{Guid.NewGuid():N}");
         Vm vm = Vm.Create(tenant.Id, Guid.NewGuid(), $"vm-{Guid.NewGuid():N}"[..12], "m", "tpl", "cluster-1", 20);
         vm.MarkCreated($"vm{Guid.NewGuid():N}"[..28]);
         vm.MarkObserved(VmStatus.Running, "10.0.0.5");

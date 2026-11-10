@@ -1197,7 +1197,7 @@ public class NetworkServiceTests
 
     private void SetupTenant(int maxNetworks = 1)
     {
-        var tenant = TestTenant.Active("acme", "owner-1", "admin@acme.com", maxNetworks: maxNetworks);
+        var tenant = TestTenant.Active("acme", "owner-1", maxNetworks: maxNetworks);
         _tenant = tenant;
         _tenantRepo.Setup(r => r.FindByIdAsync(TenantId, default)).ReturnsAsync(tenant);
     }

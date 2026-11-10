@@ -22,7 +22,6 @@ public partial class VmTemplateCluster
         {
             Status = VmTemplateClusterStatus.Available;
         }
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     /// The reconciler did not find the alias. A cluster whose sync gave up before any alias was there stays Failed.
@@ -37,6 +36,5 @@ public partial class VmTemplateCluster
         {
             Status = VmTemplateClusterStatus.NotFound;
         }
-        UpdatedAt = DateTimeOffset.UtcNow;
     }
 }

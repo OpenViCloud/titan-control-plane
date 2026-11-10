@@ -16,7 +16,6 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
         builder.HasKey(o => o.Id);
         builder.Property(o => o.Id).HasColumnName("id").HasColumnType("text");
         builder.Property(o => o.Name).HasColumnName("name").HasColumnType("text").IsRequired();
-        builder.Property(o => o.CpuUnits).HasColumnName("cpu_units").HasColumnType("numeric(5,2)").IsRequired();
         builder.Property(o => o.VcpuCount).HasColumnName("vcpu_count").IsRequired();
         builder.Property(o => o.MemoryMb).HasColumnName("memory_mb").IsRequired();
         // NOT NULL: a tier without a price would bill every VM on it zero, silently
@@ -28,7 +27,7 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
         SeedOfferings(builder);
     }
 
-    // CPU = vCPU × 0.5, the 2:1 overcommit ratio. HasData needs constant values: no Guid.NewGuid()/UtcNow.
+    // HasData needs constant values: no Guid.NewGuid()/UtcNow.
     //
     // Positioning: half of Vultr for the equivalent instance.
     // Source: Vultr's public plan API (api.vultr.com/v2/plans?type=vc2), converted at
@@ -49,19 +48,18 @@ public class VmOfferingConfiguration : IEntityTypeConfiguration<VmOffering>
     private static void SeedOfferings(EntityTypeBuilder<VmOffering> builder)
     {
         builder.HasData(
-            Row("s", "Small", 0.5m, 1, 2048, 161.388m),
-            Row("m", "Medium", 1.0m, 2, 4096, 311.256m),
-            Row("l", "Large", 2.0m, 4, 8192, 634.050m),
-            Row("xl", "Extra Large", 4.0m, 8, 16384, 1268.100m));
+            Row("s", "Small", 1, 2048, 161.388m),
+            Row("m", "Medium", 2, 4096, 311.256m),
+            Row("l", "Large", 4, 8192, 634.050m),
+            Row("xl", "Extra Large", 8, 16384, 1268.100m));
     }
 
     // VmOffering has a private ctor + validating factory, so HasData maps by property name.
     private static object Row(
-        string id, string name, decimal cpuUnits, int vcpuCount, int memoryMb, decimal pricePerHour) => new
+        string id, string name, int vcpuCount, int memoryMb, decimal pricePerHour) => new
     {
         Id = id,
         Name = name,
-        CpuUnits = cpuUnits,
         VcpuCount = vcpuCount,
         MemoryMb = memoryMb,
         PricePerHour = Rate.Of(pricePerHour),

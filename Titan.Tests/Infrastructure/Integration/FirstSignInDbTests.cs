@@ -66,7 +66,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
 
         await using TitanDbContext first = pg.NewDbContext();
         await using var firstInsert = await first.Database.BeginTransactionAsync();
-        first.Tenants.Add(Tenant.CreatePending(name, user, name + "@example.com"));
+        first.Tenants.Add(Tenant.CreatePending(name, user));
         await first.SaveChangesAsync();
 
         await using TitanDbContext second = pg.NewDbContext();
@@ -101,7 +101,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
     {
         string user = "kc-" + Guid.NewGuid();
         string name = "decl-" + Guid.NewGuid().ToString("N")[..12];
-        Tenant pending = Tenant.CreatePending(name, user, name + "@example.com");
+        Tenant pending = Tenant.CreatePending(name, user);
         await using (TitanDbContext seed = pg.NewDbContext())
         {
             seed.Tenants.Add(pending);

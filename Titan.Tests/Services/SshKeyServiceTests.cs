@@ -18,7 +18,7 @@ public class SshKeyServiceTests
     private readonly FakeActivityRecorder _activity = new();
     private readonly Mock<ITenantRepository> _tenants = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
-    private readonly Tenant _tenant = TestTenant.Active("acme", "kc-1", "a@acme.com");
+    private readonly Tenant _tenant = TestTenant.Active("acme", "kc-1");
 
     public SshKeyServiceTests()
     {
@@ -107,7 +107,7 @@ public class SshKeyServiceTests
     public async Task List_ShowsOnlyTheCallersTenant()
     {
         await AddAsync("laptop", SshPublicKeyTests.Ed25519);
-        Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
+        Tenant other = TestTenant.Active("other", "kc-2");
         _keys.Saved.Add(Titan.Domain.Aggregates.SshKey.SshKey.Create(other.Id, "theirs", SshPublicKeyTests.Rsa2048));
 
         SshKeyQueryResult listed = Assert.Single(await ListAsync());
@@ -129,7 +129,7 @@ public class SshKeyServiceTests
     [Fact]
     public async Task Delete_AnotherTenantsKey_IsNotFound_AndKeepsIt()
     {
-        Tenant other = TestTenant.Active("other", "kc-2", "b@other.com");
+        Tenant other = TestTenant.Active("other", "kc-2");
         var theirs = Titan.Domain.Aggregates.SshKey.SshKey.Create(other.Id, "theirs", SshPublicKeyTests.Rsa2048);
         _keys.Saved.Add(theirs);
 

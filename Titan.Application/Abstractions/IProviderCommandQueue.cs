@@ -27,7 +27,7 @@ public interface IProviderCommandQueue
     Task EnqueueFirewallRuleCreateAsync(NetworkAggregate network, FirewallRule rule, Guid requestId, string projectName, CancellationToken ct = default);
     Task EnqueueFirewallRuleDeleteAsync(NetworkAggregate network, FirewallRule rule, Guid requestId, string externalRuleId, string projectName, CancellationToken ct = default);
 
-    // cpuUnits/vcpuCount/memoryMb from the VM offering the customer picked (titan-ops features/catalog/design.md#vm-offering-sizing):
+    // vcpuCount/memoryMb from the VM offering the customer picked (titan-ops features/catalog/design.md#vm-offering-sizing):
     // the worker has no access to Titan's catalog, so the resolved sizing travels and the offering id does not
     // (titan-ops features/catalog/design.md#catalog-resolution-at-create). vendorData is Titan's own cloud-init script
     // (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData.

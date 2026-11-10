@@ -25,7 +25,7 @@ public class ProviderCommandRetentionDbTests(PostgresFixture pg)
         }
         if (status == ProviderCommandStatus.Done)
         {
-            row.Complete(lease, createdAt);
+            row.Complete(lease);
         }
         if (status == ProviderCommandStatus.Failed)
         {

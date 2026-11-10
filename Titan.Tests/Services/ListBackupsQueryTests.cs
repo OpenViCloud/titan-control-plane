@@ -18,7 +18,7 @@ public class ListBackupsQueryTests
         new ListBackupsQueryHandler(_records, _observations, new FixedClock(Now)).HandleAsync(new ListBackupsQuery());
 
     private void Row(string key, TimeSpan age, long size, BackupRecordStatus status = BackupRecordStatus.Complete) =>
-        _records.Rows.Add(BackupRecord.Create(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, key, Now - age, size, status, Now));
+        _records.Rows.Add(BackupRecord.Create(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, key, Now - age, size, status));
 
     [Fact]
     public async Task NothingReadYet_IsOneUnknownItem_WithNoReadTime()
