@@ -338,7 +338,8 @@ public class ModuleBoundaryTests
         [("Compute", "Catalog")] =
             "CreateVm resolves template and offering; the offering is the sole source of sizing (docs/features/catalog/design.md#template-borrows-sizing). "
             + "CreateVolume refuses an offering the catalog lacks, or the disk meter would meet a volume with no price "
-            + "(docs/features/volume/design.md#offering-must-exist).",
+            + "(docs/features/volume/design.md#offering-must-exist). "
+            + "GetVmMetricsQueryHandler reads the VM's offering for its vCPU count: CPU percent is per vCPU.",
         [("Compute", "Networking")] =
             "A VM and a load balancer are created onto a network — the id alone is not enough, the network (its state, "
             + "its public /64) must be verified.",

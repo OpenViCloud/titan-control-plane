@@ -26,7 +26,9 @@ RUN dotnet publish Titan.Host/Titan.Host.csproj \
     -r "$(cat /rid)" \
     --output /publish
 
-RUN dotnet tool install --global dotnet-ef
+# Same version as the EF Core packages: an unpinned install takes the newest dotnet-ef, which the 9.0 SDK fails to
+# install ("DotnetToolSettings.xml was not found").
+RUN dotnet tool install --global dotnet-ef --version 9.0.4
 ENV PATH="$PATH:/root/.dotnet/tools"
 
 RUN dotnet ef migrations bundle \

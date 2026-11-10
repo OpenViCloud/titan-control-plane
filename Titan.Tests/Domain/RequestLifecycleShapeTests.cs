@@ -484,14 +484,15 @@ public class RequestLifecycleShapeTests
     // ---------- source text: handlers lock, payloads carry the id ----------
 
     // A VM snapshot is reached through its VM, so every snapshot handler locks the VM's row: the create for the cap,
-    // the rest so two requests on one snapshot take turns.
+    // the rest so two requests on one snapshot take turns. A metric batch writes its own table and no VM's status
+    // (titan-ops features/vm/design.md#vm-metrics), so it locks nothing.
     [Fact]
     public void EveryVmLifecycleHandler_LocksTheRow()
     {
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "Vm"), Path.Combine("Titan.Application", "Commands", "Admin", "Vm"),
                 Path.Combine("Titan.Application", "Commands", "Compute", "VmSnapshot")],
-            except: ["Rename", "RequestVmSsh"], atLeast: 12, "VM");
+            except: ["Rename", "RequestVmSsh", "RecordVmMetrics"], atLeast: 12, "VM");
     }
 
     // A volume's create makes a new row, so it has nothing to lock; a snapshot's create locks its volume for the cap.
