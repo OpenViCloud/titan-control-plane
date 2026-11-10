@@ -199,7 +199,8 @@ public class VmMetricPointsTests
     [Fact]
     public void TwentyFourHours_AveragesEachFiveMinuteBucket_AtTheBucketStart()
     {
-        // From is on a five-minute boundary; readings every 60 s, CPU 30 s then 60 s per minute on one vCPU.
+        // From is on a five-minute boundary; readings at +0, +60, +120 and +300 s, CPU 30 s then 60 s per minute on one
+        // vCPU.
         List<VmMetricReading> readings =
         [
             Reading(From.AddSeconds(0), 0, memoryAvailable: 1_000_000),

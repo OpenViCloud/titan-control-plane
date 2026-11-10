@@ -15,8 +15,7 @@ public class RecordVmMetricsEndpoint(RecordVmMetricsCommandHandler handler, ICon
     {
         Post("internal/clusters/{clusterId}/vm-metrics");
         AllowAnonymous();
-        // The validator's verdict waits for the token check below: a caller without the token learns nothing about
-        // the body.
+        // The validator's verdict on a well-formed body waits for the token check below.
         DontThrowIfValidationFails();
     }
 
@@ -29,7 +28,7 @@ public class RecordVmMetricsEndpoint(RecordVmMetricsCommandHandler handler, ICon
             return;
         }
 
-        // A body that is not JSON of this shape binds as a validation failure, and a JSON null as no body at all.
+        // A JSON null binds as no body at all.
         if (ValidationFailed || body == null)
         {
             await SendErrorsAsync(400, ct);
@@ -65,7 +64,7 @@ public record VmMetricsSampleBody(
     long? DiskReadBytes,
     long? DiskWrittenBytes);
 
-// Counters and sizes are never negative; the four memory and root filesystem numbers may be null (no guest agent).
+// Counters and sizes are never negative; the four memory and root filesystem numbers may be null (Incus reported none).
 public class RecordVmMetricsValidator : Validator<RecordVmMetricsBody>
 {
     public RecordVmMetricsValidator()

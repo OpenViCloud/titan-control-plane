@@ -45,7 +45,8 @@ public class VmMetricSampleSchemaTests
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
-    // Incus has no memory or root filesystem numbers without the guest agent: those four may be NULL, never 0.
+    // Incus may report no memory or root filesystem number (the root filesystem only comes with the guest agent): those
+    // four may be NULL.
     [Fact]
     public void TheColumns_AndWhichMayBeNull()
     {

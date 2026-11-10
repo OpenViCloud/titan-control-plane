@@ -5,7 +5,8 @@ namespace Titan.Application.Queries.Compute.Vm.Contracts;
 public record VmMetricsQueryResult(string Range, int StepSeconds, List<VmMetricPointQueryResult> Points);
 
 // At is the sample time for 1h and the start of the step for 24h and 7d. A null field is a number Titan does not have:
-// CPU and the disk rates across a restart or a change of source, memory and the root filesystem without the guest agent.
+// CPU and the disk rates on the first sample, across a restart or a change of source (CPU also when the VM has no
+// offering), memory and the root filesystem when Incus reported none.
 public record VmMetricPointQueryResult(
     DateTimeOffset At,
     double? CpuPercent,

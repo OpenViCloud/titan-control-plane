@@ -308,7 +308,7 @@ public class InternalTokenCallbackTests
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }
 
-    // The token is read before the body's verdict, so a wrong token answers 401 whatever the batch holds.
+    // The token is read before the validator's verdict, so a wrong token answers 401 for a well-formed batch.
     [Theory]
     [InlineData(null)]
     [InlineData("wrong")]

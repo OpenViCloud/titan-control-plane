@@ -22,7 +22,8 @@ public interface IVmMetricStore
 }
 
 /// One reading of a VM's counters. CpuSeconds, DiskReadBytes and DiskWrittenBytes only grow while the VM runs; the
-/// four memory and root filesystem numbers are null when Incus has none (no guest agent). Source is "agent" or "qemu".
+/// four memory and root filesystem numbers are null when Incus reports none (the root filesystem only with the guest
+/// agent, memory sometimes without it). Source is "agent" or "qemu".
 public record VmMetricReading(
     Guid VmId,
     DateTimeOffset SampledAt,
