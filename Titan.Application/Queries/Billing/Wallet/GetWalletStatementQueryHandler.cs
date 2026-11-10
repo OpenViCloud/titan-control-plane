@@ -1,5 +1,5 @@
 using Titan.Application.Abstractions;
-using Titan.Application.Options;
+using Titan.Application.Services.Billing;
 using Titan.Application.Queries.Billing.Wallet.Contracts;
 using Titan.Domain.Aggregates.WalletTransaction;
 using Titan.Domain.Repositories;
@@ -8,7 +8,7 @@ namespace Titan.Application.Queries.Billing.Wallet;
 
 /// Every movement (TopUp +, promo +, spend −) in chronological order with the balance after each
 /// (titan-ops architecture/money-and-wallet.md#wallet-one-balance).
-public class GetWalletStatementQueryHandler(IWalletTransactionRepository transactions, ICurrentUser currentUser, CreditOptions options)
+public class GetWalletStatementQueryHandler(IWalletTransactionRepository transactions, ICurrentUser currentUser)
 {
     public async Task<WalletStatementQueryResult> HandleAsync(GetWalletStatementQuery query, CancellationToken ct = default)
     {
@@ -22,7 +22,7 @@ public class GetWalletStatementQueryHandler(IWalletTransactionRepository transac
             .ToList();
 
         var closing = lines.Count == 0 ? 0m : lines[^1].RunningBalance;
-        return new WalletStatementQueryResult(0m, closing, options.Currency, lines);
+        return new WalletStatementQueryResult(0m, closing, BillingConstants.DefaultCurrency, lines);
     }
 
     /// The customer's word for a movement, not ours: InvoicePayment has no business on the wire.

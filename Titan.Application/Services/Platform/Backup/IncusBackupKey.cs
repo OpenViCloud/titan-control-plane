@@ -1,7 +1,7 @@
 using System.Globalization;
 using Titan.Domain.Aggregates.BackupRecord;
 
-namespace Titan.Application.Commands.Platform.Backup;
+namespace Titan.Application.Services.Platform.Backup;
 
 /// One VM or volume backup, read from its object key: incus/<clusterId>/<tenantId>/<vms|volumes>/<id>/<yyyyMMddTHHmmssZ>.tar.gz,
 /// the key the worker gives it (titan-ops features/backup/design.md#incus-backup).

@@ -1,3 +1,4 @@
+using Titan.Application.Services.Platform.Backup;
 using System.Text;
 using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
@@ -25,6 +26,13 @@ public class RefreshBackupStatusCommandHandler(
     private record BaseFolder(string Key, long Size, DateTimeOffset TakenAt, BackupRecordStatus Status);
 
     private record BucketSnapshot(BackupReadOutcome Outcome, DateTimeOffset? LastWalAt, IReadOnlyList<BaseFolder> Folders);
+
+    // One backup the bucket shows, as its row holds it.
+    private record SeenBackup(string Kind, string ResourceName, string BackupKey, DateTimeOffset TakenAt, long Size,
+        BackupRecordStatus Status, Guid? TenantId);
+
+    // A pass that cannot read the bucket records why and leaves the rows as they are.
+    private static bool IsUnreadable(Exception e) => e is BackupBucketException or ServiceUnavailableException;
 
     public async Task HandleAsync(RefreshBackupStatusCommand command, CancellationToken ct = default)
     {
@@ -79,18 +87,15 @@ public class RefreshBackupStatusCommandHandler(
         {
             snapshot = await ReadAsync(bucket, known, now, ct);
         }
-        catch (BackupBucketException e)
-        {
-            observation.RecordUnreadable(e.Message, now);
-            return;
-        }
-        catch (ServiceUnavailableException e)
+        catch (Exception e) when (IsUnreadable(e))
         {
             observation.RecordUnreadable(e.Message, now);
             return;
         }
 
-        Apply(snapshot, known, observation, now);
+        ReplaceRows(known, snapshot.Folders.Select(f => new SeenBackup(BackupRecord.PostgresKind,
+            BackupLayout.PostgresResourceName, f.Key, f.TakenAt, f.Size, f.Status, null)), now);
+        observation.RecordRead(snapshot.Outcome, snapshot.LastWalAt, now);
     }
 
     /// VM and volume backups under incus/ (titan-ops features/backup/design.md#incus-backup): each object is a
@@ -118,40 +123,43 @@ public class RefreshBackupStatusCommandHandler(
                 kept.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
             }
         }
-        catch (BackupBucketException e)
-        {
-            observation.RecordUnreadable(e.Message, now);
-            return;
-        }
-        catch (ServiceUnavailableException e)
+        catch (Exception e) when (IsUnreadable(e))
         {
             observation.RecordUnreadable(e.Message, now);
             return;
         }
 
-        foreach (BackupRecord gone in known.Where(r => !kept.Any(k => IsRowOf(r, k.Key))))
-        {
-            records.Remove(gone);
-        }
-        foreach (var (key, size) in kept)
-        {
-            BackupRecord? existing = known.FirstOrDefault(r => IsRowOf(r, key));
-            if (existing is null)
-            {
-                // A VM's or volume's archive is always complete: the bucket shows an upload only once it has finished.
-                records.Add(BackupRecord.Create(
-                    key.Kind, key.ResourceId.ToString(), key.BackupKey, key.TakenAt, size, BackupRecordStatus.Complete, now, key.TenantId));
-            }
-            else
-            {
-                existing.Observe(key.TakenAt, size, BackupRecordStatus.Complete, now);
-            }
-        }
+        // A VM's or volume's archive is always complete: the bucket shows an upload only once it has finished.
+        ReplaceRows(known, kept.Select(k => new SeenBackup(k.Key.Kind, k.Key.ResourceId.ToString(), k.Key.BackupKey,
+            k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, k.Key.TenantId)), now);
         observation.RecordRead(BackupReadOutcome.Read, null, now);
     }
 
-    private static bool IsRowOf(BackupRecord row, IncusBackupKey key) =>
-        row.Kind == key.Kind && row.ResourceName == key.ResourceId.ToString() && row.BackupKey == key.BackupKey;
+    // The bucket is the truth: a row it no longer shows goes, a backup it shows is added or brought up to date.
+    private void ReplaceRows(List<BackupRecord> known, IEnumerable<SeenBackup> seen, DateTimeOffset now)
+    {
+        List<SeenBackup> shown = seen.ToList();
+        foreach (BackupRecord gone in known.Where(r => !shown.Any(b => IsRowOf(r, b))))
+        {
+            records.Remove(gone);
+        }
+        foreach (SeenBackup backup in shown)
+        {
+            BackupRecord? existing = known.FirstOrDefault(r => IsRowOf(r, backup));
+            if (existing is null)
+            {
+                records.Add(BackupRecord.Create(backup.Kind, backup.ResourceName, backup.BackupKey, backup.TakenAt,
+                    backup.Size, backup.Status, now, backup.TenantId));
+            }
+            else
+            {
+                existing.Observe(backup.TakenAt, backup.Size, backup.Status, now);
+            }
+        }
+    }
+
+    private static bool IsRowOf(BackupRecord row, SeenBackup backup) =>
+        row.Kind == backup.Kind && row.ResourceName == backup.ResourceName && row.BackupKey == backup.BackupKey;
 
     private static async Task<BucketSnapshot> ReadAsync(
         IBackupBucket bucket, List<BackupRecord> known, DateTimeOffset now, CancellationToken ct)
@@ -160,10 +168,11 @@ public class RefreshBackupStatusCommandHandler(
         // The cluster that runs now is the serverName that wrote last: after a restore the old name gets nothing new.
         // Ties go to the larger name, so the choice does not depend on the listing's order.
         string? server = all
-            .Where(o => BackupLayout.ServerOf(o.Key) is not null)
+            .Select(o => (o.LastModified, Server: BackupLayout.ServerOf(o.Key)))
+            .Where(o => o.Server is not null)
             .OrderByDescending(o => o.LastModified)
-            .ThenByDescending(o => BackupLayout.ServerOf(o.Key), StringComparer.Ordinal)
-            .Select(o => BackupLayout.ServerOf(o.Key))
+            .ThenByDescending(o => o.Server, StringComparer.Ordinal)
+            .Select(o => o.Server)
             .FirstOrDefault();
         if (server is null)
         {
@@ -201,7 +210,7 @@ public class RefreshBackupStatusCommandHandler(
             }
 
             // A backup already seen complete is not read again: barman does not rewrite a finished backup.
-            BackupRecord? already = known.FirstOrDefault(r => r.BackupKey == folder.Key && r.Status == BackupRecordStatus.Complete);
+            BackupRecord? already = known.FirstOrDefault(r => r.BackupKey == folder.Key && r.IsComplete);
             if (already is not null)
             {
                 folders.Add(new BaseFolder(folder.Key, size, already.TakenAt, BackupRecordStatus.Complete));
@@ -220,27 +229,5 @@ public class RefreshBackupStatusCommandHandler(
             folders.Add(new BaseFolder(folder.Key, size, takenAt, BackupRecordStatus.Complete));
         }
         return new BucketSnapshot(BackupReadOutcome.Read, lastWal, folders);
-    }
-
-    private void Apply(BucketSnapshot snapshot, List<BackupRecord> known, BackupObservation observation, DateTimeOffset now)
-    {
-        foreach (BackupRecord gone in known.Where(r => snapshot.Folders.All(f => f.Key != r.BackupKey)))
-        {
-            records.Remove(gone);
-        }
-        foreach (BaseFolder folder in snapshot.Folders)
-        {
-            BackupRecord? existing = known.FirstOrDefault(r => r.BackupKey == folder.Key);
-            if (existing is null)
-            {
-                records.Add(BackupRecord.Create(
-                    BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, folder.Key, folder.TakenAt, folder.Size, folder.Status, now));
-            }
-            else
-            {
-                existing.Observe(folder.TakenAt, folder.Size, folder.Status, now);
-            }
-        }
-        observation.RecordRead(snapshot.Outcome, snapshot.LastWalAt, now);
     }
 }

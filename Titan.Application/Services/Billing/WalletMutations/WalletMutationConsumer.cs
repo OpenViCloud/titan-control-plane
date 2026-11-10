@@ -29,7 +29,7 @@ public class WalletMutationConsumer(
         if (mutation is null) return;                  // a notify for a mutation that never landed
 
         // Only a Pending mutation has work left: a redelivered notify returns here without touching the wallet.
-        if (mutation.Status != WalletMutationStatus.Pending) return;
+        if (!mutation.IsPending) return;
 
         await apply.ApplyAsync(mutation, ct);
 

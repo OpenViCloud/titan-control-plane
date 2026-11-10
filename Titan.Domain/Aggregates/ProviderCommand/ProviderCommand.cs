@@ -76,6 +76,14 @@ public class ProviderCommand : IAggregateRoot
 
     public bool IsOpen => Status is ProviderCommandStatus.Pending or ProviderCommandStatus.Leased;
 
+    /// The command ended well: a later report of it is a repeat that already landed
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsDone => Status == ProviderCommandStatus.Done;
+
+    /// A worker holds it now; once the lease's report has landed the row is Done, Failed or Pending again, and a later
+    /// report under the same lease is a repeat.
+    public bool IsLeased => Status == ProviderCommandStatus.Leased;
+
     /// The rows the retention job deletes: finished and created before the cutoff. An open row is never one, however old:
     /// a worker may still lease it (titan-ops architecture/resource-lifecycle.md#one-key-per-operation).
     /// ProviderCommandRepository.DeleteFinishedCreatedBeforeAsync writes the same test in SQL

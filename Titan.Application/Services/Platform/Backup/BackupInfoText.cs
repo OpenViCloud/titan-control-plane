@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Titan.Application.Commands.Platform.Backup;
+namespace Titan.Application.Services.Platform.Backup;
 
 // barman's backup.info is lines of key=value. Only the two keys the status needs are read, leniently: a file that does not
 // say status=DONE is an unfinished backup, and a missing or odd end_time falls back to the object's own LastModified.

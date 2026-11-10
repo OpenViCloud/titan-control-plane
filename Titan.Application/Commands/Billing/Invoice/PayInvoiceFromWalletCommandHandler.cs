@@ -19,14 +19,8 @@ public class PayInvoiceFromWalletCommandHandler(
 {
     public async Task HandleAsync(PayInvoiceFromWalletCommand command, CancellationToken ct = default)
     {
-        var invoiceId = command.InvoiceId;
-        var tenantId = currentUser.RequireTenantId();
-        var invoice = await invoiceRepo.GetForUpdateAsync(invoiceId, ct);
-
-        // Same error for "does not exist" and "belongs to another tenant", so a payment attempt cannot
-        // probe for invoice ids.
-        if (invoice is null || invoice.TenantId != tenantId)
-            throw new NotFoundException("INVOICE_NOT_FOUND", $"Invoice {invoiceId} not found.");
+        var invoice = await InvoiceOwnership.RequireInvoiceForUpdateAsync(
+            invoiceRepo, currentUser.RequireTenantId(), command.InvoiceId, ct);
 
         // A repeat is recognised here first (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat):
         // answer like the first press, nothing enqueued, nothing charged.

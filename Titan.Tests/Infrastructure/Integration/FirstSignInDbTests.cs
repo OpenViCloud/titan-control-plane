@@ -30,8 +30,7 @@ public class FirstSignInDbTests(PostgresFixture pg)
         return new TenantResolutionMiddleware(
             tenants,
             new BootstrapTenantCommandHandler(tenants),
-            new ApproveDeclaredAccountCommandHandler(tenants, wallets, new TenantActivation(wallets),
-                new CreditOptions { Currency = "VND" }));
+            new ApproveDeclaredAccountCommandHandler(tenants, wallets, new TenantActivation(wallets)));
     }
 
     private static DefaultHttpContext Request(string keycloakUserId, string username)

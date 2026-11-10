@@ -51,12 +51,12 @@ public static class BackupHealthPolicy
         }
 
         BackupRecord? newest = records
-            .Where(r => r.Status == BackupRecordStatus.Complete)
+            .Where(r => r.IsComplete)
             .OrderByDescending(r => r.TakenAt)
             .FirstOrDefault();
         if (newest is null)
         {
-            bool anyIncomplete = records.Any(r => r.Status == BackupRecordStatus.Incomplete);
+            bool anyIncomplete = records.Any(r => !r.IsComplete);
             return (BackupHealth.Missing, anyIncomplete ? OnlyIncompleteBackups : NoBackup);
         }
         if (now - newest.TakenAt > PostgresBaseStaleAfter)

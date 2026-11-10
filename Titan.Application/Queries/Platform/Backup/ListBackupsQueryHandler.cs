@@ -1,4 +1,4 @@
-using Titan.Application.Commands.Platform.Backup;
+using Titan.Application.Services.Platform.Backup;
 using Titan.Application.Queries.Platform.Backup.Contracts;
 using Titan.Domain.Aggregates.BackupRecord;
 using Titan.Domain.Repositories;
@@ -17,7 +17,7 @@ public class ListBackupsQueryHandler(
 
         var (health, reason) = BackupHealthPolicy.ForPostgres(observation, rows, clock.GetUtcNow());
         BackupRecord? newest = rows
-            .Where(r => r.Status == BackupRecordStatus.Complete)
+            .Where(r => r.IsComplete)
             .OrderByDescending(r => r.TakenAt)
             .FirstOrDefault();
 

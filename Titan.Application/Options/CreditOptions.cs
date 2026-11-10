@@ -9,7 +9,4 @@ public class CreditOptions
     /// Upper bound for a single grant (VND). A sane ceiling, not an invariant: the handler refuses a larger
     /// grant with GRANT_AMOUNT_EXCEEDS_MAX.
     public decimal MaxGrantAmount { get; set; } = 100_000_000m;
-
-    /// Currency of the grant — must match the billing default (VND, titan-ops architecture/money-and-wallet.md#money-is-long-vnd) so credit and usage are comparable.
-    public string Currency { get; set; } = "VND";
 }

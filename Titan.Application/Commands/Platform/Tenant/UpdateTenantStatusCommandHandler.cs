@@ -25,28 +25,23 @@ public class UpdateTenantStatusCommandHandler(ITenantRepository repo)
 
     public async Task HandleAsync(UpdateTenantStatusCommand command, CancellationToken ct = default)
     {
-        var (tenantId, status) = command;
-
-        var tenant = await repo.FindByIdAsync(tenantId, ct)
+        var tenant = await repo.FindByIdAsync(command.TenantId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
 
-        TenantStatus parsed = ParseTarget(status);
-
-        if (parsed == TenantStatus.Active)
+        if (command.Status == TenantStatus.Active)
         {
             throw new InvalidOperationException("Active goes to ActivateTenantCommandHandler, which opens the wallet.");
         }
 
         // Only two targets exist for an admin: Active and Suspended; anything else is refused.
-        if (parsed != TenantStatus.Suspended)
+        if (command.Status != TenantStatus.Suspended)
         {
             throw new BadRequestException("INVALID_STATUS", $"A tenant can only be set to {TenantStatus.Active} or {TenantStatus.Suspended}.");
         }
 
         // The aggregate refuses a repeat, so the handler recognises it first
         // (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat): already suspended answers 204, saves nothing.
-        bool alreadySuspended = tenant.Status == TenantStatus.Suspended;
-        if (alreadySuspended)
+        if (tenant.IsSuspended)
         {
             return;
         }

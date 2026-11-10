@@ -226,7 +226,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
         await using (var db = pg.NewDbContext())
         {
             var ex = await Assert.ThrowsAsync<ConflictException>(() =>
-                new MarkInvoicePaidCommandHandler(new InvoiceRepository(db), new WalletMutationRepository(db), Callers.Admin("admin-1"))
+                new MarkInvoicePaidCommandHandler(new InvoiceRepository(db), new WalletMutationRepository(db), Callers.Admin("admin-1"), TimeProvider.System)
                     .HandleAsync(new MarkInvoicePaidCommand(invoice.Id)));
             Assert.Equal("INVOICE_PAYMENT_CONFLICT", ex.Code);
         }

@@ -1,5 +1,5 @@
 using Titan.Application.Commands.Billing.TenantActivation.Contracts;
-using Titan.Application.Options;
+using Titan.Application.Services.Billing;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Repositories;
 using ActivationService = Titan.Domain.Services.TenantActivation;
@@ -13,8 +13,7 @@ namespace Titan.Application.Commands.Billing.TenantActivation;
 public class ApproveDeclaredAccountCommandHandler(
     ITenantRepository tenants,
     IWalletRepository wallets,
-    ActivationService activation,
-    CreditOptions options)
+    ActivationService activation)
 {
     public async Task HandleAsync(ApproveDeclaredAccountCommand command, CancellationToken ct = default)
     {
@@ -22,9 +21,9 @@ public class ApproveDeclaredAccountCommandHandler(
         // it alone (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat); a request that bootstrapped the
         // tenant still holds its own pending copy, approves it again and finds the wallet the first opened.
         TenantAggregate? tenant = await tenants.FindByIdForUpdateAsync(command.TenantId, ct);
-        if (tenant != null && tenant.Status == TenantStatus.PendingApproval)
+        if (tenant != null && tenant.IsPendingApproval)
         {
-            await activation.ApproveAsync(tenant, options.Currency, ct);
+            await activation.ApproveAsync(tenant, BillingConstants.DefaultCurrency, ct);
         }
 
         // Also when nothing changed: the save ends the lock's transaction, and the request goes on past the middleware.

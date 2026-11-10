@@ -16,20 +16,19 @@ public class WalletServiceTests
     private readonly Mock<IWalletRepository> _walletRepo = new();
     private readonly Mock<IWalletTransactionRepository> _transactions = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
-    private readonly CreditOptions _options = new() { MaxGrantAmount = 100_000_000m, Currency = "VND" };
     private static readonly Guid Tenant = Guid.NewGuid();
 
     // Facade over two query handlers: every method forwards to exactly one handler and adds nothing.
-    private WalletFacade CreateService() => new(_walletRepo.Object, _transactions.Object, _currentUser.Object, _options);
+    private WalletFacade CreateService() => new(_walletRepo.Object, _transactions.Object, _currentUser.Object);
 
     private sealed class WalletFacade(
-        IWalletRepository walletRepo, IWalletTransactionRepository transactions, ICurrentUser currentUser, CreditOptions options)
+        IWalletRepository walletRepo, IWalletTransactionRepository transactions, ICurrentUser currentUser)
     {
         public Task<WalletQueryResult> GetMyWalletAsync(CancellationToken ct = default)
-            => new GetWalletQueryHandler(walletRepo, currentUser, options).HandleAsync(new GetWalletQuery(), ct);
+            => new GetWalletQueryHandler(walletRepo, currentUser).HandleAsync(new GetWalletQuery(), ct);
 
         public Task<WalletStatementQueryResult> GetMyStatementAsync(CancellationToken ct = default)
-            => new GetWalletStatementQueryHandler(transactions, currentUser, options).HandleAsync(new GetWalletStatementQuery(), ct);
+            => new GetWalletStatementQueryHandler(transactions, currentUser).HandleAsync(new GetWalletStatementQuery(), ct);
     }
     private void AsTenant() => _currentUser.SetupGet(u => u.TenantId).Returns(Tenant);
 

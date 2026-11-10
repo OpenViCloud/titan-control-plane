@@ -37,23 +37,21 @@ public class TenantServiceTests
 
     private sealed class TenantFacade(ITenantRepository repo, IWalletRepository wallets)
     {
-        private static readonly CreditOptions Options = new() { Currency = "VND" };
-
         public Task BootstrapAsync(string keycloakUserId, string username, string email, CancellationToken ct = default)
             => new TenantCmd.BootstrapTenantCommandHandler(repo)
                 .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username, email), ct);
 
         public Task ApproveDeclaredAccountAsync(Guid tenantId, CancellationToken ct = default)
-            => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets), Options)
+            => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets))
                 .HandleAsync(new ApproveDeclaredAccountCommand(tenantId), ct);
 
         public Task ActivateAsync(Guid tenantId, CancellationToken ct = default)
-            => new ActivationCmd.ActivateTenantCommandHandler(repo, wallets, new TenantActivation(wallets), Options)
+            => new ActivationCmd.ActivateTenantCommandHandler(repo, wallets, new TenantActivation(wallets))
                 .HandleAsync(new ActivateTenantCommand(tenantId), ct);
 
         public Task UpdateStatusAsync(Guid tenantId, string status, CancellationToken ct = default)
             => new TenantCmd.UpdateTenantStatusCommandHandler(repo)
-                .HandleAsync(new UpdateTenantStatusCommand(tenantId, status), ct);
+                .HandleAsync(new UpdateTenantStatusCommand(tenantId, TenantCmd.UpdateTenantStatusCommandHandler.ParseTarget(status)), ct);
 
         // An admin client that sends only the two caps it always sent: the other seven arrive absent.
         public Task UpdateQuotaAsync(Guid tenantId, int maxVms, int maxNetworks, CancellationToken ct = default)

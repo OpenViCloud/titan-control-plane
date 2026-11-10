@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Model;
 
@@ -14,6 +15,14 @@ public class TopUp : IAggregateRoot
     public long Amount { get; private set; }
     public string Currency { get; private set; } = default!;
     public TopUpStatus Status { get; private set; }
+
+    /// The money is in and its one credit is queued (TopUpCredit.ConfirmAsync): a later confirm of it, by webhook or admin,
+    /// credits nothing more.
+    public bool IsConfirmed => Status == TopUpStatus.Confirmed;
+
+    /// A transfer pays this top-up only at its exact amount: a fractional transfer does not match a whole-đồng purchase
+    /// (titan-ops architecture/money-and-wallet.md#money-is-long-vnd).
+    public bool IsPaidBy(decimal transferred) => transferred == Amount;
 
     /// Titan's reconciliation code (TITAN-XXXXXXXX), distinct from the bank's PaymentTxnRef. The customer's
     /// bank transfer and the SePay webhook reference it.
@@ -103,6 +112,27 @@ public class TopUp : IAggregateRoot
     // Crockford base32 (no I/L/O/U): unambiguous when a human reads it off a bank transfer. Uniqueness is
     // enforced by the DB index; 40 random bits only make collisions rare.
     private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+    private static readonly Regex PaymentRefShape = new("TITAN-[0-9A-HJKMNP-TV-Z]{8}", RegexOptions.Compiled);
+
+    /// The first reference in the generator's shape found in either text (a gateway's parsed code, or the raw transfer
+    /// text), or null when neither holds one.
+    public static string? FindPaymentRef(string? code, string? content)
+    {
+        foreach (string? text in new[] { code, content })
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                continue;
+            }
+            Match match = PaymentRefShape.Match(text);
+            if (match.Success)
+            {
+                return match.Value;
+            }
+        }
+        return null;
+    }
 
     private static string GeneratePaymentRef()
     {

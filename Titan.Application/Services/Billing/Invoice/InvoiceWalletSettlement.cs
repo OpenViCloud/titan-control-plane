@@ -20,16 +20,19 @@ public static class InvoiceWalletSettlement
     public static async Task<bool> IsAlreadyPaidFromWalletAsync(
         IWalletMutationRepository mutationRepo, InvoiceAggregate invoice, CancellationToken ct)
     {
-        bool walletAlreadyPaid = invoice.Status == InvoiceStatus.SettledByWallet;
-        if (walletAlreadyPaid)
+        if (invoice.IsSettledByWallet)
         {
             return true;
         }
+        return await IsDebitWaitingAsync(mutationRepo, invoice, ct);
+    }
 
-        WalletMutation? debit = await mutationRepo.GetForRefAsync(
-            WalletMutation.InvoiceRefType, invoice.Id, ct);
-        bool debitIsWaiting = debit != null && debit.Status == WalletMutationStatus.Pending;
-        return debitIsWaiting;
+    /// A debit for the invoice is queued and not yet applied: the invoice still reads New until the consumer applies it.
+    public static async Task<bool> IsDebitWaitingAsync(
+        IWalletMutationRepository mutationRepo, InvoiceAggregate invoice, CancellationToken ct)
+    {
+        WalletMutation? debit = await mutationRepo.GetForRefAsync(WalletMutation.InvoiceRefType, invoice.Id, ct);
+        return debit is { IsPending: true };
     }
 
     /// What surrounds the rule of InvoiceWalletPayment for both buttons, so neither can drift into a softer one: the save

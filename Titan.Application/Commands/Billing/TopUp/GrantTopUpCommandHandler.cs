@@ -1,6 +1,7 @@
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TopUp.Contracts;
 using Titan.Application.Options;
+using Titan.Application.Services.Billing;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
@@ -23,9 +24,9 @@ public class GrantTopUpCommandHandler(
         // in the aggregate — it protects against an admin typo (500.000 vs 50.000.000), not an invariant.
         if (amount > (long)options.MaxGrantAmount)
             throw new BusinessException("GRANT_AMOUNT_EXCEEDS_MAX",
-                $"A single promotional credit may not exceed {options.MaxGrantAmount:N0} {options.Currency}.");
+                $"A single promotional credit may not exceed {options.MaxGrantAmount:N0} {BillingConstants.DefaultCurrency}.");
 
-        var topUp = await topUpCredit.GrantPromoAsync(tenantId, amount, options.Currency, reason, currentUser.KeycloakUserId, ct);
+        var topUp = await topUpCredit.GrantPromoAsync(tenantId, amount, BillingConstants.DefaultCurrency, reason, currentUser.KeycloakUserId, ct);
         try
         {
             await walletRepo.SaveChangesAsync(ct);

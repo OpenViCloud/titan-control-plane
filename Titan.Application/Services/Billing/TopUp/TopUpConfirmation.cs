@@ -24,7 +24,7 @@ public static class TopUpConfirmation
             ?? throw new NotFoundException("TOPUP_NOT_FOUND", $"Top-up {topUpId} not found.");
 
         // A retry of an already-confirmed top-up credits nothing more: double webhook, double click.
-        if (topUp.Status == TopUpStatus.Confirmed) return;
+        if (topUp.IsConfirmed) return;
 
         // topUp is tracked, so the SaveChanges below persists it.
         var mutation = await topUpCredit.ConfirmAsync(topUp, source, confirmedBy, paymentTxnRef, confirmedAt, ct);
@@ -40,7 +40,7 @@ public static class TopUpConfirmation
             // A concurrent confirm of this top-up won the unique guard, so answer as the winner's
             // confirmation. Anything else is a rare cross-operation race, surfaced for retry.
             var winner = await repo.GetTopUpAsync(topUpId, ct);
-            if (winner is { Status: TopUpStatus.Confirmed }) return;
+            if (winner is { IsConfirmed: true }) return;
             throw new ConflictException("TOPUP_CONFIRM_CONFLICT",
                 $"Top-up {topUpId} hit a concurrent confirm and was not recorded; retry.");
         }

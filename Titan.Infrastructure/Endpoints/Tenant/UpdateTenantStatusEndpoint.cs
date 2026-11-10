@@ -26,14 +26,14 @@ public class UpdateTenantStatusEndpoint(
     {
         var tenantId = Route<Guid>("tenantId");
 
-        bool asksForActive = UpdateTenantStatusCommandHandler.ParseTarget(req.Status) == TenantStatus.Active;
-        if (asksForActive)
+        TenantStatus target = UpdateTenantStatusCommandHandler.ParseTarget(req.Status);
+        if (target == TenantStatus.Active)
         {
             await activateTenant.HandleAsync(new ActivateTenantCommand(tenantId), ct);
         }
         else
         {
-            await updateStatus.HandleAsync(new UpdateTenantStatusCommand(tenantId, req.Status), ct);
+            await updateStatus.HandleAsync(new UpdateTenantStatusCommand(tenantId, target), ct);
         }
         await SendNoContentAsync(ct);
     }

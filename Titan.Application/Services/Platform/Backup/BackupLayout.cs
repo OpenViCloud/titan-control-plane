@@ -1,4 +1,4 @@
-namespace Titan.Application.Commands.Platform.Backup;
+namespace Titan.Application.Services.Platform.Backup;
 
 // Where barman (Barman Cloud Plugin) puts Postgres backups in the bucket
 // (titan-ops features/backup/design.md#backup-status-reads-the-bucket); measured on the dev bucket:

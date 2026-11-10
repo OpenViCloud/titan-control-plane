@@ -12,14 +12,7 @@ public class GetTenantInvoiceQueryHandler(
 {
     public async Task<InvoiceDetailQueryResult> HandleAsync(GetTenantInvoiceQuery query, CancellationToken ct = default)
     {
-        var id = query.InvoiceId;
-        var tenantId = currentUser.RequireTenantId();
-        var invoice = await invoiceRepo.GetByIdAsync(id, ct);
-
-        // Same error for "does not exist" and "belongs to another tenant" — telling those apart
-        // would confirm to the caller that another tenant's invoice id exists.
-        if (invoice is null || invoice.TenantId != tenantId)
-            throw new NotFoundException("INVOICE_NOT_FOUND", $"Invoice {id} not found.");
+        var invoice = await InvoiceOwnership.RequireInvoiceAsync(invoiceRepo, currentUser.RequireTenantId(), query.InvoiceId, ct);
 
         var mutation = await mutationRepo.GetForRefAsync(
             WalletMutation.InvoiceRefType, invoice.Id, ct);

@@ -28,6 +28,9 @@ public class BackupRecord : IAggregateRoot
     public DateTimeOffset TakenAt { get; private set; }
     public long SizeBytes { get; private set; }
     public BackupRecordStatus Status { get; private set; }
+
+    /// The backup finished: the only kind the backup health and the newest-backup list count.
+    public bool IsComplete => Status == BackupRecordStatus.Complete;
     public DateTimeOffset ObservedAt { get; private set; }
 
     private BackupRecord() { }

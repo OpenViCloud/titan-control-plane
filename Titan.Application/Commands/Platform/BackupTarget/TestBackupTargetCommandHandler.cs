@@ -18,6 +18,9 @@ public class TestBackupTargetCommandHandler(IOptions<BackupTargetOptions> option
     public TimeSpan Timeout { get; init; } = TimeSpan.FromSeconds(15);
     public TimeSpan CleanupTimeout { get; init; } = TimeSpan.FromSeconds(5);
 
+    // Past the cleanup's own timeout, so the wait sees the cleanup give up rather than racing it.
+    private static readonly TimeSpan CleanupGrace = TimeSpan.FromMilliseconds(100);
+
     public async Task<BackupTargetTestResult> HandleAsync(TestBackupTargetCommand command, CancellationToken ct = default)
     {
         BackupBucketConnection connection = options.Value.ToConnection();
@@ -57,7 +60,7 @@ public class TestBackupTargetCommandHandler(IOptions<BackupTargetOptions> option
     /// An abandoned probe is still deleting its object; the bucket must not be disposed under it.
     private async Task LetCleanupFinishAsync(Task probe)
     {
-        await Task.WhenAny(probe, Task.Delay(CleanupTimeout + TimeSpan.FromMilliseconds(100)));
+        await Task.WhenAny(probe, Task.Delay(CleanupTimeout + CleanupGrace));
         if (probe.IsFaulted || probe.IsCanceled)
         {
             // Its failure was already reported as the timeout; observe it so it is not left unobserved.

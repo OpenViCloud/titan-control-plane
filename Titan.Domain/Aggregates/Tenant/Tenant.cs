@@ -25,6 +25,13 @@ public class Tenant : IAggregateRoot
 
     public bool IsActive => Status == TenantStatus.Active;
 
+    /// Signed up and not yet approved: approval opens the wallet (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
+    public bool IsPendingApproval => Status == TenantStatus.PendingApproval;
+
+    /// Reads only, every write refused at the middleware; a later suspend is a repeat
+    /// (titan-ops architecture/intent-and-observation.md#domain-refuses-a-repeat).
+    public bool IsSuspended => Status == TenantStatus.Suspended;
+
     private Tenant() { }
 
     /// Frozen onto each row at creation: changing this constant does not rewrite existing tenants, because a
