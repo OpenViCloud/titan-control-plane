@@ -4,6 +4,7 @@ using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.LoadBalancer;
+using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.Volume;
 using Titan.Application.Commands.Compute.VmSnapshot;
 using Titan.Application.Commands.Compute.VolumeSnapshot;
@@ -303,6 +304,28 @@ public class InternalTokenCallbackTests
             new ObserveFirewallRuleCommandHandler(StrictNetworks()), ConfigWithToken());
 
         await ep.HandleAsync(new ObserveFirewallRuleBody(Exists: true, new FirewallRuleObservedBody("enabled")), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    // The token is read before the body's verdict, so a wrong token answers 401 whatever the batch holds.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task RecordVmMetrics_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<RecordVmMetricsEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["clusterId"] = "mock";
+                SetToken(ctx, token);
+            },
+            new RecordVmMetricsCommandHandler(new Mock<IVmMetricStore>(MockBehavior.Strict).Object), ConfigWithToken());
+
+        await ep.HandleAsync(new RecordVmMetricsBody(DateTimeOffset.UtcNow,
+        [
+            new VmMetricsSampleBody("vmaaaaaaaaaaaaaaaaaaaaaaaaaa", "agent", 1, null, null, null, null, 0, 0),
+        ]), CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }

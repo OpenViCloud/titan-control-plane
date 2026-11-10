@@ -840,6 +840,53 @@
         ]
       }
     },
+    "/v1/tenant/vms/{vmId}/metrics": {
+      "get": {
+        "tags": [
+          "V1"
+        ],
+        "operationId": "TitanInfrastructureEndpointsVmGetVmMetricsEndpoint",
+        "parameters": [
+          {
+            "name": "vmId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "guid"
+            }
+          },
+          {
+            "name": "range",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "nullable": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VmMetricsQueryResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "JWTBearerAuth": []
+          }
+        ]
+      }
+    },
     "/v1/tenant/vms/{vmId}/start": {
       "post": {
         "tags": [
@@ -2781,6 +2828,74 @@
           "Failed",
           "Deleted"
         ]
+      },
+      "VmMetricsQueryResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "range": {
+            "type": "string"
+          },
+          "stepSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VmMetricPointQueryResult"
+            }
+          }
+        }
+      },
+      "VmMetricPointQueryResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cpuPercent": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "memoryUsedBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "memoryTotalBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rootFsUsedBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "rootFsSizeBytes": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "diskReadBytesPerSecond": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          },
+          "diskWriteBytesPerSecond": {
+            "type": "number",
+            "format": "double",
+            "nullable": true
+          }
+        }
+      },
+      "GetVmMetricsRequest": {
+        "type": "object",
+        "additionalProperties": false
       },
       "RenameVmBody": {
         "type": "object",

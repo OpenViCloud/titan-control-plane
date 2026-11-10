@@ -111,6 +111,7 @@ builder.Services.AddScoped<ITenantRepository, TenantRepository>();
 builder.Services.AddScoped<INetworkRepository, NetworkRepository>();
 builder.Services.AddScoped<IClusterIpv6RouteRepository, ClusterIpv6RouteRepository>();
 builder.Services.AddScoped<IPendingRequestReader, PendingRequestReader>();
+builder.Services.AddScoped<IVmMetricStore, VmMetricStore>();
 builder.Services.AddScoped<IFirewallRuleRepository, FirewallRuleRepository>();
 builder.Services.AddScoped<ISshKeyRepository, SshKeyRepository>();
 builder.Services.AddScoped<IApiTokenRepository, ApiTokenRepository>();
@@ -178,6 +179,8 @@ builder.Services.AddScoped<StopVmCommandHandler>();
 builder.Services.AddScoped<StartVmCommandHandler>();
 builder.Services.AddScoped<EndVmRequestCommandHandler>();
 builder.Services.AddScoped<ObserveVmCommandHandler>();
+builder.Services.AddScoped<RecordVmMetricsCommandHandler>();
+builder.Services.AddScoped<GetVmMetricsQueryHandler>();
 builder.Services.AddScoped<IActivityRecorder, ActivityRecorder>();
 builder.Services.AddScoped<BillUsageQry.GetVmCostQueryHandler>();
 builder.Services.AddScoped<BillUsageQry.GetTenantBillingSummaryQueryHandler>();
@@ -285,6 +288,8 @@ builder.Services.AddOptions<IdempotencyCleanupOptions>().BindConfiguration(Idemp
 builder.Services.AddHostedService<IdempotencyCleanupService>();
 builder.Services.AddOptions<ProviderCommandRetentionOptions>().BindConfiguration(ProviderCommandRetentionOptions.SectionName);
 builder.Services.AddHostedService<ProviderCommandRetention>();
+builder.Services.AddOptions<VmMetricRetentionOptions>().BindConfiguration(VmMetricRetentionOptions.SectionName);
+builder.Services.AddHostedService<VmMetricRetention>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
 // and nothing alerts on its absence (/healthz/wallet only reports it). Its SKIP LOCKED does not keep it off
 // a mutation the subscriber is applying (titan-ops features/billing/wallet/design.md#wallet-debts).

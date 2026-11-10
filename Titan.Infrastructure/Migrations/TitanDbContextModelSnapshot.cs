@@ -1790,6 +1790,54 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.VmMetricSample", b =>
+                {
+                    b.Property<Guid>("VmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vm_id");
+
+                    b.Property<DateTimeOffset>("SampledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("sampled_at");
+
+                    b.Property<double>("CpuSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("cpu_seconds");
+
+                    b.Property<long>("DiskReadBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("disk_read_bytes");
+
+                    b.Property<long>("DiskWrittenBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("disk_written_bytes");
+
+                    b.Property<long?>("MemoryAvailableBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("memory_available_bytes");
+
+                    b.Property<long?>("MemoryTotalBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("memory_total_bytes");
+
+                    b.Property<long?>("RootFsAvailBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("root_fs_avail_bytes");
+
+                    b.Property<long?>("RootFsSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("root_fs_size_bytes");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.HasKey("VmId", "SampledAt");
+
+                    b.ToTable("vm_metric_samples", "core");
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)
@@ -2220,6 +2268,15 @@ namespace Titan.Infrastructure.Migrations
                         });
 
                     b.Navigation("Operation")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.VmMetricSample", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.Vm.Vm", null)
+                        .WithMany()
+                        .HasForeignKey("VmId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
