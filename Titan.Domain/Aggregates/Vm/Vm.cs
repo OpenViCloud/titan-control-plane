@@ -20,7 +20,7 @@ public partial class Vm : IAggregateRoot
     public Guid NetworkId { get; private set; }
     public string Name { get; private set; } = default!;
     /// The one status the API shows (titan-ops features/vm/design.md#vm-status). Only an operation, a report ending it, or
-    /// an observation at rest writes it, each through the moves of Vm.Creation.cs, Vm.Start.cs, Vm.Stop.cs,
+    /// an observation at rest writes it, each through the moves of Vm.Creation.cs, Vm.Start.cs, Vm.Stop.cs, Vm.Snapshots.cs,
     /// Vm.Deletion.cs and Vm.Observation.cs.
     public VmStatus Status { get; private set; }
     /// The operation waiting on its command's report, the last one that failed, and the Incus status seen while one waits
