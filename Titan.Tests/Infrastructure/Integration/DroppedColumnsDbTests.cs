@@ -4,8 +4,8 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-/// What only Postgres can show of the migration that drops the columns nothing read: the migrated schema holds none of
-/// them. A column that came back through the model would be written on every save and read by no one.
+/// What only Postgres can show of the migration that drops the columns the control plane did not read: the migrated
+/// schema holds none of them. A column that came back through the model would be written on every save and read by no one.
 /// Category=Integration — its own CI step.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
