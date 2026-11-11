@@ -83,8 +83,9 @@ public class ProviderCommandRepositoryStateTests
     private static readonly Guid Busy = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid Idle = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
 
-    // Lanes: a busy tenant (a held lease, a pending row, a backup of its own), a busy no-tenant lane, an idle tenant,
-    // and a tenant whose only leased row ran out (that row is the one handed out).
+    // Lanes: a busy tenant (a held lease, a pending row, a pending backup: its backup lane is free), a busy no-tenant
+    // lane, a tenant whose backup lane is held but its command lane is free, and a tenant whose only leased row ran out
+    // (that row is the one handed out).
     private static List<ProviderCommand> EveryLane()
     {
         ProviderCommand ranOut = Leased("ran-out-tenant-leased", Now.AddHours(-1));
@@ -93,6 +94,8 @@ public class ProviderCommandRepositoryStateTests
         syncHeld.Lease(Guid.NewGuid(), Now);
         ProviderCommand busyHeld = Pending("busy-held", Now.AddMinutes(-2), Busy);
         busyHeld.Lease(Guid.NewGuid(), Now);
+        ProviderCommand idleBackupHeld = Pending("idle-backup-held", Now.AddMinutes(-2), Idle, ProviderCommandKinds.VmBackup);
+        idleBackupHeld.Lease(Guid.NewGuid(), Now);
         return
         [
             busyHeld,
@@ -100,13 +103,15 @@ public class ProviderCommandRepositoryStateTests
             Pending("busy-backup", Now.AddMinutes(-1), Busy, ProviderCommandKinds.VmBackup),
             syncHeld,
             ProviderCommand.Create("sync-waiting", ProviderCommandKinds.TemplateSync, "mock", "{}", Now.AddMinutes(-1)),
+            idleBackupHeld,
             Pending("idle-waiting", Now.AddMinutes(-1), Idle),
             ranOut,
             Pending("ran-out-tenant-waiting", Now.AddMinutes(-1), ranOutTenant),
         ];
     }
 
-    private static readonly string[] CommandKinds = [ProviderCommandKinds.VmDelete, ProviderCommandKinds.TemplateSync];
+    private static readonly string[] CommandKinds =
+        [ProviderCommandKinds.VmDelete, ProviderCommandKinds.TemplateSync, ProviderCommandKinds.VmBackup];
 
     [Fact]
     public async Task Claimable_SkipsALaneThatHoldsALease_ButNotTheLeaseThatRanOut()
@@ -117,7 +122,8 @@ public class ProviderCommandRepositoryStateTests
 
         var claimable = await new ProviderCommandRepository(db).ListClaimableAsync(CommandKinds, Now, 100, default);
 
-        Assert.Equal(["idle-waiting", "ran-out-tenant-leased"], claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["busy-backup", "idle-waiting", "ran-out-tenant-leased"],
+            claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 
     [Fact]

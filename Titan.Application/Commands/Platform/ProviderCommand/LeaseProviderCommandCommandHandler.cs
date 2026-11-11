@@ -6,8 +6,8 @@ using ProviderCommandAggregate = Titan.Domain.Aggregates.ProviderCommand.Provide
 namespace Titan.Application.Commands.Platform.ProviderCommand;
 
 // The worker asks for work under a lease id it minted, then reads what it got with GetLeasedProviderCommandQuery
-// (titan-ops architecture/provider-and-worker.md#provider-command-lease). Nothing claimable, or another worker won the
-// same row: the lease stays empty and the worker asks again on its next tick.
+// (titan-ops architecture/provider-and-worker.md#provider-command-lease). Nothing claimable, or another lease committed
+// first on the same row or the same lane: the lease stays empty and the worker asks again on its next tick.
 public class LeaseProviderCommandCommandHandler(IProviderCommandRepository repository, TimeProvider clock)
 {
     private const int Candidates = 1;
@@ -36,7 +36,7 @@ public class LeaseProviderCommandCommandHandler(IProviderCommandRepository repos
         }
         catch (ConcurrencyConflictException)
         {
-            // Another worker leased this row first; this lease stays empty.
+            // Another lease took this row, or a row of its lane, first; this lease stays empty.
         }
     }
 }

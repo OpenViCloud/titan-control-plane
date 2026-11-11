@@ -143,8 +143,8 @@ public class ProviderCommandLeaseTests
         Assert.Equal(T0.AddSeconds(30) + ProviderCommand.LeaseLength, command.LeaseUntil);
     }
 
-    // titan-ops features/provider/user-stories.md#p3-2: one command of a tenant at a time, for every cluster; other
-    // tenants and the platform lane (no tenant) do not wait for it.
+    // titan-ops features/provider/user-stories.md#p3-2: one command of a tenant at a time in each lane, for every cluster;
+    // other tenants and the no-tenant lane do not wait for it.
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
 
@@ -171,6 +171,25 @@ public class ProviderCommandLeaseTests
 
         Assert.Equal(ProviderCommandStatus.Pending, a2.Status);
         Assert.Equal(ProviderCommandStatus.Leased, b1.Status);
+    }
+
+    // P3-2 AC-1, the two other ways a command stops running: it failed for good, or failed and waits for its retry.
+    [Theory]
+    [InlineData(false, ProviderCommandStatus.Failed)]
+    [InlineData(true, ProviderCommandStatus.Pending)]
+    public async Task Lease_GivesATenantsNextCommand_OnceItsLeasedOneFailed(bool retryable, ProviderCommandStatus failedTo)
+    {
+        ProviderCommand a1 = SeedFor(TenantA, "a-1", ProviderCommandKinds.VmCreate, T0.AddMinutes(-2));
+        ProviderCommand a2 = SeedFor(TenantA, "a-2", ProviderCommandKinds.VmDelete, T0.AddMinutes(-1));
+        Guid first = Guid.NewGuid();
+        await LeaseAsync(first, TenantKinds);
+
+        await new FailProviderCommandCommandHandler(_repo, _clock)
+            .HandleAsync(new FailProviderCommandCommand(first, "boom", retryable));
+        await LeaseAsync(Guid.NewGuid(), TenantKinds);
+
+        Assert.Equal(failedTo, a1.Status);
+        Assert.Equal(ProviderCommandStatus.Leased, a2.Status);
     }
 
     [Fact]

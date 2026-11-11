@@ -37,6 +37,14 @@ namespace Titan.Infrastructure.Migrations
                 """);
 
             migrationBuilder.CreateIndex(
+                name: "IX_provider_commands_kind_leased_no_tenant",
+                schema: "core",
+                table: "provider_commands",
+                column: "kind",
+                unique: true,
+                filter: "status = 'Leased' AND tenant_id IS NULL");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_provider_commands_tenant_id_lane_leased",
                 schema: "core",
                 table: "provider_commands",
@@ -48,6 +56,11 @@ namespace Titan.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.DropIndex(
+                name: "IX_provider_commands_kind_leased_no_tenant",
+                schema: "core",
+                table: "provider_commands");
+
             migrationBuilder.DropIndex(
                 name: "IX_provider_commands_tenant_id_lane_leased",
                 schema: "core",

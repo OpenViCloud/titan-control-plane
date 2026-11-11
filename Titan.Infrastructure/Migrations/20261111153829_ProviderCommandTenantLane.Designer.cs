@@ -13,7 +13,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Migrations
 {
     [DbContext(typeof(TitanDbContext))]
-    [Migration("20261111150539_ProviderCommandTenantLane")]
+    [Migration("20261111153829_ProviderCommandTenantLane")]
     partial class ProviderCommandTenantLane
     {
         /// <inheritdoc />
@@ -845,6 +845,11 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasIndex("Key")
                         .IsUnique();
+
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_provider_commands_kind_leased_no_tenant")
+                        .HasFilter("status = 'Leased' AND tenant_id IS NULL");
 
                     b.HasIndex("LeaseId")
                         .IsUnique();

@@ -10,8 +10,9 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
 
-// titan-ops architecture/provider-and-worker.md#provider-command-table on real Postgres: the unique key and the version
-// token, which InMemory does not enforce (ProviderCommandSchemaTests pins only their metadata).
+// titan-ops architecture/provider-and-worker.md#provider-command-table on real Postgres: the unique key, the version
+// token and the indexes on leased rows, which InMemory does not enforce (ProviderCommandSchemaTests pins only their
+// metadata), and the lane test in the SQL EF writes.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ProviderCommandLeaseDbTests(PostgresFixture pg)
@@ -70,7 +71,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
 
     // titan-ops features/provider/user-stories.md#p3-2 AC-2: two leases read at once while the only waiting rows are one
     // tenant's; each picks a different row, and only one may commit. The version token sees two rows and stops neither:
-    // drop the leased-per-tenant index from the mapping and both commit.
+    // on a schema without the leased-per-tenant index both commit.
     [Fact]
     public async Task TwoLeasesReadingAtOnce_TheRowsOfOneTenant_OnlyOneCommits()
     {
@@ -97,7 +98,33 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
     }
 
-    // The same through the handler, eight at once: one row of the tenant is leased, the rest wait.
+    // The same race over two rows of no tenant of one kind (template.sync's lane): the leased-no-tenant index lets one
+    // commit.
+    [Fact]
+    public async Task TwoLeasesReadingAtOnce_TwoRowsOfNoTenant_OnlyOneCommits()
+    {
+        string kind = UniqueKind();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        await SeedForAsync(kind, null, now.AddSeconds(-2));
+        await SeedForAsync(kind, null, now.AddSeconds(-1));
+        await using TitanDbContext dbA = pg.NewDbContext();
+        await using TitanDbContext dbB = pg.NewDbContext();
+        var repoA = new ProviderCommandRepository(dbA);
+        var repoB = new ProviderCommandRepository(dbB);
+        ProviderCommand seenByA = (await repoA.ListClaimableAsync([kind], now, 2, CancellationToken.None))[0];
+        ProviderCommand seenByB = (await repoB.ListClaimableAsync([kind], now, 2, CancellationToken.None))[1];
+
+        seenByA.Lease(Guid.NewGuid(), now);
+        await repoA.SaveChangesAsync(CancellationToken.None);
+        seenByB.Lease(Guid.NewGuid(), now);
+
+        await Assert.ThrowsAsync<ConcurrencyConflictException>(() => repoB.SaveChangesAsync(CancellationToken.None));
+        await using TitanDbContext read = pg.NewDbContext();
+        Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
+    }
+
+    // Eight leases through the handler at once on one tenant's four rows: one row is leased, the rest wait. Each lease
+    // takes one candidate, the oldest, so here the version token decides; the race over two rows is the test above.
     [Fact]
     public async Task ConcurrentLeases_OfOneTenantsRows_LeaseOne()
     {
@@ -123,8 +150,9 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
     }
 
-    // P3-1 AC-1 and P3-2 AC-6 on the SQL EF writes: a busy tenant is skipped, the next tenant and a row of no tenant are
-    // handed out; a second row of no tenant waits for the first (the nullable comparison of the lane).
+    // titan-ops features/provider/user-stories.md#p3-1 and #p3-2 on the SQL EF writes: a busy tenant is skipped, the next
+    // tenant and a row of no tenant are handed out; a second row of no tenant waits for the first (the nullable
+    // comparison of the lane).
     [Fact]
     public async Task ABusyTenant_IsSkipped_AndTheNoTenantLaneTakesOneRowAtATime()
     {

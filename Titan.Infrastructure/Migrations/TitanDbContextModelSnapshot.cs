@@ -843,6 +843,11 @@ namespace Titan.Infrastructure.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_provider_commands_kind_leased_no_tenant")
+                        .HasFilter("status = 'Leased' AND tenant_id IS NULL");
+
                     b.HasIndex("LeaseId")
                         .IsUnique();
 

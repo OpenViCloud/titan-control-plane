@@ -12,8 +12,9 @@ public interface IProviderCommandRepository
     /// Tracked. Null when no row carries this lease.
     Task<ProviderCommand?> FindByLeaseAsync(Guid leaseId, CancellationToken ct);
 
-    /// Tracked, oldest first: rows of these kinds that a lease may take now. Two workers may get the same row; the
-    /// Version token lets only one lease commit.
+    /// Tracked, oldest first: rows of these kinds that a lease may take now, skipping a lane that holds a leased row
+    /// (ProviderCommand.HoldsTheLaneOf). Two workers may get the same row, and the Version token lets only one lease
+    /// commit; or two rows of one lane, and a unique index on leased rows lets only one commit.
     Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct);
 

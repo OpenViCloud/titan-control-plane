@@ -71,4 +71,16 @@ public class ProviderCommandSchemaTests
         Assert.True(index.IsUnique);
         Assert.Equal("status = 'Leased' AND tenant_id IS NOT NULL", index.GetFilter());
     }
+
+    // The no-tenant lane (template.sync): one leased row per kind.
+    [Fact]
+    public void ALeasedRowOfNoTenantPerKind_IsUnique()
+    {
+        IIndex? index = EntityType().GetIndexes().SingleOrDefault(i =>
+            i.GetDatabaseName() == ProviderCommandConfiguration.LeasedNoTenantIndex);
+        Assert.NotNull(index);
+        Assert.True(index.IsUnique);
+        Assert.Equal([nameof(ProviderCommand.Kind)], index.Properties.Select(p => p.Name));
+        Assert.Equal("status = 'Leased' AND tenant_id IS NULL", index.GetFilter());
+    }
 }
