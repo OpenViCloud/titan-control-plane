@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Npgsql;
+using Prometheus;
 using Titan.Application.Abstractions;
 using Titan.Application.Options;
 using Titan.Application.Services.Billing.WalletMutations;
@@ -82,6 +83,15 @@ builder.Services.AddDbContext<TitanDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Titan")));
 
 var connectionString = builder.Configuration.GetConnectionString("Titan")!;
+
+// /metrics is served by a Kestrel server of its own on Metrics:Port, so the main listener has no such route
+// whatever Host a request carries. Unset ⇒ no metric server, so hosts started side by side (tests) bind no fixed port.
+int metricsPort = builder.Configuration.GetValue<int>("Metrics:Port", 0);
+if (metricsPort > 0)
+{
+    builder.Services.AddMetricServer(options => options.Port = (ushort)metricsPort);
+}
+
 builder.Services.AddHealthChecks()
     .AddAsyncCheck("database", async ct =>
     {
@@ -447,6 +457,21 @@ if (args.Contains("sync-templates"))
     return result.Outcome == TemplateSyncOutcome.AllSynced ? 0 : 1;
 }
 
+// Outside the exception handler, so a request that throws is counted with the code the handler answers, not the
+// 200 the response held when the exception passed.
+app.UseHttpMetrics();
+
+// The exception handler clears the endpoint before it answers; putting it back keeps the route on that count.
+app.Use(async (context, next) =>
+{
+    Endpoint? endpoint = context.GetEndpoint();
+    await next(context);
+    if (context.GetEndpoint() == null)
+    {
+        context.SetEndpoint(endpoint);
+    }
+});
+
 app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
 {
     var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
@@ -497,7 +522,7 @@ app.MapHealthChecks("/healthz/meters", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("meters")
 }).AllowAnonymous();
 
-// Nothing polls this: no Prometheus, no livenessProbe (titan-ops infra/runbooks/runbook-wallet-async.md). It is a
+// Nothing polls this: no scrape job or probe calls it (titan-ops infra/runbooks/runbook-wallet-async.md). It is a
 // question someone has to ask, not an alert.
 app.MapHealthChecks("/healthz/wallet", new HealthCheckOptions
 {
