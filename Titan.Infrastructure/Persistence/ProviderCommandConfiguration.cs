@@ -48,7 +48,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.HasIndex(nameof(ProviderCommand.TenantId), LaneColumn).IsUnique()
             .HasFilter("status = 'Leased' AND tenant_id IS NOT NULL")
             .HasDatabaseName(LeasedPerTenantIndex);
-        // The same for rows of no tenant, per kind: template.sync is the one such kind, so two syncs never run at once.
+        // The same for rows of no tenant, per kind: template.sync is the one such kind, so two syncs never hold a lease at once.
         builder.HasIndex(c => c.Kind).IsUnique()
             .HasFilter("status = 'Leased' AND tenant_id IS NULL")
             .HasDatabaseName(LeasedNoTenantIndex);

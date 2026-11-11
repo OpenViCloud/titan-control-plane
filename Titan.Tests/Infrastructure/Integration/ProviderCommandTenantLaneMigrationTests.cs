@@ -7,7 +7,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure.Integration;
 
 /// Rows written before the tenant column meet the migration that gives each a tenant lane
-/// (titan-ops features/provider/user-stories.md#p3-2): a row whose payload names a tenant's Incus project gets that
+/// (titan-ops features/provider/design.md#tenant-lane): a row whose payload names a tenant's Incus project gets that
 /// tenant, template.sync none; the lane column follows the kind; Down drops both columns and both indexes.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]

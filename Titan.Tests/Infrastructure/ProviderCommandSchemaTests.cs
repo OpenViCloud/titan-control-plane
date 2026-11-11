@@ -60,7 +60,7 @@ public class ProviderCommandSchemaTests
         Assert.True(version.IsConcurrencyToken);
     }
 
-    // One leased row per tenant and lane (titan-ops features/provider/user-stories.md#p3-2); ProviderCommandLeaseDbTests
+    // One leased row per tenant and lane (titan-ops features/provider/design.md#tenant-lane); ProviderCommandLeaseDbTests
     // measures it on Postgres.
     [Fact]
     public void ALeasedRowPerTenantAndLane_IsUnique()

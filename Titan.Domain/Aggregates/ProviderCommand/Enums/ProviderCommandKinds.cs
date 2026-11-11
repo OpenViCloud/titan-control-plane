@@ -30,5 +30,5 @@ public static class ProviderCommandKinds
 
     /// The kinds the worker leases on a loop of their own; a tenant's backup and its other commands are two lanes
     /// (titan-ops features/provider/design.md#tenant-lane).
-    public static readonly string[] Backup = [VmBackup, VolumeBackup];
+    public static readonly IReadOnlyList<string> Backup = [VmBackup, VolumeBackup];
 }

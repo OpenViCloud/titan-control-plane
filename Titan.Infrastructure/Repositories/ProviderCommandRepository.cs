@@ -33,7 +33,7 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
     public async Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct)
     {
-        string[] backup = ProviderCommandKinds.Backup;
+        string[] backup = [.. ProviderCommandKinds.Backup];
         List<ProviderCommand> rows = await db.ProviderCommands
             .Where(c => kinds.Contains(c.Kind))
             .Where(c => (c.Status == ProviderCommandStatus.Pending && c.AvailableAt <= now)

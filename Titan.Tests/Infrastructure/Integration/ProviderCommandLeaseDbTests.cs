@@ -69,7 +69,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         return command.Id;
     }
 
-    // titan-ops features/provider/user-stories.md#p3-2 AC-2: two leases read at once while the only waiting rows are one
+    // titan-ops features/provider/user-stories.md#p3-2: two leases read at once while the only waiting rows are one
     // tenant's; each picks a different row, and only one may commit. The version token sees two rows and stops neither:
     // on a schema without the leased-per-tenant index both commit.
     [Fact]
@@ -124,7 +124,8 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
     }
 
     // Eight leases through the handler at once on one tenant's four rows: one row is leased, the rest wait. Each lease
-    // takes one candidate, the oldest, so here the version token decides; the race over two rows is the test above.
+    // takes one candidate, the oldest, so here the version token decides; the race over two rows is
+    // TwoLeasesReadingAtOnce_TheRowsOfOneTenant_OnlyOneCommits.
     [Fact]
     public async Task ConcurrentLeases_OfOneTenantsRows_LeaseOne()
     {
@@ -179,6 +180,34 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(ProviderCommandStatus.Leased, status[noTenant]);
         Assert.Equal(ProviderCommandStatus.Pending, status[noTenantWaiting]);
         Assert.Equal(ProviderCommandStatus.Leased, status[other]);
+    }
+
+    // titan-ops features/provider/design.md#tenant-lane on the SQL EF writes: a tenant's leased backup holds its backup
+    // lane, not its command lane. The real kinds, a fresh tenant, and the claimable rows read by id, so rows of other
+    // tests in the shared database do not change the answer.
+    [Fact]
+    public async Task ATenantsLeasedBackup_HoldsItsBackupLane_NotItsCommandLane()
+    {
+        Guid tenant = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Guid backupHeld = await SeedForAsync(ProviderCommandKinds.VmBackup, tenant, now.AddSeconds(-3));
+        await using (TitanDbContext lease = pg.NewDbContext())
+        {
+            ProviderCommand held = await lease.ProviderCommands.SingleAsync(c => c.Id == backupHeld);
+            held.Lease(Guid.NewGuid(), now);
+            await lease.SaveChangesAsync();
+        }
+        Guid backupWaiting = await SeedForAsync(ProviderCommandKinds.VolumeBackup, tenant, now.AddSeconds(-2));
+        Guid deleteWaiting = await SeedForAsync(ProviderCommandKinds.VmDelete, tenant, now.AddSeconds(-1));
+
+        await using TitanDbContext db = pg.NewDbContext();
+        IReadOnlyList<ProviderCommand> claimable = await new ProviderCommandRepository(db).ListClaimableAsync(
+            [ProviderCommandKinds.VmDelete, ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup], now,
+            int.MaxValue, CancellationToken.None);
+
+        List<Guid> ids = claimable.Select(c => c.Id).ToList();
+        Assert.Contains(deleteWaiting, ids);
+        Assert.DoesNotContain(backupWaiting, ids);
     }
 
     // Deterministic form of the race: two workers both read the row as claimable before either commits. The second

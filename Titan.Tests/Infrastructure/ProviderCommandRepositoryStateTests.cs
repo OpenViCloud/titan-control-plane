@@ -5,11 +5,12 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure;
 
-// The claim query is the SQL of ProviderCommand.IsClaimable (titan-ops architecture/domain-methods.md#plain-code): every
-// shape a row can be in goes through both, so the two cannot drift apart.
+// The claim query is the SQL of ProviderCommand.IsClaimable and HoldsTheLaneOf
+// (titan-ops architecture/domain-methods.md#plain-code): every shape a row or a lane can be in goes through both, so
+// the two cannot drift apart.
 //
-// Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it); the race of two
-// workers on one row is ProviderCommandLeaseDbTests.
+// Silent about: Postgres-only behaviour (InMemory runs the same LINQ, not the SQL EF generates from it); the races of two
+// workers on one row or on two rows of one lane are ProviderCommandLeaseDbTests.
 public class ProviderCommandRepositoryStateTests
 {
     private static readonly DateTimeOffset Now = new(2026, 11, 10, 12, 0, 0, TimeSpan.Zero);

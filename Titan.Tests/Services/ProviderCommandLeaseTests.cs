@@ -143,7 +143,7 @@ public class ProviderCommandLeaseTests
         Assert.Equal(T0.AddSeconds(30) + ProviderCommand.LeaseLength, command.LeaseUntil);
     }
 
-    // titan-ops features/provider/user-stories.md#p3-2: one command of a tenant at a time in each lane, for every cluster;
+    // titan-ops features/provider/design.md#tenant-lane: one command of a tenant at a time in each lane, for every cluster;
     // other tenants and the no-tenant lane do not wait for it.
     private static readonly Guid TenantA = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
@@ -173,7 +173,8 @@ public class ProviderCommandLeaseTests
         Assert.Equal(ProviderCommandStatus.Leased, b1.Status);
     }
 
-    // P3-2 AC-1, the two other ways a command stops running: it failed for good, or failed and waits for its retry.
+    // titan-ops features/provider/user-stories.md#p3-2, the two other ways a command stops running: it failed for good,
+    // or failed and waits for its retry.
     [Theory]
     [InlineData(false, ProviderCommandStatus.Failed)]
     [InlineData(true, ProviderCommandStatus.Pending)]
