@@ -59,4 +59,16 @@ public class ProviderCommandSchemaTests
         Assert.NotNull(version);
         Assert.True(version.IsConcurrencyToken);
     }
+
+    // One leased row per tenant and lane (titan-ops features/provider/user-stories.md#p3-2); ProviderCommandLeaseDbTests
+    // measures it on Postgres.
+    [Fact]
+    public void ALeasedRowPerTenantAndLane_IsUnique()
+    {
+        IIndex? index = EntityType().GetIndexes().SingleOrDefault(i =>
+            i.Properties.Select(p => p.Name).SequenceEqual([nameof(ProviderCommand.TenantId), ProviderCommandConfiguration.LaneColumn]));
+        Assert.NotNull(index);
+        Assert.True(index.IsUnique);
+        Assert.Equal("status = 'Leased' AND tenant_id IS NOT NULL", index.GetFilter());
+    }
 }

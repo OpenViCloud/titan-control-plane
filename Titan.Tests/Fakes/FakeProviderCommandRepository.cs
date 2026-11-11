@@ -20,6 +20,7 @@ public class FakeProviderCommandRepository : IProviderCommandRepository
     {
         IReadOnlyList<ProviderCommand> rows = Rows
             .Where(c => kinds.Contains(c.Kind) && c.IsClaimable(now))
+            .Where(c => !Rows.Any(other => kinds.Contains(other.Kind) && other.HoldsTheLaneOf(c)))
             .OrderBy(c => c.CreatedAt)
             .Take(limit)
             .ToList();

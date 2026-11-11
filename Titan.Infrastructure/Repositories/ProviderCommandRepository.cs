@@ -25,8 +25,11 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
     public Task<ProviderCommand?> FindByLeaseAsync(Guid leaseId, CancellationToken ct) =>
         db.ProviderCommands.FirstOrDefaultAsync(c => c.LeaseId == leaseId, ct);
 
-    // ProviderCommand.IsClaimable, written in SQL (titan-ops architecture/domain-methods.md#plain-code);
-    // ProviderCommandRepositoryStateTests runs every shape through both.
+    // ProviderCommand.IsClaimable and HoldsTheLaneOf, written in SQL (titan-ops architecture/domain-methods.md#plain-code);
+    // ProviderCommandRepositoryStateTests runs every shape through both. The lane is the kinds of the lease: the backup
+    // loop asks only for the backup kinds, so a tenant's backup does not hold its other commands. Two leases that read
+    // at once can still pick two rows of one tenant; the unique index on a tenant's leased rows
+    // (ProviderCommandConfiguration) lets one of them commit.
     public async Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct)
     {
@@ -34,6 +37,10 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
             .Where(c => kinds.Contains(c.Kind))
             .Where(c => (c.Status == ProviderCommandStatus.Pending && c.AvailableAt <= now)
                         || (c.Status == ProviderCommandStatus.Leased && c.LeaseUntil <= now))
+            .Where(c => !db.ProviderCommands.Any(other => kinds.Contains(other.Kind)
+                                                          && other.Status == ProviderCommandStatus.Leased
+                                                          && other.Id != c.Id
+                                                          && other.TenantId == c.TenantId))
             .OrderBy(c => c.CreatedAt)
             .Take(limit)
             .ToListAsync(ct);
@@ -65,9 +72,10 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
             when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             // A worker retried PUT leases/{id} while its first PUT was still in flight and both leased a row: the
-            // lease_id index lets one keep it.
+            // lease_id index lets one keep it. Or two leases took two rows of one tenant: the leased-per-tenant index
+            // lets one keep its row (ProviderCommandConfiguration).
             throw new ConcurrencyConflictException("PROVIDER_COMMAND_CONFLICT",
-                "Another request took this lease first.", ex);
+                "Another lease came first; ask again.", ex);
         }
     }
 }

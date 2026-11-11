@@ -19,8 +19,10 @@ public class ProviderCommandRepositoryStateTests
             .UseInMemoryDatabase($"provider-command-state-{Guid.NewGuid()}")
             .Options);
 
-    private static ProviderCommand Pending(string key, DateTimeOffset createdAt) =>
-        ProviderCommand.Create(key, ProviderCommandKinds.VmDelete, "mock", "{}", createdAt);
+    // Each shape in a tenant of its own: the lane of a tenant is measured apart, below.
+    private static ProviderCommand Pending(string key, DateTimeOffset createdAt, Guid? tenantId = null,
+        string kind = ProviderCommandKinds.VmDelete) =>
+        ProviderCommand.Create(key, kind, "mock", "{}", createdAt, tenantId ?? Guid.NewGuid());
 
     private static ProviderCommand Leased(string key, DateTimeOffset leasedAt)
     {
@@ -76,5 +78,62 @@ public class ProviderCommandRepositoryStateTests
 
         Assert.Equal(shapes.Where(c => c.IsClaimable(Now)).Select(c => c.Key).Order(StringComparer.Ordinal),
             claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
+    }
+
+    private static readonly Guid Busy = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+    private static readonly Guid Idle = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
+
+    // Lanes: a busy tenant (a held lease, a pending row, a backup of its own), a busy no-tenant lane, an idle tenant,
+    // and a tenant whose only leased row ran out (that row is the one handed out).
+    private static List<ProviderCommand> EveryLane()
+    {
+        ProviderCommand ranOut = Leased("ran-out-tenant-leased", Now.AddHours(-1));
+        Guid ranOutTenant = ranOut.TenantId!.Value;
+        ProviderCommand syncHeld = ProviderCommand.Create("sync-held", ProviderCommandKinds.TemplateSync, "mock", "{}", Now);
+        syncHeld.Lease(Guid.NewGuid(), Now);
+        ProviderCommand busyHeld = Pending("busy-held", Now.AddMinutes(-2), Busy);
+        busyHeld.Lease(Guid.NewGuid(), Now);
+        return
+        [
+            busyHeld,
+            Pending("busy-waiting", Now.AddMinutes(-1), Busy),
+            Pending("busy-backup", Now.AddMinutes(-1), Busy, ProviderCommandKinds.VmBackup),
+            syncHeld,
+            ProviderCommand.Create("sync-waiting", ProviderCommandKinds.TemplateSync, "mock", "{}", Now.AddMinutes(-1)),
+            Pending("idle-waiting", Now.AddMinutes(-1), Idle),
+            ranOut,
+            Pending("ran-out-tenant-waiting", Now.AddMinutes(-1), ranOutTenant),
+        ];
+    }
+
+    private static readonly string[] CommandKinds = [ProviderCommandKinds.VmDelete, ProviderCommandKinds.TemplateSync];
+
+    [Fact]
+    public async Task Claimable_SkipsALaneThatHoldsALease_ButNotTheLeaseThatRanOut()
+    {
+        await using TitanDbContext db = NewDb();
+        db.ProviderCommands.AddRange(EveryLane());
+        await db.SaveChangesAsync();
+
+        var claimable = await new ProviderCommandRepository(db).ListClaimableAsync(CommandKinds, Now, 100, default);
+
+        Assert.Equal(["idle-waiting", "ran-out-tenant-leased"], claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task ClaimQuery_AgreesWithHoldsTheLaneOf_ForEveryLane()
+    {
+        await using TitanDbContext db = NewDb();
+        List<ProviderCommand> lanes = EveryLane();
+        db.ProviderCommands.AddRange(lanes);
+        await db.SaveChangesAsync();
+
+        var claimable = await new ProviderCommandRepository(db).ListClaimableAsync(CommandKinds, Now, 100, default);
+
+        IEnumerable<string> expected = lanes
+            .Where(c => CommandKinds.Contains(c.Kind) && c.IsClaimable(Now))
+            .Where(c => !lanes.Any(other => CommandKinds.Contains(other.Kind) && other.HoldsTheLaneOf(c)))
+            .Select(c => c.Key);
+        Assert.Equal(expected.Order(StringComparer.Ordinal), claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 }
