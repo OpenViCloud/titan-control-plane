@@ -22,7 +22,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.ClusterId).HasColumnName("cluster_id").HasMaxLength(64).IsRequired();
         builder.Property(c => c.TenantId).HasColumnName("tenant_id");
         // The side of the backup split (ProviderCommandKinds.Backup) a row is on: with the tenant, its lane
-        // (titan-ops architecture/provider-and-worker.md#provider-command-lease).
+        // (titan-ops features/provider/design.md#tenant-lane).
         builder.Property<string>(LaneColumn).HasColumnName("lane").HasMaxLength(16)
             .HasComputedColumnSql(
                 $"CASE WHEN kind IN ({string.Join(", ", ProviderCommandKinds.Backup.Select(k => $"'{k}'"))}) " +

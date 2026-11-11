@@ -29,6 +29,6 @@ public static class ProviderCommandKinds
     public const string VolumeBackup = "volume.backup";
 
     /// The kinds the worker leases on a loop of their own; a tenant's backup and its other commands are two lanes
-    /// (titan-ops architecture/provider-and-worker.md#provider-command-lease).
+    /// (titan-ops features/provider/design.md#tenant-lane).
     public static readonly string[] Backup = [VmBackup, VolumeBackup];
 }

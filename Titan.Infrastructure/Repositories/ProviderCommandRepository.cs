@@ -27,7 +27,7 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
 
     // ProviderCommand.IsClaimable and HoldsTheLaneOf, written in SQL (titan-ops architecture/domain-methods.md#plain-code),
     // among the kinds of the lease; ProviderCommandRepositoryStateTests runs every shape through both. A worker loop asks
-    // for the kinds of one whole lane (titan-ops architecture/provider-and-worker.md#provider-command-lease). Two leases
+    // for the kinds of one whole lane (titan-ops features/provider/design.md#tenant-lane). Two leases
     // that read at once can still pick two rows of one lane; the unique indexes on leased rows
     // (ProviderCommandConfiguration) let one of them commit.
     public async Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
