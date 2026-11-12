@@ -13,7 +13,7 @@ public class RunScheduledJobRequest
 
 /// Called by each job's Kubernetes CronJob, which waits for the pass to end: 204 when it ran, 404 for a name no job has,
 /// and the pass's own error otherwise, so the CronJob's Job fails with it
-/// (titan-ops architecture/platform-infra.md#background-jobs).
+/// (titan-ops architecture/background-jobs.md#background-jobs).
 public class RunScheduledJobEndpoint(
     IEnumerable<IScheduledJob> jobs,
     IConfiguration config,

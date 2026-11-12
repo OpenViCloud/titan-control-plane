@@ -7,7 +7,7 @@ using Titan.Infrastructure.Hosting;
 namespace Titan.Tests.Infrastructure;
 
 // A Kubernetes CronJob calls this route once per schedule, so one control plane pod runs each pass of a job
-// (titan-ops architecture/platform-infra.md#background-jobs).
+// (titan-ops architecture/background-jobs.md#background-jobs).
 public class RunScheduledJobEndpointTests
 {
     private sealed class CountingJob(string name) : IScheduledJob

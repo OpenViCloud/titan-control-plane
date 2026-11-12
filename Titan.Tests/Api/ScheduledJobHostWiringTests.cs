@@ -8,7 +8,7 @@ namespace Titan.Tests.Api;
 /// The scheduled jobs run only when their CronJob (or, for the IPv6 route seed, the PostSync hook Job) calls
 /// POST /internal/jobs/{job}: a job missing from Program.cs fails every pass with 404, and no service-level test builds
 /// the host. And no pod runs a job on a timer of its own
-/// (titan-ops architecture/platform-infra.md#background-jobs).
+/// (titan-ops architecture/background-jobs.md#background-jobs).
 /// </summary>
 // FullHost — its own CI process, for the reason CatalogContractTests gives.
 [Trait("Category", "FullHost")]

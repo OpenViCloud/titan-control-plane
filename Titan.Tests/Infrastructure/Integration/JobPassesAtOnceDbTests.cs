@@ -12,7 +12,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// Passes of a background job at once, each with its own DbContext as each control plane pod has: they take turns on
 /// the job's lock, so the day's backup commands come out once and no pass fails. Without the lock, eight passes
 /// deadlock on Postgres (40P01): each inserts its new commands in the order of their random ids, so two passes lock
-/// the same keys in different orders (titan-ops architecture/platform-infra.md#background-jobs). Category=Integration — its own CI step; needs real Postgres.
+/// the same keys in different orders (titan-ops architecture/background-jobs.md#background-jobs). Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class JobPassesAtOnceDbTests(PostgresFixture pg)
