@@ -9,6 +9,6 @@ public class ShellSession
     public Guid VmId { get; set; }
     public DateTimeOffset OpenedAt { get; set; }
     /// Written by the replica holding the session every ShellSessionLimiter.SeenEvery; a row not seen for
-    /// ShellSessionLimiter.GoneAfter belongs to a replica that died.
+    /// ShellSessionLimiter.GoneAfter holds no place.
     public DateTimeOffset SeenAt { get; set; }
 }

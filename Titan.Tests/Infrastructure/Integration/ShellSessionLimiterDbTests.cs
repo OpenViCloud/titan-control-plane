@@ -45,10 +45,12 @@ public class ShellSessionLimiterDbTests(PostgresFixture pg)
         {
             Guid tenant = await SeedTenantAsync();
             ShellSessionLimiter first = NewReplica(services);
+            var taken = new List<IAsyncDisposable?>();
             for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant - 1; i++)
             {
-                Assert.NotNull(await first.TryAcquireAsync(tenant, Guid.NewGuid(), CancellationToken.None));
+                taken.Add(await first.TryAcquireAsync(tenant, Guid.NewGuid(), CancellationToken.None));
             }
+            Assert.All(taken, Assert.NotNull);
             using var start = new SemaphoreSlim(0, Replicas);
 
             Task<IAsyncDisposable?>[] opens = Enumerable.Range(0, Replicas).Select(async _ =>
@@ -63,6 +65,13 @@ public class ShellSessionLimiterDbTests(PostgresFixture pg)
             await using TitanDbContext read = pg.NewDbContext();
             Assert.Equal(ShellSessionLimiter.MaxSessionsPerTenant, await read.ShellSessions.CountAsync(s => s.TenantId == tenant));
             Assert.Single(places, p => p != null);
+            foreach (IAsyncDisposable? place in places.Concat(taken))
+            {
+                if (place != null)
+                {
+                    await place.DisposeAsync();
+                }
+            }
         }
     }
 

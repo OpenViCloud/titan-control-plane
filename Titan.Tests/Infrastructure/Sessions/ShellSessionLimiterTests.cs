@@ -6,7 +6,7 @@ using Titan.Infrastructure.Sessions;
 
 namespace Titan.Tests.Infrastructure.Sessions;
 
-// At most five shell sessions per tenant at once, counted in core.ssh_sessions so every control plane replica sees the
+// At most five shell sessions per tenant at once, counted in core.shell_sessions so every control plane replica sees the
 // same count (titan-ops features/vm/design.md#ssh-session). ShellSessionLimiterDbTests measures the lock on Postgres.
 public class ShellSessionLimiterTests
 {
@@ -110,7 +110,7 @@ public class ShellSessionLimiterTests
     }
 
     // A replica that died left its rows behind: a session not seen for longer than GoneAfter no longer holds a place,
-    // and the next open deletes its row.
+    // and the next open that gets a place deletes its row.
     [Fact]
     public async Task ASessionNotSeenForLongerThanGoneAfter_HoldsNoPlace_AndItsRowGoes()
     {

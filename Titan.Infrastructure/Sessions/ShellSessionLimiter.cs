@@ -12,7 +12,8 @@ public sealed class ShellSessionLimiter
     public const int MaxSessionsPerTenant = 5;
     /// How often an open session writes that it is still open.
     public static readonly TimeSpan SeenEvery = TimeSpan.FromSeconds(30);
-    /// A row not seen for this long belongs to a replica that died with the session open: it holds no place.
+    /// A row not seen for this long holds no place: its replica died with the session open, or could not write for that
+    /// long. The next open that gets a place deletes it.
     public static readonly TimeSpan GoneAfter = TimeSpan.FromSeconds(90);
     private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(10);
 
