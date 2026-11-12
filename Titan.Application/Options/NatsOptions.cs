@@ -14,8 +14,7 @@ public class NatsOptions
     /// nats://host:4222 of the cluster's NATS core. Blank is treated as disabled.
     public string Url { get; set; } = "";
 
-    /// A per-wallet subject "<Prefix>.<walletId>" keeps ordering per wallet, and a single subscriber
-    /// instance (control-plane replicas: 1) makes that one writer per wallet.
+    /// A per-wallet subject "<Prefix>.<walletId>" keeps ordering per wallet.
     public string SubjectPrefix { get; set; } = "wallet.mutation";
 
     /// One place decides it, so the DI wiring and the subscriber agree on what "on" means.

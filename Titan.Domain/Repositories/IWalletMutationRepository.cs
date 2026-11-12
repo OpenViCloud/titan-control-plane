@@ -17,7 +17,7 @@ public interface IWalletMutationRepository
     void Add(WalletMutation mutation);
 
     /// Oldest first, tracked. The age cutoff keeps the sweeper off the hot path: a mutation enqueued a moment
-    /// ago belongs to the bus notify already in flight, and sweeping it would put two writers on one wallet.
+    /// ago belongs to the bus notify already in flight.
     /// FOR UPDATE SKIP LOCKED skips a mutation a consumer on any replica is applying (it holds the row's lock from its
     /// read to its commit); the statement's own locks end with it (titan-ops features/billing/wallet/design.md#wallet-mutation-flow).
     Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(

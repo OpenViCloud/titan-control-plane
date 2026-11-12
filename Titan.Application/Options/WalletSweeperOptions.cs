@@ -19,7 +19,7 @@ public class WalletSweeperOptions
 
     /// <summary>
     /// Keeps the sweeper off the hot path: a mutation enqueued a moment ago belongs to a notify already in
-    /// flight, and claiming it would put a second writer on the wallet.
+    /// flight.
     /// </summary>
     public int StaleAfterSeconds { get; set; } = 10;
 
