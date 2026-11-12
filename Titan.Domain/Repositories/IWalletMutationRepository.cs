@@ -6,7 +6,9 @@ namespace Titan.Domain.Repositories;
 /// its SaveChanges commits MarkApplied together with the balance change and ledger row in one transaction.
 public interface IWalletMutationRepository
 {
-    /// Tracked. Null for a notify whose mutation never landed — nothing to apply.
+    /// Tracked, its row locked until the next SaveChanges (or the scope's end): every replica receives every notify,
+    /// and the consumers after the first wait here, then read the mutation applied. Null for a notify whose mutation
+    /// never landed — nothing to apply.
     Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct);
 
     /// Committed in the same SaveChanges as the business fact, so a TopUp is Confirmed and its credit mutation
@@ -15,9 +17,9 @@ public interface IWalletMutationRepository
     void Add(WalletMutation mutation);
 
     /// Oldest first, tracked. The age cutoff keeps the sweeper off the hot path: a mutation enqueued a moment
-    /// ago belongs to the bus notify already in flight, and sweeping it would put two writers on one wallet.
-    /// FOR UPDATE SKIP LOCKED holds its lock only for the statement, so it does not keep the sweep off a mutation
-    /// the consumer is applying (titan-ops features/billing/wallet/design.md#wallet-debts).
+    /// ago belongs to the bus notify already in flight.
+    /// FOR UPDATE SKIP LOCKED skips a mutation a consumer on any replica is applying (it holds the row's lock from its
+    /// read to its commit); the statement's own locks end with it (titan-ops features/billing/wallet/design.md#wallet-mutation-flow).
     Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(
         DateTimeOffset cutoff, int batchSize, CancellationToken ct);
 

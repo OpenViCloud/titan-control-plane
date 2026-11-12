@@ -86,6 +86,7 @@ var connectionString = builder.Configuration.GetConnectionString("Titan")!;
 
 // /metrics is served by a Kestrel server of its own on Metrics:Port, so the main listener has no such route
 // whatever Host a request carries. Unset ⇒ no metric server, so hosts started side by side (tests) bind no fixed port.
+// (titan-ops architecture/operator-metrics.md#control-plane-metrics)
 int metricsPort = builder.Configuration.GetValue<int>("Metrics:Port", 0);
 if (metricsPort > 0)
 {
@@ -245,7 +246,6 @@ builder.Services.AddSingleton(sePayOptions);
 
 // NATS is off by default: the outbox table is the durable queue and NATS only a speed layer, so a missed
 // notify is a delayed apply, never lost money (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
-// At control-plane replicas: 1 the single subscriber is the one writer per wallet.
 var natsOptions = builder.Configuration.GetSection(NatsOptions.SectionName).Get<NatsOptions>() ?? new NatsOptions();
 builder.Services.AddSingleton(natsOptions);
 if (natsOptions.IsActive)
@@ -301,8 +301,7 @@ builder.Services.AddHostedService<ProviderCommandRetention>();
 builder.Services.AddOptions<VmMetricRetentionOptions>().BindConfiguration(VmMetricRetentionOptions.SectionName);
 builder.Services.AddHostedService<VmMetricRetention>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
-// and nothing alerts on its absence (/healthz/wallet only reports it). Its SKIP LOCKED does not keep it off
-// a mutation the subscriber is applying (titan-ops features/billing/wallet/design.md#wallet-debts).
+// and nothing alerts on its absence (/healthz/wallet only reports it).
 builder.Services.AddOptions<WalletSweeperOptions>().BindConfiguration(WalletSweeperOptions.SectionName);
 // Singleton: written by the sweeper loop, read by the health check.
 builder.Services.AddSingleton<WalletSweeperHeartbeat>();

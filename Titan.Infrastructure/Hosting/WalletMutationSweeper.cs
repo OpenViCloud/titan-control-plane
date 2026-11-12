@@ -98,9 +98,9 @@ public class WalletMutationSweeper(
                 }
                 catch (ConcurrencyConflictException)
                 {
-                    // The row's status moved between the read and the save (applied by the subscriber, or
-                    // given up and reopened by a payer): the status token refused to record an attempt on it.
-                    // Nothing to record; the rest of the batch still runs.
+                    // The status token refused to record an attempt: the row changed since GiveUpOrRetryAsync read
+                    // it. On Postgres its read holds the row's lock, so only a store without row locks (InMemory)
+                    // gets here. Nothing to record; the rest of the batch still runs.
                     logger.LogInformation(
                         "Wallet mutation {MutationId} changed while the sweeper recorded a failed attempt; skipped",
                         mutation.Id);

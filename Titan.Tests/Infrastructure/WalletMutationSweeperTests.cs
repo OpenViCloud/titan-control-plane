@@ -103,7 +103,8 @@ public class WalletMutationSweeperTests
     }
 
     // The status token refuses to record a failed attempt on a row whose status moved between the sweeper's read
-    // and its save (the subscriber applied it). That refusal is skipped, not fatal: the rest of the batch runs.
+    // and its save (the subscriber applied it; on Postgres the read's row lock keeps that from happening). That
+    // refusal is skipped, not fatal: the rest of the batch runs.
     [Fact]
     public async Task Sweep_RowAppliedWhileAFailedAttemptIsRecorded_SkipsIt_AndSweepsTheRest()
     {

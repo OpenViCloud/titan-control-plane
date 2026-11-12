@@ -317,7 +317,7 @@ public class InvoiceDebitRetryDbTests(PostgresFixture pg)
     }
 
     // A reopened row keeps the created_at of its first press. The sweeper must still treat it as fresh, or it
-    // takes the row while the bus notify of the reopen is in flight: two writers on one wallet.
+    // takes the row while the bus notify of the reopen is in flight.
     [Fact]
     public async Task ReopenedRow_FirstPressedLongAgo_IsNotSweptBeforeItsStaleWindow()
     {

@@ -4,9 +4,9 @@ using Titan.Domain.Services;
 
 namespace Titan.Application.Services.Billing.WalletMutations;
 
-// The single-writer consumer (titan-ops architecture/money-and-wallet.md#single-writer-outbox): the subscriber and the
-// sweeper both call it, and the rule itself is WalletMutationApply; the wallet version token catches two applies that
-// read the wallet at the same time.
+// The consumer (titan-ops architecture/money-and-wallet.md#single-writer-outbox): every replica's subscriber and sweeper
+// call it, and the rule itself is WalletMutationApply. It locks the mutation's row, then the wallet's, so applies of one
+// mutation, or of one wallet, take turns; the version token and the ledger's UNIQUE(type, ref_id) stay as the backstop.
 //
 // A non-Pending mutation is a no-op, so a redelivered notify is safe. The check reads the mutation this
 // context loaded, so it only sees another context's apply when the context is fresh: every caller gives each

@@ -6,8 +6,9 @@ using Titan.Application.Services.Billing.WalletMutations;
 
 namespace Titan.Infrastructure.Hosting;
 
-/// The single writer per wallet only because control-plane runs at replicas: 1, with no leader election
-/// (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Registered only when NatsOptions.IsActive.
+/// Every replica runs one and receives every notify (no queue group): the consumer's row locks make the applies of one
+/// wallet take turns (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Registered only when
+/// NatsOptions.IsActive.
 public class WalletMutationSubscriber(
     IServiceScopeFactory scopeFactory,
     IWalletMutationSubscription subscription,
