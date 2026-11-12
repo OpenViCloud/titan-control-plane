@@ -9,8 +9,11 @@ namespace Titan.Infrastructure.Repositories;
 /// (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
 public class WalletMutationRepository(TitanDbContext db) : IWalletMutationRepository
 {
-    public Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct) =>
-        db.WalletMutations.FirstOrDefaultAsync(c => c.Id == mutationId, ct);
+    public async Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.wallet_mutations WHERE id = {mutationId} FOR UPDATE", ct);
+        return await db.WalletMutations.FirstOrDefaultAsync(c => c.Id == mutationId, ct);
+    }
 
     public void Add(WalletMutation mutation) => db.WalletMutations.Add(mutation);
 

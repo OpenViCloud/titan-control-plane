@@ -10,7 +10,8 @@ public interface IWalletRepository
     /// Tracked. Null when no wallet was opened for the tenant.
     Task<Wallet?> GetByTenantForUpdateAsync(Guid tenantId, CancellationToken ct);
 
-    /// Tracked. A wallet mutation names its wallet by id, not tenant
+    /// Tracked, its row locked until the next SaveChanges: two replicas applying two mutations of one wallet take
+    /// turns instead of one losing on the version token. A wallet mutation names its wallet by id, not tenant
     /// (titan-ops architecture/money-and-wallet.md#single-writer-outbox).
     Task<Wallet?> GetByIdForUpdateAsync(Guid walletId, CancellationToken ct);
 

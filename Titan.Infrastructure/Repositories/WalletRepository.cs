@@ -14,8 +14,11 @@ public class WalletRepository(TitanDbContext db) : IWalletRepository
     public Task<Wallet?> GetByTenantForUpdateAsync(Guid tenantId, CancellationToken ct) =>
         db.Wallets.FirstOrDefaultAsync(w => w.TenantId == tenantId, ct);
 
-    public Task<Wallet?> GetByIdForUpdateAsync(Guid walletId, CancellationToken ct) =>
-        db.Wallets.FirstOrDefaultAsync(w => w.Id == walletId, ct);
+    public async Task<Wallet?> GetByIdForUpdateAsync(Guid walletId, CancellationToken ct)
+    {
+        await db.LockRowAsync($"SELECT id FROM core.wallets WHERE id = {walletId} FOR UPDATE", ct);
+        return await db.Wallets.FirstOrDefaultAsync(w => w.Id == walletId, ct);
+    }
 
     public async Task<long> GetBalanceAsync(Guid tenantId, CancellationToken ct) =>
         // default(long) = 0 for a tenant with no wallet: asking never creates a row.

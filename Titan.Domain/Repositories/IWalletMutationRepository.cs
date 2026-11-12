@@ -6,7 +6,9 @@ namespace Titan.Domain.Repositories;
 /// its SaveChanges commits MarkApplied together with the balance change and ledger row in one transaction.
 public interface IWalletMutationRepository
 {
-    /// Tracked. Null for a notify whose mutation never landed — nothing to apply.
+    /// Tracked, its row locked until the next SaveChanges (or the scope's end): every replica receives every notify,
+    /// and the consumers after the first wait here, then read the mutation applied. Null for a notify whose mutation
+    /// never landed — nothing to apply.
     Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct);
 
     /// Committed in the same SaveChanges as the business fact, so a TopUp is Confirmed and its credit mutation
