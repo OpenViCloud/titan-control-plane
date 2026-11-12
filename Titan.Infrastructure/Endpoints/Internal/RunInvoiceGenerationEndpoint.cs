@@ -39,6 +39,9 @@ public class RunInvoiceGenerationEndpoint(GenerateInvoicesForPeriodCommandHandle
         }
 
         var (year, month) = ResolvePeriod(req.Year, req.Month);
+        bool namesAMonth = year >= 1 && year <= 9999 && month >= 1 && month <= 12;
+        if (!namesAMonth)
+            ThrowError("Invalid period. Year is 1 to 9999, month 1 to 12.", 400);
         var result = await handler.HandleAsync(new GenerateInvoicesForPeriodCommand(year, month), ct);
 
         await SendOkAsync(new RunInvoiceGenerationResponse
