@@ -103,7 +103,7 @@ public class WalletMutationSubscriberTests
     // record between fakes, which can never disagree with themselves; this one asserts the serialized text.
     //
     // A rename is safe to ship only in a release that deploys the control plane with Recreate, so two versions never
-    // share the subject (titan-ops architecture/platform-infra.md#control-plane-replicas). Under a rolling update a
+    // share the subject (titan-ops features/billing/wallet/design.md#wallet-mutation-bus). Under a rolling update a
     // subscriber reading the old name would deserialize Guid.Empty, find no row and return silently — a delayed
     // apply (the sweeper re-drives it), but nothing logs an error.
     [Fact]

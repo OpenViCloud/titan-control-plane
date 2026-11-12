@@ -6,7 +6,7 @@ namespace Titan.Application.Abstractions;
 ///
 /// THESE PROPERTY NAMES ARE THE WIRE FORMAT: NatsWalletMutationBus serializes this record with
 /// JsonSerializer. A rename is safe only in a release that deploys the control plane with Recreate, so two
-/// versions never publish onto one subject (titan-ops architecture/platform-infra.md#control-plane-replicas). Under a
+/// versions never publish onto one subject (titan-ops features/billing/wallet/design.md#wallet-mutation-bus). Under a
 /// rolling update it becomes a silent failure: the subscriber deserializes Guid.Empty, finds no row and returns
 /// without logging.
 /// Change a name here only alongside a compatibility plan
