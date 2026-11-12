@@ -340,6 +340,7 @@ builder.Services.AddScoped<AdminNetworkQry.ListAdminNetworksQueryHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IProviderCommandRepository, ProviderCommandRepository>();
 builder.Services.AddScoped<IProviderCommandQueue, ProviderCommandQueue>();
+builder.Services.AddScoped<Titan.Application.Abstractions.IJobPassLock, Titan.Infrastructure.Persistence.PostgresJobPassLock>();
 builder.Services.AddScoped<ProviderCommandCmd.LeaseProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.ExtendProviderCommandLeaseCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.CompleteProviderCommandCommandHandler>();

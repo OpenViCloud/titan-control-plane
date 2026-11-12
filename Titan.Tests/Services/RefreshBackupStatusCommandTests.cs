@@ -34,7 +34,7 @@ public class RefreshBackupStatusCommandTests
     }
 
     private Task RunAsync() => new RefreshBackupStatusCommandHandler(
-        ConfiguredBackupTarget.Options(_target), _factory, _records, _observations, new FixedClock(Now))
+        ConfiguredBackupTarget.Options(_target), _factory, _records, _observations, new FakeJobPassLock(), new FixedClock(Now))
         .HandleAsync(new RefreshBackupStatusCommand());
 
     private void Put(string key, string content, DateTimeOffset modified, long? size = null)

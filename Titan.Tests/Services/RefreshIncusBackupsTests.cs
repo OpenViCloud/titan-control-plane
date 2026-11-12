@@ -21,10 +21,11 @@ public class RefreshIncusBackupsTests
     private readonly InMemoryBackupBucket _bucket = new();
     private readonly FakeBackupRecordRepository _records = new();
     private readonly FakeBackupObservationRepository _observations = new();
+    private readonly FakeJobPassLock _lock = new();
 
     private Task RunAsync() => new RefreshBackupStatusCommandHandler(
         ConfiguredBackupTarget.Options(ConfiguredBackupTarget.Valid()), new FixedBackupBucketFactory(_bucket), _records,
-        _observations, new FixedClock(Now))
+        _observations, _lock, new FixedClock(Now))
         .HandleAsync(new RefreshBackupStatusCommand());
 
     // The worker's key, spelled out here rather than taken from the code under test.
@@ -174,5 +175,18 @@ public class RefreshIncusBackupsTests
 
         Assert.Single(RowsOf(BackupRecord.VmKind));
         Assert.Equal(BackupReadOutcome.Unreadable, IncusObservation.Outcome);
+    }
+
+    // Two control plane pods may read the bucket at once: the second waits for the first to save, then reads the rows it
+    // saved. So the lock comes before the pass reads any row.
+    [Fact]
+    public async Task ThePass_TakesItsJobLock_BeforeItReadsAnyRow()
+    {
+        Put(Key("vms", Vm, Now.AddHours(-3)), 10);
+        _records.OnList = () => Assert.Equal(new[] { RefreshBackupStatusCommandHandler.Job }, _lock.Taken);
+
+        await RunAsync();
+
+        Assert.Equal(new[] { "backup-status" }, _lock.Taken);
     }
 }

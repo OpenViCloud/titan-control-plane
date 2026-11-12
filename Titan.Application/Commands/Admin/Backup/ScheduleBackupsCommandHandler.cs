@@ -13,10 +13,16 @@ public class ScheduleBackupsCommandHandler(
     IVmRepository vms,
     IVolumeRepository volumes,
     IProviderCommandQueue commands,
+    IJobPassLock passLock,
     TimeProvider clock)
 {
+    public const string Job = "backup-schedule";
+
     public async Task HandleAsync(ScheduleBackupsCommand command, CancellationToken ct = default)
     {
+        // Another pod's pass of this job waits here until this one saved, then reads the commands it saved: without the
+        // lock two passes insert the same keys in different orders and deadlock.
+        await passLock.TakeAsync(Job, ct);
         DateOnly today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
         foreach (var vm in await vms.ListWithAnInstanceAsync(ct))

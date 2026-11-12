@@ -21,8 +21,11 @@ public class RefreshBackupStatusCommandHandler(
     IBackupBucketFactory buckets,
     IBackupRecordRepository records,
     IBackupObservationRepository observations,
+    IJobPassLock passLock,
     TimeProvider clock)
 {
+    public const string Job = "backup-status";
+
     private record BaseFolder(string Key, long Size, DateTimeOffset TakenAt, BackupRecordStatus Status);
 
     private record BucketSnapshot(BackupReadOutcome Outcome, DateTimeOffset? LastWalAt, IReadOnlyList<BaseFolder> Folders);
@@ -41,6 +44,9 @@ public class RefreshBackupStatusCommandHandler(
         {
             return;
         }
+
+        // Another pod's pass of this job waits here until this one saved, then reads the rows it saved.
+        await passLock.TakeAsync(Job, ct);
 
         DateTimeOffset now = clock.GetUtcNow();
         var postgres = await ObservationAsync(BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, ct);
