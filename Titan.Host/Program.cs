@@ -373,7 +373,7 @@ builder.Services.AddSingleton<IProviderClientIdentityStore>(sp =>
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusClientFactory>();
 builder.Services.AddScoped<IComputeCatalogProvider, Titan.Infrastructure.Incus.IncusCatalogProvider>();
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusShellConnector>();
-// One count for the whole process: right while the control plane runs one replica (titan-ops features/vm/design.md#ssh-session).
+// One count for every replica: open sessions are rows of core.shell_sessions (titan-ops features/vm/design.md#ssh-session).
 builder.Services.AddSingleton<Titan.Infrastructure.Sessions.ShellSessionLimiter>();
 builder.Services.AddScoped<IClusterConnectionTester, Titan.Infrastructure.Incus.IncusClusterConnectionTester>();
 builder.Services.AddScoped<IAdminClusterService, Titan.Infrastructure.Incus.AdminClusterService>();
