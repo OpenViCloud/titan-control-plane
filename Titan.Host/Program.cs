@@ -83,7 +83,7 @@ builder.Logging.AddFilter("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMidd
 builder.Services.AddDbContext<TitanDbContext>(options =>
     options.UseNpgsql(TitanConnectionString.WithPoolCap(builder.Configuration.GetConnectionString("Titan")!)));
 
-var connectionString = builder.Configuration.GetConnectionString("Titan")!;
+var connectionString = TitanConnectionString.WithPoolCap(builder.Configuration.GetConnectionString("Titan")!);
 
 // /metrics is served by a Kestrel server of its own on Metrics:Port, so the main listener has no such route
 // whatever Host a request carries. Unset ⇒ no metric server, so hosts started side by side (tests) bind no fixed port.

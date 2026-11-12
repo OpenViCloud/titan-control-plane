@@ -5,9 +5,9 @@ using Titan.Application.Options;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Same shape as MeterLivenessHealthCheck, over the polls every replica records in core.reconciler_polls. Only the
-/// kinds the worker runs and the clusters configured now count: a cluster removed from config, or a kind no longer
-/// reconciled, leaves a row that never polls again (titan-ops architecture/desired-and-current.md#desired-and-current).
+/// A stale window per key, over the polls every replica records in core.reconciler_polls. Only the kinds the control
+/// plane lists (ReconcilerHeartbeat.Kinds) in the clusters configured now count: a cluster removed from config, or a
+/// kind taken off that list, leaves a row that never polls again (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// </summary>
 public sealed class ReconcilerLivenessHealthCheck(
     ReconcilerHeartbeat heartbeat,

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Titan.Infrastructure.Hosting;
 using Titan.Infrastructure.Persistence;
@@ -42,5 +43,19 @@ public class ReconcilerHeartbeatTests
         await using TitanDbContext read = Replica(database);
         Assert.Equal(T0.AddMinutes(2), (await new ReconcilerHeartbeat(read).SnapshotAsync(CancellationToken.None))["networks/mock"]);
         Assert.Equal(1, await read.ReconcilerPolls.CountAsync());
+    }
+
+    // The health check counts only ReconcilerHeartbeat.Kinds: a kind constant left off that list would go unmeasured.
+    [Fact]
+    public void Kinds_ListsEveryKindConstant()
+    {
+        string[] constants = typeof(ReconcilerHeartbeat).GetFields(BindingFlags.Public | BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.Name.EndsWith("Kind"))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .Order()
+            .ToArray();
+
+        Assert.Equal(7, constants.Length);
+        Assert.Equal(constants, ReconcilerHeartbeat.Kinds.Order().ToArray());
     }
 }
