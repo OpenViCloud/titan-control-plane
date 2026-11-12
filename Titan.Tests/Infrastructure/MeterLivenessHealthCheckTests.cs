@@ -48,7 +48,7 @@ public class MeterLivenessHealthCheckTests
         Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
-    // Registered at boot, no tick yet (wait-first timer), still inside the grace window
+    // Registered (the migration's row), no tick yet, still inside the grace window
     // (measured from registration) → not a false alarm.
     [Fact]
     public void Registered_but_not_yet_ticked_within_grace_is_Healthy()
@@ -92,7 +92,7 @@ public class MeterLivenessHealthCheckTests
         Assert.DoesNotContain("Disk", result.Description);
     }
 
-    // Nothing registered yet (probed before the host loop's first pass) — no evidence of a stopped
+    // No row at all (a meter whose migration has not run) — no evidence of a stopped
     // meter, so Healthy rather than a boot-time false alarm.
     [Fact]
     public void Empty_snapshot_is_Healthy()

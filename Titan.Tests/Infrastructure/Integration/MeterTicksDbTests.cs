@@ -76,7 +76,7 @@ public class MeterTicksDbTests(PostgresFixture pg) : IAsyncLifetime
         Assert.Equal(failure, compute.LastAttemptAt);
     }
 
-    // AC-3.2: ticks recorded through one DbContext, as one pod records them, are read through another.
+    // Ticks recorded through one DbContext, as one pod records them, are read through another.
     [Fact]
     public async Task EveryMeterTickedJustNow_IsHealthy_ReadFromAnotherPod()
     {
@@ -88,7 +88,7 @@ public class MeterTicksDbTests(PostgresFixture pg) : IAsyncLifetime
         Assert.Equal(HealthStatus.Healthy, await HealthAsync());
     }
 
-    // AC-3.3: a meter whose last success is older than MeterStaleFactor × IntervalMinutes (30 minutes by default).
+    // A meter whose last success is older than MeterStaleFactor × IntervalMinutes (30 minutes by default).
     [Fact]
     public async Task AMeterWhoseLastSuccessIsOlderThanTheWindow_IsUnhealthy()
     {
@@ -99,7 +99,7 @@ public class MeterTicksDbTests(PostgresFixture pg) : IAsyncLifetime
         Assert.Equal(HealthStatus.Unhealthy, await HealthAsync());
     }
 
-    // AC-3.3, never ticked: the window counts from the registration the migration wrote.
+    // Never ticked: the window counts from the registration the migration wrote.
     [Fact]
     public async Task AMeterNeverTicked_RegisteredLongerAgoThanTheWindow_IsUnhealthy()
     {

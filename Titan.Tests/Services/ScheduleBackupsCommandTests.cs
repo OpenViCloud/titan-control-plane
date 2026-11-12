@@ -107,7 +107,7 @@ public class ScheduleBackupsCommandTests
     }
 
     // Two control plane pods may run the pass at once: the second waits for the first to save, then reads what it
-    // saved (BackupPassesAtOnceDbTests). So the lock comes before the pass reads anything.
+    // saved (JobPassesAtOnceDbTests). So the lock comes before the pass reads anything.
     [Fact]
     public async Task ThePass_TakesItsJobLock_BeforeItReadsAnything()
     {

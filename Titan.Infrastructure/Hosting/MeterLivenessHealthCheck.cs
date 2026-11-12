@@ -7,7 +7,7 @@ namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
 /// A silently dead meter stops recording usage and under-bills with no error; this turns it into a signal on
-/// /healthz/meters. A meter not yet ticked is measured from its registration, giving a boot grace window.
+/// /healthz/meters. A meter not yet ticked is measured from its registration, the row its migration wrote.
 /// </summary>
 public sealed class MeterLivenessHealthCheck(
     IMeterTicks ticks,
