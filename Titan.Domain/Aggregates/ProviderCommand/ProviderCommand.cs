@@ -23,6 +23,10 @@ public class ProviderCommand : IAggregateRoot
 
     public string ClusterId { get; private set; } = default!;
 
+    /// The tenant whose resource the command acts on; null for a command of no tenant (`template.sync`). A tenant's
+    /// commands run one at a time in each lane (titan-ops features/provider/design.md#tenant-lane).
+    public Guid? TenantId { get; private set; }
+
     /// JSON the worker reads; its property names are the wire format.
     public string Payload { get; private set; } = default!;
 
@@ -47,7 +51,7 @@ public class ProviderCommand : IAggregateRoot
     private ProviderCommand() { }
 
     public static ProviderCommand Create(
-        string key, string kind, string clusterId, string payload, DateTimeOffset now)
+        string key, string kind, string clusterId, string payload, DateTimeOffset now, Guid? tenantId = null)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("A provider command needs a key.", nameof(key));
@@ -60,6 +64,7 @@ public class ProviderCommand : IAggregateRoot
             Key = key,
             Kind = kind,
             ClusterId = clusterId,
+            TenantId = tenantId,
             Payload = payload,
             Status = ProviderCommandStatus.Pending,
             Attempts = 0,
@@ -117,6 +122,14 @@ public class ProviderCommand : IAggregateRoot
         bool leaseRanOut = Status == ProviderCommandStatus.Leased && LeaseUntil != null && LeaseUntil.Value <= now;
         return pendingAndDue || leaseRanOut;
     }
+
+    /// A Leased row holds its lane, the same tenant (or no tenant) and the same side of the backup split: no other row of
+    /// that lane is handed out until it stops running, while the row itself is taken again once its lease ran out
+    /// (titan-ops features/provider/design.md#tenant-lane). ProviderCommandRepository.ListClaimableAsync
+    /// writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
+    internal bool HoldsTheLaneOf(ProviderCommand other) =>
+        Status == ProviderCommandStatus.Leased && Id != other.Id && TenantId == other.TenantId
+        && ProviderCommandKinds.Backup.Contains(Kind) == ProviderCommandKinds.Backup.Contains(other.Kind);
 
     public void Lease(Guid leaseId, DateTimeOffset now)
     {

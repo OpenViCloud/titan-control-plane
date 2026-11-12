@@ -70,6 +70,71 @@ public class ProviderCommandQueueTests
         return template;
     }
 
+    // Every kind stages the tenant whose resource it acts on, and template.sync none: a tenant's commands run one at a
+    // time in each lane (titan-ops features/provider/design.md#tenant-lane). A new kind fails the first assertion until
+    // it is here.
+    [Fact]
+    public async Task EveryKind_StagesTheTenantOfItsResource_AndTemplateSyncNoTenant()
+    {
+        ProviderCommandQueue queue = Queue();
+        (Vm vm, VmSnapshot vmSnapshot) = AVmSnapshot();
+        (Volume volume, VolumeSnapshot volumeSnapshot) = AVolumeSnapshot();
+        (Network network, FirewallRule rule) = ARule();
+        LoadBalancer lb = ALoadBalancer();
+        var expected = new Dictionary<string, Guid?>
+        {
+            [ProviderCommandKinds.VmCreate] = vm.TenantId, [ProviderCommandKinds.VmDelete] = vm.TenantId,
+            [ProviderCommandKinds.VmStop] = vm.TenantId, [ProviderCommandKinds.VmStart] = vm.TenantId,
+            [ProviderCommandKinds.VmSnapshotCreate] = vm.TenantId, [ProviderCommandKinds.VmSnapshotRevert] = vm.TenantId,
+            [ProviderCommandKinds.VmSnapshotDelete] = vm.TenantId, [ProviderCommandKinds.VmBackup] = vm.TenantId,
+            [ProviderCommandKinds.NetworkCreate] = network.TenantId, [ProviderCommandKinds.NetworkDelete] = network.TenantId,
+            [ProviderCommandKinds.FirewallRuleCreate] = network.TenantId,
+            [ProviderCommandKinds.FirewallRuleDelete] = network.TenantId,
+            [ProviderCommandKinds.VolumeCreate] = volume.TenantId, [ProviderCommandKinds.VolumeAttach] = volume.TenantId,
+            [ProviderCommandKinds.VolumeDetach] = volume.TenantId, [ProviderCommandKinds.VolumeDelete] = volume.TenantId,
+            [ProviderCommandKinds.VolumeSnapshotCreate] = volume.TenantId,
+            [ProviderCommandKinds.VolumeSnapshotDelete] = volume.TenantId,
+            [ProviderCommandKinds.VolumeSnapshotRestore] = volume.TenantId,
+            [ProviderCommandKinds.VolumeBackup] = volume.TenantId,
+            [ProviderCommandKinds.LoadBalancerCreate] = lb.TenantId, [ProviderCommandKinds.LoadBalancerUpdate] = lb.TenantId,
+            [ProviderCommandKinds.LoadBalancerDelete] = lb.TenantId,
+            [ProviderCommandKinds.TemplateSync] = null,
+        };
+
+        await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
+        await queue.EnqueueVmDeleteAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmStopAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmStartAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmSnapshotCreateAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmSnapshotRevertAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotDeleteAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 11, 11));
+        await queue.EnqueueNetworkCreateAsync(network, Guid.NewGuid(), "t-1", null);
+        await queue.EnqueueNetworkDeleteAsync(network, Guid.NewGuid(), "net-x", "t-1");
+        await queue.EnqueueFirewallRuleCreateAsync(network, rule, Guid.NewGuid(), "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, Guid.NewGuid(), "acl-x/rule", "t-1");
+        await queue.EnqueueVolumeCreateAsync(volume, Guid.NewGuid(), "t-1");
+        await queue.EnqueueVolumeAttachAsync(volume, Guid.NewGuid(), "vol-x", "vm-x", "t-1");
+        await queue.EnqueueVolumeDetachAsync(volume, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeDeleteAsync(volume, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotCreateAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotDeleteAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x/s-x", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(volume, Guid.NewGuid(), "vol-x/s-x", "t-1");
+        await queue.EnqueueVolumeBackupAsync(volume, "vol-x", "t-1", new DateOnly(2026, 11, 11));
+        await queue.EnqueueLoadBalancerCreateAsync(lb, Guid.NewGuid(), "t-1");
+        await queue.EnqueueLoadBalancerUpdateAsync(lb, Guid.NewGuid(), "t-1");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
+        await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
+
+        string[] everyKind = typeof(ProviderCommandKinds)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .ToArray();
+        Assert.Equal(everyKind.Order(StringComparer.Ordinal), _repo.Rows.Select(r => r.Kind).Order(StringComparer.Ordinal));
+        Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.TenantId));
+    }
+
     [Fact]
     public async Task VmCreate_StagesOnePendingRow_KeyedOnTheRequest_WithTheWorkersPayload()
     {

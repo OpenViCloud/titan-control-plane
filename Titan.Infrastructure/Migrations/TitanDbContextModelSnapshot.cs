@@ -799,6 +799,13 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("kind");
 
+                    b.Property<string>("Lane")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("lane")
+                        .HasComputedColumnSql("CASE WHEN kind IN ('vm.backup', 'volume.backup') THEN 'backup' ELSE 'command' END", true);
+
                     b.Property<string>("LastError")
                         .HasColumnType("text")
                         .HasColumnName("last_error");
@@ -822,6 +829,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("status");
 
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
                         .HasColumnType("integer")
@@ -832,10 +843,20 @@ namespace Titan.Infrastructure.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("IX_provider_commands_kind_leased_no_tenant")
+                        .HasFilter("status = 'Leased' AND tenant_id IS NULL");
+
                     b.HasIndex("LeaseId")
                         .IsUnique();
 
                     b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("TenantId", "Lane")
+                        .IsUnique()
+                        .HasDatabaseName("IX_provider_commands_tenant_id_lane_leased")
+                        .HasFilter("status = 'Leased' AND tenant_id IS NOT NULL");
 
                     b.HasIndex("Status", "Kind", "AvailableAt");
 
