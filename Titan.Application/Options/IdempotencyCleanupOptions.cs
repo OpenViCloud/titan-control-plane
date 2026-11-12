@@ -7,5 +7,4 @@ public class IdempotencyCleanupOptions
     /// <summary>Default 24h: at least one apply/retry cycle.</summary>
     public int TtlHours { get; set; } = 24;
 
-    public int IntervalMinutes { get; set; } = 60;
 }

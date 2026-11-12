@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
@@ -13,37 +11,17 @@ namespace Titan.Infrastructure.Hosting;
 /// ProviderCommandRetention, not a provider command.
 /// </summary>
 public class VmMetricRetention(
-    IServiceScopeFactory scopeFactory,
+    IVmMetricStore store,
     IOptions<VmMetricRetentionOptions> options,
     TimeProvider clock,
-    ILogger<VmMetricRetention> logger) : BackgroundService
+    ILogger<VmMetricRetention> logger) : IScheduledJob
 {
-    private readonly VmMetricRetentionOptions _opts = options.Value;
+    public const string JobName = "vm-metric-retention";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_opts.IntervalMinutes));
+    public string Name => JobName;
 
-        // Wait-first, like ProviderCommandRetention: nothing runs during startup, nor under the InMemory provider of a
-        // WebApplicationFactory test, which has no ExecuteDelete.
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                await RunOnceAsync(scope.ServiceProvider.GetRequiredService<IVmMetricStore>(),
-                    _opts.RetentionDays, clock.GetUtcNow(), logger, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "VM metric retention pass failed");
-            }
-        }
-    }
+    public Task RunAsync(CancellationToken ct) =>
+        RunOnceAsync(store, options.Value.RetentionDays, clock.GetUtcNow(), logger, ct);
 
     public static async Task<int> RunOnceAsync(
         IVmMetricStore store, int retentionDays, DateTimeOffset now, ILogger logger, CancellationToken ct)

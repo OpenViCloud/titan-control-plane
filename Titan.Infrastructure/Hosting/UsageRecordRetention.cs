@@ -1,8 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using Titan.Application.Options;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Repositories;
 
@@ -10,41 +6,20 @@ namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
 /// Deletes usage records older than UsageRecord.KeptDays (titan-ops features/billing/metering/design.md#usage-retention).
-/// Every pod runs its own pass; two passes at once delete the same rows and the later one finds none. Local DB
-/// maintenance, like VmMetricRetention, not a provider command.
+/// Two passes at once delete the same rows and the later one finds none. Local DB maintenance, like VmMetricRetention,
+/// not a provider command.
 /// </summary>
 public class UsageRecordRetention(
-    IServiceScopeFactory scopeFactory,
-    IOptions<UsageRecordRetentionOptions> options,
+    IUsageRecordRepository repository,
     TimeProvider clock,
-    ILogger<UsageRecordRetention> logger) : BackgroundService
+    ILogger<UsageRecordRetention> logger) : IScheduledJob
 {
-    private readonly UsageRecordRetentionOptions _opts = options.Value;
+    public const string JobName = "usage-record-retention";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_opts.IntervalMinutes));
+    public string Name => JobName;
 
-        // Wait-first, like VmMetricRetention: nothing runs during startup, nor under the InMemory provider of a
-        // WebApplicationFactory test, which has no ExecuteDelete.
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                await RunOnceAsync(scope.ServiceProvider.GetRequiredService<IUsageRecordRepository>(),
-                    clock.GetUtcNow(), logger, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Usage record retention pass failed");
-            }
-        }
-    }
+    public Task RunAsync(CancellationToken ct) =>
+        RunOnceAsync(repository, clock.GetUtcNow(), logger, ct);
 
     public static async Task<int> RunOnceAsync(
         IUsageRecordRepository repository, DateTimeOffset now, ILogger logger, CancellationToken ct)
