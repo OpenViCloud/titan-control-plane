@@ -72,6 +72,36 @@ public class QueryParameterValidationEndpointTests
         await Assert.ThrowsAsync<ValidationFailureException>(() => ep.HandleAsync(CancellationToken.None));
     }
 
+    // A year no date can carry must be a 400 before the handler: the retention check builds the month's first day.
+    [Theory]
+    [InlineData("0-05")]
+    [InlineData("10000-01")]
+    public async Task BillingSummary_YearOutsideOneTo9999_Is400(string month)
+    {
+        GetTenantBillingSummaryEndpoint ep = SummaryEndpoint(month);
+
+        await Assert.ThrowsAsync<ValidationFailureException>(() => ep.HandleAsync(CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("0-05")]
+    [InlineData("10000-01")]
+    public async Task VmCost_YearOutsideOneTo9999_Is400(string month)
+    {
+        Vm vm = Vm.Create(TenantOwner.Id, Guid.NewGuid(), "vm-1", "m", "tpl-1", "cluster-a", 20);
+        var vms = new Mock<IVmRepository>();
+        vms.Setup(r => r.FindByIdAsync(vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync(vm);
+        GetVmCostEndpoint ep = Factory.Create<GetVmCostEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["vmId"] = vm.Id.ToString();
+                ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?month={month}");
+            },
+            new GetVmCostQueryHandler(new FakeUsageRecordRepository(), Caller(), TimeProvider.System), Caller(), vms.Object);
+
+        await Assert.ThrowsAsync<ValidationFailureException>(() => ep.HandleAsync(CancellationToken.None));
+    }
+
     // A month whose first day is more than 90 days back is no longer whole in the ledger: 422, never a 200 that reads
     // like "nothing was used" (titan-ops features/billing/metering/design.md#usage-retention).
     [Fact]

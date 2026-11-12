@@ -28,6 +28,6 @@ public class GetTenantBillingSummaryEndpoint(
         year = 0; month = 0;
         var parts = value.Split('-');
         bool parsed = parts.Length == 2 && int.TryParse(parts[0], out year) && int.TryParse(parts[1], out month);
-        return parsed && month >= 1 && month <= 12;
+        return parsed && year >= 1 && year <= 9999 && month >= 1 && month <= 12;
     }
 }
