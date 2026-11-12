@@ -146,7 +146,7 @@ public class NetworkReconcilerTests
         Assert.DoesNotContain("networks/vn-han-1", result.Description);
     }
 
-    // A cluster removed from config, or a kind no longer reconciled, never polls again: its row does not count.
+    // A cluster removed from config, or a kind not in ReconcilerHeartbeat.Kinds, never polls again: its row does not count.
     [Fact]
     public void Liveness_ARowOfAClusterNotConfigured_OrOfAnUnknownKind_DoesNotCount()
     {
