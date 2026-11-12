@@ -86,6 +86,7 @@ var connectionString = builder.Configuration.GetConnectionString("Titan")!;
 
 // /metrics is served by a Kestrel server of its own on Metrics:Port, so the main listener has no such route
 // whatever Host a request carries. Unset ⇒ no metric server, so hosts started side by side (tests) bind no fixed port.
+// (titan-ops architecture/operator-metrics.md#control-plane-metrics)
 int metricsPort = builder.Configuration.GetValue<int>("Metrics:Port", 0);
 if (metricsPort > 0)
 {
