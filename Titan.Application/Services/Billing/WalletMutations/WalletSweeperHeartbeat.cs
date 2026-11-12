@@ -1,7 +1,7 @@
 namespace Titan.Application.Services.Billing.WalletMutations;
 
 /// <summary>
-/// The sweeper's pulse, like <see cref="MeterHeartbeat"/>: it lets the health check see a sweeper that stopped,
+/// The sweeper's pulse: it lets the health check see a sweeper that stopped,
 /// which a log line alone does not. The sweeper is the only thing that recovers a lost notify
 /// (titan-ops architecture/money-and-wallet.md#single-writer-outbox); while it is dead, a mutation whose notify was lost is
 /// never applied.

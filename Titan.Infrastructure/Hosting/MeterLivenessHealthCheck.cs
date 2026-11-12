@@ -10,19 +10,19 @@ namespace Titan.Infrastructure.Hosting;
 /// /healthz/meters. A meter not yet ticked is measured from its registration, giving a boot grace window.
 /// </summary>
 public sealed class MeterLivenessHealthCheck(
-    MeterHeartbeat heartbeat,
+    IMeterTicks ticks,
     IOptions<BillingMeterOptions> options) : IHealthCheck
 {
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
     {
         var opts = options.Value;
-        var result = Evaluate(DateTimeOffset.UtcNow, heartbeat.Snapshot(), opts.IntervalMinutes, opts.MeterStaleFactor);
-        return Task.FromResult(result);
+        IReadOnlyDictionary<string, MeterTickState> snapshot = await ticks.SnapshotAsync(ct);
+        return Evaluate(DateTimeOffset.UtcNow, snapshot, opts.IntervalMinutes, opts.MeterStaleFactor);
     }
 
     /// <summary>
-    /// Pure, so MeterLivenessHealthCheckTests can inject the clock. An empty snapshot (probed before the host
-    /// loop starts) is Healthy: there is no evidence of a stopped meter.
+    /// Pure, so MeterLivenessHealthCheckTests can inject the clock. An empty snapshot is Healthy: there is no evidence of a
+    /// stopped meter (the migration that adds a meter writes its row).
     /// </summary>
     public static HealthCheckResult Evaluate(
         DateTimeOffset now,

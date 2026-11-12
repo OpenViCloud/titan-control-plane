@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Titan.Application.Options;
 using Titan.Application.Services.Billing.Metering;
+using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Hosting;
 
@@ -14,10 +15,10 @@ public static class MeterRegistration
     {
         services.AddOptions<BillingMeterOptions>().BindConfiguration(BillingMeterOptions.SectionName);
 
-        // Liveness state is shared across per-tick scopes → singleton.
-        services.AddSingleton<MeterHeartbeat>();
+        // The ticks are rows, read the same by every pod's /healthz/meters.
+        services.AddScoped<IMeterTicks, PostgresMeterTicks>();
 
-        // Also exposed as IMeter so the host can iterate them; the forwarders resolve the same scoped instance.
+        // Also exposed as IMeter so the meter job can iterate them; the forwarders resolve the same scoped instance.
         services.AddScoped<IComputeMeterService, ComputeMeterService>();
         services.AddScoped<IDiskMeterService, DiskMeterService>();
         services.AddScoped<ISnapshotMeterService, SnapshotMeterService>();
@@ -25,7 +26,7 @@ public static class MeterRegistration
         services.AddScoped<IMeter>(sp => sp.GetRequiredService<IDiskMeterService>());
         services.AddScoped<IMeter>(sp => sp.GetRequiredService<ISnapshotMeterService>());
 
-        services.AddHostedService<MeterHostedService>();
+        services.AddScoped<IScheduledJob, MeterJob>();
 
         return services;
     }

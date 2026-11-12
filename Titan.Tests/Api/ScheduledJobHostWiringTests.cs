@@ -24,7 +24,7 @@ public class ScheduledJobHostWiringTests : IClassFixture<OpenApiSpecTests.ApiFac
     private static readonly string[] JobNames =
     [
         "backup-schedule", "backup-status", "template-sync-never-asked", "idempotency-cleanup",
-        "provider-command-retention", "vm-metric-retention", "usage-record-retention",
+        "provider-command-retention", "vm-metric-retention", "usage-record-retention", "meter",
     ];
 
     [Fact]
@@ -36,8 +36,8 @@ public class ScheduledJobHostWiringTests : IClassFixture<OpenApiSpecTests.ApiFac
         Assert.Equal(JobNames.Order(), names.Order());
     }
 
-    // The hosted services left are the wallet's (a subscription and a 30-second sweeper: no CronJob runs that often), the
-    // IPv6 route seed and the meter; Titan's own, by type.
+    // The hosted services left are the wallet's (a subscription and a 30-second sweeper: no CronJob runs that often) and
+    // the IPv6 route seed; Titan's own, by type.
     [Fact]
     public void NoScheduledJob_RunsOnAPodTimer()
     {
@@ -49,7 +49,7 @@ public class ScheduledJobHostWiringTests : IClassFixture<OpenApiSpecTests.ApiFac
 
         // A subset: the subscriber is there only when NATS is configured, which this host is not.
         Assert.Subset(
-            new HashSet<string> { "ClusterIpv6RouteSeedService", "MeterHostedService", "WalletMutationSubscriber", "WalletMutationSweeper" },
+            new HashSet<string> { "ClusterIpv6RouteSeedService", "WalletMutationSubscriber", "WalletMutationSweeper" },
             titanHostedServices);
         Assert.Contains("WalletMutationSweeper", titanHostedServices);
     }
