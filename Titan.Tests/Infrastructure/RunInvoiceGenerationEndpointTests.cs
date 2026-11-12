@@ -99,6 +99,23 @@ public class RunInvoiceGenerationEndpointTests
         _usage.Verify(u => u.GetDistinctTenantIdsForMonthAsync(2026, 7, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // A period that names no month is a 400 before anything is read, not a 500 from building its first day.
+    [Theory]
+    [InlineData(2026, 13)]
+    [InlineData(2026, 0)]
+    [InlineData(0, 7)]
+    public async Task HandleAsync_APeriodThatNamesNoMonth_Is400_AndNeverCallsService(int year, int month)
+    {
+        var ep = Factory.Create<RunInvoiceGenerationEndpoint>(
+            ctx => ctx.Request.Headers["X-Internal-Token"] = "secret",
+            AugustHandler(), ConfigWithToken("secret"));
+
+        await Assert.ThrowsAsync<ValidationFailureException>(
+            () => ep.HandleAsync(new RunInvoiceGenerationRequest { Year = year, Month = month }, CancellationToken.None));
+
+        VerifyNeverGenerated();
+    }
+
     // The counts the CronJob logs are the handler's own, carried through unchanged: two tenants billed,
     // one already billed for the period and skipped.
     [Fact]
