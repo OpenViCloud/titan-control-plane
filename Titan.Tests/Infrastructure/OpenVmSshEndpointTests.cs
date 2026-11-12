@@ -2,6 +2,8 @@ using System.Net.WebSockets;
 using FastEndpoints;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
@@ -13,6 +15,7 @@ using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Infrastructure.Endpoints.Vm;
 using Titan.Infrastructure.Incus;
+using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.Sessions;
 using Titan.Tests.Fakes;
 using Titan.Tests.Infrastructure.Incus;
@@ -28,11 +31,20 @@ public class OpenVmSshEndpointTests
     private readonly Mock<IVmRepository> _vms = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
     private readonly FakeActivityRecorder _activity = new();
-    private readonly ShellSessionLimiter _limiter = new();
+    private readonly ShellSessionLimiter _limiter = NewLimiter();
     private readonly ClusterOptions _clusters = new();
     private static readonly Titan.Domain.Aggregates.Tenant.Tenant _tenantIdOwner = TestTenant.WithRoomToSpare();
     private readonly Guid _tenantId = _tenantIdOwner.Id;
     private readonly Vm _vm;
+
+    private static ShellSessionLimiter NewLimiter()
+    {
+        string database = $"ssh-endpoint-{Guid.NewGuid()}";
+        var services = new ServiceCollection();
+        services.AddDbContext<TitanDbContext>(o => o.UseInMemoryDatabase(database));
+        return new ShellSessionLimiter(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System, NullLogger<ShellSessionLimiter>.Instance);
+    }
 
     public OpenVmSshEndpointTests()
     {
@@ -79,7 +91,7 @@ public class OpenVmSshEndpointTests
     {
         for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
         {
-            Assert.NotNull(_limiter.TryAcquire(_tenantId));
+            Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
         }
 
         var refused = await Assert.ThrowsAsync<BusinessException>(() => Endpoint(upgrade: true).HandleAsync(CancellationToken.None));
@@ -106,7 +118,7 @@ public class OpenVmSshEndpointTests
         Assert.Equal("vm.ssh_requested", Assert.Single(_activity.Events).Action);
         for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
         {
-            Assert.NotNull(_limiter.TryAcquire(_tenantId));
+            Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
         }
     }
 

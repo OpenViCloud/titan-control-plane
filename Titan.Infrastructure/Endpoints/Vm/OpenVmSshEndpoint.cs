@@ -43,7 +43,7 @@ public class OpenVmSshEndpoint(
         Guid vmId = Route<Guid>("vmId");
         VmShellTargetQueryResult shell = await target.HandleAsync(new GetVmShellTargetQuery(vmId), ct);
         Guid tenantId = currentUser.RequireTenantId();
-        using IDisposable? place = limiter.TryAcquire(tenantId);
+        await using IAsyncDisposable? place = await limiter.TryAcquireAsync(tenantId, vmId, ct);
         if (place == null)
         {
             throw new BusinessException("VM_SESSION_LIMIT_REACHED",

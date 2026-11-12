@@ -1811,6 +1811,36 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.ShellSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("OpenedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at");
+
+                    b.Property<DateTimeOffset>("SeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seen_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("VmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vm_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("shell_sessions", "core");
+                });
+
             modelBuilder.Entity("Titan.Infrastructure.Persistence.VmMetricSample", b =>
                 {
                     b.Property<Guid>("VmId")
