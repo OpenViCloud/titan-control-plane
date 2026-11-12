@@ -138,9 +138,9 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         Assert.Equal(1, movements);
     }
 
-    // A mutation younger than the cutoff is LEFT ALONE. Without this, the sweeper would race the
-    // subscriber for every mutation the instant it is written, putting two writers on one wallet — the
-    // exact condition titan-ops architecture/money-and-wallet.md#single-writer-outbox removes. The symmetric
+    // A mutation younger than the cutoff is LEFT ALONE: the bus notify in flight applies it, and the sweeper does not
+    // queue on its row lock for every mutation the instant it is written
+    // (titan-ops architecture/money-and-wallet.md#single-writer-outbox). The symmetric
     // partner of the test above: on its own, that one passes just as well for a sweeper that grabs everything.
     [Fact]
     public async Task Sweep_FreshMutation_IsLeftAlone()

@@ -79,10 +79,10 @@ public class WalletTwoConsumersDbTests(PostgresFixture pg)
             (await read.WalletMutations.AsNoTracking().SingleAsync(m => m.Id == mutation.Id)).Status);
     }
 
-    // Two replicas apply two mutations of one wallet at once: both land, each once, and neither replica fails — the
-    // second waits for the first instead of losing on the wallet's version and waiting for the sweeper.
+    // Eight replicas apply eight mutations of one wallet at once: all land, each once, and no replica fails — each waits
+    // for the one before on the wallet's row instead of losing on its version and waiting for the sweeper.
     [Fact]
-    public async Task TwoMutationsOfOneWallet_AppliedOnTwoReplicasAtOnce_BothLand_AndNeitherFails()
+    public async Task MutationsOfOneWallet_AppliedOnManyReplicasAtOnce_AllLand_AndNoneFails()
     {
         Wallet wallet = await SeedWalletAsync();
         var mutations = new List<WalletMutation>();

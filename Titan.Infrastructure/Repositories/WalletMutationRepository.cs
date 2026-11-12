@@ -17,8 +17,9 @@ public class WalletMutationRepository(TitanDbContext db) : IWalletMutationReposi
 
     public void Add(WalletMutation mutation) => db.WalletMutations.Add(mutation);
 
-    /// Raw SQL because FOR UPDATE SKIP LOCKED has no LINQ spelling. It runs in autocommit, so it skips only a row
-    /// whose apply is committing at that instant (titan-ops features/billing/wallet/design.md#wallet-debts).
+    /// Raw SQL because FOR UPDATE SKIP LOCKED has no LINQ spelling. It runs in autocommit, so it holds no lock past the
+    /// statement; it skips a row a consumer is applying, whose lock GetForUpdateAsync holds to the commit
+    /// (titan-ops features/billing/wallet/design.md#wallet-mutation-flow).
     /// 'Pending' is a literal because raw SQL bypasses EF value converters; it matches the stored token
     /// (WalletMutationSchemaTests.Status_IsStoredAsString). InMemory cannot run it: WalletMutationSweeperDbTests.
     public async Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(

@@ -19,7 +19,9 @@ namespace Titan.Tests.Infrastructure;
 // mutation between the sweeper's read and its write. Both cases need a hook between those two steps, which only a
 // test double gives (titan-ops architecture/testing.md#doubles-only-in-unit-tests), so they run on the InMemory provider:
 // it enforces concurrency tokens but no unique index, so a mutation applied twice shows up as money moved twice.
-// The list is LINQ here, not the production FOR UPDATE SKIP LOCKED (WalletMutationSweeperDbTests covers that).
+// The list is LINQ here, not the production FOR UPDATE SKIP LOCKED (WalletMutationSweeperDbTests covers that). On
+// Postgres the consumer's and the sweeper's reads lock the row, so these writes in between happen only here;
+// WalletTwoConsumersDbTests measures concurrent applies on Postgres.
 public class WalletMutationSweeperTests
 {
     private readonly InMemoryDatabaseRoot _root = new();
@@ -103,7 +105,8 @@ public class WalletMutationSweeperTests
     }
 
     // The status token refuses to record a failed attempt on a row whose status moved between the sweeper's read
-    // and its save (the subscriber applied it). That refusal is skipped, not fatal: the rest of the batch runs.
+    // and its save (the subscriber applied it; on Postgres the read's row lock keeps that from happening). That
+    // refusal is skipped, not fatal: the rest of the batch runs.
     [Fact]
     public async Task Sweep_RowAppliedWhileAFailedAttemptIsRecorded_SkipsIt_AndSweepsTheRest()
     {
