@@ -18,7 +18,8 @@ public class RunInvoiceGenerationResponse
 }
 
 /// Triggered by the gitops CronJob on the 1st of every month. Re-running for an already-billed period is safe
-/// (one invoice per tenant per period), so the CronJob needs no idempotency of its own.
+/// (one invoice per tenant per period), so the CronJob needs no idempotency of its own. A period whose first day is
+/// more than 90 days back is refused with 422 USAGE_PERIOD_EXPIRED (titan-ops features/billing/metering/design.md#usage-retention).
 public class RunInvoiceGenerationEndpoint(GenerateInvoicesForPeriodCommandHandler handler, IConfiguration config)
     : Endpoint<RunInvoiceGenerationRequest, RunInvoiceGenerationResponse>
 {

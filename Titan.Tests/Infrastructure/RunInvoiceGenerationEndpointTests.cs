@@ -1,3 +1,4 @@
+using Titan.Tests.Fakes;
 using FastEndpoints;
 using Microsoft.Extensions.Configuration;
 using Moq;
@@ -30,7 +31,13 @@ public class RunInvoiceGenerationEndpointTests
         _usage.Setup(u => u.GetDistinctTenantIdsForMonthAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync([]);
 
-    private GenerateInvoicesForPeriodCommandHandler Handler() => new(new FakeInvoiceRepository(), _usage.Object);
+    // Mid-August 2026: July, the period the explicit-period tests ask for, is still kept
+    // (titan-ops features/billing/metering/design.md#usage-retention).
+    private static readonly FixedClock August = new(new DateTimeOffset(2026, 8, 15, 0, 0, 0, TimeSpan.Zero));
+
+    private GenerateInvoicesForPeriodCommandHandler Handler() => new(new FakeInvoiceRepository(), _usage.Object, TimeProvider.System);
+
+    private GenerateInvoicesForPeriodCommandHandler AugustHandler() => new(new FakeInvoiceRepository(), _usage.Object, August);
 
     private void VerifyNeverGenerated() =>
         _usage.Verify(u => u.GetDistinctTenantIdsForMonthAsync(
@@ -85,7 +92,7 @@ public class RunInvoiceGenerationEndpointTests
     {
         var ep = Factory.Create<RunInvoiceGenerationEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = "secret",
-            Handler(), ConfigWithToken("secret"));
+            AugustHandler(), ConfigWithToken("secret"));
 
         await ep.HandleAsync(new RunInvoiceGenerationRequest { Year = 2026, Month = 7 }, CancellationToken.None);
 
@@ -110,7 +117,7 @@ public class RunInvoiceGenerationEndpointTests
 
         var ep = Factory.Create<RunInvoiceGenerationEndpoint>(
             ctx => ctx.Request.Headers["X-Internal-Token"] = "secret",
-            new GenerateInvoicesForPeriodCommandHandler(invoices, ledger), ConfigWithToken("secret"));
+            new GenerateInvoicesForPeriodCommandHandler(invoices, ledger, August), ConfigWithToken("secret"));
 
         await ep.HandleAsync(new RunInvoiceGenerationRequest { Year = 2026, Month = 7 }, CancellationToken.None);
 

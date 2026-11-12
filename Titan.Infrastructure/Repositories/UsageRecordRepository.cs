@@ -53,4 +53,10 @@ public class UsageRecordRepository(TitanDbContext db) : IUsageRecordRepository
             .Select(r => r.TenantId)
             .Distinct()
             .ToListAsync(ct);
+
+    public async Task<int> DeleteBucketBeforeAsync(DateTimeOffset before, CancellationToken ct)
+    {
+        DateTimeOffset beforeUtc = before.ToUniversalTime();
+        return await db.UsageRecords.Where(r => r.Bucket < beforeUtc).ExecuteDeleteAsync(ct);
+    }
 }

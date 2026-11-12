@@ -17,4 +17,7 @@ public interface IUsageRecordRepository
 
     /// Invoice generation walks this, so a tenant with no usage that month gets no invoice.
     Task<IReadOnlyList<Guid>> GetDistinctTenantIdsForMonthAsync(int year, int month, CancellationToken ct);
+
+    /// The retention pass: deletes every record whose bucket is before `before`, returns how many.
+    Task<int> DeleteBucketBeforeAsync(DateTimeOffset before, CancellationToken ct);
 }

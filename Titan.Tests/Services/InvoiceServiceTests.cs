@@ -30,6 +30,8 @@ public class InvoiceServiceTests
     private static readonly Guid OtherTenantId = Guid.NewGuid();
     private static readonly Guid VmId = Guid.NewGuid();
     private static readonly DateTimeOffset T0 = new(2026, 4, 10, 10, 0, 0, TimeSpan.Zero);
+    // The monthly run bills April on the 1st of May (titan-ops features/billing/metering/design.md#usage-retention).
+    private static readonly FixedClock Clock = new(new DateTimeOffset(2026, 5, 1, 2, 0, 0, TimeSpan.Zero));
 
     private readonly FakeInvoiceRepository _invoiceRepo = new();
     private readonly FakeUsageRecordRepository _usageRepo = new();
@@ -60,6 +62,18 @@ public class InvoiceServiceTests
         new(_invoiceRepo, _usageRepo, _walletRepo, _currentUser.Object, _tenantRepo.Object,
             _mutationRepo, _walletBus, _auditLog);
 
+    [Fact]
+    public async Task Generate_APeriodThatStartedMoreThanNinetyDaysAgo_IsUsagePeriodExpired_AndIssuesNothing()
+    {
+        _usageRepo.Seed(UsageRecord.CreateCompute(Guid.NewGuid(), "vm-old", TenantId,
+            new DateTimeOffset(2026, 1, 10, 10, 0, 0, TimeSpan.Zero), 10, Rate.Of(6000m), "VND"));
+
+        var e = await Assert.ThrowsAsync<BusinessException>(() => CreateService().GenerateForPeriodAsync(2026, 1, default));
+
+        Assert.Equal("USAGE_PERIOD_EXPIRED", e.Code);
+        Assert.False(await _invoiceRepo.ExistsForPeriodAsync(TenantId, 2026, 1, default));
+    }
+
     private sealed class InvoiceFacade(
         IInvoiceRepository invoiceRepo,
         IUsageRecordRepository usageRepo,
@@ -71,7 +85,7 @@ public class InvoiceServiceTests
         IAdminAuditLogRepository auditLog)
     {
         public Task<GenerateInvoicesForPeriodCommandResult> GenerateForPeriodAsync(int year, int month, CancellationToken ct)
-            => new GenerateInvoicesForPeriodCommandHandler(invoiceRepo, usageRepo)
+            => new GenerateInvoicesForPeriodCommandHandler(invoiceRepo, usageRepo, Clock)
                 .HandleAsync(new GenerateInvoicesForPeriodCommand(year, month), ct);
 
         public Task<IReadOnlyList<InvoiceQueryResult>> GetTenantInvoicesAsync(CancellationToken ct)

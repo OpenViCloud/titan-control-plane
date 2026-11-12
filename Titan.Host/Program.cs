@@ -301,6 +301,8 @@ builder.Services.AddOptions<ProviderCommandRetentionOptions>().BindConfiguration
 builder.Services.AddHostedService<ProviderCommandRetention>();
 builder.Services.AddOptions<VmMetricRetentionOptions>().BindConfiguration(VmMetricRetentionOptions.SectionName);
 builder.Services.AddHostedService<VmMetricRetention>();
+builder.Services.AddOptions<UsageRecordRetentionOptions>().BindConfiguration(UsageRecordRetentionOptions.SectionName);
+builder.Services.AddHostedService<UsageRecordRetention>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
 // and nothing alerts on its absence (/healthz/wallet only reports it).
 builder.Services.AddOptions<WalletSweeperOptions>().BindConfiguration(WalletSweeperOptions.SectionName);

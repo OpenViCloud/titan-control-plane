@@ -8,7 +8,7 @@ namespace Titan.Application.Queries.Billing.UsageRecord;
 
 /// Cost is a sum over usage_records, never a mutable running total
 /// (titan-ops architecture/money-and-wallet.md#append-only-metering).
-public class GetTenantBillingSummaryQueryHandler(IUsageRecordRepository usageRepo, ICurrentUser currentUser)
+public class GetTenantBillingSummaryQueryHandler(IUsageRecordRepository usageRepo, ICurrentUser currentUser, TimeProvider clock)
 {
     // See GetVmCostQueryHandler: the read path reports the constant, not the rows' Currency column.
     private const string DefaultCurrency = BillingConstants.DefaultCurrency;
@@ -18,6 +18,7 @@ public class GetTenantBillingSummaryQueryHandler(IUsageRecordRepository usageRep
     {
         var (year, month) = (query.Year, query.Month);
         var tenantId = currentUser.RequireTenantId();
+        BillingInput.EnsureKeptMonth(year, month, clock.GetUtcNow());
         var records = await usageRepo.GetByTenantAndMonthAsync(tenantId, year, month, ct);
 
         var computeCost = records.Where(r => r.ResourceType == UsageResourceType.Compute).Sum(r => r.Cost);
