@@ -115,7 +115,7 @@ public class VmReconcilerTests
         Assert.Equal("Exists", row.CurrentExistence);
         Assert.Equal("10.0.0.5", row.IpAddress);
         Assert.Equal("2001:db8::5", row.PublicIpv6Address);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"vms/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"vms/{Cluster}"));
     }
 
     // The worker contract keeps CurrentExistence, now read off the status and the Incus status

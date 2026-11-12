@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure;
 
 // /healthz/reconcilers answers the same on every control plane replica: a poll that reached one replica is seen by the
-// health check of another, because the polls live in core.reconciler_polls (titan-ops architecture/provider-and-worker.md#reconciler-is-a-worker-ticker).
+// health check of another, because the polls live in core.reconciler_polls (titan-ops architecture/platform-infra.md#control-plane-replicas).
 public class ReconcilerHeartbeatTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 12, 0, 0, 0, TimeSpan.Zero);
@@ -22,8 +22,8 @@ public class ReconcilerHeartbeatTests
 
         await new ReconcilerHeartbeat(first).RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmKind, "mock"), T0, CancellationToken.None);
 
-        IReadOnlyDictionary<string, ReconcilerPollState> seen = await new ReconcilerHeartbeat(second).SnapshotAsync(CancellationToken.None);
-        Assert.Equal(T0, seen["vms/mock"].LastPollAt);
+        IReadOnlyDictionary<string, DateTimeOffset> seen = await new ReconcilerHeartbeat(second).SnapshotAsync(CancellationToken.None);
+        Assert.Equal(T0, seen["vms/mock"]);
     }
 
     [Fact]
@@ -40,7 +40,7 @@ public class ReconcilerHeartbeatTests
         }
 
         await using TitanDbContext read = Replica(database);
-        Assert.Equal(T0.AddMinutes(2), (await new ReconcilerHeartbeat(read).SnapshotAsync(CancellationToken.None))["networks/mock"].LastPollAt);
+        Assert.Equal(T0.AddMinutes(2), (await new ReconcilerHeartbeat(read).SnapshotAsync(CancellationToken.None))["networks/mock"]);
         Assert.Equal(1, await read.ReconcilerPolls.CountAsync());
     }
 }

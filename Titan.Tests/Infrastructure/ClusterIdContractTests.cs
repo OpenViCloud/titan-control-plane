@@ -55,7 +55,7 @@ public class ClusterIdContractTests
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal("205", Assert.Single(ep.Response).ExternalTemplateId);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))["templates/mock"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey("templates/mock"));
     }
 
     [Fact]

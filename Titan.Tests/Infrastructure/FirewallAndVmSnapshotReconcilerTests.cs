@@ -71,7 +71,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal("sg-7", r.ExternalId);
         Assert.Equal("enabled", r.CurrentState);
         Assert.Equal("Exists", r.CurrentExistence);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"firewall-rules/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"firewall-rules/{Cluster}"));
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal(vm.Id, s.VmId);
         Assert.Equal("42:3", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"vm-snapshots/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"vm-snapshots/{Cluster}"));
     }
 
     // The worker's contract kept its existence word (titan-ops features/vm/design.md#vm-snapshot-reports): Exists while

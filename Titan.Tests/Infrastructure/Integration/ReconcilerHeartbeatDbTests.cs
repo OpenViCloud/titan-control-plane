@@ -5,7 +5,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure.Integration;
 
 // Replicas recording the first poll of one reconciler at once: one row, and no poll fails — a list request must not
-// turn into a 500 because another replica inserted the row first (titan-ops architecture/provider-and-worker.md#reconciler-is-a-worker-ticker).
+// turn into a 500 because another replica inserted the row first (titan-ops architecture/platform-infra.md#control-plane-replicas).
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
 public class ReconcilerHeartbeatDbTests(PostgresFixture pg)

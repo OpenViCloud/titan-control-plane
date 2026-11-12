@@ -76,7 +76,7 @@ public class TemplateReconcilerTests
 
         var rows = ep.Response.OrderBy(r => r.ExternalTemplateId).Select(r => $"{r.ExternalTemplateId}:{r.CurrentExistence}").ToList();
         Assert.Equal(new[] { "205:Exists", "206:NotFound" }, rows);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))["templates/mock"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey("templates/mock"));
     }
 
     [Fact] // a reconciler that does not say its cluster is asking for nothing anyone can answer

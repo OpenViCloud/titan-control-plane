@@ -79,8 +79,11 @@ var builder = WebApplication.CreateBuilder(args);
 // worker's empty lease poll is one every few seconds). A 500 keeps its log: UseExceptionHandler below writes it.
 builder.Logging.AddFilter("Microsoft.AspNetCore.Diagnostics.ExceptionHandlerMiddleware", LogLevel.None);
 
-var connectionString = TitanConnectionString.WithPoolCap(builder.Configuration.GetConnectionString("Titan")!);
-builder.Services.AddDbContext<TitanDbContext>(options => options.UseNpgsql(connectionString));
+// Read inside the lambda: a test host sets ConnectionStrings:Titan through ConfigureAppConfiguration, applied at Build().
+builder.Services.AddDbContext<TitanDbContext>(options =>
+    options.UseNpgsql(TitanConnectionString.WithPoolCap(builder.Configuration.GetConnectionString("Titan")!)));
+
+var connectionString = builder.Configuration.GetConnectionString("Titan")!;
 
 // /metrics is served by a Kestrel server of its own on Metrics:Port, so the main listener has no such route
 // whatever Host a request carries. Unset ⇒ no metric server, so hosts started side by side (tests) bind no fixed port.

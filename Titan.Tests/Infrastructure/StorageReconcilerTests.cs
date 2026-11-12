@@ -65,7 +65,7 @@ public class StorageReconcilerTests
         Assert.Equal(volume.Id, s.VolumeId);
         Assert.Equal("img-8", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"volumes/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"volumes/{Cluster}"));
     }
 
     // The worker compares the instance names it reads in used_by, so the list names the attached VM by its instance.

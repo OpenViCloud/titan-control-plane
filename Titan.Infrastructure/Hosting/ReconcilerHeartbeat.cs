@@ -20,6 +20,9 @@ public sealed class ReconcilerHeartbeat(TitanDbContext db)
     public const string TemplateKind = "templates";
     public const string LoadBalancerKind = "load-balancers";
 
+    public static readonly IReadOnlyList<string> Kinds =
+        [VmKind, NetworkKind, VolumeKind, FirewallKind, VmSnapshotKind, TemplateKind, LoadBalancerKind];
+
     public async Task RecordPollAsync(string key, DateTimeOffset at, CancellationToken ct)
     {
         ReconcilerPoll? poll = await db.ReconcilerPolls.FirstOrDefaultAsync(p => p.Key == key, ct);
@@ -42,10 +45,11 @@ public sealed class ReconcilerHeartbeat(TitanDbContext db)
         }
     }
 
-    public async Task<IReadOnlyDictionary<string, ReconcilerPollState>> SnapshotAsync(CancellationToken ct)
+    /// The last poll of every key, by key.
+    public async Task<IReadOnlyDictionary<string, DateTimeOffset>> SnapshotAsync(CancellationToken ct)
     {
         List<ReconcilerPoll> polls = await db.ReconcilerPolls.AsNoTracking().ToListAsync(ct);
-        return polls.ToDictionary(p => p.Key, p => new ReconcilerPollState(RegisteredAt: p.PolledAt, LastPollAt: p.PolledAt));
+        return polls.ToDictionary(p => p.Key, p => p.PolledAt);
     }
 
     public static string KeyFor(string kind, string clusterId)
@@ -53,7 +57,3 @@ public sealed class ReconcilerHeartbeat(TitanDbContext db)
         return $"{kind}/{clusterId}";
     }
 }
-
-/// <param name="RegisteredAt">When the reconciler was first expected — the reference for the boot grace window.</param>
-/// <param name="LastPollAt">Last time it asked the control plane what to observe; null until the first time.</param>
-public sealed record ReconcilerPollState(DateTimeOffset RegisteredAt, DateTimeOffset? LastPollAt);
