@@ -1,46 +1,21 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Titan.Application.Options;
 using Titan.Domain.Repositories;
 
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Gives every cluster with public IPv6 a row for each of its static routes, once, when the control plane starts. The
-/// cluster list is config, so a new cluster means a restart.
-/// A failure leaves the pod running and tries again: a cluster that already has its rows loses nothing, and only a new
-/// one answers IPV6_NOT_AVAILABLE meanwhile.
+/// Gives every cluster with public IPv6 a row for each of its static routes, adding only the missing ones. The cluster list
+/// is config, and ArgoCD syncs whenever it changes: the control plane's PostSync hook Job calls this job after each sync, so
+/// a new cluster gets its routes once its pods are up (titan-ops features/network/design.md#ipv6-public). A failure fails
+/// the hook, so the sync shows it; the pods keep serving, and only a new cluster answers IPV6_NOT_AVAILABLE meanwhile.
 /// </summary>
-public class ClusterIpv6RouteSeedService(
-    IServiceScopeFactory scopeFactory,
-    ClusterOptions clusters,
-    ILogger<ClusterIpv6RouteSeedService> logger) : BackgroundService
+public class ClusterIpv6RouteSeedService(IClusterIpv6RouteRepository routes, ClusterOptions clusters) : IScheduledJob
 {
-    public static readonly TimeSpan RetryInterval = TimeSpan.FromMinutes(1);
+    public const string JobName = "ipv6-route-seed";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(RetryInterval);
-        do
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                await RunOnceAsync(scope.ServiceProvider.GetRequiredService<IClusterIpv6RouteRepository>(), clusters, stoppingToken);
-                return;
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Could not make the IPv6 routes of the clusters; trying again");
-            }
-        }
-        while (await timer.WaitForNextTickAsync(stoppingToken));
-    }
+    public string Name => JobName;
+
+    public Task RunAsync(CancellationToken ct) => RunOnceAsync(routes, clusters, ct);
 
     public static async Task RunOnceAsync(IClusterIpv6RouteRepository routes, ClusterOptions clusters, CancellationToken ct)
     {

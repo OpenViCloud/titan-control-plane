@@ -1,7 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Titan.Application.Options;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Hosting;
@@ -16,12 +13,6 @@ public class UsageRecordRetentionTests
 
     private static UsageRecord Record(DateTimeOffset bucket) =>
         UsageRecord.CreateCompute(Guid.NewGuid(), "vm-1", Guid.NewGuid(), bucket, 10, Rate.Of(6000m), "VND");
-
-    [Fact]
-    public void RunsEveryHour_ByDefault()
-    {
-        Assert.Equal(60, new UsageRecordRetentionOptions().IntervalMinutes);
-    }
 
     [Fact]
     public async Task RunOnce_DeletesTheRecordOneBucketBeforeTheMark_AndKeepsTheOneOnTheMark()
@@ -51,18 +42,17 @@ public class UsageRecordRetentionTests
         Assert.Equal([young], repo.All);
     }
 
+    // One pass when the CronJob calls POST /internal/jobs/usage-record-retention.
     [Fact]
-    public async Task StartsWithoutFaulting_AndStopsOnRequest()
+    public async Task RunAsync_IsOnePass_UnderItsJobName()
     {
-        var service = new UsageRecordRetention(
-            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new UsageRecordRetentionOptions()), TimeProvider.System,
-            NullLogger<UsageRecordRetention>.Instance);
+        var repo = new FakeUsageRecordRepository();
+        repo.Seed(Record(UsageRecord.KeptFrom(DateTimeOffset.UtcNow).AddDays(-1)));
+        var job = new UsageRecordRetention(repo, TimeProvider.System, NullLogger<UsageRecordRetention>.Instance);
 
-        await service.StartAsync(CancellationToken.None);
-        Assert.False(service.ExecuteTask!.IsFaulted);
-        await service.StopAsync(CancellationToken.None);
+        await job.RunAsync(CancellationToken.None);
 
-        Assert.True(service.ExecuteTask.IsCompletedSuccessfully || service.ExecuteTask.IsCanceled);
+        Assert.Equal("usage-record-retention", job.Name);
+        Assert.Empty(repo.All);
     }
 }

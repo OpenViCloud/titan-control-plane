@@ -296,13 +296,12 @@ builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IdempotencyMiddleware>();
 builder.Services.AddOptions<IdempotencyCleanupOptions>().BindConfiguration(IdempotencyCleanupOptions.SectionName);
-builder.Services.AddHostedService<IdempotencyCleanupService>();
+builder.Services.AddScoped<IScheduledJob, IdempotencyCleanupService>();
 builder.Services.AddOptions<ProviderCommandRetentionOptions>().BindConfiguration(ProviderCommandRetentionOptions.SectionName);
-builder.Services.AddHostedService<ProviderCommandRetention>();
+builder.Services.AddScoped<IScheduledJob, ProviderCommandRetention>();
 builder.Services.AddOptions<VmMetricRetentionOptions>().BindConfiguration(VmMetricRetentionOptions.SectionName);
-builder.Services.AddHostedService<VmMetricRetention>();
-builder.Services.AddOptions<UsageRecordRetentionOptions>().BindConfiguration(UsageRecordRetentionOptions.SectionName);
-builder.Services.AddHostedService<UsageRecordRetention>();
+builder.Services.AddScoped<IScheduledJob, VmMetricRetention>();
+builder.Services.AddScoped<IScheduledJob, UsageRecordRetention>();
 // The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
 // and nothing alerts on its absence (/healthz/wallet only reports it).
 builder.Services.AddOptions<WalletSweeperOptions>().BindConfiguration(WalletSweeperOptions.SectionName);
@@ -317,8 +316,8 @@ builder.Services.AddScoped<ReconcilerHeartbeat>();
 builder.Services.AddMeters();
 builder.Services.AddScoped<CatTemplateCmd.SyncTemplatesCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListClustersWithNeverAskedTemplatesQueryHandler>();
-builder.Services.AddHostedService<Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService>();
-builder.Services.AddHostedService<Titan.Infrastructure.Hosting.ClusterIpv6RouteSeedService>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.ClusterIpv6RouteSeedService>();
 builder.Services.AddScoped<CatTemplateCmd.EndTemplateSyncRequestCommandHandler>();
 builder.Services.AddScoped<CatTemplateCmd.ObserveTemplateCommandHandler>();
 builder.Services.AddScoped<CatOfferingCmd.UpdateVmOfferingPriceCommandHandler>();
@@ -340,6 +339,7 @@ builder.Services.AddScoped<AdminNetworkQry.ListAdminNetworksQueryHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IProviderCommandRepository, ProviderCommandRepository>();
 builder.Services.AddScoped<IProviderCommandQueue, ProviderCommandQueue>();
+builder.Services.AddScoped<Titan.Application.Abstractions.IJobPassLock, Titan.Infrastructure.Persistence.PostgresJobPassLock>();
 builder.Services.AddScoped<ProviderCommandCmd.LeaseProviderCommandCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.ExtendProviderCommandLeaseCommandHandler>();
 builder.Services.AddScoped<ProviderCommandCmd.CompleteProviderCommandCommandHandler>();
@@ -363,11 +363,9 @@ builder.Services.AddScoped<Titan.Domain.Repositories.IBackupObservationRepositor
 builder.Services.AddScoped<Titan.Application.Commands.Platform.Backup.RefreshBackupStatusCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler>();
-builder.Services.AddOptions<Titan.Application.Options.BackupStatusOptions>()
-    .BindConfiguration(Titan.Application.Options.BackupStatusOptions.SectionName);
-builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.ScheduleBackupsCommandHandler>();
-builder.Services.AddHostedService<Titan.Infrastructure.Hosting.BackupScheduleService>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupScheduleService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
 builder.Services.AddSingleton<IProviderClientIdentityStore>(sp =>

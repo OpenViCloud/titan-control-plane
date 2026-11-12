@@ -78,7 +78,7 @@ public class BackupStatusDbTests(PostgresFixture pg) : IAsyncLifetime
         await using TitanDbContext db = pg.NewDbContext();
         await new RefreshBackupStatusCommandHandler(
             ConfiguredBackupTarget.Options(_target), new S3BackupBucketFactory(),
-            new BackupRecordRepository(db), new BackupObservationRepository(db), TimeProvider.System)
+            new BackupRecordRepository(db), new BackupObservationRepository(db), new PostgresJobPassLock(db), TimeProvider.System)
             .HandleAsync(new RefreshBackupStatusCommand());
     }
 

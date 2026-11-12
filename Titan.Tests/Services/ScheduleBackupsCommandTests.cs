@@ -17,11 +17,12 @@ public class ScheduleBackupsCommandTests
     private readonly Mock<IVmRepository> _vms = new();
     private readonly Mock<IVolumeRepository> _volumes = new();
     private readonly FakeProviderCommandRepository _rows = new();
+    private readonly FakeJobPassLock _lock = new();
     // 06:30 on the 27th in Asia/Saigon is still 23:30 on the 26th in UTC: the day in the key is the UTC one.
     private readonly FixedClock _clock = new(new DateTimeOffset(2026, 10, 27, 6, 30, 0, TimeSpan.FromHours(7)));
 
     private ScheduleBackupsCommandHandler Handler() =>
-        new(_vms.Object, _volumes.Object, new ProviderCommandQueue(_rows, _clock), _clock);
+        new(_vms.Object, _volumes.Object, new ProviderCommandQueue(_rows, _clock), _lock, _clock);
 
     private void Holds(List<Vm> vms, List<Volume> volumes)
     {
@@ -103,5 +104,20 @@ public class ScheduleBackupsCommandTests
         await Handler().HandleAsync(new ScheduleBackupsCommand());
 
         Assert.Equal(2, _rows.Rows.Count);
+    }
+
+    // Two control plane pods may run the pass at once: the second waits for the first to save, then reads what it
+    // saved (JobPassesAtOnceDbTests). So the lock comes before the pass reads anything.
+    [Fact]
+    public async Task ThePass_TakesItsJobLock_BeforeItReadsAnything()
+    {
+        Holds([RunningVm("vm-a")], []);
+        _vms.Setup(r => r.ListWithAnInstanceAsync(It.IsAny<CancellationToken>()))
+            .Callback(() => Assert.Equal(new[] { ScheduleBackupsCommandHandler.Job }, _lock.Taken))
+            .ReturnsAsync([]);
+
+        await Handler().HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Equal(new[] { "backup-schedule" }, _lock.Taken);
     }
 }

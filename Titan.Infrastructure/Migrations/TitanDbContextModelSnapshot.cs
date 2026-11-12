@@ -1811,6 +1811,30 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.MeterTick", b =>
+                {
+                    b.Property<string>("Meter")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("meter");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<DateTimeOffset>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registered_at");
+
+                    b.HasKey("Meter");
+
+                    b.ToTable("meter_ticks", "core");
+                });
+
             modelBuilder.Entity("Titan.Infrastructure.Persistence.ReconcilerPoll", b =>
                 {
                     b.Property<string>("Key")

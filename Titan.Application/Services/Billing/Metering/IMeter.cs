@@ -1,14 +1,14 @@
 namespace Titan.Application.Services.Billing.Metering;
 
 /// <summary>
-/// One append-only sampling strategy, driven by the single
-/// <see cref="Titan.Infrastructure.Hosting.MeterHostedService"/> loop (titan-ops architecture/money-and-wallet.md#append-only-metering).
+/// One append-only sampling strategy, ticked by the meter's scheduled job, Titan.Infrastructure.Hosting.MeterJob
+/// (titan-ops architecture/money-and-wallet.md#append-only-metering).
 /// </summary>
 public interface IMeter
 {
     /// <summary>
-    /// The key in <see cref="MeterHeartbeat"/> and the liveness health check. Closed set {Compute, Disk,
-    /// Snapshot}, guarded by MeterRegistrationTests.
+    /// The key in <see cref="IMeterTicks"/> (a row of core.meter_ticks, written by the migration that adds the meter)
+    /// and the liveness health check. Closed set {Compute, Disk, Snapshot}, guarded by MeterRegistrationTests.
     /// </summary>
     string Name { get; }
 

@@ -19,8 +19,8 @@ public class IdempotencyCleanupServiceTests
              .Callback<DateTimeOffset, CancellationToken>((c, _) => captured = c)
              .ReturnsAsync(0);
 
-        var opts = Options.Create(new IdempotencyCleanupOptions { TtlHours = 24, IntervalMinutes = 60 });
-        var svc = new IdempotencyCleanupService(Mock.Of<IServiceScopeFactory>(), opts,
+        var opts = Options.Create(new IdempotencyCleanupOptions { TtlHours = 24 });
+        var svc = new IdempotencyCleanupService(store.Object, opts,
             NullLogger<IdempotencyCleanupService>.Instance);
 
         var lower = DateTimeOffset.UtcNow.AddHours(-24).AddSeconds(-5);

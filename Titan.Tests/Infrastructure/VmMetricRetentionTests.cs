@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
@@ -17,12 +16,9 @@ public class VmMetricRetentionTests
         new(vmId, at, "agent", 1, null, null, null, null, 0, 0);
 
     [Fact]
-    public void KeepsSevenDays_AndRunsEveryHour_ByDefault()
+    public void KeepsSevenDays_ByDefault()
     {
-        var options = new VmMetricRetentionOptions();
-
-        Assert.Equal(7, options.RetentionDays);
-        Assert.Equal(60, options.IntervalMinutes);
+        Assert.Equal(7, new VmMetricRetentionOptions().RetentionDays);
     }
 
     [Fact]
@@ -41,18 +37,19 @@ public class VmMetricRetentionTests
         Assert.Equal([young], store.Readings);
     }
 
+    // One pass when the CronJob calls POST /internal/jobs/vm-metric-retention.
     [Fact]
-    public async Task StartsWithoutFaulting_AndStopsOnRequest()
+    public async Task RunAsync_IsOnePass_UnderItsJobName()
     {
-        var service = new VmMetricRetention(
-            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new VmMetricRetentionOptions()), TimeProvider.System,
+        var store = new FakeVmMetricStore();
+        VmMetricReading old = Reading(Guid.NewGuid(), DateTimeOffset.UtcNow.AddDays(-8));
+        store.Readings.Add(old);
+        var job = new VmMetricRetention(store, Options.Create(new VmMetricRetentionOptions()), TimeProvider.System,
             NullLogger<VmMetricRetention>.Instance);
 
-        await service.StartAsync(CancellationToken.None);
-        Assert.False(service.ExecuteTask!.IsFaulted);
-        await service.StopAsync(CancellationToken.None);
+        await job.RunAsync(CancellationToken.None);
 
-        Assert.True(service.ExecuteTask.IsCompletedSuccessfully || service.ExecuteTask.IsCanceled);
+        Assert.Equal("vm-metric-retention", job.Name);
+        Assert.Empty(store.Readings);
     }
 }

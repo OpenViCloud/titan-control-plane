@@ -1,4 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Titan.Application.Options;
@@ -61,18 +60,18 @@ public class ProviderCommandRetentionTests
         Assert.Equal([oldPending, oldLeased, youngDone, youngFailed], repo.Rows);
     }
 
+    // One pass when the CronJob calls POST /internal/jobs/provider-command-retention.
     [Fact]
-    public async Task StartsWithoutFaulting_AndStopsOnRequest()
+    public async Task RunAsync_IsOnePass_UnderItsJobName()
     {
-        var service = new ProviderCommandRetention(
-            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new ProviderCommandRetentionOptions()), TimeProvider.System,
+        var repo = new FakeProviderCommandRepository();
+        ProviderCommand oldDone = Row(repo, ProviderCommandStatus.Done, DateTimeOffset.UtcNow.AddDays(-31));
+        var job = new ProviderCommandRetention(repo, Options.Create(new ProviderCommandRetentionOptions()), TimeProvider.System,
             NullLogger<ProviderCommandRetention>.Instance);
 
-        await service.StartAsync(CancellationToken.None);
-        Assert.False(service.ExecuteTask!.IsFaulted);
-        await service.StopAsync(CancellationToken.None);
+        await job.RunAsync(CancellationToken.None);
 
-        Assert.True(service.ExecuteTask.IsCompletedSuccessfully || service.ExecuteTask.IsCanceled);
+        Assert.Equal("provider-command-retention", job.Name);
+        Assert.DoesNotContain(oldDone, repo.Rows);
     }
 }

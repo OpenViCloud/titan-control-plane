@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Titan.Application.Options;
@@ -13,37 +11,17 @@ namespace Titan.Infrastructure.Hosting;
 /// it the table grows with every click. Local DB maintenance, like IdempotencyCleanupService, not a provider command.
 /// </summary>
 public class ProviderCommandRetention(
-    IServiceScopeFactory scopeFactory,
+    IProviderCommandRepository commands,
     IOptions<ProviderCommandRetentionOptions> options,
     TimeProvider clock,
-    ILogger<ProviderCommandRetention> logger) : BackgroundService
+    ILogger<ProviderCommandRetention> logger) : IScheduledJob
 {
-    private readonly ProviderCommandRetentionOptions _opts = options.Value;
+    public const string JobName = "provider-command-retention";
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_opts.IntervalMinutes));
+    public string Name => JobName;
 
-        // Wait-first, like IdempotencyCleanupService: nothing runs during startup, nor under the InMemory provider of a
-        // WebApplicationFactory test, which has no ExecuteDelete.
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-        {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                await RunOnceAsync(scope.ServiceProvider.GetRequiredService<IProviderCommandRepository>(),
-                    _opts.RetentionDays, clock.GetUtcNow(), logger, stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Provider command retention pass failed");
-            }
-        }
-    }
+    public Task RunAsync(CancellationToken ct) =>
+        RunOnceAsync(commands, options.Value.RetentionDays, clock.GetUtcNow(), logger, ct);
 
     public static async Task<int> RunOnceAsync(
         IProviderCommandRepository commands, int retentionDays, DateTimeOffset now, ILogger logger, CancellationToken ct)

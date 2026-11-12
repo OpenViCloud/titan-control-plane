@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Titan.Application.Abstractions;
@@ -8,47 +6,33 @@ using Titan.Application.Options;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Without a TTL idempotency_keys grows unbounded. A CP-side BackgroundService, not a provider command:
-/// this is local DB maintenance, not a business workflow.
+/// Without a TTL idempotency_keys grows unbounded. A scheduled job, not a provider command: this is local DB maintenance,
+/// not a business workflow.
 /// </summary>
 public class IdempotencyCleanupService(
-    IServiceScopeFactory scopeFactory,
+    IIdempotencyStore store,
     IOptions<IdempotencyCleanupOptions> options,
-    ILogger<IdempotencyCleanupService> logger) : BackgroundService
+    ILogger<IdempotencyCleanupService> logger) : IScheduledJob
 {
+    public const string JobName = "idempotency-cleanup";
+
     private readonly IdempotencyCleanupOptions _opts = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(_opts.IntervalMinutes));
+    public string Name => JobName;
 
-        // Wait-first: no purge during startup, and none under the InMemory provider in WebApplicationFactory
-        // tests, which does not support ExecuteDelete.
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+    public async Task RunAsync(CancellationToken ct)
+    {
+        int removed = await PurgeOnceAsync(store, ct);
+        if (removed > 0)
         {
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var store = scope.ServiceProvider.GetRequiredService<IIdempotencyStore>();
-                var removed = await PurgeOnceAsync(store, stoppingToken);
-                if (removed > 0)
-                    logger.LogInformation("Idempotency cleanup removed {Count} expired records", removed);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                break;
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Idempotency cleanup pass failed");
-            }
+            logger.LogInformation("Idempotency cleanup removed {Count} expired records", removed);
         }
     }
 
     /// <summary>Public for testing.</summary>
-    public Task<int> PurgeOnceAsync(IIdempotencyStore store, CancellationToken ct)
+    public Task<int> PurgeOnceAsync(IIdempotencyStore idempotency, CancellationToken ct)
     {
         var cutoff = DateTimeOffset.UtcNow.AddHours(-_opts.TtlHours);
-        return store.PurgeExpiredAsync(cutoff, ct);
+        return idempotency.PurgeExpiredAsync(cutoff, ct);
     }
 }

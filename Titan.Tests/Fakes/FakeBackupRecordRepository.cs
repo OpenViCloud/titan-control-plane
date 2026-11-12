@@ -8,11 +8,26 @@ public sealed class FakeBackupRecordRepository : IBackupRecordRepository
     public List<BackupRecord> Rows { get; } = new();
     public int Saves { get; private set; }
 
-    public Task<List<BackupRecord>> ListAsync(string kind, string resourceName, CancellationToken ct = default) =>
-        Task.FromResult(Rows.Where(r => r.Kind == kind && r.ResourceName == resourceName).ToList());
+    /// Runs on every list, before it answers.
+    public Action? OnList { get; set; }
 
-    public Task<List<BackupRecord>> ListOfKindsAsync(IReadOnlyCollection<string> kinds, CancellationToken ct = default) =>
-        Task.FromResult(Rows.Where(r => kinds.Contains(r.Kind)).ToList());
+    public Task<List<BackupRecord>> ListAsync(string kind, string resourceName, CancellationToken ct = default)
+    {
+        if (OnList != null)
+        {
+            OnList();
+        }
+        return Task.FromResult(Rows.Where(r => r.Kind == kind && r.ResourceName == resourceName).ToList());
+    }
+
+    public Task<List<BackupRecord>> ListOfKindsAsync(IReadOnlyCollection<string> kinds, CancellationToken ct = default)
+    {
+        if (OnList != null)
+        {
+            OnList();
+        }
+        return Task.FromResult(Rows.Where(r => kinds.Contains(r.Kind)).ToList());
+    }
 
     public void Add(BackupRecord record) => Rows.Add(record);
 
