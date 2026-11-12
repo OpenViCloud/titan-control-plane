@@ -1,5 +1,3 @@
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Options;
 using Titan.Domain.Repositories;
@@ -31,38 +29,17 @@ public class ClusterIpv6RouteSeedServiceTests
         routes.VerifyNoOtherCalls();
     }
 
+    // One pass when the PostSync hook Job calls POST /internal/jobs/ipv6-route-seed after every sync, so a cluster added
+    // to the config gets its routes without a pod restart (titan-ops features/network/design.md#ipv6-public).
     [Fact]
-    public async Task AFailure_LeavesTheServiceRunning_WaitingToTryAgain()
+    public async Task RunAsync_IsOnePass_UnderItsJobName()
     {
         var routes = new Mock<IClusterIpv6RouteRepository>();
-        routes.Setup(r => r.EnsureRoutesAsync("both", It.IsAny<CancellationToken>())).ThrowsAsync(new InvalidOperationException("no database"));
-        var services = new ServiceCollection();
-        services.AddSingleton(routes.Object);
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        using var service = new ClusterIpv6RouteSeedService(provider.GetRequiredService<IServiceScopeFactory>(),
-            Clusters(("both", "ovnup", "2001:db8::/56")), NullLogger<ClusterIpv6RouteSeedService>.Instance);
+        var job = new ClusterIpv6RouteSeedService(routes.Object, Clusters(("both", "ovnup", "2001:db8::/56")));
 
-        await service.StartAsync(CancellationToken.None);
-        await Task.Delay(TimeSpan.FromMilliseconds(200));
+        await job.RunAsync(CancellationToken.None);
 
-        Assert.False(service.ExecuteTask!.IsCompleted);
-        routes.Verify(r => r.EnsureRoutesAsync("both", It.IsAny<CancellationToken>()), Times.Once);
-        await service.StopAsync(CancellationToken.None);
-    }
-
-    [Fact]
-    public async Task ASuccess_EndsTheService()
-    {
-        var routes = new Mock<IClusterIpv6RouteRepository>();
-        var services = new ServiceCollection();
-        services.AddSingleton(routes.Object);
-        await using ServiceProvider provider = services.BuildServiceProvider();
-        using var service = new ClusterIpv6RouteSeedService(provider.GetRequiredService<IServiceScopeFactory>(),
-            Clusters(("both", "ovnup", "2001:db8::/56")), NullLogger<ClusterIpv6RouteSeedService>.Instance);
-
-        await service.StartAsync(CancellationToken.None);
-        await service.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(10));
-
+        Assert.Equal("ipv6-route-seed", job.Name);
         routes.Verify(r => r.EnsureRoutesAsync("both", It.IsAny<CancellationToken>()), Times.Once);
     }
 }

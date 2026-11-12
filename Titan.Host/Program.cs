@@ -317,7 +317,7 @@ builder.Services.AddMeters();
 builder.Services.AddScoped<CatTemplateCmd.SyncTemplatesCommandHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListClustersWithNeverAskedTemplatesQueryHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.TemplateSyncNeverAskedService>();
-builder.Services.AddHostedService<Titan.Infrastructure.Hosting.ClusterIpv6RouteSeedService>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.ClusterIpv6RouteSeedService>();
 builder.Services.AddScoped<CatTemplateCmd.EndTemplateSyncRequestCommandHandler>();
 builder.Services.AddScoped<CatTemplateCmd.ObserveTemplateCommandHandler>();
 builder.Services.AddScoped<CatOfferingCmd.UpdateVmOfferingPriceCommandHandler>();
