@@ -37,7 +37,7 @@ public class ListReconcilableFirewallRulesEndpoint(
         }
 
         List<ReconcilableFirewallRuleQueryResult> rows = await handler.HandleAsync(new ListReconcilableFirewallRulesQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.FirewallKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.FirewallKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(rows, cancellation: ct);
     }
 }

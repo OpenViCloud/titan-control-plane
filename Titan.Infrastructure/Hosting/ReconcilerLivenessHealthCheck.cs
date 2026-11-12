@@ -12,10 +12,9 @@ public sealed class ReconcilerLivenessHealthCheck(
     ReconcilerHeartbeat heartbeat,
     IOptions<ReconcilerLivenessOptions> options) : IHealthCheck
 {
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
     {
-        HealthCheckResult result = Evaluate(DateTimeOffset.UtcNow, heartbeat.Snapshot(), options.Value.StaleMinutes);
-        return Task.FromResult(result);
+        return Evaluate(DateTimeOffset.UtcNow, await heartbeat.SnapshotAsync(ct), options.Value.StaleMinutes);
     }
 
     /// An empty snapshot is Healthy: nothing is expected yet, so there is no evidence of a stopped reconciler.

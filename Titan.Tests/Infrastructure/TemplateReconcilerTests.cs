@@ -69,27 +69,27 @@ public class TemplateReconcilerTests
         var otherClusterOnly = SyncedIn("singapore-only", "singapore01", "4");
         db.VmTemplates.AddRange(synced, lost, failedFirstSync, otherClusterOnly, VmTemplate.Create("pending", null, "img", 10, "m"));
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = TemplateEndpoint(db, heartbeat, "secret", clusterId: "mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
         var rows = ep.Response.OrderBy(r => r.ExternalTemplateId).Select(r => $"{r.ExternalTemplateId}:{r.CurrentExistence}").ToList();
         Assert.Equal(new[] { "205:Exists", "206:NotFound" }, rows);
-        Assert.NotNull(heartbeat.Snapshot()["templates/mock"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))["templates/mock"].LastPollAt);
     }
 
     [Fact] // a reconciler that does not say its cluster is asking for nothing anyone can answer
     public async Task TemplateEndpoint_WithoutACluster_Answers400_AndRecordsNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = TemplateEndpoint(db, heartbeat, "secret", clusterId: null);
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(400, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 
     [Fact] // the worker compares Exists and NotFound only: a re-sync that did not see the alias reads NotFound, one that did, Exists
@@ -105,7 +105,7 @@ public class TemplateReconcilerTests
         didNotSeeIt.SyncIn("mock");
         db.VmTemplates.AddRange(sawIt, didNotSeeIt);
         await db.SaveChangesAsync();
-        var ep = TemplateEndpoint(db, new ReconcilerHeartbeat(), "secret", clusterId: "mock");
+        var ep = TemplateEndpoint(db, new ReconcilerHeartbeat(db), "secret", clusterId: "mock");
 
         await ep.HandleAsync(CancellationToken.None);
 

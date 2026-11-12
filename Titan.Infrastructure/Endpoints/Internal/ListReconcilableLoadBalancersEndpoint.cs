@@ -37,7 +37,7 @@ public class ListReconcilableLoadBalancersEndpoint(
         }
 
         var rows = await handler.HandleAsync(new ListReconcilableLoadBalancersQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.LoadBalancerKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.LoadBalancerKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(rows, cancellation: ct);
     }
 }

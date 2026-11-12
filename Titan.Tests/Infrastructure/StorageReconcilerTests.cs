@@ -49,7 +49,7 @@ public class StorageReconcilerTests
         snapshot.MarkCreated("img-8");
         db.Volumes.Add(volume);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Endpoint(db, heartbeat, "secret");
 
         await ep.HandleAsync(CancellationToken.None);
@@ -65,7 +65,7 @@ public class StorageReconcilerTests
         Assert.Equal(volume.Id, s.VolumeId);
         Assert.Equal("img-8", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"volumes/{Cluster}"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"volumes/{Cluster}"].LastPollAt);
     }
 
     // The worker compares the instance names it reads in used_by, so the list names the attached VM by its instance.
@@ -82,7 +82,7 @@ public class StorageReconcilerTests
         db.Vms.Add(vm);
         db.Volumes.Add(volume);
         await db.SaveChangesAsync();
-        var ep = Endpoint(db, new ReconcilerHeartbeat(), "secret");
+        var ep = Endpoint(db, new ReconcilerHeartbeat(db), "secret");
 
         await ep.HandleAsync(CancellationToken.None);
 
@@ -95,12 +95,12 @@ public class StorageReconcilerTests
     public async Task Endpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Endpoint(db, heartbeat, "wrong");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 }

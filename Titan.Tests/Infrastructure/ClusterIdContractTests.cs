@@ -49,26 +49,26 @@ public class ClusterIdContractTests
         template.MarkCreatedIn("mock", "205");
         db.VmTemplates.Add(template);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = TemplateEndpoint(db, heartbeat, "?clusterId=mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal("205", Assert.Single(ep.Response).ExternalTemplateId);
-        Assert.NotNull(heartbeat.Snapshot()["templates/mock"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))["templates/mock"].LastPollAt);
     }
 
     [Fact]
     public async Task AReconcilerAskingWithoutAClusterId_Is400_AndRecordsNoPoll()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = TemplateEndpoint(db, heartbeat, "?name=mock");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(400, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 
     // Every reconcile route reads the cluster the same way, from clusterId.

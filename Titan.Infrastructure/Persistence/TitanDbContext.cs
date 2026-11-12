@@ -51,6 +51,7 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<VolumeSnapshot> VolumeSnapshots => Set<VolumeSnapshot>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<ShellSession> ShellSessions => Set<ShellSession>();
+    public DbSet<ReconcilerPoll> ReconcilerPolls => Set<ReconcilerPoll>();
     public DbSet<VmMetricSample> VmMetricSamples => Set<VmMetricSample>();
     public DbSet<VmTemplate> VmTemplates => Set<VmTemplate>();
     public DbSet<VmOffering> VmOfferings => Set<VmOffering>();

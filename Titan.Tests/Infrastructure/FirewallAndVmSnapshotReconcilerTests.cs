@@ -60,7 +60,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         db.Networks.Add(network);
         db.FirewallRules.Add(rule);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = FirewallEndpoint(db, heartbeat, "secret");
 
         await ep.HandleAsync(CancellationToken.None);
@@ -71,7 +71,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal("sg-7", r.ExternalId);
         Assert.Equal("enabled", r.CurrentState);
         Assert.Equal("Exists", r.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"firewall-rules/{Cluster}"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"firewall-rules/{Cluster}"].LastPollAt);
     }
 
     [Fact]
@@ -85,7 +85,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         vm.RevertSnapshot(snapshot.Id, Guid.NewGuid());
         db.Vms.Add(vm); // the snapshot comes with the VM
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = VmSnapshotEndpoint(db, heartbeat, "secret");
 
         await ep.HandleAsync(CancellationToken.None);
@@ -95,7 +95,7 @@ public class FirewallAndVmSnapshotReconcilerTests
         Assert.Equal(vm.Id, s.VmId);
         Assert.Equal("42:3", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"vm-snapshots/{Cluster}"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"vm-snapshots/{Cluster}"].LastPollAt);
     }
 
     // The worker's contract kept its existence word (titan-ops features/vm/design.md#vm-snapshot-reports): Exists while
@@ -145,25 +145,25 @@ public class FirewallAndVmSnapshotReconcilerTests
     public async Task FirewallEndpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = FirewallEndpoint(db, heartbeat, "wrong");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 
     [Fact]
     public async Task VmSnapshotEndpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = VmSnapshotEndpoint(db, heartbeat, "wrong");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 }

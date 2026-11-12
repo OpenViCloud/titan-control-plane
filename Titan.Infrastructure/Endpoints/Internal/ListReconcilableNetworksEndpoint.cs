@@ -40,7 +40,7 @@ public class ListReconcilableNetworksEndpoint(
         }
 
         List<ReconcilableNetworkQueryResult> networks = await handler.HandleAsync(new ListReconcilableNetworksQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.NetworkKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.NetworkKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(networks, cancellation: ct);
     }
 }

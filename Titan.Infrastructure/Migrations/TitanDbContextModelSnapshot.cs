@@ -1811,6 +1811,22 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("idempotency_keys", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.ReconcilerPoll", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("PolledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("polled_at");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("reconciler_polls", "core");
+                });
+
             modelBuilder.Entity("Titan.Infrastructure.Persistence.ShellSession", b =>
                 {
                     b.Property<Guid>("Id")

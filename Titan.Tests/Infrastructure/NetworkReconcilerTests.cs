@@ -71,7 +71,7 @@ public class NetworkReconcilerTests
         leaving.Delete();
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Factory.Create<ListReconcilableNetworksEndpoint>(
             ctx =>
             {
@@ -87,14 +87,14 @@ public class NetworkReconcilerTests
         Assert.Equal("ext-leaving", only.ExternalId);
         Assert.Equal("Created", only.CurrentState);
         Assert.Equal("Exists", only.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"networks/{Cluster}"].LastPollAt);
+        Assert.NotNull((await heartbeat.SnapshotAsync(CancellationToken.None))[$"networks/{Cluster}"].LastPollAt);
     }
 
     [Fact]
     public async Task Endpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Factory.Create<ListReconcilableNetworksEndpoint>(
             ctx =>
             {
@@ -106,7 +106,7 @@ public class NetworkReconcilerTests
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 
     // ── Liveness verdict ───────────────────────────────────────────
