@@ -102,10 +102,10 @@ public class WalletMutationSubscriberTests
     // JsonSerializer, so renaming a property renames a field on a live bus. The other tests pass the
     // record between fakes, which can never disagree with themselves; this one asserts the serialized text.
     //
-    // A rename is safe to ship only because the control-plane deploys replicas: 1 with strategy: Recreate
-    // (base/control-plane/deployment.yaml of OpenViCloud/titan-local-cluster), so two versions never share the subject. Under
-    // RollingUpdate a subscriber reading the old name would deserialize Guid.Empty, find no row and
-    // return silently — a delayed apply (the sweeper re-drives it), but nothing logs an error.
+    // A rename is safe to ship only in a release that deploys the control plane with Recreate, so two versions never
+    // share the subject (titan-ops architecture/platform-infra.md#control-plane-replicas). Under a rolling update a
+    // subscriber reading the old name would deserialize Guid.Empty, find no row and return silently — a delayed
+    // apply (the sweeper re-drives it), but nothing logs an error.
     [Fact]
     public void Notification_WireFormat_UsesMutationId()
     {

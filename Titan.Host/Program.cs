@@ -512,7 +512,8 @@ app.UseFastEndpoints(c =>
 app.UseSwaggerGen();
 
 // Readiness answers "can this pod serve requests"; a background loop falling behind does not change that,
-// and at replicas: 1 failing readiness takes the whole service down. Excluded by tag, not by name, so a
+// and a check that reads the shared database fails on every pod at once, taking the whole service down
+// (titan-ops infra/health-check/design.md#readiness-db-only). Excluded by tag, not by name, so a
 // new check tagged "background" inherits it; an untagged check lands on readiness.
 app.MapHealthChecks("/healthz", new HealthCheckOptions
 {

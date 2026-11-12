@@ -5,9 +5,10 @@ namespace Titan.Application.Abstractions;
 /// notify is a delayed apply and the bus may be non-persistent.
 ///
 /// THESE PROPERTY NAMES ARE THE WIRE FORMAT: NatsWalletMutationBus serializes this record with
-/// JsonSerializer. A rename is safe only while control-plane deploys at replicas: 1 with
-/// strategy: Recreate, so two versions never publish onto one subject. Under RollingUpdate it becomes a
-/// silent failure: the subscriber deserializes Guid.Empty, finds no row and returns without logging.
+/// JsonSerializer. A rename is safe only in a release that deploys the control plane with Recreate, so two
+/// versions never publish onto one subject (titan-ops architecture/platform-infra.md#control-plane-replicas). Under a
+/// rolling update it becomes a silent failure: the subscriber deserializes Guid.Empty, finds no row and returns
+/// without logging.
 /// Change a name here only alongside a compatibility plan
 /// (WalletMutationSubscriberTests.Notification_WireFormat_UsesMutationId pins the current one).
 public record WalletMutationNotification(Guid MutationId, Guid WalletId);
