@@ -36,7 +36,7 @@ public class ListReconcilableTemplatesEndpoint(
         }
 
         List<ReconcilableTemplateQueryResult> rows = await handler.HandleAsync(new ListReconcilableTemplatesQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.TemplateKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.TemplateKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(rows, cancellation: ct);
     }
 }

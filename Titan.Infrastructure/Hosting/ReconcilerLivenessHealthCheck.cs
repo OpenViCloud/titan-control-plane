@@ -5,43 +5,39 @@ using Titan.Application.Options;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Same shape as MeterLivenessHealthCheck: a reconciler that has never asked for its list is measured from
-/// its registration.
+/// A stale window per key, over the polls every replica records in core.reconciler_polls. Only the kinds the control
+/// plane lists (ReconcilerHeartbeat.Kinds) in the clusters configured now count: a cluster removed from config, or a
+/// kind taken off that list, leaves a row that never polls again (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// </summary>
 public sealed class ReconcilerLivenessHealthCheck(
     ReconcilerHeartbeat heartbeat,
+    ClusterOptions clusters,
     IOptions<ReconcilerLivenessOptions> options) : IHealthCheck
 {
-    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
     {
-        HealthCheckResult result = Evaluate(DateTimeOffset.UtcNow, heartbeat.Snapshot(), options.Value.StaleMinutes);
-        return Task.FromResult(result);
+        IReadOnlyDictionary<string, DateTimeOffset> polls = Expected(await heartbeat.SnapshotAsync(ct), clusters.Clusters.Select(c => c.Id));
+        return Evaluate(DateTimeOffset.UtcNow, polls, options.Value.StaleMinutes);
     }
 
-    /// An empty snapshot is Healthy: nothing is expected yet, so there is no evidence of a stopped reconciler.
+    /// The polls of a known kind in a configured cluster.
+    public static IReadOnlyDictionary<string, DateTimeOffset> Expected(
+        IReadOnlyDictionary<string, DateTimeOffset> polls, IEnumerable<string> clusterIds)
+    {
+        var expected = new HashSet<string>(
+            ReconcilerHeartbeat.Kinds.SelectMany(kind => clusterIds.Select(id => ReconcilerHeartbeat.KeyFor(kind, id))));
+        return polls.Where(p => expected.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value);
+    }
+
+    /// No poll is Healthy: nothing is expected yet, so there is no evidence of a stopped reconciler.
     public static HealthCheckResult Evaluate(
         DateTimeOffset now,
-        IReadOnlyDictionary<string, ReconcilerPollState> snapshot,
+        IReadOnlyDictionary<string, DateTimeOffset> polls,
         int staleMinutes)
     {
         TimeSpan staleWindow = TimeSpan.FromMinutes(staleMinutes);
 
-        var stale = new List<string>();
-        foreach (KeyValuePair<string, ReconcilerPollState> entry in snapshot)
-        {
-            DateTimeOffset reference = entry.Value.RegisteredAt;
-            if (entry.Value.LastPollAt != null)
-            {
-                reference = entry.Value.LastPollAt.Value;
-            }
-
-            bool tooLongSinceLastPoll = now - reference > staleWindow;
-            if (tooLongSinceLastPoll)
-            {
-                stale.Add(entry.Key);
-            }
-        }
-
+        var stale = polls.Where(p => now - p.Value > staleWindow).Select(p => p.Key).ToList();
         if (stale.Count == 0)
         {
             return HealthCheckResult.Healthy("every reconciler polled within the stale window");

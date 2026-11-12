@@ -37,7 +37,7 @@ public class ListReconcilableStorageEndpoint(
         }
 
         ReconcilableStorageQueryResult storage = await handler.HandleAsync(new ListReconcilableStorageQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VolumeKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VolumeKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(storage, cancellation: ct);
     }
 }

@@ -37,7 +37,7 @@ public class ListReconcilableVmSnapshotsEndpoint(
         }
 
         List<ReconcilableVmSnapshotQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmSnapshotsQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmSnapshotKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmSnapshotKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(rows, cancellation: ct);
     }
 }

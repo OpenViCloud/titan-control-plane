@@ -103,7 +103,7 @@ public class VmReconcilerTests
         vm.MarkRunning("41", "10.0.0.5", "2001:db8::5");
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         ListReconcilableVmsEndpoint ep = Endpoint(db, heartbeat, "secret");
 
         await ep.HandleAsync(CancellationToken.None);
@@ -115,7 +115,7 @@ public class VmReconcilerTests
         Assert.Equal("Exists", row.CurrentExistence);
         Assert.Equal("10.0.0.5", row.IpAddress);
         Assert.Equal("2001:db8::5", row.PublicIpv6Address);
-        Assert.NotNull(heartbeat.Snapshot()[$"vms/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"vms/{Cluster}"));
     }
 
     // The worker contract keeps CurrentExistence, now read off the status and the Incus status
@@ -160,12 +160,12 @@ public class VmReconcilerTests
     public async Task Endpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         ListReconcilableVmsEndpoint ep = Endpoint(db, heartbeat, "wrong");
 
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 }

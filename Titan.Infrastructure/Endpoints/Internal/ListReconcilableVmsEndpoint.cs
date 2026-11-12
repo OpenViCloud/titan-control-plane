@@ -37,7 +37,7 @@ public class ListReconcilableVmsEndpoint(
         }
 
         List<ReconcilableVmQueryResult> rows = await handler.HandleAsync(new ListReconcilableVmsQuery(clusterId), ct);
-        heartbeat.RecordPoll(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmKind, clusterId), DateTimeOffset.UtcNow);
+        await heartbeat.RecordPollAsync(ReconcilerHeartbeat.KeyFor(ReconcilerHeartbeat.VmKind, clusterId), DateTimeOffset.UtcNow, ct);
         await SendAsync(rows, cancellation: ct);
     }
 }

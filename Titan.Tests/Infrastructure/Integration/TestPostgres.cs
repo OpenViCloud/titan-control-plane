@@ -1,4 +1,5 @@
 using Npgsql;
+using Titan.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
 namespace Titan.Tests.Infrastructure.Integration;
@@ -71,8 +72,10 @@ public sealed class TestPostgres : IAsyncDisposable
         // A plain DROP waits up to 5 s for those backends to leave. No FORCE: it kills a backend with its Terminate unread,
         // the kernel resets that socket, and one reset makes kubectl port-forward exit, which ends the tunnel for every test
         // (https://github.com/OpenViCloud/titan-local-cluster/blob/main/docs/topology.md#runbook, TEST-ALL-TUNNEL).
-        await using (NpgsqlConnection testConnection = new(GetConnectionString()))
+        // The host opens its pool on the capped string (TitanConnectionString.WithPoolCap), a pool of its own.
+        foreach (string connectionString in new[] { GetConnectionString(), TitanConnectionString.WithPoolCap(GetConnectionString()) })
         {
+            await using NpgsqlConnection testConnection = new(connectionString);
             NpgsqlConnection.ClearPool(testConnection);
         }
         await using NpgsqlConnection admin = new(ForDatabase(_server!, "postgres"));

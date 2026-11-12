@@ -71,7 +71,7 @@ public class NetworkReconcilerTests
         leaving.Delete();
         db.Networks.Add(leaving);
         await db.SaveChangesAsync();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Factory.Create<ListReconcilableNetworksEndpoint>(
             ctx =>
             {
@@ -87,14 +87,14 @@ public class NetworkReconcilerTests
         Assert.Equal("ext-leaving", only.ExternalId);
         Assert.Equal("Created", only.CurrentState);
         Assert.Equal("Exists", only.CurrentExistence);
-        Assert.NotNull(heartbeat.Snapshot()[$"networks/{Cluster}"].LastPollAt);
+        Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"networks/{Cluster}"));
     }
 
     [Fact]
     public async Task Endpoint_WrongToken_Returns401_AndLeavesNoHeartbeat()
     {
         using var db = NewDb();
-        var heartbeat = new ReconcilerHeartbeat();
+        var heartbeat = new ReconcilerHeartbeat(db);
         var ep = Factory.Create<ListReconcilableNetworksEndpoint>(
             ctx =>
             {
@@ -106,7 +106,7 @@ public class NetworkReconcilerTests
         await ep.HandleAsync(CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
-        Assert.Empty(heartbeat.Snapshot());
+        Assert.Empty((await heartbeat.SnapshotAsync(CancellationToken.None)));
     }
 
     // ── Liveness verdict ───────────────────────────────────────────
@@ -114,18 +114,18 @@ public class NetworkReconcilerTests
     private static readonly DateTimeOffset Now = new(2026, 9, 26, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
-    public void Liveness_NothingRegistered_IsHealthy()
+    public void Liveness_NoPoll_IsHealthy()
     {
-        var result = ReconcilerLivenessHealthCheck.Evaluate(Now, new Dictionary<string, ReconcilerPollState>(), 30);
+        var result = ReconcilerLivenessHealthCheck.Evaluate(Now, new Dictionary<string, DateTimeOffset>(), 30);
         Assert.Equal(HealthStatus.Healthy, result.Status);
     }
 
     [Fact]
     public void Liveness_RecentPoll_IsHealthy()
     {
-        var snapshot = new Dictionary<string, ReconcilerPollState>
+        var snapshot = new Dictionary<string, DateTimeOffset>
         {
-            ["networks/vn-hcm-1"] = new(Now.AddHours(-5), LastPollAt: Now.AddMinutes(-3)),
+            ["networks/vn-hcm-1"] = Now.AddMinutes(-3),
         };
         Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, snapshot, 30).Status);
     }
@@ -133,10 +133,10 @@ public class NetworkReconcilerTests
     [Fact]
     public void Liveness_PollOlderThanTheWindow_IsUnhealthy_AndNamesIt()
     {
-        var snapshot = new Dictionary<string, ReconcilerPollState>
+        var snapshot = new Dictionary<string, DateTimeOffset>
         {
-            ["networks/vn-hcm-1"] = new(Now.AddHours(-5), LastPollAt: Now.AddMinutes(-31)),
-            ["networks/vn-han-1"] = new(Now.AddHours(-5), LastPollAt: Now.AddMinutes(-1)),
+            ["networks/vn-hcm-1"] = Now.AddMinutes(-31),
+            ["networks/vn-han-1"] = Now.AddMinutes(-1),
         };
 
         var result = ReconcilerLivenessHealthCheck.Evaluate(Now, snapshot, 30);
@@ -146,16 +146,20 @@ public class NetworkReconcilerTests
         Assert.DoesNotContain("networks/vn-han-1", result.Description);
     }
 
-    // Registered but never polled: measured from registration — a grace window at boot, an alarm after it.
-    [Theory]
-    [InlineData(10, HealthStatus.Healthy)]
-    [InlineData(45, HealthStatus.Unhealthy)]
-    public void Liveness_NeverPolled_IsMeasuredFromRegistration(int minutesSinceRegistered, HealthStatus expected)
+    // A cluster removed from config, or a kind not in ReconcilerHeartbeat.Kinds, never polls again: its row does not count.
+    [Fact]
+    public void Liveness_ARowOfAClusterNotConfigured_OrOfAnUnknownKind_DoesNotCount()
     {
-        var snapshot = new Dictionary<string, ReconcilerPollState>
+        var polls = new Dictionary<string, DateTimeOffset>
         {
-            ["networks/vn-hcm-1"] = new(Now.AddMinutes(-minutesSinceRegistered), LastPollAt: null),
+            ["networks/gone"] = Now.AddDays(-3),
+            ["old-kind/vn-hcm-1"] = Now.AddDays(-3),
+            ["networks/vn-hcm-1"] = Now.AddMinutes(-1),
         };
-        Assert.Equal(expected, ReconcilerLivenessHealthCheck.Evaluate(Now, snapshot, 30).Status);
+
+        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"]);
+
+        Assert.Equal(["networks/vn-hcm-1"], expected.Keys);
+        Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30).Status);
     }
 }
