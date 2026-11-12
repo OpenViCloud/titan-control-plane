@@ -93,7 +93,7 @@ public class MeterLivenessHealthCheckTests
     }
 
     // No row at all (a meter whose migration has not run) — no evidence of a stopped
-    // meter, so Healthy rather than a boot-time false alarm.
+    // meter, so Healthy rather than a false alarm.
     [Fact]
     public void Empty_snapshot_is_Healthy()
     {
