@@ -25,7 +25,26 @@ public class UsageRecord : IAggregateRoot
     public string Currency { get; private set; } = default!;
     public DateTimeOffset CollectedAt { get; private set; }
 
+    /// A record lives this many days, then the retention pass deletes it; an issued invoice keeps its own copy of the
+    /// amounts (titan-ops features/billing/metering/design.md#usage-retention). The delete and the month rule read this
+    /// one number, so a month that may be read has lost no bucket.
+    public const int KeptDays = 90;
+
     private UsageRecord() { }
+
+    /// The first bucket still kept at `now`: every record before it is deleted.
+    public static DateTimeOffset KeptFrom(DateTimeOffset now)
+    {
+        return now.ToUniversalTime().AddDays(-KeptDays);
+    }
+
+    /// A month may be read or billed only while every bucket of it is kept: its first instant (UTC) is not before the
+    /// mark. The caller that receives the month throws (BillingInput.EnsureKeptMonth).
+    public static bool IsAKeptMonth(int year, int month, DateTimeOffset now)
+    {
+        var firstInstant = new DateTimeOffset(year, month, 1, 0, 0, 0, TimeSpan.Zero);
+        return firstInstant >= now.ToUniversalTime().AddDays(-KeptDays);
+    }
 
     public static UsageRecord CreateCompute(
         Guid vmId, string vmName, Guid tenantId, DateTimeOffset collectedAt, int intervalMinutes,

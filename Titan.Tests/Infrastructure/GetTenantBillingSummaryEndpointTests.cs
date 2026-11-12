@@ -6,6 +6,7 @@ using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Repositories;
 using Titan.Domain.Values;
 using Titan.Infrastructure.Endpoints.Billing;
+using Titan.Tests.Fakes;
 using Titan.Tests.Services;
 
 namespace Titan.Tests.Infrastructure;
@@ -41,7 +42,7 @@ public class GetTenantBillingSummaryEndpointTests
 
         return Factory.Create<GetTenantBillingSummaryEndpoint>(
             ctx => ctx.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString($"?month={Month}"),
-            new GetTenantBillingSummaryQueryHandler(ledger, caller.Object));
+            new GetTenantBillingSummaryQueryHandler(ledger, caller.Object, new FixedClock(InAugust)));
     }
 
     // The name shown on a bill is the name the VM had while it was accruing cost, taken

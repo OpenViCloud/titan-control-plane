@@ -7,6 +7,8 @@ using Titan.Application.Queries.Billing.UsageRecord.Contracts;
 using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Repositories;
 using Titan.Application.Exceptions;
+using Titan.Domain.Exceptions;
+using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
 
@@ -16,6 +18,7 @@ public class BillingServiceTests
     private static readonly Guid VmId = Guid.NewGuid();
     private const string VmName = "web-prod-1";
     private static readonly DateTimeOffset T0 = new(2026, 4, 10, 10, 0, 0, TimeSpan.Zero);
+    private static readonly FixedClock Clock = new(new DateTimeOffset(2026, 4, 20, 0, 0, 0, TimeSpan.Zero));
 
     private readonly FakeUsageRecordRepository _usageRepo = new();
     private readonly Mock<ICurrentUser> _currentUser = new();
@@ -33,10 +36,10 @@ public class BillingServiceTests
     private sealed class BillingFacade(IUsageRecordRepository usageRepo, ICurrentUser currentUser)
     {
         public Task<VmCostQueryResult> GetVmCostAsync(Guid vmId, int year, int month, CancellationToken ct)
-            => new GetVmCostQueryHandler(usageRepo, currentUser).HandleAsync(new GetVmCostQuery(vmId, year, month), ct);
+            => new GetVmCostQueryHandler(usageRepo, currentUser, Clock).HandleAsync(new GetVmCostQuery(vmId, year, month), ct);
 
         public Task<TenantBillingSummaryQueryResult> GetTenantSummaryAsync(int year, int month, CancellationToken ct)
-            => new GetTenantBillingSummaryQueryHandler(usageRepo, currentUser)
+            => new GetTenantBillingSummaryQueryHandler(usageRepo, currentUser, Clock)
                 .HandleAsync(new GetTenantBillingSummaryQuery(year, month), ct);
     }
 
@@ -255,6 +258,35 @@ public class BillingServiceTests
         Assert.Equal(BillingConstants.DefaultCurrency, result.Currency);
     }
 
+
+    // ── Months older than the 90 days the ledger keeps (titan-ops features/billing/metering/design.md#usage-retention) ──
+
+    [Fact]
+    public async Task GetVmCost_AMonthThatStartedMoreThanNinetyDaysAgo_IsUsagePeriodExpired()
+    {
+        _usageRepo.Seed(UsageRecord.CreateCompute(VmId, VmName, TenantId, new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero),
+            10, Rate.Of(6000m), "VND"));
+
+        var e = await Assert.ThrowsAsync<BusinessException>(() => CreateService().GetVmCostAsync(VmId, 2026, 1, default));
+
+        Assert.Equal("USAGE_PERIOD_EXPIRED", e.Code);
+    }
+
+    [Fact]
+    public async Task GetTenantSummary_AMonthThatStartedMoreThanNinetyDaysAgo_IsUsagePeriodExpired()
+    {
+        var e = await Assert.ThrowsAsync<BusinessException>(() => CreateService().GetTenantSummaryAsync(2026, 1, default));
+
+        Assert.Equal("USAGE_PERIOD_EXPIRED", e.Code);
+    }
+
+    [Fact]
+    public async Task GetTenantSummary_ThePreviousMonth_IsStillAnswered()
+    {
+        var result = await CreateService().GetTenantSummaryAsync(2026, 3, default);
+
+        Assert.Equal("2026-03", result.Month);
+    }
 }
 
 // ── Fakes ─────────────────────────────────────────────────────────────────
@@ -310,6 +342,11 @@ public class FakeUsageRecordRepository : IUsageRecordRepository
             .Distinct()
             .ToList();
         return Task.FromResult<IReadOnlyList<Guid>>(result);
+    }
+
+    public Task<int> DeleteBucketBeforeAsync(DateTimeOffset before, CancellationToken ct)
+    {
+        return Task.FromResult(All.RemoveAll(r => r.Bucket < before));
     }
 }
 

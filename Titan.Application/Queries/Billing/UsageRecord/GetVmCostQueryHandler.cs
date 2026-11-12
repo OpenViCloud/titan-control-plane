@@ -8,7 +8,7 @@ namespace Titan.Application.Queries.Billing.UsageRecord;
 
 /// Cost is a sum over usage_records, never a mutable running total
 /// (titan-ops architecture/money-and-wallet.md#append-only-metering).
-public class GetVmCostQueryHandler(IUsageRecordRepository usageRepo, ICurrentUser currentUser)
+public class GetVmCostQueryHandler(IUsageRecordRepository usageRepo, ICurrentUser currentUser, TimeProvider clock)
 {
     // Reports this, not the `Currency` column on the rows it sums: every meter writes this same constant,
     // so the column can only ever echo it.
@@ -18,6 +18,7 @@ public class GetVmCostQueryHandler(IUsageRecordRepository usageRepo, ICurrentUse
     {
         var (vmId, year, month) = (query.VmId, query.Year, query.Month);
         var tenantId = currentUser.RequireTenantId();
+        BillingInput.EnsureKeptMonth(year, month, clock.GetUtcNow());
         // Defense-in-depth: scope usage to the caller's tenant so cost for another
         // tenant's VM never leaks even if a caller bypasses the endpoint ownership check.
         // Compute-only: disk has its own meter and is not attributed to a VM.

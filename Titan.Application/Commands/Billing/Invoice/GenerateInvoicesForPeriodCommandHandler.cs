@@ -10,12 +10,15 @@ namespace Titan.Application.Commands.Billing.Invoice;
 /// An Invoice is a frozen snapshot of the UsageRecord ledger, derived once per (tenant, month) and never
 /// recomputed (titan-ops architecture/money-and-wallet.md#invoice-frozen-snapshot). The only creator of Invoice rows.
 /// Run once a month after the period has closed; safe to re-run.
-public class GenerateInvoicesForPeriodCommandHandler(IInvoiceRepository invoiceRepo, IUsageRecordRepository usageRepo)
+public class GenerateInvoicesForPeriodCommandHandler(
+    IInvoiceRepository invoiceRepo, IUsageRecordRepository usageRepo, TimeProvider clock)
 {
     public async Task<GenerateInvoicesForPeriodCommandResult> HandleAsync(
         GenerateInvoicesForPeriodCommand command, CancellationToken ct = default)
     {
         int year = command.Year, month = command.Month;
+        // A period whose first buckets are already deleted would be billed short, silently.
+        BillingInput.EnsureKeptMonth(year, month, clock.GetUtcNow());
         var tenantIds = await usageRepo.GetDistinctTenantIdsForMonthAsync(year, month, ct);
         var issuedAt = DateTimeOffset.UtcNow;
         int generated = 0, skipped = 0;
