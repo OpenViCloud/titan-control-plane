@@ -85,8 +85,8 @@ public class ProviderCommandRepositoryStateTests
     private static readonly Guid Idle = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
 
     // Lanes: a busy tenant (a held lease, a pending row, a pending backup: its backup lane is free), a busy no-tenant
-    // lane, a tenant whose backup lane is held but its command lane is free, and a tenant whose only leased row ran out
-    // (that row is the one handed out).
+    // lane, a tenant whose backup lane is held but its command lane is free, a tenant whose only leased row ran out
+    // (that row is the one handed out), and two tenants whose earlier command is Done or Failed (neither holds the lane).
     private static List<ProviderCommand> EveryLane()
     {
         ProviderCommand ranOut = Leased("ran-out-tenant-leased", Now.AddHours(-1));
@@ -97,6 +97,10 @@ public class ProviderCommandRepositoryStateTests
         busyHeld.Lease(Guid.NewGuid(), Now);
         ProviderCommand idleBackupHeld = Pending("idle-backup-held", Now.AddMinutes(-2), Idle, ProviderCommandKinds.VmBackup);
         idleBackupHeld.Lease(Guid.NewGuid(), Now);
+        ProviderCommand done = Leased("done-tenant-done", Now.AddMinutes(-3));
+        done.Complete(done.LeaseId!.Value);
+        ProviderCommand failed = Leased("failed-tenant-failed", Now.AddMinutes(-3));
+        failed.Fail(failed.LeaseId!.Value, "gave up", retryable: false, Now.AddMinutes(-3));
         return
         [
             busyHeld,
@@ -108,6 +112,10 @@ public class ProviderCommandRepositoryStateTests
             Pending("idle-waiting", Now.AddMinutes(-1), Idle),
             ranOut,
             Pending("ran-out-tenant-waiting", Now.AddMinutes(-1), ranOutTenant),
+            done,
+            Pending("done-tenant-waiting", Now.AddMinutes(-1), done.TenantId),
+            failed,
+            Pending("failed-tenant-waiting", Now.AddMinutes(-1), failed.TenantId),
         ];
     }
 
@@ -123,7 +131,7 @@ public class ProviderCommandRepositoryStateTests
 
         var claimable = await new ProviderCommandRepository(db).ListClaimableAsync(CommandKinds, Now, 100, default);
 
-        Assert.Equal(["busy-backup", "idle-waiting", "ran-out-tenant-leased"],
+        Assert.Equal(["busy-backup", "done-tenant-waiting", "failed-tenant-waiting", "idle-waiting", "ran-out-tenant-leased"],
             claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 

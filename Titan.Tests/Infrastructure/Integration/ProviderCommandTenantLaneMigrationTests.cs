@@ -91,7 +91,7 @@ public sealed class ProviderCommandTenantLaneMigrationTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Down_DropsTheIndexAndBothColumns_AndKeepsTheRows()
+    public async Task Down_DropsBothIndexesAndBothColumns_AndKeepsTheRows()
     {
         await MigrateToLatestAsync();
         await using (TitanDbContext seed = NewDbContext())

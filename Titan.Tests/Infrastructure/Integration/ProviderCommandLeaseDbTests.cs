@@ -151,7 +151,7 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
     }
 
-    // titan-ops features/provider/user-stories.md#p3-1 and #p3-2 on the SQL EF writes: a busy tenant is skipped, the next
+    // titan-ops features/provider/design.md#tenant-lane on the SQL EF writes: a busy tenant is skipped, the next
     // tenant and a row of no tenant are handed out; a second row of no tenant waits for the first (the nullable
     // comparison of the lane).
     [Fact]
