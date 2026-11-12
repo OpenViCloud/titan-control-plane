@@ -45,10 +45,13 @@ public class QueryParameterValidationEndpointTests
         await Assert.ThrowsAsync<ValidationFailureException>(() => ep.HandleAsync(CancellationToken.None));
     }
 
-    [Fact]
-    public async Task BillingSummary_ValidMonth_IsAnswered()
+    // The current month and the last year a date can carry: both kept, both answered.
+    [Theory]
+    [InlineData(null)]
+    [InlineData("9999-12")]
+    public async Task BillingSummary_ValidMonth_IsAnswered(string? month)
     {
-        GetTenantBillingSummaryEndpoint ep = SummaryEndpoint("2026-12");
+        GetTenantBillingSummaryEndpoint ep = SummaryEndpoint(month ?? DateTime.UtcNow.ToString("yyyy-MM"));
 
         await ep.HandleAsync(CancellationToken.None);
 
