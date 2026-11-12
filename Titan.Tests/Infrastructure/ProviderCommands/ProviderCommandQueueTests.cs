@@ -71,7 +71,8 @@ public class ProviderCommandQueueTests
     }
 
     // Every kind stages the tenant whose resource it acts on, and template.sync none: a tenant's commands run one at a
-    // time in each lane (titan-ops features/provider/design.md#tenant-lane). A new kind fails the first assertion until it is here.
+    // time in each lane (titan-ops features/provider/design.md#tenant-lane). A new kind fails the first assertion until
+    // it is here.
     [Fact]
     public async Task EveryKind_StagesTheTenantOfItsResource_AndTemplateSyncNoTenant()
     {
