@@ -9,7 +9,9 @@ namespace Titan.Tests.Infrastructure.Incus;
 
 // The relay between the customer's websocket and the exec's (titan-ops features/vm/design.md#ssh-session), against an
 // Incus that ends a command the way Incus does: an empty message, then sockets dropped without a close handshake.
-// Every timeout runs on a fake clock that only a test moves, so no outcome depends on how fast the runner is.
+// Every timeout of the relay runs on a fake clock that only a test moves: a test that asserts the session stays open
+// moves it after a sync point; a test that waits for an ending moves it in steps until the relay returns. Real-time
+// waits remain only as outer bounds (RealWait) and inside the fake Incus.
 public class ShellRelayTests
 {
     private static readonly ShellRelayOptions Fast = new(
@@ -362,7 +364,7 @@ public class ShellRelayTests
 
     // The idle timeout still ends a session whose last byte is older than it: the fake clock is what decides.
     [Fact]
-    public async Task ASessionSilentForTheIdleTimeout_EndsIdle_EvenRightAfterABurst()
+    public async Task ASessionSilentForTheIdleTimeout_EndsIdle_EvenRightAfterAByte()
     {
         await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Swallows);
         var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(1500), SignalWait = TimeSpan.FromMilliseconds(500) };

@@ -26,7 +26,8 @@ public sealed class ShellFirstOutput
         return new ShellFirstOutput(stdout, buffer, stdout.ReceiveAsync(buffer, CancellationToken.None));
     }
 
-    // True when the command ended within `wait` without writing a byte; false when a byte came, and also when the
+    // True when the command ended within `wait` without writing a byte, or its stdout socket dropped before one (the
+    // session cannot open either way, and a retry is the customer's move); false when a byte came, and also when the
     // command is still silent at the end of the wait (a slow server is not refused).
     public async Task<bool> EndedWithoutOutputWithinAsync(TimeSpan wait, TimeProvider clock)
     {
