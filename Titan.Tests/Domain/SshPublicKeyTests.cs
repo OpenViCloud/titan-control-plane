@@ -40,7 +40,7 @@ public class SshPublicKeyTests
         Assert.Equal(fingerprint, key.Fingerprint);
     }
 
-    // The line written into authorized_keys is rebuilt from the parsed parts: the comment the customer typed never
+    // The line written into the guest's key file is rebuilt from the parsed parts: the comment the customer typed never
     // reaches the guest's shell script.
     [Fact]
     public void Line_IsTypeAndBlob_WithoutTheComment()
