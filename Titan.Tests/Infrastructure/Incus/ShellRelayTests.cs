@@ -10,8 +10,8 @@ namespace Titan.Tests.Infrastructure.Incus;
 // The relay between the customer's websocket and the exec's (titan-ops features/vm/design.md#ssh-session), against an
 // Incus that ends a command the way Incus does: an empty message, then sockets dropped without a close handshake.
 // Every timeout of the relay runs on a fake clock that only a test moves: a test that asserts the session stays open
-// moves it after a sync point; a test that waits for an ending moves it in steps until the relay returns. Real-time
-// waits remain only as outer bounds (RealWait) and inside the fake Incus.
+// moves it after a sync point; a test that waits for an ending moves it in steps until the relay returns. Real time
+// only bounds a wait or paces those steps, and drives the fake Incus.
 public class ShellRelayTests
 {
     private static readonly ShellRelayOptions Fast = new(
@@ -413,12 +413,13 @@ public class ShellRelayTests
         ShellFirstOutput stdout = ShellFirstOutput.Start(rig.Session.Stdout);
 
         Task<bool> ended = stdout.EndedWithoutOutputWithinAsync(TimeSpan.FromSeconds(5), rig.Clock);
-        while (!ended.IsCompleted)
+        var giveUp = DateTime.UtcNow + RealWait;
+        while (!ended.IsCompleted && DateTime.UtcNow < giveUp)
         {
             rig.Clock.Advance(TimeSpan.FromSeconds(1));
             await Task.Delay(5);
         }
-        Assert.False(await ended);
+        Assert.False(await ended.WaitAsync(TimeSpan.FromSeconds(1)));
         Task<ShellRelayResult> relay = RelayAsync(rig, stdout, Fast, CancellationToken.None);
         await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("hi"), WebSocketMessageType.Binary, true, CancellationToken.None);
         Assert.Equal("hi", await ReadAsync(rig.Customer, 2));

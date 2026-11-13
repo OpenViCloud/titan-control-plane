@@ -207,7 +207,7 @@ public sealed class IncusClient : IDisposable
     /// The exit code of an exec once it has finished: GET /1.0/operations/{id}/wait?timeout=N waits for the operation;
     /// a finished exec carries the code as "return" in the operation's metadata (measured on Incus 7.0.2, 2026-11-13).
     /// Null when the operation has no such field; how Incus answers a wait that times out is not measured, and an
-    /// error answer is CLUSTER_ERROR, which the session's caller turns into null too.
+    /// error answer is CLUSTER_ERROR, which IncusExecSession turns into null too.
     public Task<int?> GetExecExitCodeAsync(string operationId, int waitSeconds, CancellationToken ct) =>
         ReadAsync($"1.0/operations/{Uri.EscapeDataString(operationId)}/wait?timeout={waitSeconds}", operation =>
         {
