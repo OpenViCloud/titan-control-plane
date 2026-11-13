@@ -8,9 +8,9 @@ namespace Titan.Application.Services.Compute;
 
 /// Titan's cloud-init vendor-data for a new VM: a boothook that writes the picked SSH keys to a file sshd reads for the
 /// `ubuntu` user (titan-ops features/vm/design.md#ssh-key). Cloud-init runs a boothook in an early stage, before sshd
-/// starts and before the stages that wait for the image's snap seed, so key login does not wait for the seed. Vendor-data, not user-data:
-/// cloud-config keys in vendor-data are dropped when the customer's user-data sets keys too; a boothook is a part of
-/// its own and stays.
+/// starts and before the stages that wait for the image's snap seed, so key login does not wait for the seed.
+/// Vendor-data, not user-data: cloud-config keys in vendor-data are dropped when the customer's user-data sets keys
+/// too; a boothook is a part of its own and stays.
 public static class VmVendorData
 {
     // A rebuilt key line: type, one space, base64. Nothing that could end either heredoc or reach the shell.
