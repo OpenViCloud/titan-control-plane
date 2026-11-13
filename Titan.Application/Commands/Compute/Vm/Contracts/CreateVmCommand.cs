@@ -13,6 +13,6 @@ public record CreateVmCommand(
     string? ClusterId,
     int? DiskSizeGb,
     string? UserData = null,
-    // Saved keys of the caller's tenant to put into the `ubuntu` user's authorized_keys at first boot
+    // Saved keys of the caller's tenant that sshd accepts for the `ubuntu` user, written once at the VM's first boot
     // (titan-ops features/vm/design.md#ssh-key).
     List<Guid>? SshKeyIds = null);

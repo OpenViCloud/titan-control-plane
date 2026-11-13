@@ -3,8 +3,8 @@ using Titan.Application.Services.Compute;
 namespace Titan.Tests.Services;
 
 // The shape was measured on Incus 7.0.2 with the template's Ubuntu 22.04 image (dev, 2026-11-13): a boothook in
-// vendor-data runs before cloud-init waits for the snap seed, so sshd has the keys as soon as it listens; the
-// customer's user-data (its bootcmd, its own keys) still applies; a reboot leaves one line per key.
+// vendor-data runs before sshd starts and before cloud-init waits for the snap seed, so key login does not wait for
+// the seed; the customer's user-data (its bootcmd, its own keys) still applies; a reboot leaves one line per key.
 public class VmVendorDataTests
 {
     private const string Ed = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJQIuvIctzZ61SoksnjJlkCRERFjIowWaKhlaoSOsHMB";
@@ -16,7 +16,8 @@ public class VmVendorDataTests
         Assert.Null(VmVendorData.ForKeys([]));
     }
 
-    // A boothook: cloud-init runs it in its first stage, long before the modules that wait for the snap seed.
+    // A boothook: cloud-init runs it in an early stage, before sshd starts and long before the modules that wait for
+    // the snap seed.
     [Fact]
     public void Keys_AreABoothook()
     {
@@ -48,6 +49,14 @@ public class VmVendorDataTests
 
         Assert.Contains("cloud-init-per instance openvicloud-ssh-keys /bin/sh -s <<'ONCE'\n", script);
         Assert.EndsWith("ONCE\n", script);
+    }
+
+    // The key file is written whole, never appended to; no `set -e`, so one failed step does not stop the next.
+    [Fact]
+    public void TheKeyFile_IsWrittenWhole_AndNoStepStopsTheNext()
+    {
+        string script = VmVendorData.ForKeys([Ed])!;
+
         Assert.DoesNotContain(">>", script);
         Assert.DoesNotContain("set -e", script);
     }

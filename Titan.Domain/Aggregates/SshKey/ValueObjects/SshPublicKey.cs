@@ -25,7 +25,7 @@ public sealed record SshPublicKey : ValueObject
     /// `SHA256:` and the unpadded base64 of SHA-256 over the blob — the string `ssh-keygen -lf` prints.
     public string Fingerprint { get; }
 
-    /// `<type> <base64 blob>`, rebuilt from the parsed bytes: what goes into authorized_keys.
+    /// `<type> <base64 blob>`, rebuilt from the parsed bytes: the line the guest's key file gets.
     public string Line { get; }
 
     private SshPublicKey(string type, byte[] blob)
