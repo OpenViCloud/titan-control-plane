@@ -36,11 +36,17 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         NoExecRoute,       // POST exec answers 404 like a server without the route
         InstanceNotRunning,// POST exec answers 400 "Instance is not running"
         AgentNotRunning,   // POST exec answers 202, the websocket upgrade 500, the operation fails
+        EndsWithoutOutput, // the guest command exits 1 without writing a byte (nc with nothing listening on port 22)
+        Silent,            // no banner; echoes stdin to stdout, ends at stdin EOF (a server that waits for its client)
     }
 
     public const string Banner = "SSH-2.0-fake\r\n";
     public const int BurstBytes = 32 * 1024;
     public ConcurrentQueue<WebSocketCloseStatus?> StdinCloseStatuses { get; } = new();
+
+    // Bytes the guest command has read from stdin: a test waits on it before moving a fake clock.
+    public long StdinBytes => Interlocked.Read(ref _stdinBytes);
+    private long _stdinBytes;
 
     private readonly WebApplication _app;
     public string Endpoint { get; }
@@ -62,6 +68,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         public TaskCompletionSource Signalled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string Status { get; set; } = "Running";
         public string Err { get; set; } = "";
+        public int? ExitCode { get; set; }
     }
 
     private FakeIncusExecServer(WebApplication app, string endpoint, string fingerprint, HashSet<string> trusted)
@@ -120,18 +127,35 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         if (isOperation)
         {
             string id = path["/1.0/operations/".Length..];
+            bool waits = id.EndsWith("/wait");
+            if (waits)
+            {
+                id = id[..^"/wait".Length];
+            }
             bool known = _operations.TryGetValue(id, out Operation? operation);
             if (!known)
             {
                 await WriteAsync(context, 404, """{"type":"error","error_code":404,"error":"Operation not found"}""");
                 return;
             }
+            if (waits)
+            {
+                int seconds = int.Parse(context.Request.Query["timeout"].ToString());
+                await Task.WhenAny(operation!.Done.Task, Task.Delay(TimeSpan.FromSeconds(seconds)));
+            }
+            // Incus keeps a finished exec's exit code as "return" in the operation's metadata (measured on Incus 7.0.2,
+            // 2026-11-13).
+            object metadata = new { };
+            if (operation!.ExitCode.HasValue)
+            {
+                metadata = new { @return = operation.ExitCode.Value };
+            }
             string body = JsonSerializer.Serialize(new
             {
                 type = "sync",
                 status = "Success",
                 status_code = 200,
-                metadata = new { id, @class = "websocket", status = operation!.Status, err = operation.Err },
+                metadata = new { id, @class = "websocket", status = operation.Status, err = operation.Err, metadata },
             });
             await WriteAsync(context, 200, body);
             return;
@@ -236,7 +260,15 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         WebSocket stdin = operation.Sockets["0"];
         WebSocket stdout = operation.Sockets["1"];
         WebSocket stderr = operation.Sockets["2"];
-        await stdout.SendAsync(Encoding.ASCII.GetBytes(Banner), WebSocketMessageType.Binary, true, CancellationToken.None);
+        if (Behaviour == Mode.EndsWithoutOutput)
+        {
+            await EndAsync(operation, stdout, stderr, exitCode: 1);
+            return;
+        }
+        if (Behaviour != Mode.Silent)
+        {
+            await stdout.SendAsync(Encoding.ASCII.GetBytes(Banner), WebSocketMessageType.Binary, true, CancellationToken.None);
+        }
         if (Behaviour == Mode.FragmentedBurst)
         {
             await stdout.SendAsync(new byte[BurstBytes], WebSocketMessageType.Binary, false, CancellationToken.None);
@@ -285,6 +317,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
                     StdinCloseStatuses.Enqueue(received.CloseStatus);
                     break;
                 }
+                Interlocked.Add(ref _stdinBytes, received.Count);
                 bool echoes = Behaviour != Mode.Swallows && Behaviour != Mode.Chatty;
                 if (echoes)
                 {
@@ -300,11 +333,17 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         {
             await Task.WhenAny(operation.Signalled.Task, Task.Delay(TimeSpan.FromSeconds(30)));
         }
-        // Incus ends a command with an empty message on stdout and stderr, then ends the connections without a close
-        // handshake: the request handlers return and the server closes the TCP connection in order (not a reset, which
-        // could drop bytes the client has not read yet).
+        await EndAsync(operation, stdout, stderr, exitCode: 0);
+    }
+
+    // Incus ends a command with an empty message on stdout and stderr, then ends the connections without a close
+    // handshake: the request handlers return and the server closes the TCP connection in order (not a reset, which
+    // could drop bytes the client has not read yet).
+    private static async Task EndAsync(Operation operation, WebSocket stdout, WebSocket stderr, int exitCode)
+    {
         await stdout.SendAsync(ReadOnlyMemory<byte>.Empty, WebSocketMessageType.Binary, true, CancellationToken.None);
         await stderr.SendAsync(ReadOnlyMemory<byte>.Empty, WebSocketMessageType.Binary, true, CancellationToken.None);
+        operation.ExitCode = exitCode;
         operation.Status = "Success";
         operation.Done.TrySetResult();
     }

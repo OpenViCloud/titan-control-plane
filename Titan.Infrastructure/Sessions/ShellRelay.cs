@@ -25,21 +25,21 @@ public sealed record ShellRelayResult(long BytesUp, long BytesDown, long BytesSt
 // keeps no byte it copies.
 //
 // customerGone (the request's abort token) is for the customer's side only: the Incus side still gets its end of input,
-// the drain and the signal after the customer has dropped.
+// the drain and the signal after the customer has dropped. Every timeout runs on `clock`.
 public static class ShellRelay
 {
     private static readonly byte[] Sigterm = Encoding.UTF8.GetBytes("{\"command\":\"signal\",\"signal\":15}");
 
     public static async Task<ShellRelayResult> RunAsync(
-        WebSocket customer, WebSocket stdin, WebSocket stdout, WebSocket stderr, WebSocket control,
-        ShellRelayOptions options, CancellationToken customerGone)
+        WebSocket customer, WebSocket stdin, ShellFirstOutput stdout, WebSocket stderr, WebSocket control,
+        ShellRelayOptions options, TimeProvider clock, CancellationToken customerGone)
     {
-        var counters = new Counters();
+        var counters = new Counters(clock);
         using var sessionOver = new CancellationTokenSource();
         Task up = CopyUpAsync(customer, stdin, counters, customerGone);
         Task down = CopyDownAsync(stdout, customer, counters, sessionOver.Token);
         Task drainStderr = DrainAsync(stderr, counters, sessionOver.Token);
-        Task<bool> idle = WatchIdleAsync(counters, options.IdleTimeout, sessionOver.Token);
+        Task<bool> idle = WatchIdleAsync(counters, options.IdleTimeout, clock, sessionOver.Token);
 
         Task first = await Task.WhenAny(up, down, idle);
         ShellEnding ending;
@@ -49,54 +49,54 @@ public static class ShellRelay
         }
         else if (first == up)
         {
-            await CloseStdinAsync(stdin, options.SignalWait);
-            bool commandEnded = await EndsWithinAsync(down, options.DrainTimeout);
+            await CloseStdinAsync(stdin, options.SignalWait, clock);
+            bool commandEnded = await EndsWithinAsync(down, options.DrainTimeout, clock);
             ending = ShellEnding.CustomerClosed;
             if (!commandEnded)
             {
                 ending = ShellEnding.CustomerClosedCommandSignalled;
-                await SignalAsync(control, options.SignalWait);
-                await EndsWithinAsync(down, options.SignalWait);
+                await SignalAsync(control, options.SignalWait, clock);
+                await EndsWithinAsync(down, options.SignalWait, clock);
             }
         }
         else
         {
             ending = ShellEnding.Idle;
-            await CloseStdinAsync(stdin, options.SignalWait);
-            await SignalAsync(control, options.SignalWait);
-            await EndsWithinAsync(down, options.SignalWait);
+            await CloseStdinAsync(stdin, options.SignalWait, clock);
+            await SignalAsync(control, options.SignalWait, clock);
+            await EndsWithinAsync(down, options.SignalWait, clock);
         }
 
         // Every ending closes the customer's side: it answers a close the customer sent, or starts one.
-        await CloseCustomerAsync(customer, ending == ShellEnding.Idle ? "idle" : "the session ended", options.SignalWait);
-        await EndsWithinAsync(up, options.SignalWait);
+        await CloseCustomerAsync(customer, ending == ShellEnding.Idle ? "idle" : "the session ended", options.SignalWait, clock);
+        await EndsWithinAsync(up, options.SignalWait, clock);
         sessionOver.Cancel();
-        await EndsWithinAsync(Task.WhenAll(down, drainStderr, idle), options.SignalWait);
+        await EndsWithinAsync(Task.WhenAll(down, drainStderr, idle), options.SignalWait, clock);
         return new ShellRelayResult(counters.Up, counters.Down, counters.Stderr, ending);
     }
 
-    private sealed class Counters
+    private sealed class Counters(TimeProvider clock)
     {
         private long _up;
         private long _down;
         private long _stderr;
-        private long _lastByteAt = Environment.TickCount64;
+        private long _lastByteAt = clock.GetTimestamp();
 
         public long Up => Interlocked.Read(ref _up);
         public long Down => Interlocked.Read(ref _down);
         public long Stderr => Interlocked.Read(ref _stderr);
-        public long LastByteAt => Interlocked.Read(ref _lastByteAt);
+        public TimeSpan SilentFor => clock.GetElapsedTime(Interlocked.Read(ref _lastByteAt));
 
         public void AddUp(int count)
         {
             Interlocked.Add(ref _up, count);
-            Interlocked.Exchange(ref _lastByteAt, Environment.TickCount64);
+            Interlocked.Exchange(ref _lastByteAt, clock.GetTimestamp());
         }
 
         public void AddDown(int count)
         {
             Interlocked.Add(ref _down, count);
-            Interlocked.Exchange(ref _lastByteAt, Environment.TickCount64);
+            Interlocked.Exchange(ref _lastByteAt, clock.GetTimestamp());
         }
 
         public void AddStderr(int count) => Interlocked.Add(ref _stderr, count);
@@ -133,17 +133,27 @@ public static class ShellRelay
     }
 
     // Ends when the command does. After the customer has gone, stdout is still read to its end, so the end of the
-    // command is still seen.
-    private static async Task CopyDownAsync(WebSocket stdout, WebSocket customer, Counters counters, CancellationToken sessionOver)
+    // command is still seen. The first receive is the one started before the upgrade.
+    private static async Task CopyDownAsync(ShellFirstOutput stdout, WebSocket customer, Counters counters, CancellationToken sessionOver)
     {
-        var buffer = new byte[64 * 1024];
+        byte[] buffer = stdout.Buffer;
         bool customerGone = false;
         bool atMessageStart = true;
+        bool firstReceive = true;
         try
         {
             while (true)
             {
-                WebSocketReceiveResult received = await stdout.ReceiveAsync(buffer, sessionOver);
+                WebSocketReceiveResult received;
+                if (firstReceive)
+                {
+                    firstReceive = false;
+                    received = await stdout.Receive;
+                }
+                else
+                {
+                    received = await stdout.Stdout.ReceiveAsync(buffer, sessionOver);
+                }
                 if (received.MessageType == WebSocketMessageType.Close)
                 {
                     return;
@@ -199,16 +209,15 @@ public static class ShellRelay
     }
 
     // True when the session went IdleTimeout without a byte; false when the session ended first.
-    private static async Task<bool> WatchIdleAsync(Counters counters, TimeSpan idleTimeout, CancellationToken sessionOver)
+    private static async Task<bool> WatchIdleAsync(Counters counters, TimeSpan idleTimeout, TimeProvider clock, CancellationToken sessionOver)
     {
         TimeSpan step = idleTimeout < TimeSpan.FromSeconds(4) ? idleTimeout / 4 : TimeSpan.FromSeconds(1);
         try
         {
             while (true)
             {
-                await Task.Delay(step, sessionOver);
-                long silentFor = Environment.TickCount64 - counters.LastByteAt;
-                if (silentFor >= (long)idleTimeout.TotalMilliseconds)
+                await Task.Delay(step, clock, sessionOver);
+                if (counters.SilentFor >= idleTimeout)
                 {
                     return true;
                 }
@@ -223,19 +232,19 @@ public static class ShellRelay
     private static bool IsTheSocketEnding(Exception e) =>
         e is WebSocketException || e is OperationCanceledException || e is ObjectDisposedException || e is InvalidOperationException;
 
-    private static async Task<bool> EndsWithinAsync(Task task, TimeSpan timeout)
+    private static async Task<bool> EndsWithinAsync(Task task, TimeSpan timeout, TimeProvider clock)
     {
-        Task first = await Task.WhenAny(task, Task.Delay(timeout));
+        Task first = await Task.WhenAny(task, Task.Delay(timeout, clock));
         return first == task;
     }
 
     // The sends that end a session wait at most `wait`: a send already stuck on a peer that stopped reading holds the
     // socket's send lock. The endpoint disposes the sockets after the relay returns.
-    private static async Task CloseCustomerAsync(WebSocket customer, string reason, TimeSpan wait)
+    private static async Task CloseCustomerAsync(WebSocket customer, string reason, TimeSpan wait, TimeProvider clock)
     {
         try
         {
-            using var giveUp = new CancellationTokenSource(wait);
+            using var giveUp = new CancellationTokenSource(wait, clock);
             await customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, reason, giveUp.Token);
         }
         catch (Exception e) when (IsTheSocketEnding(e))
@@ -244,11 +253,11 @@ public static class ShellRelay
     }
 
     // Closing the sending side of stdin is end-of-input for the command (nc -N then shuts its socket to sshd).
-    private static async Task CloseStdinAsync(WebSocket stdin, TimeSpan wait)
+    private static async Task CloseStdinAsync(WebSocket stdin, TimeSpan wait, TimeProvider clock)
     {
         try
         {
-            using var giveUp = new CancellationTokenSource(wait);
+            using var giveUp = new CancellationTokenSource(wait, clock);
             await stdin.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", giveUp.Token);
         }
         catch (Exception e) when (IsTheSocketEnding(e))
@@ -256,11 +265,11 @@ public static class ShellRelay
         }
     }
 
-    private static async Task SignalAsync(WebSocket control, TimeSpan wait)
+    private static async Task SignalAsync(WebSocket control, TimeSpan wait, TimeProvider clock)
     {
         try
         {
-            using var giveUp = new CancellationTokenSource(wait);
+            using var giveUp = new CancellationTokenSource(wait, clock);
             await control.SendAsync(Sigterm, WebSocketMessageType.Text, true, giveUp.Token);
         }
         catch (Exception e) when (IsTheSocketEnding(e))

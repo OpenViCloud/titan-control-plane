@@ -97,6 +97,27 @@ public sealed class IncusExecSession(
     public WebSocket Stderr { get; } = stderr;
     public WebSocket Control { get; } = control;
 
+    // How long the read of the exit code waits for Incus to finish the operation after the command's streams ended.
+    public static readonly int ExitCodeWaitSeconds = 2;
+
+    // The command's exit code for the session's log line; null while it runs or when the cluster does not answer: a
+    // session never fails for the sake of its log.
+    public async Task<int?> ReadExitCodeAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await client.GetExecExitCodeAsync(OperationId, ExitCodeWaitSeconds, ct);
+        }
+        catch (ServiceUnavailableException)
+        {
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
     public ValueTask DisposeAsync()
     {
         Stdin.Dispose();

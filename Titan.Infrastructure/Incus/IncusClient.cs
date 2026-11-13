@@ -204,6 +204,25 @@ public sealed class IncusClient : IDisposable
             return err.GetString() ?? "";
         }, ct);
 
+    /// The exit code of an exec once it has finished: GET /1.0/operations/{id}/wait answers when the operation is done
+    /// or `waitSeconds` have passed; a finished exec carries the code as "return" in the operation's metadata
+    /// (measured on Incus 7.0.2, 2026-11-13). Null when the operation has no such field (still running).
+    public Task<int?> GetExecExitCodeAsync(string operationId, int waitSeconds, CancellationToken ct) =>
+        ReadAsync($"1.0/operations/{Uri.EscapeDataString(operationId)}/wait?timeout={waitSeconds}", operation =>
+        {
+            bool hasMetadata = operation.TryGetProperty("metadata", out JsonElement metadata) && metadata.ValueKind == JsonValueKind.Object;
+            if (!hasMetadata)
+            {
+                return (int?)null;
+            }
+            bool hasReturn = metadata.TryGetProperty("return", out JsonElement code) && code.ValueKind == JsonValueKind.Number;
+            if (!hasReturn)
+            {
+                return null;
+            }
+            return code.GetInt32();
+        }, ct);
+
     private static string ErrorOf(JsonElement envelope)
     {
         bool hasError = envelope.TryGetProperty("error", out JsonElement message) && message.ValueKind == JsonValueKind.String;

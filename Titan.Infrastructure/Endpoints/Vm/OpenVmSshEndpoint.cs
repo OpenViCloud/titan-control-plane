@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net.WebSockets;
 using FastEndpoints;
 using Microsoft.AspNetCore.Builder;
@@ -18,6 +17,7 @@ namespace Titan.Infrastructure.Endpoints.Vm;
 
 // An SSH session: a websocket that carries the bytes of `nc -N 127.0.0.1 22` run in the guest
 // (titan-ops features/vm/design.md#ssh-session). Every refusal happens before the upgrade, so it is the usual JSON error.
+// The session counts as opened, and is recorded, only once the guest's SSH server has spoken.
 // Left out of the OpenAPI spec: a websocket has no JSON body to describe.
 public class OpenVmSshEndpoint(
     GetVmShellTargetQueryHandler target,
@@ -25,8 +25,12 @@ public class OpenVmSshEndpoint(
     ICurrentUser currentUser,
     ShellSessionLimiter limiter,
     IncusShellConnector connector,
+    TimeProvider clock,
     ILogger<OpenVmSshEndpoint> logger) : EndpointWithoutRequest
 {
+    // How long an SSH server has to send its banner before the session opens anyway.
+    public static readonly TimeSpan BannerWait = TimeSpan.FromSeconds(5);
+
     public override void Configure()
     {
         Get("v1/tenant/vms/{vmId:guid}/ssh");
@@ -49,17 +53,29 @@ public class OpenVmSshEndpoint(
             throw new BusinessException("VM_SESSION_LIMIT_REACHED",
                 $"Your tenant already has {ShellSessionLimiter.MaxSessionsPerTenant} SSH sessions open; close one first.");
         }
-        await request.HandleAsync(new RequestVmSshCommand(vmId), ct);
         await using IncusExecSession exec = await OpenAsync(vmId, shell, ct);
+        ShellFirstOutput stdout = ShellFirstOutput.Start(exec.Stdout);
+        bool nothingListening = await stdout.EndedWithoutOutputWithinAsync(BannerWait, clock);
+        if (nothingListening)
+        {
+            int? refusedExitCode = await exec.ReadExitCodeAsync(ct);
+            logger.LogInformation(
+                "SSH session refused: vmId {VmId} tenantId {TenantId} operation {OperationId} nothing listening on port 22 exitCode {ExitCode}",
+                vmId, tenantId, exec.OperationId, refusedExitCode);
+            throw new BusinessException("VM_SSH_NOT_READY",
+                "The VM is running but its SSH server is not listening yet; try again in a minute.");
+        }
+        await request.HandleAsync(new RequestVmSshCommand(vmId), ct);
 
         using WebSocket customer = await HttpContext.WebSockets.AcceptWebSocketAsync();
-        var clock = Stopwatch.StartNew();
+        long started = clock.GetTimestamp();
         ShellRelayResult result = await ShellRelay.RunAsync(
-            customer, exec.Stdin, exec.Stdout, exec.Stderr, exec.Control, ShellRelayOptions.Default, ct);
+            customer, exec.Stdin, stdout, exec.Stderr, exec.Control, ShellRelayOptions.Default, clock, ct);
+        int? exitCode = await exec.ReadExitCodeAsync(CancellationToken.None);
         logger.LogInformation(
-            "SSH session ended: vmId {VmId} tenantId {TenantId} operation {OperationId} ending {Ending} " +
+            "SSH session ended: vmId {VmId} tenantId {TenantId} operation {OperationId} ending {Ending} exitCode {ExitCode} " +
             "durationMs {DurationMs} bytesUp {BytesUp} bytesDown {BytesDown} bytesStderr {BytesStderr}",
-            vmId, tenantId, exec.OperationId, result.Ending, clock.ElapsedMilliseconds,
+            vmId, tenantId, exec.OperationId, result.Ending, exitCode, (long)clock.GetElapsedTime(started).TotalMilliseconds,
             result.BytesUp, result.BytesDown, result.BytesStderr);
     }
 

@@ -1,5 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
+using Microsoft.Extensions.Time.Testing;
 using Titan.Application.Options;
 using Titan.Infrastructure.Incus;
 using Titan.Infrastructure.Sessions;
@@ -8,12 +9,16 @@ namespace Titan.Tests.Infrastructure.Incus;
 
 // The relay between the customer's websocket and the exec's (titan-ops features/vm/design.md#ssh-session), against an
 // Incus that ends a command the way Incus does: an empty message, then sockets dropped without a close handshake.
+// Every timeout runs on a fake clock that only a test moves, so no outcome depends on how fast the runner is.
 public class ShellRelayTests
 {
     private static readonly ShellRelayOptions Fast = new(
         IdleTimeout: TimeSpan.FromSeconds(30), DrainTimeout: TimeSpan.FromMilliseconds(300), SignalWait: TimeSpan.FromSeconds(2));
 
-    private sealed record Rig(FakeIncusExecServer Incus, IncusExecSession Session, WebSocket Server, WebSocket Customer) : IAsyncDisposable
+    private static readonly TimeSpan RealWait = TimeSpan.FromSeconds(20);
+
+    private sealed record Rig(FakeIncusExecServer Incus, IncusExecSession Session, WebSocket Server, WebSocket Customer,
+        FakeTimeProvider Clock) : IAsyncDisposable
     {
         public async ValueTask DisposeAsync()
         {
@@ -35,15 +40,40 @@ public class ShellRelayTests
         IncusExecSession session = await new IncusShellConnector(configured, new IncusClientFactory(store))
             .OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
         (WebSocket server, WebSocket customer) = InMemoryWebSocket.Pair();
-        return new Rig(incus, session, server, customer);
+        return new Rig(incus, session, server, customer, new FakeTimeProvider());
     }
 
     private static Task<ShellRelayResult> RelayAsync(Rig rig, ShellRelayOptions options) =>
         RelayAsync(rig, options, CancellationToken.None);
 
     private static Task<ShellRelayResult> RelayAsync(Rig rig, ShellRelayOptions options, CancellationToken customerGone) =>
-        ShellRelay.RunAsync(rig.Server, rig.Session.Stdin, rig.Session.Stdout, rig.Session.Stderr, rig.Session.Control,
-            options, customerGone);
+        RelayAsync(rig, ShellFirstOutput.Start(rig.Session.Stdout), options, customerGone);
+
+    private static Task<ShellRelayResult> RelayAsync(Rig rig, ShellFirstOutput stdout, ShellRelayOptions options, CancellationToken customerGone) =>
+        ShellRelay.RunAsync(rig.Server, rig.Session.Stdin, stdout, rig.Session.Stderr, rig.Session.Control,
+            options, rig.Clock, customerGone);
+
+    // Moves the fake clock in small steps until the relay returns: for the endings that need a timeout to pass.
+    private static async Task<ShellRelayResult> DriveAsync(Rig rig, Task<ShellRelayResult> relay)
+    {
+        var giveUp = DateTime.UtcNow + RealWait;
+        while (!relay.IsCompleted && DateTime.UtcNow < giveUp)
+        {
+            rig.Clock.Advance(TimeSpan.FromMilliseconds(100));
+            await Task.Delay(5);
+        }
+        return await relay.WaitAsync(TimeSpan.FromSeconds(1));
+    }
+
+    private static async Task UntilAsync(Func<bool> condition)
+    {
+        var giveUp = DateTime.UtcNow + RealWait;
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < giveUp, "the condition never held");
+            await Task.Delay(5);
+        }
+    }
 
     private static async Task<string> ReadAsync(WebSocket socket, int length)
     {
@@ -81,7 +111,7 @@ public class ShellRelayTests
         Assert.Equal("hello", await ReadAsync(rig.Customer, 5));
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
         Assert.Equal(ShellEnding.CustomerClosed, result.Ending);
         Assert.Equal(5, result.BytesUp);
         Assert.Equal(FakeIncusExecServer.Banner.Length + 5, result.BytesDown);
@@ -101,7 +131,7 @@ public class ShellRelayTests
         Assert.Equal("x", await ReadAsync(rig.Customer, 1));
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
         Assert.Equal(ShellEnding.CustomerClosed, result.Ending);
         Assert.Equal(FakeIncusExecServer.Banner.Length + FakeIncusExecServer.BurstBytes + 1, result.BytesDown);
     }
@@ -119,7 +149,7 @@ public class ShellRelayTests
         rig.Customer.Abort();
         requestAborted.Cancel();
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
         Assert.Equal(ShellEnding.CustomerClosed, result.Ending);
         Assert.Equal(WebSocketCloseStatus.NormalClosure, Assert.Single(rig.Incus.StdinCloseStatuses));
         Assert.Empty(rig.Incus.ControlMessages);
@@ -138,7 +168,7 @@ public class ShellRelayTests
         rig.Customer.Abort();
         requestAborted.Cancel();
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await DriveAsync(rig, relay);
         Assert.Equal(ShellEnding.CustomerClosedCommandSignalled, result.Ending);
         Assert.Equal("{\"command\":\"signal\",\"signal\":15}", Assert.Single(rig.Incus.ControlMessages));
     }
@@ -151,7 +181,7 @@ public class ShellRelayTests
         await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Floods);
         var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(500), SignalWait = TimeSpan.FromMilliseconds(500) };
 
-        ShellRelayResult result = await RelayAsync(rig, idleSoon).WaitAsync(TimeSpan.FromSeconds(15));
+        ShellRelayResult result = await DriveAsync(rig, RelayAsync(rig, idleSoon));
 
         Assert.Equal(ShellEnding.Idle, result.Ending);
     }
@@ -180,7 +210,7 @@ public class ShellRelayTests
             }
         });
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(60));
+        ShellRelayResult result = await DriveAsync(rig, relay);
         stopFlooding.Cancel();
 
         Assert.Equal(ShellEnding.Idle, result.Ending);
@@ -199,7 +229,7 @@ public class ShellRelayTests
         Assert.Equal("abc", await ReadAsync(rig.Customer, 3));
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(TimeSpan.FromSeconds(10))).Ending);
+        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(RealWait)).Ending);
     }
 
     [Fact]
@@ -211,8 +241,8 @@ public class ShellRelayTests
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        Assert.Equal(WebSocketCloseStatus.NormalClosure, await ReadUntilClosedAsync(rig.Customer).WaitAsync(TimeSpan.FromSeconds(10)));
-        await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(WebSocketCloseStatus.NormalClosure, await ReadUntilClosedAsync(rig.Customer).WaitAsync(RealWait));
+        await relay.WaitAsync(RealWait);
     }
 
     // A failed login leaves nc and sshd running in the guest when the end of the stream does not reach sshd: the relay
@@ -226,7 +256,7 @@ public class ShellRelayTests
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await DriveAsync(rig, relay);
         Assert.Equal(ShellEnding.CustomerClosedCommandSignalled, result.Ending);
         string signal = Assert.Single(rig.Incus.ControlMessages);
         Assert.Equal("{\"command\":\"signal\",\"signal\":15}", signal);
@@ -239,10 +269,10 @@ public class ShellRelayTests
         Task<ShellRelayResult> relay = RelayAsync(rig, Fast);
 
         Assert.Equal(FakeIncusExecServer.Banner, await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length));
-        Assert.Equal(WebSocketCloseStatus.NormalClosure, await ReadUntilClosedAsync(rig.Customer).WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(WebSocketCloseStatus.NormalClosure, await ReadUntilClosedAsync(rig.Customer).WaitAsync(RealWait));
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
         Assert.Equal(ShellEnding.CommandEnded, result.Ending);
         Assert.Empty(rig.Incus.ControlMessages);
     }
@@ -255,36 +285,41 @@ public class ShellRelayTests
         Task<ShellRelayResult> relay = RelayAsync(rig, idleSoon);
 
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
-        Assert.Equal(WebSocketCloseStatus.NormalClosure, await ReadUntilClosedAsync(rig.Customer).WaitAsync(TimeSpan.FromSeconds(10)));
+        Task<WebSocketCloseStatus?> closed = ReadUntilClosedAsync(rig.Customer);
+        Task<ShellRelayResult> driven = DriveAsync(rig, relay);
+        Assert.Equal(WebSocketCloseStatus.NormalClosure, await closed.WaitAsync(RealWait));
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await driven;
         Assert.Equal(ShellEnding.Idle, result.Ending);
         Assert.Contains("{\"command\":\"signal\",\"signal\":15}", rig.Incus.ControlMessages);
     }
 
     // A pair: bytes in either direction alone keep the session open (titan-ops features/vm/design.md#ssh-session).
+    // The clock moves 500 ms per byte against a 1500 ms idle timeout, and only after the guest has read that byte, so
+    // the last byte the relay has stamped is at most 1000 ms old when the watcher looks.
     [Fact]
     public async Task BytesFromTheCustomerOnly_KeepTheSessionOpen()
     {
         await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Swallows);
-        // A byte every 250 ms for 3 s against a 1.5 s idle timeout: the run outlasts the timeout twice, and a slow CI
-        // runner has 1.25 s of slack per gap.
         var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(1500) };
         Task<ShellRelayResult> relay = RelayAsync(rig, idleSoon);
 
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
-        for (int i = 0; i < 12; i++)
+        for (int i = 1; i <= 12; i++)
         {
-            await Task.Delay(250);
             await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("k"), WebSocketMessageType.Binary, true, CancellationToken.None);
+            int sent = i;
+            await UntilAsync(() => rig.Incus.StdinBytes >= sent);
+            rig.Clock.Advance(TimeSpan.FromMilliseconds(500));
         }
         Assert.False(relay.IsCompleted);
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(TimeSpan.FromSeconds(10))).Ending);
+        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(RealWait)).Ending);
     }
 
+    // The relay stamps a byte from the guest before it sends it on, so the customer holding the byte means it is stamped.
     [Fact]
     public async Task BytesFromTheGuestOnly_KeepTheSessionOpen()
     {
@@ -292,11 +327,16 @@ public class ShellRelayTests
         var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(600) };
         Task<ShellRelayResult> relay = RelayAsync(rig, idleSoon);
 
-        await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length + 7);
+        await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
+        for (int i = 0; i < 10; i++)
+        {
+            Assert.Equal(".", await ReadAsync(rig.Customer, 1));
+            rig.Clock.Advance(TimeSpan.FromMilliseconds(250));
+        }
         Assert.False(relay.IsCompleted);
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(TimeSpan.FromSeconds(10))).Ending);
+        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(RealWait)).Ending);
     }
 
     [Fact]
@@ -309,14 +349,79 @@ public class ShellRelayTests
         await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
         for (int i = 0; i < 6; i++)
         {
-            await Task.Delay(250);
             await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("k"), WebSocketMessageType.Binary, true, CancellationToken.None);
             Assert.Equal("k", await ReadAsync(rig.Customer, 1));
+            rig.Clock.Advance(TimeSpan.FromMilliseconds(250));
         }
         Assert.False(relay.IsCompleted);
         await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
 
-        ShellRelayResult result = await relay.WaitAsync(TimeSpan.FromSeconds(10));
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
         Assert.Equal(ShellEnding.CustomerClosed, result.Ending);
+    }
+
+    // The idle timeout still ends a session whose last byte is older than it: the fake clock is what decides.
+    [Fact]
+    public async Task ASessionSilentForTheIdleTimeout_EndsIdle_EvenRightAfterABurst()
+    {
+        await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Swallows);
+        var idleSoon = Fast with { IdleTimeout = TimeSpan.FromMilliseconds(1500), SignalWait = TimeSpan.FromMilliseconds(500) };
+        Task<ShellRelayResult> relay = RelayAsync(rig, idleSoon);
+
+        await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length);
+        await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("k"), WebSocketMessageType.Binary, true, CancellationToken.None);
+        await UntilAsync(() => rig.Incus.StdinBytes >= 1);
+
+        ShellRelayResult result = await DriveAsync(rig, relay);
+        Assert.Equal(ShellEnding.Idle, result.Ending);
+    }
+
+    // An SSH server writes its banner before it reads anything: nc that ends with no byte found nothing listening.
+    [Fact]
+    public async Task ACommandThatEndsWithoutAByte_EndedWithoutOutput()
+    {
+        await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.EndsWithoutOutput);
+        ShellFirstOutput stdout = ShellFirstOutput.Start(rig.Session.Stdout);
+
+        Assert.True(await stdout.EndedWithoutOutputWithinAsync(TimeSpan.FromSeconds(5), rig.Clock).WaitAsync(RealWait));
+    }
+
+    // The banner read to decide reaches the customer whole, first.
+    [Fact]
+    public async Task ABanner_IsNotEndedWithoutOutput_AndReachesTheCustomerFirst()
+    {
+        await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Echo);
+        ShellFirstOutput stdout = ShellFirstOutput.Start(rig.Session.Stdout);
+
+        Assert.False(await stdout.EndedWithoutOutputWithinAsync(TimeSpan.FromSeconds(5), rig.Clock).WaitAsync(RealWait));
+        Task<ShellRelayResult> relay = RelayAsync(rig, stdout, Fast, CancellationToken.None);
+        Assert.Equal(FakeIncusExecServer.Banner, await ReadAsync(rig.Customer, FakeIncusExecServer.Banner.Length));
+        await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+
+        ShellRelayResult result = await relay.WaitAsync(RealWait);
+        Assert.Equal(FakeIncusExecServer.Banner.Length, result.BytesDown);
+    }
+
+    // A command still running and silent when the wait is over is not refused: the session goes on, and its first
+    // byte, whenever it comes, still reaches the customer.
+    [Fact]
+    public async Task ACommandSilentForTheWholeWait_IsNotEndedWithoutOutput_AndTheSessionGoesOn()
+    {
+        await using Rig rig = await StartAsync(FakeIncusExecServer.Mode.Silent);
+        ShellFirstOutput stdout = ShellFirstOutput.Start(rig.Session.Stdout);
+
+        Task<bool> ended = stdout.EndedWithoutOutputWithinAsync(TimeSpan.FromSeconds(5), rig.Clock);
+        while (!ended.IsCompleted)
+        {
+            rig.Clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(5);
+        }
+        Assert.False(await ended);
+        Task<ShellRelayResult> relay = RelayAsync(rig, stdout, Fast, CancellationToken.None);
+        await rig.Customer.SendAsync(Encoding.ASCII.GetBytes("hi"), WebSocketMessageType.Binary, true, CancellationToken.None);
+        Assert.Equal("hi", await ReadAsync(rig.Customer, 2));
+        await rig.Customer.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+
+        Assert.Equal(ShellEnding.CustomerClosed, (await relay.WaitAsync(RealWait)).Ending);
     }
 }
