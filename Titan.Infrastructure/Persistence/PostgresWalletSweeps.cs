@@ -7,8 +7,8 @@ namespace Titan.Infrastructure.Persistence;
 /// The row of core.wallet_sweeps (titan-ops features/billing/wallet/design.md#healthz-wallet).
 public sealed class PostgresWalletSweeps(TitanDbContext db) : IWalletSweeps
 {
-    // One statement: without the row (not yet migrated) the pass writes one, registered at this attempt; a failure keeps
-    // the last success.
+    // One statement: without the row (deleted after the migration wrote it) the pass writes one, registered at this attempt;
+    // a failure keeps the last success.
     public Task RecordAsync(bool success, DateTimeOffset at, CancellationToken ct) =>
         db.Database.ExecuteSqlInterpolatedAsync(
             $"""

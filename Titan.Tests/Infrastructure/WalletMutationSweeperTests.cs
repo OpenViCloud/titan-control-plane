@@ -180,6 +180,29 @@ public class WalletMutationSweeperTests
         Assert.Equal([false], sweeps.Records);
     }
 
+    // The usual reason a pass throws is that Postgres is unreachable, and then the record of the failed pass throws too.
+    // The pass's own error is the one the CronJob's Job and the log must show.
+    [Fact]
+    public async Task RunAsync_WhenTheRecordOfAFailedPassThrowsToo_ThrowsThePassesError()
+    {
+        var services = RealRepositories();
+        services.AddScoped<IWalletMutationRepository>(_ => new ListFails());
+        services.AddSingleton<IWalletSweeps>(new RecordFails());
+        var root = services.BuildServiceProvider();
+
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() => Sweeper(root).RunAsync(default));
+
+        Assert.Equal("list failed (test)", thrown.Message);
+    }
+
+    private sealed class RecordFails : IWalletSweeps
+    {
+        public Task RecordAsync(bool success, DateTimeOffset at, CancellationToken ct) =>
+            throw new TimeoutException("record failed (test)");
+
+        public Task<WalletSweepState?> GetAsync(CancellationToken ct) => Task.FromResult<WalletSweepState?>(null);
+    }
+
     [Fact]
     public void ItsJobName_IsTheCronJobs()
     {

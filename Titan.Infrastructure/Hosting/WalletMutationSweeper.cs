@@ -13,8 +13,9 @@ namespace Titan.Infrastructure.Hosting;
 /// row, and this re-drives the rows the bus did not get through
 /// (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Without it a lost notify loses money silently.
 /// It calls the same IWalletMutationConsumer.ApplyAsync as the bus, so there is one apply path. A pass runs when the
-/// sweeper's CronJob calls POST /internal/jobs/wallet-sweep (titan-ops architecture/background-jobs.md#background-jobs);
-/// no job lock, because the list is FOR UPDATE SKIP LOCKED and two passes at once claim different rows.
+/// sweeper's CronJob calls POST /internal/jobs/wallet-sweep (titan-ops architecture/background-jobs.md#background-jobs).
+/// No job lock: two passes at once may list the same rows (the list's locks end with its statement), and the consumer's
+/// row lock, read under which a mutation no longer Pending is left alone, moves the money once.
 /// </summary>
 public class WalletMutationSweeper(
     IServiceScopeFactory scopeFactory,
@@ -29,7 +30,8 @@ public class WalletMutationSweeper(
 
     /// <summary>
     /// One pass, recorded in IWalletSweeps for /healthz/wallet. A pass that throws records an attempt without a success
-    /// and throws on, so the CronJob's Job fails too; the mutations stay Pending for the next pass.
+    /// and throws on, so the CronJob's Job fails too; the mutations stay Pending for the next pass. When the database is
+    /// what failed, the record fails as well and the pass's own error is the one thrown.
     /// </summary>
     public async Task RunAsync(CancellationToken ct)
     {
@@ -46,9 +48,15 @@ public class WalletMutationSweeper(
         }
         catch (Exception ex)
         {
-            // Logged before the record, which needs the database the pass may just have failed to reach.
             logger.LogError(ex, "Wallet sweeper pass failed");
-            await sweeps.RecordAsync(success: false, DateTimeOffset.UtcNow, ct);
+            try
+            {
+                await sweeps.RecordAsync(success: false, DateTimeOffset.UtcNow, ct);
+            }
+            catch (Exception recordFailure)
+            {
+                logger.LogError(recordFailure, "Wallet sweeper could not record its failed pass");
+            }
             throw;
         }
 

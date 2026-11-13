@@ -62,7 +62,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
             NullLogger<WalletMutationSweeper>.Instance), provider);
     }
 
-    /// One sweep through a FRESH DI scope, which is what the sweeper's own loop does every tick.
+    /// One sweep through a FRESH DI scope, which is what RunAsync does for each pass its CronJob calls.
     /// Resolving the scoped repository/consumer off the root provider instead would give each call a
     /// different lifetime than production and quietly change what these tests measure.
     private static async Task<int> SweepAsync(WalletMutationSweeper sweeper, IServiceProvider root)

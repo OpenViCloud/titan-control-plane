@@ -72,7 +72,7 @@ public sealed class WalletMutationHealthCheck(
             if (now - state.SweeperRegisteredAt.Value > staleWindow)
                 return HealthCheckResult.Unhealthy(
                     $"wallet sweeper has never completed a pass in the {(int)(now - state.SweeperRegisteredAt.Value).TotalSeconds}s " +
-                    $"since it was registered (expected every {sweepIntervalSeconds}s) — its CronJob is not running");
+                    $"since it was registered (expected every {sweepIntervalSeconds}s) — its CronJob is not running, or every pass fails");
         }
         else if (now - state.LastSweepAt.Value > staleWindow)
         {
