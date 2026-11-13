@@ -37,6 +37,15 @@ public class ScheduledJobRouteHostTests(ScheduledJobRouteHostTests.JobHostFactor
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
 
+    // The wallet sweeper's CronJob calls every 2 minutes; a 415 or 404 here would leave every lost notify Pending.
+    [Fact]
+    public async Task TheWalletSweepCronJobsCall_RunsAPass_AndAnswers204()
+    {
+        HttpResponseMessage response = await CallAsCronJobAsync("wallet-sweep");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+    }
+
     // Why the CronJob sends an empty object: the call without it never reaches the pass.
     [Fact]
     public async Task ACallWithoutAJsonBody_Is415()

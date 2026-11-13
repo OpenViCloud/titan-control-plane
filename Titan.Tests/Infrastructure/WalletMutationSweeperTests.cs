@@ -31,7 +31,6 @@ public class WalletMutationSweeperTests
     private static WalletMutationSweeper Sweeper(IServiceProvider root) =>
         new(root.GetRequiredService<IServiceScopeFactory>(),
             Options.Create(new WalletSweeperOptions { StaleAfterSeconds = 10, MaxAttempts = 5, BatchSize = 100 }),
-            new WalletSweeperHeartbeat(),
             NullLogger<WalletMutationSweeper>.Instance);
 
     private ServiceCollection RealRepositories()
@@ -142,6 +141,80 @@ public class WalletMutationSweeperTests
         Assert.Equal(0, firstRow.Attempts);
         Assert.Equal(WalletMutationStatus.Applied, (await db.WalletMutations.AsNoTracking().SingleAsync(m => m.Id == second.Id)).Status);
         Assert.Equal(50_000L, (await MoneyAsync(wallet.Id)).Balance);
+    }
+
+    // A pass is what the CronJob's call runs: it lists through a fresh scope and records the sweep there, so
+    // /healthz/wallet on any pod sees it (titan-ops features/billing/wallet/design.md#wallet-sweeper).
+    [Fact]
+    public async Task RunAsync_SweepsAndRecordsASuccessfulPass()
+    {
+        var (_, first, _) = await SeedAsync();
+        var sweeps = new RecordedSweeps();
+        var services = RealRepositories();
+        services.AddScoped<IWalletMutationRepository>(sp => new ListsPendingThroughLinq(sp.GetRequiredService<TitanDbContext>()));
+        services.AddScoped<IWalletRepository>(sp => new WalletRepository(sp.GetRequiredService<TitanDbContext>()));
+        services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
+        services.AddSingleton<IWalletSweeps>(sweeps);
+        var root = services.BuildServiceProvider();
+
+        await Sweeper(root).RunAsync(default);
+
+        await using var db = NewDb();
+        Assert.Equal(WalletMutationStatus.Applied, (await db.WalletMutations.AsNoTracking().SingleAsync(m => m.Id == first.Id)).Status);
+        Assert.Equal([true], sweeps.Records);
+    }
+
+    // A pass that throws fails the CronJob's Job and records an attempt without a success, so the health check's
+    // clock keeps running from the last pass that worked.
+    [Fact]
+    public async Task RunAsync_WhenTheListThrows_RecordsAFailedPass_AndThrows()
+    {
+        var sweeps = new RecordedSweeps();
+        var services = RealRepositories();
+        services.AddScoped<IWalletMutationRepository>(_ => new ListFails());
+        services.AddSingleton<IWalletSweeps>(sweeps);
+        var root = services.BuildServiceProvider();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Sweeper(root).RunAsync(default));
+
+        Assert.Equal([false], sweeps.Records);
+    }
+
+    [Fact]
+    public void ItsJobName_IsTheCronJobs()
+    {
+        Assert.Equal("wallet-sweep", Sweeper(RealRepositories().BuildServiceProvider()).Name);
+    }
+
+    private sealed class RecordedSweeps : IWalletSweeps
+    {
+        public List<bool> Records { get; } = [];
+
+        public Task RecordAsync(bool success, DateTimeOffset at, CancellationToken ct)
+        {
+            Records.Add(success);
+            return Task.CompletedTask;
+        }
+
+        public Task<WalletSweepState?> GetAsync(CancellationToken ct) => Task.FromResult<WalletSweepState?>(null);
+    }
+
+    /// The pass's first read fails, as it does when Postgres is unreachable.
+    private sealed class ListFails : IWalletMutationRepository
+    {
+        public Task<IReadOnlyList<WalletMutation>> ListPendingOlderThanAsync(
+            DateTimeOffset cutoff, int batchSize, CancellationToken ct) =>
+            throw new InvalidOperationException("list failed (test)");
+
+        public Task<WalletMutation?> GetForUpdateAsync(Guid mutationId, CancellationToken ct) => throw new NotSupportedException();
+        public void Add(WalletMutation mutation) => throw new NotSupportedException();
+        public Task<WalletMutation?> GetForRefAsync(string refType, Guid refId, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WalletMutation?> GetForRefForUpdateAsync(string refType, Guid refId, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, WalletMutation>> GetForRefsAsync(
+            string refType, IReadOnlyCollection<Guid> refIds, CancellationToken ct) => throw new NotSupportedException();
+        public Task<WalletMutationBacklog> GetHealthSnapshotAsync(DateTimeOffset now, int maxAttempts, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     /// The sweeper's list, through LINQ: every Pending mutation, oldest first, tracked by the pass's context.

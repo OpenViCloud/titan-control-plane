@@ -1929,6 +1929,30 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("vm_metric_samples", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.WalletSweep", b =>
+                {
+                    b.Property<string>("Job")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("job");
+
+                    b.Property<DateTimeOffset?>("LastAttemptAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<DateTimeOffset?>("LastSuccessAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_success_at");
+
+                    b.Property<DateTimeOffset>("RegisteredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("registered_at");
+
+                    b.HasKey("Job");
+
+                    b.ToTable("wallet_sweeps", "core");
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)

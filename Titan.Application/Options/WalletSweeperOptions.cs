@@ -10,12 +10,10 @@ public class WalletSweeperOptions
     public const string SectionName = "WalletSweeper";
 
     /// <summary>
-    /// On by default, unlike the NATS bus: the bus being off costs latency, the sweeper being off removes
-    /// the only safety net.
+    /// How often the sweeper's CronJob runs a pass (titan-local-cluster base/control-plane/scheduled-jobs.yaml, whose render
+    /// test compares the schedule with this). Not a timer here: /healthz/wallet reads it to know when a pass is late.
     /// </summary>
-    public bool Enabled { get; set; } = true;
-
-    public int IntervalSeconds { get; set; } = 30;
+    public int IntervalSeconds { get; set; } = 120;
 
     /// <summary>
     /// Keeps the sweeper off the hot path: a mutation enqueued a moment ago belongs to a notify already in

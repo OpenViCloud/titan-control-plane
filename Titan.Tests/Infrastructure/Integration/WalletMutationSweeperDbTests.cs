@@ -46,6 +46,7 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         services.AddScoped<WalletLedger>();
         services.AddScoped<WalletMutationApply>();
         services.AddScoped<IWalletMutationConsumer, WalletMutationConsumer>();
+        services.AddScoped<IWalletSweeps>(sp => new PostgresWalletSweeps(sp.GetRequiredService<TitanDbContext>()));
 
         var provider = services.BuildServiceProvider();
         var options = Options.Create(new WalletSweeperOptions
@@ -58,7 +59,6 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         return (new WalletMutationSweeper(
             provider.GetRequiredService<IServiceScopeFactory>(),
             options,
-            new WalletSweeperHeartbeat(),
             NullLogger<WalletMutationSweeper>.Instance), provider);
     }
 
@@ -114,6 +114,28 @@ public class WalletMutationSweeperDbTests(PostgresFixture pg)
         var wallet = await db.Wallets.AsNoTracking().SingleAsync(w => w.TenantId == tenantId);
         var movements = await db.WalletTransactions.AsNoTracking().CountAsync(t => t.WalletId == wallet.Id);
         return (wallet.AvailableAmount, movements);
+    }
+
+    // The pass the CronJob's call runs, on Postgres: the never-announced mutation is applied and the sweep is a row
+    // every pod reads.
+    [Fact]
+    public async Task RunAsync_AppliesTheStaleMutation_AndRecordsTheSweep()
+    {
+        var tenantId = Guid.NewGuid();
+        var wallet = await SeedWalletAsync(tenantId);
+        var mutation = await EnqueueAsync(
+            WalletMutation.Create(WalletMutationType.Credit, wallet.Id, 120_000L, "TopUp", Guid.NewGuid()),
+            age: TimeSpan.FromMinutes(1));
+        DateTimeOffset before = DateTimeOffset.UtcNow.AddSeconds(-1);
+
+        var (sweeper, _) = NewSweeper();
+        await sweeper.RunAsync(default);
+
+        Assert.Equal(WalletMutationStatus.Applied, (await ReadMutationAsync(mutation.Id)).Status);
+        await using var db = pg.NewDbContext();
+        WalletSweepState? state = await new PostgresWalletSweeps(db).GetAsync(default);
+        Assert.NotNull(state);
+        Assert.True(state.LastSuccessAt >= before, $"last_success_at {state.LastSuccessAt} is older than the pass");
     }
 
     // ⭐ A mutation NOBODY was told about still gets applied. This is the proof that the
