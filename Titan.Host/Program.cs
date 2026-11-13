@@ -302,12 +302,11 @@ builder.Services.AddScoped<IScheduledJob, ProviderCommandRetention>();
 builder.Services.AddOptions<VmMetricRetentionOptions>().BindConfiguration(VmMetricRetentionOptions.SectionName);
 builder.Services.AddScoped<IScheduledJob, VmMetricRetention>();
 builder.Services.AddScoped<IScheduledJob, UsageRecordRetention>();
-// The sweeper is on by default, unlike the bus: it is the only thing that makes a non-persistent bus safe,
-// and nothing alerts on its absence (/healthz/wallet only reports it).
+// The sweeper is the only thing that makes a non-persistent bus safe; its CronJob runs a pass every IntervalSeconds, and
+// nothing alerts on its absence (/healthz/wallet only reports it, from the passes recorded in core.wallet_sweeps).
 builder.Services.AddOptions<WalletSweeperOptions>().BindConfiguration(WalletSweeperOptions.SectionName);
-// Singleton: written by the sweeper loop, read by the health check.
-builder.Services.AddSingleton<WalletSweeperHeartbeat>();
-builder.Services.AddHostedService<WalletMutationSweeper>();
+builder.Services.AddScoped<IWalletSweeps, PostgresWalletSweeps>();
+builder.Services.AddScoped<IScheduledJob, WalletMutationSweeper>();
 // The worker's reconcilers poll GET /internal/reconcile/*; each poll feeds this heartbeat, read by /healthz/reconcilers.
 builder.Services.AddOptions<ReconcilerLivenessOptions>().BindConfiguration(ReconcilerLivenessOptions.SectionName);
 builder.Services.AddOptions<RequestStuckOptions>().BindConfiguration(RequestStuckOptions.SectionName);

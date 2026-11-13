@@ -42,7 +42,7 @@ public interface IWalletMutationRepository
         DateTimeOffset now, int maxAttempts, CancellationToken ct);
 }
 
-/// The sweeper's own pulse lives in memory (WalletSweeperHeartbeat); the health check joins the two.
+/// The sweeper's passes are a row of their own (core.wallet_sweeps); the health check joins the two.
 public sealed record WalletMutationBacklog(
     int PoisonCount,
     int PendingCount,

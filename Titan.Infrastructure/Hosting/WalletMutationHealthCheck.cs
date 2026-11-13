@@ -7,21 +7,23 @@ using Titan.Domain.Repositories;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// Every failure of the async wallet path is quiet: a lost notify, a dead sweeper and a poison mutation
+/// Every failure of the async wallet path is quiet: a lost notify, a stopped sweeper and a poison mutation
 /// all just leave rows Pending (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Not an alert:
-/// nothing polls this (titan-ops infra/runbooks/runbook-wallet-async.md).
+/// nothing polls this (titan-ops infra/runbooks/runbook-wallet-async.md). Both inputs are rows, so every pod answers the
+/// same whichever pod the sweeper's CronJob reached.
 /// </summary>
 public sealed class WalletMutationHealthCheck(
     IWalletMutationRepository mutations,
-    WalletSweeperHeartbeat heartbeat,
+    IWalletSweeps sweeps,
     IOptions<WalletSweeperOptions> options) : IHealthCheck
 {
-    /// Not the fast-path SLO: it must clear the sweeper's recovery of a lost notify
-    /// (StaleAfterSeconds + IntervalSeconds, ~40s by default), or it fires every time the safety net works.
-    public const int PendingThresholdSeconds = 90;
-
-    /// Three missed passes rather than one: a single slow pass under load is not a fault.
+    /// Three missed passes rather than one: a single slow or skipped run is not a fault.
     public const int SweepStaleFactor = 3;
+
+    /// Not the fast-path SLO: it must clear the sweeper's recovery of a lost notify (StaleAfterSeconds + IntervalSeconds)
+    /// twice, or it fires every time the safety net works.
+    public static int PendingThresholdSeconds(WalletSweeperOptions opts) =>
+        2 * (opts.StaleAfterSeconds + opts.IntervalSeconds);
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken ct = default)
@@ -30,16 +32,16 @@ public sealed class WalletMutationHealthCheck(
         var now = DateTimeOffset.UtcNow;
 
         var backlog = await mutations.GetHealthSnapshotAsync(now, opts.MaxAttempts, ct);
+        var sweep = await sweeps.GetAsync(ct);
 
         var state = new WalletMutationHealth(
             PoisonCount: backlog.PoisonCount,
             PendingCount: backlog.PendingCount,
             OldestPendingAge: backlog.OldestPendingAge,
-            LastSweepAt: heartbeat.LastSweepAt,
-            SweeperStartedAt: heartbeat.StartedAt,
-            SweeperEnabled: opts.Enabled);
+            LastSweepAt: sweep?.LastSuccessAt,
+            SweeperRegisteredAt: sweep?.RegisteredAt);
 
-        return Evaluate(now, state, PendingThresholdSeconds, opts.IntervalSeconds, SweepStaleFactor);
+        return Evaluate(now, state, PendingThresholdSeconds(opts), opts.IntervalSeconds, SweepStaleFactor);
     }
 
     /// <summary>
@@ -53,10 +55,10 @@ public sealed class WalletMutationHealthCheck(
         int sweepIntervalSeconds,
         int sweepStaleFactor)
     {
-        // Outranks an empty backlog: with the sweeper off, a quiet queue is the absence of a witness, not health.
-        if (!state.SweeperEnabled)
+        // Outranks an empty backlog: with no sweeper registered, a quiet queue is the absence of a witness, not health.
+        if (state.SweeperRegisteredAt is null)
             return HealthCheckResult.Unhealthy(
-                "wallet sweeper is disabled — a lost notify will never be recovered (docs/architecture/money-and-wallet.md#single-writer-outbox)");
+                "no wallet sweeper is registered — a lost notify will never be recovered (titan-ops architecture/money-and-wallet.md#single-writer-outbox)");
 
         if (state.PoisonCount > 0)
             return HealthCheckResult.Unhealthy(
@@ -64,17 +66,13 @@ public sealed class WalletMutationHealthCheck(
 
         var staleWindow = TimeSpan.FromSeconds((double)sweepIntervalSeconds * sweepStaleFactor);
 
-        // Never-run and running-fine both show an empty backlog, so measure against the boot instant.
+        // Never-run and running-fine both show an empty backlog, so a sweeper that never swept is measured from its row.
         if (state.LastSweepAt is null)
         {
-            var since = state.SweeperStartedAt is null ? (TimeSpan?)null : now - state.SweeperStartedAt.Value;
-
-            if (since is null || since > staleWindow)
-                return HealthCheckResult.Degraded(
-                    "wallet sweeper has never completed a sweep since startup — " +
-                    "cannot distinguish a working safety net from an absent one");
-
-            // Inside the boot grace window: no first tick yet.
+            if (now - state.SweeperRegisteredAt.Value > staleWindow)
+                return HealthCheckResult.Unhealthy(
+                    $"wallet sweeper has never completed a pass in the {(int)(now - state.SweeperRegisteredAt.Value).TotalSeconds}s " +
+                    $"since it was registered (expected every {sweepIntervalSeconds}s) — its CronJob is not running, or every pass fails");
         }
         else if (now - state.LastSweepAt.Value > staleWindow)
         {

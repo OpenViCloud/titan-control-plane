@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Titan.Application.Options;
@@ -13,64 +12,65 @@ namespace Titan.Infrastructure.Hosting;
 /// The polling relay that makes a non-persistent NATS bus safe on a money path: the mutation is a durable
 /// row, and this re-drives the rows the bus did not get through
 /// (titan-ops architecture/money-and-wallet.md#single-writer-outbox). Without it a lost notify loses money silently.
-/// It calls the same IWalletMutationConsumer.ApplyAsync as the bus, so there is one apply path.
+/// It calls the same IWalletMutationConsumer.ApplyAsync as the bus, so there is one apply path. A pass runs when the
+/// sweeper's CronJob calls POST /internal/jobs/wallet-sweep (titan-ops architecture/background-jobs.md#background-jobs).
+/// No job lock: two passes at once may list the same rows (the list's locks end with its statement), and the consumer's
+/// row lock, read under which a mutation no longer Pending is left alone, moves the money once.
 /// </summary>
 public class WalletMutationSweeper(
     IServiceScopeFactory scopeFactory,
     IOptions<WalletSweeperOptions> options,
-    WalletSweeperHeartbeat heartbeat,
-    ILogger<WalletMutationSweeper> logger) : BackgroundService
+    ILogger<WalletMutationSweeper> logger) : IScheduledJob
 {
+    public const string JobName = "wallet-sweep";
+
     private readonly WalletSweeperOptions _opts = options.Value;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    public string Name => JobName;
+
+    /// <summary>
+    /// One pass, recorded in IWalletSweeps for /healthz/wallet. A pass that throws records an attempt without a success
+    /// and throws on, so the CronJob's Job fails too; the mutations stay Pending for the next pass. When the database is
+    /// what failed, the record fails as well and the pass's own error is the one thrown.
+    /// </summary>
+    public async Task RunAsync(CancellationToken ct)
     {
-        // Recorded before the disabled check, so /healthz/wallet can tell "switched off" from "not wired up".
-        heartbeat.Started(DateTimeOffset.UtcNow);
-
-        if (!_opts.Enabled)
+        using var scope = scopeFactory.CreateScope();
+        var sweeps = scope.ServiceProvider.GetRequiredService<IWalletSweeps>();
+        int swept;
+        try
         {
-            // Loud on purpose: running without the safety net should show in the logs.
-            logger.LogWarning(
-                "Wallet mutation sweeper is DISABLED. Mutations the notify bus fails to deliver will " +
-                "stay Pending indefinitely (docs/architecture/money-and-wallet.md#single-writer-outbox).");
-            return;
+            swept = await SweepOnceAsync(scope.ServiceProvider.GetRequiredService<IWalletMutationRepository>(), ct);
         }
-
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(_opts.IntervalSeconds));
-
-        // Wait-first: nothing is stale at startup.
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Wallet sweeper pass failed");
             try
             {
-                using var scope = scopeFactory.CreateScope();
-                var swept = await SweepOnceAsync(
-                    scope.ServiceProvider.GetRequiredService<IWalletMutationRepository>(),
-                    stoppingToken);
-
-                // A pass that found nothing still counts; only a pass that threw leaves the pulse untouched,
-                // so a sweeper failing every time is distinguishable from a healthy quiet one.
-                heartbeat.Swept(DateTimeOffset.UtcNow);
-
-                if (swept > 0)
-                    logger.LogInformation("Wallet sweeper re-drove {Count} stale mutation(s)", swept);
+                await sweeps.RecordAsync(success: false, DateTimeOffset.UtcNow, ct);
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            catch (Exception recordFailure)
             {
-                break;
+                logger.LogError(recordFailure, "Wallet sweeper could not record its failed pass");
             }
-            catch (Exception ex)
-            {
-                // One bad pass must not kill the net: the mutations stay Pending and the next tick retries.
-                logger.LogError(ex, "Wallet sweeper pass failed");
-            }
+            throw;
+        }
+
+        // A pass that found nothing still counts: finding nothing is the sweeper working.
+        await sweeps.RecordAsync(success: true, DateTimeOffset.UtcNow, ct);
+        if (swept > 0)
+        {
+            logger.LogInformation("Wallet sweeper re-drove {Count} stale mutation(s)", swept);
         }
     }
 
     /// <summary>
-    /// Returns how many stale mutations were claimed. Public so tests run a pass without a PeriodicTimer
-    /// (WalletMutationSweeperDbTests).
+    /// Returns how many stale mutations were claimed. Public so tests run a pass through a repository of their own
+    /// (WalletMutationSweeperTests).
     ///
     /// Each apply gets its own scope. The list's context tracks every listed mutation as Pending, so an apply
     /// through it misses one the subscriber applied meanwhile; and an apply that throws leaves the wallet it
