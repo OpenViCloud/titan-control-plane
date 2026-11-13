@@ -50,6 +50,33 @@ public class IncusExecSessionTests
         Assert.Equal(FakeIncusExecServer.Banner, await ReadTextAsync(session.Stdout, FakeIncusExecServer.Banner.Length));
     }
 
+    // nc with nothing listening exits 1 without a byte; the exit code is what the log keeps of why.
+    [Fact]
+    public async Task ExitCode_OfAFinishedCommand_IsWhatIncusReturns()
+    {
+        var (connector, configured, titan) = await Connector();
+        await using var server = await FakeIncusExecServer.StartAsync(titan);
+        server.Behaviour = FakeIncusExecServer.Mode.EndsWithoutOutput;
+        configured.Clusters.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
+
+        await using IncusExecSession session = await connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
+
+        Assert.Equal(1, await session.ReadExitCodeAsync(CancellationToken.None));
+    }
+
+    // A command still running when the wait is over has no exit code yet.
+    [Fact]
+    public async Task ExitCode_OfACommandStillRunning_IsNull()
+    {
+        var (connector, configured, titan) = await Connector();
+        await using var server = await FakeIncusExecServer.StartAsync(titan);
+        configured.Clusters.Add(IncusTestKit.Cluster("local-mac", server.Endpoint, server.Fingerprint));
+
+        await using IncusExecSession session = await connector.OpenSshAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None);
+
+        Assert.Null(await session.ReadExitCodeAsync(CancellationToken.None));
+    }
+
     [Fact]
     public async Task OpenSsh_WhenIncusSaysTheInstanceIsNotRunning_IsVmInvalidStatus()
     {

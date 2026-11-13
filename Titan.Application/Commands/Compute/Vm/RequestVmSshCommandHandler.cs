@@ -5,8 +5,8 @@ using Titan.Application.Commands.Compute.Vm.Contracts;
 
 namespace Titan.Application.Commands.Compute.Vm;
 
-// The write half of opening an SSH session (titan-ops features/vm/design.md#ssh-session): who asked, recorded before the
-// endpoint reaches Incus. The session itself changes nothing on the VM.
+// The write half of opening an SSH session (titan-ops features/vm/design.md#ssh-session): who opened it, recorded once
+// the session opens, just before the upgrade. The session itself changes nothing on the VM.
 public class RequestVmSshCommandHandler(IVmRepository repo, ICurrentUser currentUser, IActivityRecorder activity)
 {
     public async Task HandleAsync(RequestVmSshCommand command, CancellationToken ct = default)

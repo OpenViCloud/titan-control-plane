@@ -75,6 +75,7 @@ public class OpenVmSshEndpointTests
             _currentUser.Object,
             _limiter,
             new IncusShellConnector(_clusters, factory ?? new IncusClientFactory(IncusTestKit.IdentityStore())),
+            TimeProvider.System,
             NullLogger<OpenVmSshEndpoint>.Instance);
 
     [Fact]
@@ -101,9 +102,9 @@ public class OpenVmSshEndpointTests
     }
 
     // The place taken for a session is given back when opening the exec fails, or a VM that is still starting would
-    // use up the tenant's five places in five tries.
+    // use up the tenant's five places in five tries. A session that never opened records nothing.
     [Fact]
-    public async Task AFailedOpen_GivesItsPlaceBack()
+    public async Task AFailedOpen_GivesItsPlaceBack_AndRecordsNothing()
     {
         var store = IncusTestKit.IdentityStore();
         var titan = await store.GetCertificateAsync(CancellationToken.None);
@@ -115,7 +116,29 @@ public class OpenVmSshEndpointTests
             Endpoint(upgrade: true, new IncusClientFactory(store)).HandleAsync(CancellationToken.None));
 
         Assert.Equal("VM_AGENT_NOT_READY", refused.Code);
-        Assert.Equal("vm.ssh_requested", Assert.Single(_activity.Events).Action);
+        Assert.Empty(_activity.Events);
+        for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
+        {
+            Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
+        }
+    }
+
+    // The agent is up but sshd is not listening yet (cloud-init still runs): nc ends without the server's banner. The
+    // customer gets a code to retry on, before the upgrade; nothing is recorded and the place is given back.
+    [Fact]
+    public async Task AVmWithNothingListeningOnPort22_IsVmSshNotReady_RecordsNothing_AndGivesItsPlaceBack()
+    {
+        var store = IncusTestKit.IdentityStore();
+        var titan = await store.GetCertificateAsync(CancellationToken.None);
+        await using var incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
+        incus.Behaviour = FakeIncusExecServer.Mode.EndsWithoutOutput;
+        _clusters.Clusters.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(() =>
+            Endpoint(upgrade: true, new IncusClientFactory(store)).HandleAsync(CancellationToken.None));
+
+        Assert.Equal("VM_SSH_NOT_READY", refused.Code);
+        Assert.Empty(_activity.Events);
         for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
         {
             Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
