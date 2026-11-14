@@ -295,6 +295,12 @@ builder.Services.AddScoped<VolSnapQry.ListVolumeSnapshotsQueryHandler>();
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IdempotencyMiddleware>();
+// Validated on start: without the key every create would fail (titan-ops architecture/http-contract.md#idempotency-key).
+builder.Services.AddOptions<Titan.Infrastructure.Auth.IdempotencyHashOptions>()
+    .BindConfiguration(Titan.Infrastructure.Auth.IdempotencyHashOptions.SectionName)
+    .ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Infrastructure.Auth.IdempotencyHashOptions>,
+    Titan.Infrastructure.Auth.IdempotencyHashValidation>();
 builder.Services.AddOptions<IdempotencyCleanupOptions>().BindConfiguration(IdempotencyCleanupOptions.SectionName);
 builder.Services.AddScoped<IScheduledJob, IdempotencyCleanupService>();
 builder.Services.AddOptions<ProviderCommandRetentionOptions>().BindConfiguration(ProviderCommandRetentionOptions.SectionName);

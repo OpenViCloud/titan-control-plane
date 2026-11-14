@@ -90,7 +90,7 @@ public class CreateVmCommandHandler(
         }
         string externalTemplateId = template.ProviderIdIn(clusterId);
 
-        string? vendorData = await VmVendorData.ForKeysAsync(sshKeyRepo, callerId, req.SshKeyIds, ct);
+        string? vendorData = await VmVendorData.ForAsync(sshKeyRepo, callerId, req.SshKeyIds, req.ConsolePassword, ct);
 
         var vm = VmAggregate.Create(
             tenant.Id,

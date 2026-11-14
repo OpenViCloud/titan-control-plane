@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using Titan.Application.Services.Platform;
@@ -15,7 +17,43 @@ public class IdempotencyMiddlewareTests
 
     private readonly Mock<IIdempotencyService> _idem = new();
 
-    private IdempotencyMiddleware CreateMiddleware() => new(_idem.Object);
+    private const string HashKey = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+
+    private IdempotencyMiddleware CreateMiddleware() =>
+        new(_idem.Object, Options.Create(new IdempotencyHashOptions { HashKey = HashKey }));
+
+    // The stored hash is an HMAC under a server key, not a plain SHA-256: a body may carry a console password, and a
+    // plain hash of a short body is guessed offline (titan-ops architecture/http-contract.md#idempotency-key).
+    [Fact]
+    public async Task TheRequestHash_IsAnHmacOfTheBody_UnderTheServerKey()
+    {
+        var ctx = BuildContext(method: "POST", key: Key, tenant: Tenant);
+        string? seen = null;
+        _idem.Setup(s => s.BeginAsync(Tenant, Key, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback<Guid, string, string, CancellationToken>((_, _, hash, _) => seen = hash)
+            .ReturnsAsync(new IdempotencyDecision.Proceed());
+
+        await CreateMiddleware().InvokeAsync(ctx, _ => Task.CompletedTask);
+
+        byte[] body = Encoding.UTF8.GetBytes("{\"name\":\"vm1\"}");
+        Assert.Equal(Convert.ToHexString(HMACSHA256.HashData(Convert.FromHexString(HashKey), body)), seen);
+        Assert.NotEqual(Convert.ToHexString(SHA256.HashData(body)), seen);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("00112233")]
+    [InlineData("not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-")]
+    public void AMissingShortOrNonHexKey_StopsStartup(string key)
+    {
+        Assert.NotNull(IdempotencyHashOptions.ProblemWith(new IdempotencyHashOptions { HashKey = key }));
+    }
+
+    [Fact]
+    public void AKeyOf32HexBytes_Starts()
+    {
+        Assert.Null(IdempotencyHashOptions.ProblemWith(new IdempotencyHashOptions { HashKey = HashKey }));
+    }
 
     [Fact]
     public async Task NoHeader_CallsNext_DoesNotTouchService()
