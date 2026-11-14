@@ -36,23 +36,25 @@ public class IdempotencyMiddlewareTests
         await CreateMiddleware().InvokeAsync(ctx, _ => Task.CompletedTask);
 
         byte[] body = Encoding.UTF8.GetBytes("{\"name\":\"vm1\"}");
-        Assert.Equal(Convert.ToHexString(HMACSHA256.HashData(Convert.FromHexString(HashKey), body)), seen);
+        Assert.Equal(Convert.ToHexString(HMACSHA256.HashData(Encoding.UTF8.GetBytes(HashKey), body)), seen);
         Assert.NotEqual(Convert.ToHexString(SHA256.HashData(body)), seen);
     }
 
     [Theory]
     [InlineData("")]
-    [InlineData("00112233")]
-    [InlineData("not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-not-hex-")]
-    public void AMissingShortOrNonHexKey_StopsStartup(string key)
+    [InlineData("0123456789abcdef0123456789abcde")]
+    public void AMissingOrShortKey_StopsStartup(string key)
     {
         Assert.NotNull(IdempotencyHashOptions.ProblemWith(new IdempotencyHashOptions { HashKey = key }));
     }
 
-    [Fact]
-    public void AKeyOf32HexBytes_Starts()
+    // Dev generates 64 hex characters, prd's Terraform 48 letters and digits: any 32 characters or more start.
+    [Theory]
+    [InlineData("0123456789abcdef0123456789abcdef")]
+    [InlineData("Zq8vT3kLmN0pR5sWAb7cD9eF1gH2iJ4kLm6nO8pQ0rS2tU4v")]
+    public void AKeyOf32CharactersOrMore_Starts(string key)
     {
-        Assert.Null(IdempotencyHashOptions.ProblemWith(new IdempotencyHashOptions { HashKey = HashKey }));
+        Assert.Null(IdempotencyHashOptions.ProblemWith(new IdempotencyHashOptions { HashKey = key }));
     }
 
     [Fact]
