@@ -2732,6 +2732,12 @@
               "type": "string",
               "format": "guid"
             }
+          },
+          "consolePassword": {
+            "type": "string",
+            "maxLength": 72,
+            "minLength": 12,
+            "nullable": true
           }
         }
       },

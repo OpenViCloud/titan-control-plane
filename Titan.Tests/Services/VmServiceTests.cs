@@ -1416,6 +1416,30 @@ public class VmServiceTests
     private static int CountOccurrences(string text, string part) =>
         (text.Length - text.Replace(part, "").Length) / part.Length;
 
+    // Only the SHA-512 crypt hash leaves the request (titan-ops features/vm/design.md#console-password).
+    [Fact]
+    public async Task Create_WithAConsolePassword_SendsItsHash_NeverThePassword()
+    {
+        var network = ReadyToCreate();
+        string? vendorData = null;
+        _commands.Setup(w => w.EnqueueVmCreateAsync(
+            It.IsAny<Vm>(),
+            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[6]))
+            .Returns(Task.CompletedTask);
+
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand(
+            "web-01", network.Id, "offering-1", _templateId, "cluster-1", null, ConsolePassword: "Console-Pass-123"), default);
+
+        Assert.NotNull(vendorData);
+        Assert.DoesNotContain("Console-Pass-123", vendorData);
+        var hash = System.Text.RegularExpressions.Regex.Match(vendorData, @"ubuntu:(\$6\$[./0-9A-Za-z]{16}\$[./0-9A-Za-z]{86})'");
+        Assert.True(hash.Success, vendorData);
+        string salt = hash.Groups[1].Value.Split('$')[2];
+        Assert.Equal(hash.Groups[1].Value, Titan.Application.Services.Compute.Sha512Crypt.Hash("Console-Pass-123", salt));
+    }
+
     [Fact]
     public async Task Create_WithoutSshKeys_SendsNoVendorData()
     {

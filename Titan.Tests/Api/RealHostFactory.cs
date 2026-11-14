@@ -61,6 +61,7 @@ public class RealHostFactory : WebApplicationFactory<Program>, IAsyncLifetime
             ["ConnectionStrings:Titan"] = _database.GetConnectionString(),
             ["Keycloak:Authority"] = "https://keycloak.test/realms/titan",
             ["Keycloak:Audience"] = "titan-api",
+            ["Idempotency:HashKey"] = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
         };
         foreach (var (key, value) in _configuration)
         {
