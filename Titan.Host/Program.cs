@@ -295,7 +295,8 @@ builder.Services.AddScoped<VolSnapQry.ListVolumeSnapshotsQueryHandler>();
 builder.Services.AddScoped<IIdempotencyStore, EfIdempotencyStore>();
 builder.Services.AddScoped<IIdempotencyService, IdempotencyService>();
 builder.Services.AddScoped<IdempotencyMiddleware>();
-// Validated on start: without the key every create would fail (titan-ops architecture/http-contract.md#idempotency-key).
+// Validated on start: an empty or short key still hashes, and the stored hashes would be guessed offline
+// (titan-ops architecture/http-contract.md#idempotency-key).
 builder.Services.AddOptions<Titan.Infrastructure.Auth.IdempotencyHashOptions>()
     .BindConfiguration(Titan.Infrastructure.Auth.IdempotencyHashOptions.SectionName)
     .ValidateOnStart();
