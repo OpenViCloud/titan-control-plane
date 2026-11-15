@@ -23,6 +23,47 @@ public class CreateVmValidatorTests
         _validator.TestValidate(Named("a_b")).ShouldHaveValidationErrorFor(r => r.Name);
     }
 
+    // A console password is 12 to 72 characters (titan-ops features/vm/design.md#console-password); absent is no password.
+    [Theory]
+    [InlineData(12)]
+    [InlineData(72)]
+    public void AConsolePassword_Of12To72Characters_IsAccepted(int length)
+    {
+        CreateVmCommand request = Request(null) with { ConsolePassword = new string('p', length) };
+        _validator.TestValidate(request).ShouldNotHaveValidationErrorFor(r => r.ConsolePassword);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(11)]
+    [InlineData(73)]
+    public void AConsolePassword_OutsideTwelveToSeventyTwo_IsRejected_WithoutEchoingIt(int length)
+    {
+        string password = new string('Q', length);
+        var result = _validator.TestValidate(Request(null) with { ConsolePassword = password });
+        result.ShouldHaveValidationErrorFor(r => r.ConsolePassword);
+        // The 400 body carries each error's message (Program.cs), so no message may carry the password.
+        if (length > 0)
+        {
+            Assert.All(result.Errors, error => Assert.DoesNotContain(password, error.ErrorMessage));
+        }
+    }
+
+    // A record prints every property; a log of the command must not carry the password.
+    [Fact]
+    public void TheCommandsText_HidesTheConsolePassword()
+    {
+        string text = (Request(null) with { ConsolePassword = "Secret-Pass-123" }).ToString();
+        Assert.DoesNotContain("Secret-Pass-123", text);
+        Assert.Contains("ConsolePassword = ***", text);
+    }
+
+    [Fact]
+    public void NoConsolePassword_IsAccepted()
+    {
+        _validator.TestValidate(Request(null)).ShouldNotHaveValidationErrorFor(r => r.ConsolePassword);
+    }
+
     [Fact]
     public void ElevenSshKeys_AreRejected()
     {

@@ -9,11 +9,12 @@ public class VmVendorDataTests
 {
     private const string Ed = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJQIuvIctzZ61SoksnjJlkCRERFjIowWaKhlaoSOsHMB";
     private const string Rsa = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCzyjeB";
+    private const string Hash = "$6$rgprobesalt$nSxi4dKg3obBTV33X0Wnws7kIi8jT50mu.DpARo.IQtM4NQ/SAJt4uuiOqBLf8QgnyKzhezr5SvghngykEqvO0";
 
     [Fact]
-    public void NoKeys_IsNoVendorData()
+    public void NoKeysAndNoPassword_IsNoVendorData()
     {
-        Assert.Null(VmVendorData.ForKeys([]));
+        Assert.Null(VmVendorData.Build([], null));
     }
 
     // A boothook: cloud-init runs it in an early stage, before sshd starts and long before the modules that wait for
@@ -21,7 +22,7 @@ public class VmVendorDataTests
     [Fact]
     public void Keys_AreABoothook()
     {
-        string script = VmVendorData.ForKeys([Ed, Rsa])!;
+        string script = VmVendorData.Build([Ed, Rsa], null)!;
 
         Assert.StartsWith("#cloud-boothook\n#!/bin/sh\n", script);
     }
@@ -31,7 +32,7 @@ public class VmVendorDataTests
     [Fact]
     public void Keys_AreWrittenToAFileSshdReadsForTheUbuntuUser()
     {
-        string script = VmVendorData.ForKeys([Ed, Rsa])!;
+        string script = VmVendorData.Build([Ed, Rsa], null)!;
 
         Assert.Contains("cat > /etc/ssh/openvicloud/ubuntu <<'KEYS'\n" + Ed + "\n" + Rsa + "\nKEYS\n", script);
         Assert.Contains("chmod 644 /etc/ssh/openvicloud/ubuntu", script);
@@ -45,7 +46,7 @@ public class VmVendorDataTests
     [Fact]
     public void TheWrites_RunOncePerInstance()
     {
-        string script = VmVendorData.ForKeys([Ed])!;
+        string script = VmVendorData.Build([Ed], null)!;
 
         Assert.Contains("cloud-init-per instance openvicloud-ssh-keys /bin/sh -s <<'ONCE'\n", script);
         Assert.EndsWith("ONCE\n", script);
@@ -55,10 +56,47 @@ public class VmVendorDataTests
     [Fact]
     public void TheKeyFile_IsWrittenWhole_AndNoStepStopsTheNext()
     {
-        string script = VmVendorData.ForKeys([Ed])!;
+        string script = VmVendorData.Build([Ed], null)!;
 
         Assert.DoesNotContain(">>", script);
         Assert.DoesNotContain("set -e", script);
+    }
+
+    // titan-ops features/vm/design.md#console-password: the `ubuntu` user does not exist yet when a boothook runs, so the
+    // boothook leaves a per-instance script for cloud-init's final stage, which runs after the user is made and locked.
+    [Fact]
+    public void AConsolePassword_LeavesAScriptThatSetsItsHash_OncePerInstance()
+    {
+        string script = VmVendorData.Build([], Hash)!;
+
+        Assert.StartsWith("#cloud-boothook\n#!/bin/sh\n", script);
+        Assert.Contains("cloud-init-per instance openvicloud-console-password /bin/sh -s <<'ONCE'\n", script);
+        Assert.Contains("cat > /var/lib/cloud/scripts/per-instance/openvicloud-console-password <<'SCRIPT'\n", script);
+        Assert.Contains("echo 'ubuntu:" + Hash + "' | chpasswd -e\n", script);
+        Assert.Contains("chmod 700 /var/lib/cloud/scripts/per-instance/openvicloud-console-password\n", script);
+        Assert.DoesNotContain("openvicloud-ssh-keys", script);
+    }
+
+    [Fact]
+    public void KeysAndAPassword_AreTwoOncePerInstanceParts_OfOneBoothook()
+    {
+        string script = VmVendorData.Build([Ed], Hash)!;
+
+        Assert.Equal(1, script.Split("#cloud-boothook").Length - 1);
+        Assert.Contains("cloud-init-per instance openvicloud-ssh-keys", script);
+        Assert.Contains("cloud-init-per instance openvicloud-console-password", script);
+        Assert.Contains(Ed, script);
+        Assert.Contains(Hash, script);
+    }
+
+    // The hash sits between single quotes in a script: anything but a SHA-512 crypt string means a caller's bug.
+    [Theory]
+    [InlineData("plain-password-123")]
+    [InlineData("$6$salt$abc'def")]
+    [InlineData("$1$salt$abcdefghijklmnopqrstuv")]
+    public void APasswordThatIsNotASha512CryptHash_IsRefused(string hash)
+    {
+        Assert.Throws<ArgumentException>(() => VmVendorData.Build([], hash));
     }
 
     // Each line was rebuilt from a parsed key, so it can hold nothing but a type and base64; anything else means a
@@ -71,6 +109,6 @@ public class VmVendorDataTests
     [InlineData("ssh-ed25519 AAAA\nONCE\nrm -rf /")]
     public void ALineThatIsNotTypeAndBase64_IsRefused(string line)
     {
-        Assert.Throws<ArgumentException>(() => VmVendorData.ForKeys([line]));
+        Assert.Throws<ArgumentException>(() => VmVendorData.Build([line], null));
     }
 }

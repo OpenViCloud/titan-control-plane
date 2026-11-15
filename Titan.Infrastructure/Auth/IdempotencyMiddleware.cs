@@ -1,6 +1,7 @@
 using FastEndpoints;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Titan.Application.Services.Platform;
 using Titan.Domain.Exceptions;
 using Titan.Application.Exceptions;
@@ -11,7 +12,7 @@ namespace Titan.Infrastructure.Auth;
 /// A POST carrying an <c>Idempotency-Key</c> is deduplicated per (TenantId, Key): identical retries replay the
 /// stored response. Must run after TenantResolutionMiddleware, which sets TenantId.
 /// </summary>
-public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddleware
+public class IdempotencyMiddleware(IIdempotencyService idempotency, IOptions<IdempotencyHashOptions> hashOptions) : IMiddleware
 {
     private const string HeaderName = "Idempotency-Key";
 
@@ -43,7 +44,7 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddlewar
         }
 
         var key = headerValues.ToString();
-        var requestHash = await ComputeRequestHashAsync(context.Request);
+        var requestHash = await ComputeRequestHashAsync(context.Request, hashOptions.Value.KeyBytes());
 
         var decision = await idempotency.BeginAsync(tenantId, key, requestHash, context.RequestAborted);
 
@@ -126,7 +127,8 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddlewar
         await buffer.CopyToAsync(originalBody, context.RequestAborted);
     }
 
-    private static async Task<string> ComputeRequestHashAsync(HttpRequest request)
+    // An HMAC under the server key, not a plain SHA-256 (IdempotencyHashOptions).
+    private static async Task<string> ComputeRequestHashAsync(HttpRequest request, byte[] key)
     {
         request.EnableBuffering();
         request.Body.Seek(0, SeekOrigin.Begin);
@@ -135,7 +137,7 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency) : IMiddlewar
         await request.Body.CopyToAsync(ms);
         request.Body.Seek(0, SeekOrigin.Begin); // rewind so the endpoint can read the body
 
-        var hash = SHA256.HashData(ms.ToArray());
+        var hash = HMACSHA256.HashData(key, ms.ToArray());
         return Convert.ToHexString(hash);
     }
 }

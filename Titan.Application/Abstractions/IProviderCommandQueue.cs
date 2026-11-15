@@ -30,7 +30,8 @@ public interface IProviderCommandQueue
     // vcpuCount/memoryMb from the VM offering the customer picked (titan-ops features/catalog/design.md#vm-offering-sizing):
     // the worker has no access to Titan's catalog, so the resolved sizing travels and the offering id does not
     // (titan-ops features/catalog/design.md#catalog-resolution-at-create). vendorData is Titan's own cloud-init boothook
-    // (titan-ops features/vm/design.md#ssh-key), kept apart from the customer's userData.
+    // (titan-ops features/vm/design.md#ssh-key, titan-ops features/vm/design.md#console-password), kept apart from the
+    // customer's userData.
     Task EnqueueVmCreateAsync(VmAggregate vm, Guid requestId, VmOfferingAggregate offering, string externalTemplateId,
         string externalNetworkId, string projectName, string? vendorData, CancellationToken ct = default);
     Task EnqueueVmDeleteAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName, CancellationToken ct = default);

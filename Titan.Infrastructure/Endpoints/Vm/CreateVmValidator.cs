@@ -26,6 +26,11 @@ public class CreateVmValidator : Validator<CreateVmCommand>
             RuleFor(x => x.UserData)
                 .Must(s => System.Text.Encoding.UTF8.GetByteCount(s!) <= 32_768)
                 .WithMessage("'UserData' must not exceed 32768 bytes (UTF-8 encoded)."));
+        // 12 to 72 characters (titan-ops features/vm/design.md#console-password), in the OpenAPI schema as minLength and
+        // maxLength; absent is no password, and the message never repeats the value.
+        RuleFor(x => x.ConsolePassword)
+            .Length(ConsolePasswordMinLength, ConsolePasswordMaxLength)
+            .WithMessage($"'ConsolePassword' must be {ConsolePasswordMinLength} to {ConsolePasswordMaxLength} characters.");
         // A predicate, not a comparison rule on the count: that one lands in the OpenAPI schema as `maximum` on an array.
         RuleFor(x => x.SshKeyIds)
             .Must(ids => ids == null || ids.Distinct().Count() <= MaxSshKeysPerVm)
@@ -33,4 +38,6 @@ public class CreateVmValidator : Validator<CreateVmCommand>
     }
 
     public const int MaxSshKeysPerVm = 10;
+    public const int ConsolePasswordMinLength = 12;
+    public const int ConsolePasswordMaxLength = 72;
 }

@@ -154,6 +154,7 @@ public class MetricsHostTests
                 ["ConnectionStrings:Titan"] = "Host=127.0.0.1;Port=1;Database=titan;Username=titan;Password=none;Timeout=2",
                 ["Keycloak:Authority"] = "https://keycloak.test/realms/titan",
                 ["Keycloak:Audience"] = "titan-api",
+                ["Idempotency:HashKey"] = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
             };
             builder.ConfigureAppConfiguration((_, cfg) => cfg.AddInMemoryCollection(configuration));
             builder.UseSetting("Metrics:Port", metricsPort.ToString());
