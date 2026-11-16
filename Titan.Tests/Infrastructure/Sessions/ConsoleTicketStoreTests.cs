@@ -102,4 +102,15 @@ public class ConsoleTicketStoreTests
         Assert.DoesNotContain(rows, r => r.TokenHash == ConsoleTicketStore.HashOf(Ticket));
         Assert.Contains(rows, r => r.TenantId == otherTenant);
     }
+
+    [Fact]
+    public async Task TheSameTicketIssuedTwice_KeepsTheFirstRow()
+    {
+        await Store().IssueAsync(_tenant, _vm, "kc-user", Ticket, CancellationToken.None);
+        await Store().IssueAsync(_tenant, Guid.NewGuid(), "kc-other", Ticket, CancellationToken.None);
+
+        ConsoleTicket row = await _db.ConsoleTickets.SingleAsync();
+        Assert.Equal(_vm, row.VmId);
+        Assert.Equal("kc-user", row.CreatedBy);
+    }
 }

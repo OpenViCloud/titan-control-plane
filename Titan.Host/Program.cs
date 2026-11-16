@@ -496,7 +496,8 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
 
 app.UseCors(corsPolicyName);
 
-// SSH sessions (titan-ops features/vm/design.md#ssh-session): a keep-alive frame every 30 s keeps an idle session's path open.
+// SSH and console sessions (titan-ops features/vm/design.md#ssh-session; titan-ops features/vm/design.md#vm-console): a
+// keep-alive frame every 30 s keeps an idle session's path open.
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 
 app.UseAuthentication();

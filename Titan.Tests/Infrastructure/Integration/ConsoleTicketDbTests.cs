@@ -44,7 +44,8 @@ public class ConsoleTicketDbTests(PostgresFixture pg)
     }
 
     // Sixteen replicas, their connections open, take one ticket at the same instant, twenty times over: each time one
-    // console opens. A read-then-delete lets several read the row before any delete commits.
+    // console opens. A read-then-delete lets several read the row before any delete commits, and all but one of their
+    // deletes then fail.
     [Fact]
     public async Task ReplicasTakingOneTicketAtOnce_OneGetsIt()
     {
@@ -70,5 +71,24 @@ public class ConsoleTicketDbTests(PostgresFixture pg)
 
             Assert.Single(taken, t => t != null);
         }
+    }
+
+    // The same ticket sent again (a retry without Idempotency-Key) is not an error, and the first row stays.
+    [Fact]
+    public async Task TheSameTicketIssuedTwice_KeepsTheFirstRow_WithoutAnError()
+    {
+        string ticket = NewTicket();
+        Guid vm = Guid.NewGuid();
+        await using (TitanDbContext db = pg.NewDbContext())
+        {
+            var store = new ConsoleTicketStore(db, TimeProvider.System);
+            await store.IssueAsync(Guid.NewGuid(), vm, "kc-user", ticket, CancellationToken.None);
+            await store.IssueAsync(Guid.NewGuid(), Guid.NewGuid(), "kc-other", ticket, CancellationToken.None);
+        }
+
+        await using TitanDbContext check = pg.NewDbContext();
+        ConsoleTicket row = await check.ConsoleTickets.SingleAsync(t => t.TokenHash == ConsoleTicketStore.HashOf(ticket));
+        Assert.Equal(vm, row.VmId);
+        Assert.Equal("kc-user", row.CreatedBy);
     }
 }

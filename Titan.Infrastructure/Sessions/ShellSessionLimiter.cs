@@ -5,8 +5,8 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Sessions;
 
-// Open shell sessions per tenant, one row each in core.shell_sessions, so every control plane replica counts the same
-// sessions (titan-ops features/vm/design.md#ssh-session).
+// Open SSH and console sessions per tenant, one row each in core.shell_sessions, so every control plane replica counts
+// the same sessions (titan-ops features/vm/design.md#ssh-session; titan-ops features/vm/design.md#vm-console).
 public sealed class ShellSessionLimiter
 {
     public const int MaxSessionsPerTenant = 5;
@@ -94,7 +94,7 @@ public sealed class ShellSessionLimiter
             catch (Exception e)
             {
                 // A session not seen for GoneAfter stops holding its place; it keeps running.
-                _logger.LogWarning(e, "SSH session {SessionId}: writing that it is still open failed", sessionId);
+                _logger.LogWarning(e, "Shell session {SessionId}: writing that it is still open failed", sessionId);
             }
         }
     }
@@ -116,7 +116,7 @@ public sealed class ShellSessionLimiter
         catch (Exception e)
         {
             // The row then ages out after GoneAfter.
-            _logger.LogWarning(e, "SSH session {SessionId}: deleting its row failed", sessionId);
+            _logger.LogWarning(e, "Shell session {SessionId}: deleting its row failed", sessionId);
         }
     }
 

@@ -249,6 +249,31 @@ public class OpenVmConsoleEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ATenantPendingApproval_IsClosed4403()
+    {
+        _tenants.Setup(r => r.FindTenantByMemberAsync("kc-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Owner.Id, TenantStatus.PendingApproval));
+
+        (int code, string? reason) = await RefusedAfterTheUpgradeAsync();
+
+        Assert.Equal(4403, code);
+        Assert.Equal("TENANT_PENDING_APPROVAL", reason);
+        Assert.Empty(_activity.Events);
+    }
+
+    // The VM was deleted after the ticket: the guard of every route answers it.
+    [Fact]
+    public async Task AVmGoneSinceTheTicket_IsClosed4404()
+    {
+        _vms.Setup(r => r.FindByIdAsync(_vm.Id, It.IsAny<CancellationToken>())).ReturnsAsync((Vm?)null);
+
+        (int code, string? reason) = await RefusedAfterTheUpgradeAsync();
+
+        Assert.Equal(4404, code);
+        Assert.Equal("VM_NOT_FOUND", reason);
+    }
+
+    [Fact]
     public async Task AVmStoppedSinceTheTicket_IsClosed4422_AndTakesNoPlace()
     {
         _vm.MarkObserved(VmStatus.Stopped, null);

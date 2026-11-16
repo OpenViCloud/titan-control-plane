@@ -33,8 +33,9 @@ internal sealed class FakeIncusConsoleServer : IAsyncDisposable
     {
         Echo,            // writes Prompt, then echoes until "0" or control ends
         Swallows,        // writes Prompt, then reads without writing back
-        EndsAfterPrompt, // writes Prompt, then ends the console on its own (the VM stopped)
+        EndsAfterPrompt, // writes Prompt, then ends the console on its own 1.5 s later (the VM stopped)
         CannotAttach,    // the operation fails once "0" connects; the sockets stay open
+        EndsAtOnce,      // the console ends as soon as it attaches (the VM stopped at that moment)
         Busy,            // POST console answers "already connected"
         NotRunning,      // POST console answers 400 "Instance is not running"
     }
@@ -233,9 +234,17 @@ internal sealed class FakeIncusConsoleServer : IAsyncDisposable
             operation.Done.TrySetResult();
             return;
         }
+        if (Behaviour == Mode.EndsAtOnce)
+        {
+            End(operation, "Success");
+            return;
+        }
         await data.SendAsync(Encoding.ASCII.GetBytes(Prompt), WebSocketMessageType.Binary, true, CancellationToken.None);
         if (Behaviour == Mode.EndsAfterPrompt)
         {
+            // Past the control plane's one read of the operation (IncusShellConnector.ConsoleAttachWaitSeconds), so the
+            // console counts as attached.
+            await Task.Delay(TimeSpan.FromSeconds(1.5));
             await data.SendAsync(ReadOnlyMemory<byte>.Empty, WebSocketMessageType.Text, true, CancellationToken.None);
             End(operation, "Success");
             return;

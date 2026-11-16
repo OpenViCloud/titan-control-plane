@@ -19,6 +19,8 @@ public sealed partial class ConsoleTicketStore(TitanDbContext db, TimeProvider c
     public static string HashOf(string ticket) =>
         Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(ticket)));
 
+    /// A ticket already kept (a client sending the same request again) stays as it was: the request succeeds and keeps
+    /// nothing new.
     public async Task IssueAsync(Guid tenantId, Guid vmId, string createdBy, string ticket, CancellationToken ct)
     {
         DateTimeOffset now = clock.GetUtcNow();
@@ -26,7 +28,8 @@ public sealed partial class ConsoleTicketStore(TitanDbContext db, TimeProvider c
             .Where(t => t.TenantId == tenantId && t.ExpiresAt <= now)
             .ToListAsync(ct);
         db.ConsoleTickets.RemoveRange(expired);
-        db.ConsoleTickets.Add(new ConsoleTicket
+        await db.SaveChangesAsync(ct);
+        var row = new ConsoleTicket
         {
             Id = Guid.NewGuid(),
             TokenHash = HashOf(ticket),
@@ -34,8 +37,29 @@ public sealed partial class ConsoleTicketStore(TitanDbContext db, TimeProvider c
             VmId = vmId,
             CreatedBy = createdBy,
             ExpiresAt = now + Lifetime,
-        });
-        await db.SaveChangesAsync(ct);
+        };
+        await InsertUnlessKeptAsync(row, ct);
+    }
+
+    private async Task InsertUnlessKeptAsync(ConsoleTicket row, CancellationToken ct)
+    {
+        // The in-memory provider of the unit tests runs no SQL and has one caller at a time.
+        if (!db.Database.IsRelational())
+        {
+            bool kept = await db.ConsoleTickets.AnyAsync(t => t.TokenHash == row.TokenHash, ct);
+            if (!kept)
+            {
+                db.ConsoleTickets.Add(row);
+                await db.SaveChangesAsync(ct);
+            }
+            return;
+        }
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO core.console_tickets (id, token_hash, tenant_id, vm_id, created_by, expires_at)
+            VALUES ({row.Id}, {row.TokenHash}, {row.TenantId}, {row.VmId}, {row.CreatedBy}, {row.ExpiresAt})
+            ON CONFLICT (token_hash) DO NOTHING
+            """, ct);
     }
 
     /// The ticket's row, deleted in the same statement so two replicas never both take it; null when no such ticket was

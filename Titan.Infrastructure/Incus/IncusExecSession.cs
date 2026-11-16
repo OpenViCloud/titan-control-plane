@@ -74,18 +74,19 @@ public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFact
         var sockets = new Dictionary<string, WebSocket>();
         try
         {
-            // Incus attaches the console once "0" is connected; control first, so its messages are read from the start.
+            // Incus attaches the console once "0" is connected; control first, so it is connected before the console
+            // can end.
             foreach (string fd in new[] { "control", "0" })
             {
                 sockets[fd] = await ConnectAsync(client, operation, fd, ct);
             }
             IncusOperationState state = await client.GetOperationStateAsync(operation.Id, ConsoleAttachWaitSeconds, ct);
-            bool failed = state.Status == "Failure";
-            if (failed)
+            bool attached = state.Status == "Running";
+            if (!attached)
             {
                 // The error is Incus's own words for the operator's log; the customer gets the code only.
                 throw new BusinessException("VM_CONSOLE_UNAVAILABLE",
-                    $"Incus could not attach the console of {instance} (operation {operation.Id}): {state.Error}");
+                    $"Incus could not attach the console of {instance} (operation {operation.Id}, {state.Status}): {state.Error}");
             }
         }
         catch

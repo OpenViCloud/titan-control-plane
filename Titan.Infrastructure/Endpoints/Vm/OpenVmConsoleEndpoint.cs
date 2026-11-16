@@ -68,6 +68,11 @@ public class OpenVmConsoleEndpoint(
         {
             await RunAsync(customer, ticket, taken.TenantStatus, vmId, ct);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            logger.LogInformation("Console session: the customer left while it opened, vmId {VmId} tenantId {TenantId}",
+                vmId, ticket.TenantId);
+        }
         catch (Exception e)
         {
             ErrorStatus error = ErrorStatus.For(e);

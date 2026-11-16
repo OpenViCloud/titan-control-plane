@@ -73,6 +73,19 @@ public class IncusConsoleSessionTests
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(10), $"took {watch.Elapsed}");
     }
 
+    // Only a console still Running after the read is attached; one that already ended is no session either.
+    [Fact]
+    public async Task AConsoleThatEndedBeforeTheRead_IsVmConsoleUnavailable()
+    {
+        var (connector, configured, titan) = await Connector();
+        await using var server = await ServerAsync(configured, titan, FakeIncusConsoleServer.Mode.EndsAtOnce);
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(() =>
+            connector.OpenConsoleAsync("local-mac", "t-abc", "vmxyz", CancellationToken.None));
+
+        Assert.Equal("VM_CONSOLE_UNAVAILABLE", refused.Code);
+    }
+
     [Fact]
     public async Task AConsoleAlreadyOpen_IsVmConsoleBusy()
     {
