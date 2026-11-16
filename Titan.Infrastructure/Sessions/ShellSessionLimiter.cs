@@ -5,8 +5,8 @@ using Titan.Infrastructure.Persistence;
 
 namespace Titan.Infrastructure.Sessions;
 
-// Open shell sessions per tenant, one row each in core.shell_sessions, so every control plane replica counts the same
-// sessions (titan-ops features/vm/design.md#ssh-session).
+// Open SSH and console sessions per tenant, one row each in core.shell_sessions, so every control plane replica counts
+// the same sessions (titan-ops features/vm/design.md#ssh-session; titan-ops features/vm/design.md#vm-console).
 public sealed class ShellSessionLimiter
 {
     public const int MaxSessionsPerTenant = 5;
@@ -59,6 +59,17 @@ public sealed class ShellSessionLimiter
         return new Place(this, session.Id);
     }
 
+    /// Whether the tenant has fewer than MaxSessionsPerTenant sessions open, without taking a place: a console ticket is
+    /// refused up front, while its place is taken when the console opens (titan-ops features/vm/design.md#vm-console).
+    public async Task<bool> HasRoomAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using AsyncServiceScope scope = _scopes.CreateAsyncScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        DateTimeOffset seenSince = _clock.GetUtcNow() - GoneAfter;
+        int open = await db.ShellSessions.CountAsync(s => s.TenantId == tenantId && s.SeenAt >= seenSince, ct);
+        return open < MaxSessionsPerTenant;
+    }
+
     private async Task KeepSeenAsync(Guid sessionId, CancellationToken stop)
     {
         while (!stop.IsCancellationRequested)
@@ -83,7 +94,7 @@ public sealed class ShellSessionLimiter
             catch (Exception e)
             {
                 // A session not seen for GoneAfter stops holding its place; it keeps running.
-                _logger.LogWarning(e, "SSH session {SessionId}: writing that it is still open failed", sessionId);
+                _logger.LogWarning(e, "Shell session {SessionId}: writing that it is still open failed", sessionId);
             }
         }
     }
@@ -105,7 +116,7 @@ public sealed class ShellSessionLimiter
         catch (Exception e)
         {
             // The row then ages out after GoneAfter.
-            _logger.LogWarning(e, "SSH session {SessionId}: deleting its row failed", sessionId);
+            _logger.LogWarning(e, "Shell session {SessionId}: deleting its row failed", sessionId);
         }
     }
 

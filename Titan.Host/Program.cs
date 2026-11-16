@@ -184,6 +184,7 @@ builder.Services.AddScoped<ListVmsQueryHandler>();
 builder.Services.AddScoped<GetVmQueryHandler>();
 builder.Services.AddScoped<GetVmShellTargetQueryHandler>();
 builder.Services.AddScoped<RequestVmSshCommandHandler>();
+builder.Services.AddScoped<RequestVmConsoleCommandHandler>();
 builder.Services.AddScoped<CreateVmCommandHandler>();
 builder.Services.AddScoped<RenameVmCommandHandler>();
 builder.Services.AddScoped<DeleteVmCommandHandler>();
@@ -381,6 +382,7 @@ builder.Services.AddScoped<IComputeCatalogProvider, Titan.Infrastructure.Incus.I
 builder.Services.AddScoped<Titan.Infrastructure.Incus.IncusShellConnector>();
 // One count for every replica: open sessions are rows of core.shell_sessions (titan-ops features/vm/design.md#ssh-session).
 builder.Services.AddSingleton<Titan.Infrastructure.Sessions.ShellSessionLimiter>();
+builder.Services.AddScoped<Titan.Infrastructure.Sessions.ConsoleTicketStore>();
 builder.Services.AddScoped<IClusterConnectionTester, Titan.Infrastructure.Incus.IncusClusterConnectionTester>();
 builder.Services.AddScoped<IAdminClusterService, Titan.Infrastructure.Incus.AdminClusterService>();
 // FastEndpoints discovers endpoints and validators from Titan.Infrastructure automatically
@@ -494,7 +496,8 @@ app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
 
 app.UseCors(corsPolicyName);
 
-// SSH sessions (titan-ops features/vm/design.md#ssh-session): a keep-alive frame every 30 s keeps an idle session's path open.
+// SSH and console sessions (titan-ops features/vm/design.md#ssh-session; titan-ops features/vm/design.md#vm-console): a
+// keep-alive frame every 30 s keeps an idle session's path open.
 app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSeconds(30) });
 
 app.UseAuthentication();

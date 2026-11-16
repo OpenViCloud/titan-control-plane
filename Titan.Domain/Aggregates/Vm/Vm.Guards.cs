@@ -53,7 +53,8 @@ public partial class Vm
 
     /// A shell session execs inside the guest, which needs its agent, which runs only while Incus reports Running
     /// or Ready (titan-ops features/vm/design.md#ssh-session). A waiting stop or delete would cut the session, and its
-    /// status is then Stopping or Deleting; Snapshotting is refused too: only Running and Ready pass.
+    /// status is then Stopping or Deleting; Snapshotting is refused too: only Running and Ready pass. A console session
+    /// takes the same guard (titan-ops features/vm/design.md#vm-console).
     public void EnsureShellCanOpen()
     {
         if (!GuestRuns)
@@ -65,7 +66,7 @@ public partial class Vm
     private bool GuestRuns => Status == VmStatus.Running || Status == VmStatus.Ready;
 
     private static BusinessException ShellCannotOpen() =>
-        new("VM_INVALID_STATUS", "VM must be Running or Ready to open an SSH session.");
+        new("VM_INVALID_STATUS", "VM must be Running or Ready to open an SSH or console session.");
 
     /// The instance a shell session execs into, handed out only past the check above
     /// (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id).

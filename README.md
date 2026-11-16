@@ -2,7 +2,7 @@
 
 `titan-control-plane` is the part of [OpenViCloud](https://github.com/OpenViCloud) that customers and the portals talk
 to. It owns identity, tenancy, quota, billing and the wallet, and it records what each customer asked for. On Incus it
-only reads, and relays SSH sessions. It writes provider commands to a table, and
+only reads, and relays SSH and console sessions. It writes provider commands to a table, and
 [titan-incus-worker](https://github.com/OpenViCloud/titan-incus-worker) leases them over the `/internal` API, carries them out and
 reports back what Incus shows.
 

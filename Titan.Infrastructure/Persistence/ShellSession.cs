@@ -1,7 +1,8 @@
 namespace Titan.Infrastructure.Persistence;
 
-/// One open SSH session, so that every control plane replica counts a tenant's sessions alike. Not a domain aggregate:
-/// it holds no customer state, only a place under the per-tenant cap (titan-ops features/vm/design.md#ssh-session).
+/// One open SSH or console session, so that every control plane replica counts a tenant's sessions alike. Not a
+/// domain aggregate: it holds no customer state, only a place under the per-tenant cap
+/// (titan-ops features/vm/design.md#ssh-session; titan-ops features/vm/design.md#vm-console).
 public class ShellSession
 {
     public Guid Id { get; set; }
