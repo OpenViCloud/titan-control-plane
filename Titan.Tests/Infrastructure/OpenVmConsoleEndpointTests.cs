@@ -370,8 +370,11 @@ public class OpenVmConsoleEndpointTests : IAsyncLifetime
 
         Task<WebSocketReceiveResult> received = _customer!.ReceiveAsync(new byte[64], CancellationToken.None);
         Task first = await Task.WhenAny(received, Task.Delay(TimeSpan.FromMilliseconds(500)));
-        bool closeSent = first == received && received.IsCompletedSuccessfully
-            && received.Result.MessageType == WebSocketMessageType.Close;
+        bool closeSent = false;
+        if (first == received && received.IsCompletedSuccessfully)
+        {
+            closeSent = (await received).MessageType == WebSocketMessageType.Close;
+        }
         Assert.False(closeSent);
         Assert.Empty(_activity.Events);
     }
