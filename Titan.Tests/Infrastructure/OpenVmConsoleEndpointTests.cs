@@ -340,6 +340,43 @@ public class OpenVmConsoleEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task AClusterNotConfigured_IsClosed4404()
+    {
+        _clusters.Clusters.Clear();
+
+        (int code, string? reason) = await RefusedAfterTheUpgradeAsync();
+
+        Assert.Equal(4404, code);
+        Assert.Equal("CLUSTER_NOT_FOUND", reason);
+    }
+
+    // A customer who leaves while the console opens is no failure: nothing is recorded, and no close is sent on a
+    // connection already gone.
+    [Fact]
+    public async Task ACustomerWhoLeavesWhileItOpens_GetsNoClose_AndNothingIsRecorded()
+    {
+        (OpenVmConsoleEndpoint endpoint, _) = Endpoint(Ticket);
+        using var gone = new CancellationTokenSource();
+        Task handled = endpoint.HandleAsync(gone.Token);
+        // The console was asked for; the control plane now reads its operation, which takes a second.
+        var giveUp = DateTime.UtcNow + RealWait;
+        while (_incus!.ConsoleRequests.IsEmpty && DateTime.UtcNow < giveUp)
+        {
+            await Task.Delay(5);
+        }
+        await gone.CancelAsync();
+
+        await handled.WaitAsync(RealWait);
+
+        Task<WebSocketReceiveResult> received = _customer!.ReceiveAsync(new byte[64], CancellationToken.None);
+        Task first = await Task.WhenAny(received, Task.Delay(TimeSpan.FromMilliseconds(500)));
+        bool closeSent = first == received && received.IsCompletedSuccessfully
+            && received.Result.MessageType == WebSocketMessageType.Close;
+        Assert.False(closeSent);
+        Assert.Empty(_activity.Events);
+    }
+
+    [Fact]
     public async Task AnOpenConsole_RunsAsTheTicketsTaker_AndRecordsOneActivity()
     {
         (OpenVmConsoleEndpoint endpoint, TitanDbContext db) = Endpoint(Ticket);

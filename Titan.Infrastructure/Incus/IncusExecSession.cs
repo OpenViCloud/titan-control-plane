@@ -5,15 +5,16 @@ using Titan.Application.Exceptions;
 
 namespace Titan.Infrastructure.Incus;
 
-// The Incus half of an SSH session (titan-ops features/vm/design.md#ssh-session): `nc -N 127.0.0.1 22` run inside the
-// guest by its agent, and the operation's four websockets. -N passes the customer's end of the stream on to sshd; a
-// plain nc keeps running after a failed login until sshd's login grace time runs out.
+// The Incus half of an SSH or console session. SSH (titan-ops features/vm/design.md#ssh-session): `nc -N 127.0.0.1 22`
+// run inside the guest by its agent, and the operation's four websockets; -N passes the customer's end of the stream on
+// to sshd, a plain nc keeps running after a failed login until sshd's login grace time runs out. Console
+// (titan-ops features/vm/design.md#vm-console): the instance's serial console and its two websockets.
 public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFactory factory)
 {
     public static readonly IReadOnlyList<string> SshCommand = ["nc", "-N", "127.0.0.1", "22"];
 
-    // Opening is the exec plus four upgrades; a cluster that stalls one of them must not hold the customer, nor a
-    // session place, for as long as the connection stays up.
+    // Opening is a request plus its upgrades (four for an exec, two for a console); a cluster that stalls one of them
+    // must not hold the customer, nor a session place, for as long as the connection stays up.
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
     public async Task<IncusExecSession> OpenSshAsync(string clusterId, string project, string instance, CancellationToken ct)
@@ -75,7 +76,7 @@ public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFact
         try
         {
             // Incus attaches the console once "0" is connected; control first, so it is connected before the console
-            // can end.
+            // can end: at its end Incus closes only the sockets connected by then.
             foreach (string fd in new[] { "control", "0" })
             {
                 sockets[fd] = await ConnectAsync(client, operation, fd, ct);

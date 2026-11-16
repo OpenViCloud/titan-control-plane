@@ -68,8 +68,8 @@ public class TenantResolutionMiddleware(
 
         context.Items["TenantId"] = result.Value.TenantId;
 
-        // A websocket upgrade is a GET that opens a shell inside a VM (titan-ops features/vm/design.md#ssh-session): it
-        // writes as much as any POST.
+        // A websocket upgrade is a GET that opens an SSH or console session in a VM
+        // (titan-ops features/vm/design.md#ssh-session): it writes as much as any POST.
         bool isWrite = !HttpMethods.IsGet(context.Request.Method) || context.WebSockets.IsWebSocketRequest;
 
         if (result.Value.Status == TenantStatus.Suspended && isWrite)

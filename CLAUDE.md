@@ -189,7 +189,7 @@ Khoá lệnh = chuỗi id workflow cũ, trừ VM, volume, volume snapshot, netwo
 | `VM_AGENT_NOT_READY` | 422 | Mở phiên SSH khi agent trong guest chưa chạy (VM vừa khởi động) — thử lại sau |
 | `VM_SSH_NOT_READY` | 422 | Mở phiên SSH khi agent đã chạy mà chưa có gì nghe cổng 22 (`nc` hết, hay socket stdout rớt, mà không byte nào trong 5 s; sshd còn chờ cloud-init) — thử lại sau; không activity (`titan-ops features/vm/design.md#ssh-session`) |
 | `VM_SESSION_LIMIT_REACHED` | 422 | Tenant đã mở 5 phiên SSH hay console cùng lúc (console: cả lúc lấy vé và close `4422` sau upgrade) |
-| `VM_CONSOLE_UNAVAILABLE` | 422 | Incus không gắn được console serial của VM (dev arm64); chỉ là close reason `4422` của websocket console |
+| `VM_CONSOLE_UNAVAILABLE` | 422 | Operation console của Incus không còn `Running` sau lần đọc 1 s: không gắn được console serial (dev arm64), hay console đã hết; chỉ là close reason `4422` của websocket console |
 | `VM_CONSOLE_BUSY` | 422 | VM đã có một phiên console mở; chỉ là close reason `4422` của websocket console |
 | `CONSOLE_TICKET_INVALID` | 401 | Websocket console với vé thiếu, sai, đã dùng, quá 30 s, của VM khác, hay người lấy vé không còn ở tenant đó — từ chối trước upgrade |
 | `WEBSOCKET_REQUIRED` | 400 | Gọi route phiên SSH hay console bằng GET thường, không upgrade websocket |

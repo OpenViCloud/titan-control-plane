@@ -15,7 +15,7 @@ public class ConsoleSessionHostTests(OpenApiSpecTests.ApiFactory factory) : ICla
     private static readonly string Route = $"/v1/tenant/vms/{Guid.NewGuid()}/console";
 
     [Fact]
-    public async Task AWebSocketUpgradeWithAnUnknownTicket_IsLetThroughAuthentication_AndRefused401()
+    public async Task AWebSocketUpgradeWithAnUnknownTicket_Is401()
     {
         factory.CreateClient();
         WebSocketClient client = factory.Server.CreateWebSocketClient();
