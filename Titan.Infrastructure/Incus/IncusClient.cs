@@ -16,6 +16,8 @@ public record IncusImage(string Fingerprint, string Type, string? Description, l
 /// A started exec: the operation id and the secret of each of its websockets ("0", "1", "2", "control").
 public record IncusExecOperation(string Id, IReadOnlyDictionary<string, string> Secrets);
 
+public record IncusOperationState(string Status, string Error);
+
 public sealed class IncusClientFactory(ProviderClientIdentityStore identity)
 {
     public async Task<IncusClient> CreateAsync(string endpoint, string serverFingerprint, CancellationToken ct)
@@ -149,6 +151,42 @@ public sealed class IncusClient : IDisposable
             }
             throw new ServiceUnavailableException("CLUSTER_ERROR", $"Incus answered {(int)status} on /{path}: {error}");
         }
+        return WebSocketOperationOf(envelope, path);
+    }
+
+    /// POST /1.0/instances/{name}/console of type console: the VM's serial console, without force, so a console another
+    /// session holds is refused rather than taken (titan-ops features/vm/design.md#vm-console). The operation carries the
+    /// websockets "0" (bytes) and "control".
+    public async Task<IncusExecOperation> StartConsoleAsync(string project, string instance, CancellationToken ct)
+    {
+        string path = $"1.0/instances/{Uri.EscapeDataString(instance)}/console?project={Uri.EscapeDataString(project)}";
+        var body = new Dictionary<string, object> { ["type"] = "console" };
+        (System.Net.HttpStatusCode status, JsonElement envelope) = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Post, path)
+            {
+                Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json"),
+            }, path, ct);
+        bool isSuccess = (int)status >= 200 && (int)status < 300;
+        if (!isSuccess)
+        {
+            string error = ErrorOf(envelope);
+            bool notRunning = error.Contains("not running", StringComparison.OrdinalIgnoreCase);
+            if (notRunning)
+            {
+                throw new BusinessException("VM_INVALID_STATUS", "The VM is not running on its cluster.");
+            }
+            bool alreadyConnected = error.Contains("already connected", StringComparison.OrdinalIgnoreCase);
+            if (alreadyConnected)
+            {
+                throw new BusinessException("VM_CONSOLE_BUSY", "Another console session is open on this VM; close it first.");
+            }
+            throw new ServiceUnavailableException("CLUSTER_ERROR", $"Incus answered {(int)status} on /{path}: {error}");
+        }
+        return WebSocketOperationOf(envelope, path);
+    }
+
+    private IncusExecOperation WebSocketOperationOf(JsonElement envelope, string path)
+    {
         try
         {
             JsonElement operation = envelope.GetProperty("metadata");
@@ -204,10 +242,27 @@ public sealed class IncusClient : IDisposable
             return err.GetString() ?? "";
         }, ct);
 
+    /// An operation's status and error after GET /1.0/operations/{id}/wait?timeout=N, which answers once the operation
+    /// ends or after N seconds with the status it has then (measured on Incus 7.0.2, 2026-11-16: 200, status Running, after
+    /// 1 s).
+    public Task<IncusOperationState> GetOperationStateAsync(string operationId, int waitSeconds, CancellationToken ct) =>
+        ReadAsync($"1.0/operations/{Uri.EscapeDataString(operationId)}/wait?timeout={waitSeconds}", operation =>
+        {
+            string status = operation.GetProperty("status").GetString() ?? "";
+            bool hasError = operation.TryGetProperty("err", out JsonElement err) && err.ValueKind == JsonValueKind.String;
+            string error = "";
+            if (hasError)
+            {
+                error = err.GetString() ?? "";
+            }
+            return new IncusOperationState(status, error);
+        }, ct);
+
     /// The exit code of an exec once it has finished: GET /1.0/operations/{id}/wait?timeout=N waits for the operation;
     /// a finished exec carries the code as "return" in the operation's metadata (measured on Incus 7.0.2, 2026-11-13).
-    /// Null when the operation has no such field; how Incus answers a wait that times out is not measured, and an
-    /// error answer is CLUSTER_ERROR, which IncusExecSession turns into null too.
+    /// Null when the operation has no such field, as when the wait times out with the command still running (Incus 7.0.2
+    /// then answers 200 with status Running, measured 2026-11-16); an error answer is CLUSTER_ERROR, which
+    /// IncusExecSession turns into null too.
     public Task<int?> GetExecExitCodeAsync(string operationId, int waitSeconds, CancellationToken ct) =>
         ReadAsync($"1.0/operations/{Uri.EscapeDataString(operationId)}/wait?timeout={waitSeconds}", operation =>
         {

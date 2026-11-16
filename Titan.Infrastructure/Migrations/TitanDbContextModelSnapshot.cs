@@ -1756,6 +1756,46 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("wallet_transactions", "core");
                 });
 
+            modelBuilder.Entity("Titan.Infrastructure.Persistence.ConsoleTicket", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("token_hash");
+
+                    b.Property<Guid>("VmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vm_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.ToTable("console_tickets", "core");
+                });
+
             modelBuilder.Entity("Titan.Infrastructure.Persistence.IdempotencyRecord", b =>
                 {
                     b.Property<Guid>("Id")

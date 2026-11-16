@@ -39,6 +39,66 @@ public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFact
         }
     }
 
+    /// A VM's serial console (titan-ops features/vm/design.md#vm-console): the console operation, its "control" and "0"
+    /// websockets, then one read of the operation. A console Incus cannot attach fails the operation within milliseconds
+    /// and leaves both sockets open, so the operation, not the sockets, tells.
+    public async Task<IncusConsoleSession> OpenConsoleAsync(string clusterId, string project, string instance, CancellationToken ct)
+    {
+        var cluster = clusters.ClusterOf(clusterId);
+        IncusClient client = await factory.CreateAsync(cluster.Endpoint, cluster.ServerFingerprint, ct);
+        using var opening = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        opening.CancelAfter(ConnectTimeout);
+        try
+        {
+            return await OpenConsoleAsync(client, project, instance, opening.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            client.Dispose();
+            throw new ServiceUnavailableException("CLUSTER_UNREACHABLE",
+                $"Cluster '{clusterId}' did not open the console within {ConnectTimeout.TotalSeconds} s.");
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
+    }
+
+    // How long the read of a new console's operation waits for it to fail; a console that attached is still Running then.
+    public static readonly int ConsoleAttachWaitSeconds = 1;
+
+    private static async Task<IncusConsoleSession> OpenConsoleAsync(IncusClient client, string project, string instance, CancellationToken ct)
+    {
+        IncusExecOperation operation = await client.StartConsoleAsync(project, instance, ct);
+        var sockets = new Dictionary<string, WebSocket>();
+        try
+        {
+            // Incus attaches the console once "0" is connected; control first, so its messages are read from the start.
+            foreach (string fd in new[] { "control", "0" })
+            {
+                sockets[fd] = await ConnectAsync(client, operation, fd, ct);
+            }
+            IncusOperationState state = await client.GetOperationStateAsync(operation.Id, ConsoleAttachWaitSeconds, ct);
+            bool failed = state.Status == "Failure";
+            if (failed)
+            {
+                // The error is Incus's own words for the operator's log; the customer gets the code only.
+                throw new BusinessException("VM_CONSOLE_UNAVAILABLE",
+                    $"Incus could not attach the console of {instance} (operation {operation.Id}): {state.Error}");
+            }
+        }
+        catch
+        {
+            foreach (WebSocket socket in sockets.Values)
+            {
+                socket.Dispose();
+            }
+            throw;
+        }
+        return new IncusConsoleSession(client, operation.Id, sockets["0"], sockets["control"]);
+    }
+
     private static async Task<IncusExecSession> OpenAsync(IncusClient client, string project, string instance, CancellationToken ct)
     {
         IncusExecOperation operation = await client.StartExecAsync(project, instance, SshCommand, ct);

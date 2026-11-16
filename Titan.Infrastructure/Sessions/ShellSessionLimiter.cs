@@ -59,6 +59,17 @@ public sealed class ShellSessionLimiter
         return new Place(this, session.Id);
     }
 
+    /// Whether the tenant has fewer than MaxSessionsPerTenant sessions open, without taking a place: a console ticket is
+    /// refused up front, while its place is taken when the console opens (titan-ops features/vm/design.md#vm-console).
+    public async Task<bool> HasRoomAsync(Guid tenantId, CancellationToken ct)
+    {
+        await using AsyncServiceScope scope = _scopes.CreateAsyncScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        DateTimeOffset seenSince = _clock.GetUtcNow() - GoneAfter;
+        int open = await db.ShellSessions.CountAsync(s => s.TenantId == tenantId && s.SeenAt >= seenSince, ct);
+        return open < MaxSessionsPerTenant;
+    }
+
     private async Task KeepSeenAsync(Guid sessionId, CancellationToken stop)
     {
         while (!stop.IsCancellationRequested)

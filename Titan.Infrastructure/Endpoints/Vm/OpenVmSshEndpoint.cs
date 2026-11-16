@@ -52,7 +52,7 @@ public class OpenVmSshEndpoint(
         if (place == null)
         {
             throw new BusinessException("VM_SESSION_LIMIT_REACHED",
-                $"Your tenant already has {ShellSessionLimiter.MaxSessionsPerTenant} SSH sessions open; close one first.");
+                $"Your tenant already has {ShellSessionLimiter.MaxSessionsPerTenant} SSH or console sessions open; close one first.");
         }
         await using IncusExecSession exec = await OpenAsync(vmId, shell, ct);
         ShellFirstOutput stdout = ShellFirstOutput.Start(exec.Stdout);

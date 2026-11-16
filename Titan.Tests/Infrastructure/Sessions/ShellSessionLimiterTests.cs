@@ -59,6 +59,33 @@ public class ShellSessionLimiterTests
         Assert.Equal(5, await RowsAsync(tenant));
     }
 
+    // A console ticket is refused when the tenant has no place left, without taking one: the place is taken when the
+    // console opens (titan-ops features/vm/design.md#vm-console).
+    [Fact]
+    public async Task HasRoom_CountsOpenSessions_AndTakesNoPlace()
+    {
+        ShellSessionLimiter limiter = NewLimiter();
+        Guid tenant = Guid.NewGuid();
+        await OpenAsync(limiter, tenant, 4);
+
+        Assert.True(await limiter.HasRoomAsync(tenant, CancellationToken.None));
+        Assert.Equal(4, await RowsAsync(tenant));
+        await OpenAsync(limiter, tenant, 1);
+        Assert.False(await limiter.HasRoomAsync(tenant, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task HasRoom_DoesNotCountASessionGoneQuiet()
+    {
+        ShellSessionLimiter limiter = NewLimiter();
+        Guid tenant = Guid.NewGuid();
+        await OpenAsync(limiter, tenant, 5);
+
+        _clock.Now += ShellSessionLimiter.GoneAfter + TimeSpan.FromSeconds(1);
+
+        Assert.True(await limiter.HasRoomAsync(tenant, CancellationToken.None));
+    }
+
     [Fact]
     public async Task ClosingASession_FreesItsPlace()
     {
