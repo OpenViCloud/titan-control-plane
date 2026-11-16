@@ -358,7 +358,7 @@ public class OpenVmConsoleEndpointTests : IAsyncLifetime
         (OpenVmConsoleEndpoint endpoint, _) = Endpoint(Ticket);
         using var gone = new CancellationTokenSource();
         Task handled = endpoint.HandleAsync(gone.Token);
-        // The console was asked for; the control plane now reads its operation, which takes a second.
+        // The console was asked for; the control plane is now opening it, and reading its operation alone takes a second.
         var giveUp = DateTime.UtcNow + RealWait;
         while (_incus!.ConsoleRequests.IsEmpty && DateTime.UtcNow < giveUp)
         {

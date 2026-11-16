@@ -13,8 +13,9 @@ public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFact
 {
     public static readonly IReadOnlyList<string> SshCommand = ["nc", "-N", "127.0.0.1", "22"];
 
-    // Opening is a request plus its upgrades (four for an exec, two for a console); a cluster that stalls one of them
-    // must not hold the customer, nor a session place, for as long as the connection stays up.
+    // Opening is a request, its upgrades (four for an exec, two for a console) and, for a console, one read of its
+    // operation; a cluster that stalls one of them must not hold the customer, nor a session place, for as long as the
+    // connection stays up.
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(15);
 
     public async Task<IncusExecSession> OpenSshAsync(string clusterId, string project, string instance, CancellationToken ct)
