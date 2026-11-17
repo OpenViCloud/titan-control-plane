@@ -84,10 +84,13 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync(VmDeleteKey(vm.Id, requestId), ProviderCommandKinds.VmDelete, vm.ClusterId, vm.TenantId,
             new { vmId = vm.Id, requestId, externalVmId, projectName }, ct);
 
+    // The worker shuts the guest down and waits stopTimeoutSeconds before it cuts the power; the value is the VM's when the
+    // stop is recorded, and the stuck-request query reads it back from this payload
+    // (titan-ops features/vm/design.md#vm-stop-timeout).
     public Task EnqueueVmStopAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
         EnqueueAsync(VmStopKey(vm.Id, requestId), ProviderCommandKinds.VmStop, vm.ClusterId, vm.TenantId,
-            new { vmId = vm.Id, requestId, externalVmId, projectName }, ct);
+            new { vmId = vm.Id, requestId, externalVmId, projectName, stopTimeoutSeconds = vm.StopTimeoutSeconds }, ct);
 
     public Task EnqueueVmStartAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>

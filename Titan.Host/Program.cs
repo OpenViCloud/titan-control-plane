@@ -186,7 +186,7 @@ builder.Services.AddScoped<GetVmShellTargetQueryHandler>();
 builder.Services.AddScoped<RequestVmSshCommandHandler>();
 builder.Services.AddScoped<RequestVmConsoleCommandHandler>();
 builder.Services.AddScoped<CreateVmCommandHandler>();
-builder.Services.AddScoped<RenameVmCommandHandler>();
+builder.Services.AddScoped<UpdateVmCommandHandler>();
 builder.Services.AddScoped<DeleteVmCommandHandler>();
 builder.Services.AddScoped<StopVmCommandHandler>();
 builder.Services.AddScoped<StartVmCommandHandler>();

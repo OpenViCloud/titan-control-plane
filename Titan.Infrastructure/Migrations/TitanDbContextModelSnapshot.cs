@@ -1230,6 +1230,12 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("status");
 
+                    b.Property<int>("StopTimeoutSeconds")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(120)
+                        .HasColumnName("stop_timeout_seconds");
+
                     b.Property<string>("TemplateId")
                         .IsRequired()
                         .HasColumnType("text")

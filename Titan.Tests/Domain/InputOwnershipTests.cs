@@ -17,8 +17,9 @@ public class InputOwnershipTests
     // A creator or rename adds a row here, with the checks its input needs asked before it.
     private static readonly Dictionary<string, string[]> ChecksEachCreatorNeeds = new()
     {
-        ["Vm.Create"] = ["EnsureVmName", "EnsureDiskSize"],
+        ["Vm.Create"] = ["EnsureVmName", "EnsureDiskSize", "EnsureStopTimeout"],
         ["Vm.Rename"] = ["EnsureVmName"],
+        ["Vm.ChangeStopTimeout"] = ["EnsureStopTimeout"],
         ["Volume.Create"] = ["EnsureVolumeName", "EnsureVolumeSize"],
         ["LoadBalancer.Create"] = ["EnsureLoadBalancerName"],
         ["LoadBalancer.Rename"] = ["EnsureLoadBalancerName"],
@@ -44,14 +45,15 @@ public class InputOwnershipTests
     [InlineData("ComputeInput.EnsureVmName(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
     [InlineData("Titan.Domain.Aggregates.Vm.Vm.Create(); ComputeInput.EnsureVmName(); ComputeInput.EnsureDiskSize();")]
     [InlineData("ComputeInput.EnsureDiskSize(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
+    [InlineData("ComputeInput.EnsureVmName(); ComputeInput.EnsureDiskSize(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
     public void Rules_ACreatorThatSkipsACheck_IsFound(string body)
     {
         Assert.NotEmpty(CreatorsThatSkipTheCheck(CompileSample(body), []));
     }
 
     [Theory]
-    [InlineData("ComputeInput.EnsureVmName(); ComputeInput.EnsureDiskSize(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
-    [InlineData("ComputeInput.EnsureDiskSize(); ComputeInput.EnsureVmName(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
+    [InlineData("ComputeInput.EnsureVmName(); ComputeInput.EnsureDiskSize(); ComputeInput.EnsureStopTimeout(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
+    [InlineData("ComputeInput.EnsureStopTimeout(); ComputeInput.EnsureDiskSize(); ComputeInput.EnsureVmName(); Titan.Domain.Aggregates.Vm.Vm.Create();")]
     [InlineData("ComputeInput.EnsureVmName();")]
     [InlineData("Console.WriteLine();")]
     public void Rules_OtherMethods_AreNotFound(string body)
@@ -98,7 +100,7 @@ public class InputOwnershipTests
     private static CSharpCompilation CompileSample(string body)
     {
         string source = "namespace Titan.Domain.Aggregates.Vm { public class Vm { public static Vm Create() { return new Vm(); } } } "
-                        + "public static class ComputeInput { public static void EnsureVmName() { } public static void EnsureDiskSize() { } } "
+                        + "public static class ComputeInput { public static void EnsureVmName() { } public static void EnsureDiskSize() { } public static void EnsureStopTimeout() { } } "
                         + $"public class Handler {{ public void Handle() {{ {body} }} }}";
         CSharpCompilation compilation = QuotaOwnershipTests.Compile([CSharpSyntaxTree.ParseText(source, path: "Sample.cs")]);
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));

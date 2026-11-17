@@ -75,7 +75,7 @@ public class VmServiceTests
         new(_repo.Object, _networkRepo.Object, _tenantRepo.Object, _currentUser.Object,
             _commands.Object, _offeringRepo.Object, _templateRepo.Object, _sshKeys, _activity, _clusters);
 
-    private RenameVmCommandHandler CreateRenameHandler() =>
+    private UpdateVmCommandHandler CreateUpdateHandler() =>
         new(_repo.Object, _currentUser.Object);
 
     // Moq answers false to an unset IsBackendAsync: no load balancer sends to the VM unless a test says so.
@@ -952,7 +952,7 @@ public class VmServiceTests
         Assert.Equal("VM_NOT_FOUND", ex.Code);
     }
 
-    // ── RenameAsync ───────────────────────────────────────────────────────
+    // ── Update: rename and stop timeout ───────────────────────────────────
 
     [Fact]
     public async Task Rename_Success_UpdatesName()
@@ -962,7 +962,7 @@ public class VmServiceTests
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "web-renamed", default)).ReturnsAsync(false);
 
-        await CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-renamed"), default);
+        await CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "web-renamed"), default);
 
         // titan-ops architecture/code-structure.md#contracts: the command returns nothing, so the rename is
         // observed on the aggregate; a caller reads it back through GetVmQuery.
@@ -979,7 +979,7 @@ public class VmServiceTests
         _repo.Setup(r => r.ExistsByNameAsync(TenantId, "taken", default)).ReturnsAsync(true);
 
         var ex = await Assert.ThrowsAsync<ConflictException>(
-            () => CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "taken"), default));
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "taken"), default));
 
         Assert.Equal("VM_NAME_TAKEN", ex.Code);
         _repo.Verify(r => r.SaveAsync(default), Times.Never);
@@ -992,7 +992,7 @@ public class VmServiceTests
         var vm = MakeVm(VmSeed.Running); // name = "web-01"
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
-        await CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-01"), default);
+        await CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "web-01"), default);
 
         // Renaming to the same name is a no-op that must not spend a uniqueness query. The name is
         // asserted on the aggregate because the command returns nothing (titan-ops architecture/code-structure.md#contracts).
@@ -1011,7 +1011,7 @@ public class VmServiceTests
         SetupCurrentUser(TenantId);
 
         var refused = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateRenameHandler().HandleAsync(new RenameVmCommand(Guid.NewGuid(), "a_b"), default));
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(Guid.NewGuid(), "a_b"), default));
 
         Assert.Equal("INVALID_VM_NAME", refused.Code);
         _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
@@ -1041,7 +1041,7 @@ public class VmServiceTests
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<BusinessException>(
-            () => CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-x"), default));
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "web-x"), default));
 
         Assert.Equal("VM_INVALID_STATUS", ex.Code);
     }
@@ -1054,9 +1054,163 @@ public class VmServiceTests
         _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
 
         var ex = await Assert.ThrowsAsync<NotFoundException>(
-            () => CreateRenameHandler().HandleAsync(new RenameVmCommand(vm.Id, "web-x"), default));
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "web-x"), default));
 
         Assert.Equal("VM_NOT_FOUND", ex.Code);
+    }
+
+    // titan-ops features/vm/design.md#vm-stop-timeout: the stop timeout changes in place, Titan-side; no command goes to
+    // the provider, and the name is not looked at.
+    [Fact]
+    public async Task Update_AStopTimeoutAlone_ChangesItInPlace_AndSendsNothing()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Running);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, StopTimeoutSeconds: 1800), default);
+
+        Assert.Equal(1800, vm.StopTimeoutSeconds);
+        Assert.Equal("web-01", vm.Name);
+        Assert.Equal(VmStatus.Running, vm.Status);
+        _repo.Verify(r => r.ExistsByNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), default), Times.Never);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        Assert.Empty(_commands.Invocations);
+    }
+
+    [Fact]
+    public async Task Update_ANameAndAStopTimeout_ChangesBoth_InOneSave()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Stopped);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "db-01", default)).ReturnsAsync(false);
+
+        await CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "db-01", 900), default);
+
+        Assert.Equal(("db-01", 900), (vm.Name, vm.StopTimeoutSeconds));
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+    }
+
+    // A taken name refuses the whole request: the stop timeout sent with it is not written either.
+    [Fact]
+    public async Task Update_ATakenName_WithAStopTimeout_ChangesNothing()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Running);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, "taken", default)).ReturnsAsync(true);
+
+        var ex = await Assert.ThrowsAsync<ConflictException>(
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, "taken", 900), default));
+
+        Assert.Equal("VM_NAME_TAKEN", ex.Code);
+        Assert.Equal(Vm.DefaultStopTimeoutSeconds, vm.StopTimeoutSeconds);
+        _repo.Verify(r => r.SaveAsync(default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_TheStopTimeoutTheVmHas_IsANoOp()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Running);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, StopTimeoutSeconds: Vm.DefaultStopTimeoutSeconds), default);
+
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // titan-ops architecture/domain-methods.md#names-and-sizes: checked before the VM is read, so a caller that skipped the
+    // validator hears 422, even about a VM that is not there.
+    [Theory]
+    [InlineData(29)]
+    [InlineData(1801)]
+    public async Task Update_AStopTimeoutOutsideTheRule_Is422_BeforeTheVmIsRead(int seconds)
+    {
+        SetupCurrentUser(TenantId);
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(Guid.NewGuid(), StopTimeoutSeconds: seconds), default));
+
+        Assert.Equal("INVALID_VM_STOP_TIMEOUT", refused.Code);
+        _repo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Update_TheStopTimeoutOfADeletedVm_IsVmInvalidStatus()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Deleted);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        var ex = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateUpdateHandler().HandleAsync(new UpdateVmCommand(vm.Id, StopTimeoutSeconds: 600), default));
+
+        Assert.Equal("VM_INVALID_STATUS", ex.Code);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // The stop records the value the VM has then: a later change does not reach a stop already asked
+    // (the queue's payload, ProviderCommandQueueTests).
+    [Fact]
+    public async Task Stop_SendsTheVmWithItsStopTimeout()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Running);
+        vm.ChangeStopTimeout(1200);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+
+        await CreateStopHandler().HandleAsync(new StopVmCommand(vm.Id), default);
+
+        _commands.Verify(w => w.EnqueueVmStopAsync(It.Is<Vm>(v => v.StopTimeoutSeconds == 1200), It.IsAny<Guid>(),
+            "cs-vm-id", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Create_WithoutAStopTimeout_Waits120_AndWithOne_KeepsIt()
+    {
+        SetupCurrentUser(TenantId);
+        SetupTenant();
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+        var network = MakeActiveNetwork();
+        _networkRepo.Setup(r => r.FindByIdAsync(network.Id, default)).ReturnsAsync(network);
+        List<Vm> added = new();
+        _repo.Setup(r => r.Add(It.IsAny<Vm>())).Callback<Vm>(added.Add);
+
+        await CreateCreateHandler().HandleAsync(new CreateVmCommand("web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
+        await CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("db-01", network.Id, "offering-1", _templateId, "cluster-1", null, StopTimeoutSeconds: 1800), default);
+
+        Assert.Equal([120, 1800], added.Select(v => v.StopTimeoutSeconds));
+    }
+
+    [Fact]
+    public async Task Create_AStopTimeoutOutsideTheRule_Is422_BeforeAnythingIsRead()
+    {
+        SetupCurrentUser(TenantId);
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(() => CreateCreateHandler().HandleAsync(
+            new CreateVmCommand("web-01", Guid.NewGuid(), "offering-1", _templateId, "cluster-1", null, StopTimeoutSeconds: 29), default));
+
+        Assert.Equal("INVALID_VM_STOP_TIMEOUT", refused.Code);
+        _tenantRepo.Verify(r => r.FindByIdAsync(It.IsAny<Guid>(), default), Times.Never);
+    }
+
+    [Fact]
+    public async Task Get_ShowsTheStopTimeout()
+    {
+        SetupCurrentUser(TenantId);
+        var vm = MakeVm(VmSeed.Running);
+        vm.ChangeStopTimeout(300);
+        _repo.Setup(r => r.FindByIdAsync(vm.Id, default)).ReturnsAsync(vm);
+        _repo.Setup(r => r.ListByTenantAsync(TenantId, default)).ReturnsAsync([vm]);
+
+        VmQueryResult one = await CreateGetHandler().HandleAsync(new GetVmQuery(vm.Id), default);
+        List<VmQueryResult> all = await CreateListHandler().HandleAsync(new ListVmsQuery(), default);
+
+        Assert.Equal(300, one.StopTimeoutSeconds);
+        Assert.Equal(300, Assert.Single(all).StopTimeoutSeconds);
     }
 
     // ── The worker's reports ──────────────────────────────────────────────

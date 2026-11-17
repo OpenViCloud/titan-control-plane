@@ -96,6 +96,27 @@ public class CreateVmValidatorTests
         _validator.TestValidate(Request(null)).ShouldNotHaveValidationErrorFor(r => r.ClusterId);
     }
 
+    // The stop timeout rule is Vm's (Vm.MinStopTimeoutSeconds, Vm.MaxStopTimeoutSeconds); absent is the default, 120
+    // (titan-ops features/vm/design.md#vm-stop-timeout).
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(30, true)]
+    [InlineData(1800, true)]
+    [InlineData(29, false)]
+    [InlineData(1801, false)]
+    public void AStopTimeout_Of30To1800Seconds_IsAccepted_AndAbsentIsToo(int? seconds, bool accepted)
+    {
+        var result = _validator.TestValidate(Request(null) with { StopTimeoutSeconds = seconds });
+        if (accepted)
+        {
+            result.ShouldNotHaveValidationErrorFor(r => r.StopTimeoutSeconds);
+        }
+        else
+        {
+            result.ShouldHaveValidationErrorFor(r => r.StopTimeoutSeconds);
+        }
+    }
+
     [Fact]
     public void NoSshKeyList_IsAccepted()
     {
