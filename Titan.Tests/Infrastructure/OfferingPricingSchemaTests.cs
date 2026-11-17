@@ -18,7 +18,7 @@ namespace Titan.Tests.Infrastructure;
 // Proving the old source is DEAD is a separate assertion, and it is the one that can actually fail.
 public class OfferingPricingSchemaTests
 {
-    // The approved price table (VND, titan-ops architecture/money-and-wallet.md#money-is-long-vnd). Written here as
+    // The approved price table (whole VND, titan-ops features/catalog/design.md#whole-vnd-prices). Written here as
     // constants ON PURPOSE: the oracle must live outside the thing being measured. Reading these from the
     // seed builder would compare the data against the very code that produced it and pass no matter what
     // either one said.

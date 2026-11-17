@@ -32,8 +32,9 @@ public class OfferingPricingTests
         Assert.Equal("pricePerHour", ex.ParamName);
     }
 
-    // The approved table carries up to 6 decimal places (161.388, 1268.100). A rounding loss
-    // anywhere in the chain is a billing discrepancy, not a display glitch.
+    // The seeded prices are whole, but the admin route still takes a fractional price (titan-ops
+    // features/catalog/design.md#whole-vnd-prices). A rounding loss anywhere in the chain is a billing discrepancy,
+    // not a display glitch.
     [Fact]
     public void VmOffering_PreservesSixDecimalPlaces()
     {
