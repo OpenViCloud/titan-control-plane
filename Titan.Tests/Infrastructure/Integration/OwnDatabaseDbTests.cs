@@ -42,6 +42,26 @@ public sealed class OwnDatabaseDbTests : IAsyncLifetime
         }
     }
 
+    // The seed tests read HasData; this reads what the migrations wrote, so a wrong value in WholeVndPrices.Up is caught
+    // (titan-ops features/catalog/design.md#whole-vnd-prices).
+    [Fact]
+    public async Task TheMigratedCatalog_CarriesTheWholePrices()
+    {
+        await using var db = NewDbContext();
+
+        var vm = await db.VmOfferings.AsNoTracking().ToDictionaryAsync(o => o.Id, o => o.PricePerHour.PerUnit);
+        var volume = await db.VolumeOfferings.AsNoTracking().SingleAsync(o => o.Id == "standard");
+        var snapshot = await db.SnapshotOfferings.AsNoTracking().SingleAsync(o => o.Id == "standard");
+
+        Assert.Equal(4, vm.Count);
+        Assert.Equal(170m, vm["s"]);
+        Assert.Equal(320m, vm["m"]);
+        Assert.Equal(640m, vm["l"]);
+        Assert.Equal(1280m, vm["xl"]);
+        Assert.Equal(2m, volume.PricePerGbPerHour.PerUnit);
+        Assert.Equal(2m, snapshot.PricePerHour.PerUnit);
+    }
+
     // The read path goes through the Rate value converter: the cost of an interval from the stored rate must equal the
     // cost from the rate the admin approved.
     [Fact]
@@ -51,7 +71,7 @@ public sealed class OwnDatabaseDbTests : IAsyncLifetime
         var stored = await read.VmOfferings.AsNoTracking().SingleAsync(o => o.Id == "m");
 
         const decimal oneTenMinuteInterval = 10m / 60m;
-        var approved = 311.256m;    // the approved number, written here not read from seed
+        var approved = 320m;    // the approved number, written here not read from seed
 
         Assert.Equal(approved, stored.PricePerHour.PerUnit);
         Assert.Equal(approved * oneTenMinuteInterval, stored.PricePerHour * oneTenMinuteInterval);

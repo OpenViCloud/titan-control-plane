@@ -18,17 +18,17 @@ namespace Titan.Tests.Infrastructure;
 // Proving the old source is DEAD is a separate assertion, and it is the one that can actually fail.
 public class OfferingPricingSchemaTests
 {
-    // The approved price table (VND, titan-ops architecture/money-and-wallet.md#money-is-long-vnd). Written here as
+    // The approved price table (whole VND, titan-ops features/catalog/design.md#whole-vnd-prices). Written here as
     // constants ON PURPOSE: the oracle must live outside the thing being measured. Reading these from the
     // seed builder would compare the data against the very code that produced it and pass no matter what
     // either one said.
     private static readonly (string Id, decimal Price)[] ApprovedVmPrices =
     [
-        ("s", 161.388m), ("m", 311.256m), ("l", 634.050m), ("xl", 1268.100m)
+        ("s", 170m), ("m", 320m), ("l", 640m), ("xl", 1280m)
     ];
 
-    private const decimal ApprovedDiskPrice = 1.57914m;
-    private const decimal ApprovedSnapshotPrice = 1.8m;
+    private const decimal ApprovedDiskPrice = 2m;
+    private const decimal ApprovedSnapshotPrice = 2m;
 
     private static TitanDbContext NewContext() =>
         new(new DbContextOptionsBuilder<TitanDbContext>()

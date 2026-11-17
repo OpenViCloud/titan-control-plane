@@ -19,13 +19,13 @@ public class SnapshotOfferingConfiguration : IEntityTypeConfiguration<SnapshotOf
 
         // One row at the id the meter resolves: snapshots carry no offering id, so this is not a tier a customer
         // picks (titan-ops architecture/money-and-wallet.md#price-belongs-to-offering).
-        // 1.8 VND/snapshot/h ≈ 1314 VND/mo, a placeholder rate. Per snapshot, not per GB: Titan tracks no snapshot
-        // size. 0 switches snapshot billing off; a missing row fails the meter tick.
+        // 2 VND/snapshot/h, whole đồng (titan-ops features/catalog/design.md#whole-vnd-prices). Per snapshot, not
+        // per GB: Titan tracks no snapshot size. 0 switches snapshot billing off; a missing row fails the meter tick.
         builder.HasData(new
         {
             Id = SnapshotOffering.DefaultId,
             Name = "Standard",
-            PricePerHour = Rate.Of(1.8m),
+            PricePerHour = Rate.Of(2m),
         });
     }
 }

@@ -6,5 +6,5 @@ namespace Titan.Application.Queries.Catalog.VolumeOffering.Contracts;
 public record VolumeOfferingQueryResult(string Id, string Name, decimal PricePerGbPerHour)
 {
     public static VolumeOfferingQueryResult From(VolumeOfferingAggregate o) =>
-        new(o.Id, o.Name, o.PricePerGbPerHour.PerUnit);
+        new(o.Id, o.Name, PriceListNumber.WithoutTrailingZeros(o.PricePerGbPerHour.PerUnit));
 }
