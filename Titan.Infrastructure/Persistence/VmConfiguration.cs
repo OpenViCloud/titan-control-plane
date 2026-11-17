@@ -43,6 +43,10 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.TemplateId).HasColumnName("template_id").IsRequired();
         builder.Property(v => v.ClusterId).HasColumnName("cluster_id").IsRequired();
         builder.Property(v => v.DiskSizeGb).HasColumnName("disk_size_gb");
+        // The default is for the rows that existed before the column (titan-ops features/vm/design.md#vm-stop-timeout);
+        // Vm.Create always writes a value.
+        builder.Property(v => v.StopTimeoutSeconds).HasColumnName("stop_timeout_seconds")
+            .HasDefaultValue(Vm.DefaultStopTimeoutSeconds).IsRequired();
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");

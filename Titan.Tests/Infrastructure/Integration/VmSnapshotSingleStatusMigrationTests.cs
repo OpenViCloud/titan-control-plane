@@ -32,6 +32,13 @@ public sealed class VmSnapshotSingleStatusMigrationTests : IAsyncLifetime
         await db.GetService<IMigrator>().MigrateAsync(migration);
     }
 
+    // The model of today reads and writes the schema of today: core.vms gained columns after this migration.
+    private async Task MigrateToLatestAsync()
+    {
+        await using TitanDbContext db = NewDbContext();
+        await db.Database.MigrateAsync();
+    }
+
     private static Vm RunningVm()
     {
         Vm vm = Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "vm-" + Guid.NewGuid().ToString("N")[..8], "m-mig", "tpl", "cluster-a", 20);
@@ -39,23 +46,30 @@ public sealed class VmSnapshotSingleStatusMigrationTests : IAsyncLifetime
         return vm;
     }
 
-    // Saves a VM, with whatever snapshots it holds, under the offering it names.
+    // Saves a VM, with whatever snapshots it holds, under the offering it names, at the schema of today.
     private async Task SaveAsync(Vm vm)
     {
         await using TitanDbContext db = NewDbContext();
         await db.Database.ExecuteSqlRawAsync(
-            "INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
+            "INSERT INTO core.vm_offerings (id, name, vcpu_count, memory_mb, price_per_hour) VALUES ('m-mig', 'm', 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING");
         db.Vms.Add(vm);
         await db.SaveChangesAsync();
     }
 
-    // The VM the snapshots belong to, without snapshots. This migration does not touch core.vms, so the model of today
-    // writes it at the migration before as well.
+    // The VM the snapshots belong to, without snapshots, as the image of the schema before this migration wrote it: in
+    // SQL, because the model of today maps core.vms columns added later.
     private async Task<Guid> SeedVmAsync()
     {
-        Vm vm = RunningVm();
-        await SaveAsync(vm);
-        return vm.Id;
+        Guid id = Guid.NewGuid();
+        await using TitanDbContext db = NewDbContext();
+        await db.Database.ExecuteSqlInterpolatedAsync($@"
+INSERT INTO core.vm_offerings (id, name, cpu_units, vcpu_count, memory_mb, price_per_hour)
+VALUES ('m-mig', 'm', 1, 2, 4096, 311.256) ON CONFLICT (id) DO NOTHING;
+INSERT INTO core.vms (id, tenant_id, network_id, name, status, external_id, ip_address, vm_offering_id, template_id,
+                      cluster_id, disk_size_gb, created_at)
+VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]}, 'Running', {"vm" + id.ToString("N")[..20]},
+        '10.0.0.5', 'm-mig', 'tpl', 'cluster-a', 20, now())");
+        return id;
     }
 
     // A snapshot row as the image before this migration wrote it. A waiting operation has its id and kind; a snapshot
@@ -167,6 +181,7 @@ VALUES ({id}, {vmId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {current
         Guid deletingLost = await SeedSnapshotAsync(vmId, "NotFound", pendingKind: "Delete");
 
         await MigrateToAsync(ThisMigration);
+        await MigrateToLatestAsync();
 
         await using TitanDbContext db = NewDbContext();
         Vm vm = await db.Vms.Include(v => v.Snapshots).SingleAsync(v => v.Id == vmId);
@@ -223,7 +238,7 @@ VALUES ({id}, {vmId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {current
     [Fact]
     public async Task ASnapshotWrittenNow_StoresItsStatusAndObservedStateByName()
     {
-        await MigrateToAsync(ThisMigration);
+        await MigrateToLatestAsync();
         Vm vm = RunningVm();
         VmSnapshot snapshot = vm.WithSnapshot("nightly");
         snapshot.MarkCreated($"{vm.ExternalId}/s1");

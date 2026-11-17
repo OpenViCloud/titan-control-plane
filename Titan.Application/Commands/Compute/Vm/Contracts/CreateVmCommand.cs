@@ -18,13 +18,16 @@ public record CreateVmCommand(
     List<Guid>? SshKeyIds = null,
     // The `ubuntu` user's password for the web console, 12 to 72 characters; only its SHA-512 crypt hash leaves the
     // request (titan-ops features/vm/design.md#console-password).
-    string? ConsolePassword = null)
+    string? ConsolePassword = null,
+    // Seconds a stop waits for the guest to shut down before the power is cut; absent is Vm.DefaultStopTimeoutSeconds
+    // (titan-ops features/vm/design.md#vm-stop-timeout).
+    int? StopTimeoutSeconds = null)
 {
     // A record prints every property: the password must never reach a log through ToString.
     protected virtual bool PrintMembers(System.Text.StringBuilder builder)
     {
         builder.Append($"Name = {Name}, NetworkId = {NetworkId}, VmOfferingId = {VmOfferingId}, TemplateId = {TemplateId}, ");
-        builder.Append($"ClusterId = {ClusterId}, DiskSizeGb = {DiskSizeGb}, ConsolePassword = ");
+        builder.Append($"ClusterId = {ClusterId}, DiskSizeGb = {DiskSizeGb}, StopTimeoutSeconds = {StopTimeoutSeconds}, ConsolePassword = ");
         builder.Append(ConsolePassword == null ? "null" : "***");
         return true;
     }

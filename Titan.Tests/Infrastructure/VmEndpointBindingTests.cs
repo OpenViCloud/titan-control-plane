@@ -65,7 +65,7 @@ public class VmEndpointBindingTests
 
     private ListVmsQueryHandler ListHandler() => new(_repo.Object, _currentUser.Object);
     private GetVmQueryHandler GetHandler() => new(_repo.Object, _currentUser.Object);
-    private RenameVmCommandHandler RenameHandler() => new(_repo.Object, _currentUser.Object);
+    private UpdateVmCommandHandler UpdateHandler() => new(_repo.Object, _currentUser.Object);
 
     [Fact] // GET /v1/tenant/vms — reaches the LIST query, not the single-item one
     public async Task ListVmsEndpoint_ReachesListQuery_AndReturnsWhatItGot()
@@ -151,18 +151,36 @@ public class VmEndpointBindingTests
         _repo.Verify(r => r.ExistsByNameAsync(TenantId, "new-vm", default), Times.Once);
     }
 
-    // PATCH /v1/tenant/vms/{vmId} — rename carries BOTH the route id and the body, and answers 204
+    // PATCH /v1/tenant/vms/{vmId} — the update carries BOTH the route id and the body, and answers 204
     // with no body (titan-ops architecture/http-contract.md#commands-return-no-data). The command side owns no read
-    // shape, so a caller that wants the renamed VM reads it back from the query side.
+    // shape, so a caller that wants the changed VM reads it back from the query side. A body of a name alone is the
+    // rename every client sent before the stop timeout existed.
     [Fact]
     public async Task UpdateVmEndpoint_ReachesRenameCommand_WithRouteVmIdAndBody_And204()
     {
-        var ep = Factory.Create<UpdateVmEndpoint>(WithVmIdRoute, RenameHandler());
+        var ep = Factory.Create<UpdateVmEndpoint>(WithVmIdRoute, UpdateHandler());
 
-        await ep.HandleAsync(new RenameVmBody("renamed-vm"), CancellationToken.None);
+        await ep.HandleAsync(new UpdateVmBody("renamed-vm"), CancellationToken.None);
 
         _repo.Verify(r => r.FindByIdAsync(VmId, default), Times.Once);
         _repo.Verify(r => r.ExistsByNameAsync(TenantId, "renamed-vm", default), Times.Once);
+        _repo.Verify(r => r.SaveAsync(default), Times.Once);
+        Assert.Equal(204, ep.HttpContext.Response.StatusCode);
+    }
+
+    // A body of a stop timeout alone reaches the same handler with it, and asks nothing about the name
+    // (titan-ops features/vm/design.md#vm-stop-timeout).
+    [Fact]
+    public async Task UpdateVmEndpoint_CarriesTheStopTimeout_And204()
+    {
+        VmAggregate vm = SampleVm();
+        _repo.Setup(r => r.FindByIdAsync(VmId, default)).ReturnsAsync(vm);
+        var ep = Factory.Create<UpdateVmEndpoint>(WithVmIdRoute, UpdateHandler());
+
+        await ep.HandleAsync(new UpdateVmBody(null, 900), CancellationToken.None);
+
+        Assert.Equal(900, vm.StopTimeoutSeconds);
+        _repo.Verify(r => r.ExistsByNameAsync(It.IsAny<Guid>(), It.IsAny<string>(), default), Times.Never);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         Assert.Equal(204, ep.HttpContext.Response.StatusCode);
     }

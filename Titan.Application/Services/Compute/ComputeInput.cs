@@ -7,8 +7,8 @@ using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 
 namespace Titan.Application.Services.Compute;
 
-/// The shape of a name or a size a customer sends, checked by the command handler before the aggregate is built or
-/// renamed (titan-ops architecture/domain-methods.md#names-and-sizes). The handlers ask before they load anything; the
+/// The shape of a name, a size or a stop timeout a customer sends, checked by the command handler before the aggregate
+/// is built or changed (titan-ops architecture/domain-methods.md#names-and-sizes). The handlers ask before they load anything; the
 /// one check made after a load is the restore's, of the size of the source volume, which needs the loaded volume.
 /// The rule itself is a predicate on the Domain type, which also holds the constants the endpoint validators read; the
 /// answer is the same 422 the aggregate used to give.
@@ -30,6 +30,15 @@ public static class ComputeInput
         {
             throw new BusinessException("INVALID_VM_DISK_SIZE",
                 $"A VM disk is {VmAggregate.ImageDiskSize} (the image's own size) or a positive number of GB.");
+        }
+    }
+
+    public static void EnsureStopTimeout(int seconds)
+    {
+        if (!VmAggregate.IsAStopTimeout(seconds))
+        {
+            throw new BusinessException("INVALID_VM_STOP_TIMEOUT",
+                $"A VM stop timeout is {VmAggregate.MinStopTimeoutSeconds} to {VmAggregate.MaxStopTimeoutSeconds} seconds.");
         }
     }
 

@@ -15,6 +15,12 @@ public partial class Vm : IAggregateRoot
     /// image's own size (OpenViCloud/titan-incus-worker:resource/vm/create.go).
     public const int ImageDiskSize = 0;
 
+    /// How long a stop waits for the guest to shut itself down before the worker cuts the power
+    /// (titan-ops features/vm/design.md#vm-stop-timeout). The validators read Min and Max, so the /v1 spec carries the range.
+    public const int DefaultStopTimeoutSeconds = 120;
+    public const int MinStopTimeoutSeconds = 30;
+    public const int MaxStopTimeoutSeconds = 1800;
+
     public Guid Id { get; private set; }
     public Guid TenantId { get; private set; }
     public Guid NetworkId { get; private set; }
@@ -55,6 +61,8 @@ public partial class Vm : IAggregateRoot
     public string TemplateId { get; private set; } = default!;
     public string ClusterId { get; private set; } = default!;
     public int DiskSizeGb { get; private set; }
+    /// The value a stop records in its command: changing it later does not reach a stop already asked.
+    public int StopTimeoutSeconds { get; private set; }
     public string? UserData { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -175,6 +183,14 @@ public partial class Vm : IAggregateRoot
         Name = newName;
     }
 
+    /// Intent, Titan-side only, as Rename: the worker reads the value from the next stop's command.
+    public void ChangeStopTimeout(int seconds)
+    {
+        if (IsDeleted)
+            throw new BusinessException("VM_INVALID_STATUS", "The stop timeout of a deleted VM cannot be changed.");
+        StopTimeoutSeconds = seconds;
+    }
+
     private static readonly System.Text.RegularExpressions.Regex NameShape = new(NamePattern, System.Text.RegularExpressions.RegexOptions.Compiled);
 
     /// The shape rule of a VM name. The command handlers ask it before they build or rename a VM
@@ -188,6 +204,9 @@ public partial class Vm : IAggregateRoot
 
     /// The image's own size (0) or a positive number of GB.
     public static bool IsADiskSize(int diskSizeGb) => diskSizeGb >= ImageDiskSize;
+
+    /// The rule of a stop timeout; the command handlers ask it before they build a VM or change the value.
+    public static bool IsAStopTimeout(int seconds) => seconds >= MinStopTimeoutSeconds && seconds <= MaxStopTimeoutSeconds;
 
     // The report of an operation's own command (titan-ops architecture/resource-lifecycle.md#shape) is the one thing that
     // ends an operation. One method per move, in the partial file of its operation (CreateSucceeded and CreateFailed in

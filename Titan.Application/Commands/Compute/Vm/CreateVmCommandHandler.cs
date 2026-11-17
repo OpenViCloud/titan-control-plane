@@ -29,8 +29,10 @@ public class CreateVmCommandHandler(
     {
         var callerId = currentUser.RequireTenantId();
         int diskSizeGb = req.DiskSizeGb ?? VmAggregate.ImageDiskSize;
+        int stopTimeoutSeconds = req.StopTimeoutSeconds ?? VmAggregate.DefaultStopTimeoutSeconds;
         ComputeInput.EnsureVmName(req.Name);
         ComputeInput.EnsureDiskSize(diskSizeGb);
+        ComputeInput.EnsureStopTimeout(stopTimeoutSeconds);
 
         var tenant = await tenantRepo.FindByIdAsync(callerId, ct)
             ?? throw new NotFoundException("TENANT_NOT_FOUND", "Tenant not found.");
@@ -100,7 +102,8 @@ public class CreateVmCommandHandler(
             req.TemplateId,
             clusterId,
             diskSizeGb,
-            req.UserData);
+            req.UserData,
+            stopTimeoutSeconds);
         repo.Add(vm);
         activity.Stage("vm.create_requested", "vm", vm.Id, vm.Name); // flushed atomically with the VM insert; "vm.created" is the outcome (titan-ops architecture/intent-and-observation.md#intent-has-identity)
 

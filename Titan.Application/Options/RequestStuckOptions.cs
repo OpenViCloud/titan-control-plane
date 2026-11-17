@@ -6,7 +6,9 @@ public class RequestStuckOptions
     public const string SectionName = "RequestStuck";
 
     /// <summary>
-    /// A request waiting longer than this is listed by GET /v1/admin/requests/stuck and turns /healthz/reconcilers.
+    /// A request waiting longer than this is listed by GET /v1/admin/requests/stuck and turns /healthz/reconcilers; a VM
+    /// stop, longer than this plus the stop timeout its command carries (`Vm.DefaultStopTimeoutSeconds` when it carries
+    /// none or has no row).
     /// 15: a chosen threshold, not a retry budget. One run of a VM command may itself take that long, so a row still open
     /// past it can be a slow worker as well as an absent one.
     /// </summary>

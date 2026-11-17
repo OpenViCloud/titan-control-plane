@@ -12,7 +12,8 @@ public partial class Vm
         string templateId,
         string clusterId,
         int diskSizeGb,
-        string? userData = null)
+        string? userData = null,
+        int stopTimeoutSeconds = DefaultStopTimeoutSeconds)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         var vm = new Vm
@@ -27,6 +28,7 @@ public partial class Vm
             ClusterId = clusterId,
             DiskSizeGb = diskSizeGb,
             UserData = userData,
+            StopTimeoutSeconds = stopTimeoutSeconds,
             CreatedAt = now,
         };
         // The create is an operation like the others: the create command's Done ends it.

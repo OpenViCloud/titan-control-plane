@@ -22,6 +22,10 @@ public class CreateVmValidator : Validator<CreateVmCommand>
         // Absent means the network's cluster (titan-ops features/catalog/design.md#cluster-is-a-real-choice); sent, it has a value.
         RuleFor(x => x.ClusterId).NotEmpty().When(x => x.ClusterId != null);
         RuleFor(x => x.DiskSizeGb).GreaterThan(0).When(x => x.DiskSizeGb.HasValue);
+        // Absent is Vm.DefaultStopTimeoutSeconds (titan-ops features/vm/design.md#vm-stop-timeout).
+        RuleFor(x => x.StopTimeoutSeconds)
+            .InclusiveBetween(VmAggregate.MinStopTimeoutSeconds, VmAggregate.MaxStopTimeoutSeconds)
+            .When(x => x.StopTimeoutSeconds.HasValue);
         When(x => x.UserData != null, () =>
             RuleFor(x => x.UserData)
                 .Must(s => System.Text.Encoding.UTF8.GetByteCount(s!) <= 32_768)

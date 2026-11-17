@@ -148,6 +148,11 @@ VALUES ({id}, {Guid.NewGuid()}, {Guid.NewGuid()}, {"vm-" + id.ToString("N")[..8]
         var stopping = await SeedVmAsync("Exists", "Running", pendingKind: "Stop");
 
         await MigrateToAsync(ThisMigration);
+        // The model of today reads the schema of today: core.vms gained columns after this migration.
+        await using (TitanDbContext latest = NewDbContext())
+        {
+            await latest.Database.MigrateAsync();
+        }
 
         await using TitanDbContext read = NewDbContext();
         Vm vm = await read.Vms.SingleAsync(v => v.Id == stopping.Id);

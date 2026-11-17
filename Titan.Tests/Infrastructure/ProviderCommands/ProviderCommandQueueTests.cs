@@ -416,6 +416,20 @@ public class ProviderCommandQueueTests
         Assert.Equal($"vm-start-{vm.Id}-{startRequest}", _repo.Rows[1].Key);
     }
 
+    // The worker waits this long for the guest to shut down before it cuts the power
+    // (titan-ops features/vm/design.md#vm-stop-timeout): the VM's value when the stop is recorded.
+    [Fact]
+    public async Task VmStop_CarriesTheVmsStopTimeout()
+    {
+        Vm vm = Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "db-1", "m", "tpl-guid", "mock", 20, stopTimeoutSeconds: 1800);
+
+        await Queue().EnqueueVmStopAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        vm.ChangeStopTimeout(60);
+
+        using JsonDocument stop = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal(1800, stop.RootElement.GetProperty("stopTimeoutSeconds").GetInt32());
+    }
+
     // A network's and a rule's keys carry the request id, as the volume's: each request its own row, and the payload names
     // the request for the worker's report (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     [Fact]
@@ -933,7 +947,7 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.FirewallRuleDelete, ["externalRuleId", "networkId", "projectName", "requestId", "ruleId"] },
         { ProviderCommandKinds.VmCreate, ["diskSizeGb", "externalNetworkId", "memoryMb", "name", "projectName", "requestId", "templateId", "userData", "vcpuCount", "vendorData", "vmId"] },
         { ProviderCommandKinds.VmDelete, ["externalVmId", "projectName", "requestId", "vmId"] },
-        { ProviderCommandKinds.VmStop, ["externalVmId", "projectName", "requestId", "vmId"] },
+        { ProviderCommandKinds.VmStop, ["externalVmId", "projectName", "requestId", "stopTimeoutSeconds", "vmId"] },
         { ProviderCommandKinds.VmStart, ["externalVmId", "projectName", "requestId", "vmId"] },
         { ProviderCommandKinds.VmSnapshotCreate, ["externalVmId", "projectName", "requestId", "snapshotId", "vmId"] },
         { ProviderCommandKinds.VmSnapshotRevert, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "vmId"] },

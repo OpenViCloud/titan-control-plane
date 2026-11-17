@@ -53,6 +53,26 @@ public class ComputeInputTests
         ComputeInput.EnsureDiskSize(diskSizeGb);
     }
 
+    // ---- VM stop timeout: 30 to 1800 seconds (titan-ops features/vm/design.md#vm-stop-timeout)
+
+    [Theory]
+    [InlineData(Vm.MinStopTimeoutSeconds - 1)]
+    [InlineData(Vm.MaxStopTimeoutSeconds + 1)]
+    [InlineData(0)]
+    public void VmStopTimeout_OutsideTheRule_IsInvalidVmStopTimeout(int seconds)
+    {
+        Assert.Equal("INVALID_VM_STOP_TIMEOUT", Code(() => ComputeInput.EnsureStopTimeout(seconds)));
+    }
+
+    [Theory]
+    [InlineData(Vm.MinStopTimeoutSeconds)]
+    [InlineData(Vm.DefaultStopTimeoutSeconds)]
+    [InlineData(Vm.MaxStopTimeoutSeconds)]
+    public void VmStopTimeout_Takes30To1800(int seconds)
+    {
+        ComputeInput.EnsureStopTimeout(seconds);
+    }
+
     // ---- Volume: a name of 1 to 100 characters, not blank, any characters; a size above 0
 
     [Theory]
