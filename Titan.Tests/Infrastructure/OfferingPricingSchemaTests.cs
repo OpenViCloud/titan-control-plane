@@ -24,11 +24,11 @@ public class OfferingPricingSchemaTests
     // either one said.
     private static readonly (string Id, decimal Price)[] ApprovedVmPrices =
     [
-        ("s", 161.388m), ("m", 311.256m), ("l", 634.050m), ("xl", 1268.100m)
+        ("s", 170m), ("m", 320m), ("l", 640m), ("xl", 1280m)
     ];
 
-    private const decimal ApprovedDiskPrice = 1.57914m;
-    private const decimal ApprovedSnapshotPrice = 1.8m;
+    private const decimal ApprovedDiskPrice = 2m;
+    private const decimal ApprovedSnapshotPrice = 2m;
 
     private static TitanDbContext NewContext() =>
         new(new DbContextOptionsBuilder<TitanDbContext>()

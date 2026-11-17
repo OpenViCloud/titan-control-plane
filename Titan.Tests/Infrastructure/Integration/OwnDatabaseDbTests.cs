@@ -51,7 +51,7 @@ public sealed class OwnDatabaseDbTests : IAsyncLifetime
         var stored = await read.VmOfferings.AsNoTracking().SingleAsync(o => o.Id == "m");
 
         const decimal oneTenMinuteInterval = 10m / 60m;
-        var approved = 311.256m;    // the approved number, written here not read from seed
+        var approved = 320m;    // the approved number, written here not read from seed
 
         Assert.Equal(approved, stored.PricePerHour.PerUnit);
         Assert.Equal(approved * oneTenMinuteInterval, stored.PricePerHour * oneTenMinuteInterval);

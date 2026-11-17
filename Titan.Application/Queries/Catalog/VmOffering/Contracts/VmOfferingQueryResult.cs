@@ -13,5 +13,5 @@ public record VmOfferingQueryResult(
     decimal PricePerHour)
 {
     public static VmOfferingQueryResult From(VmOfferingAggregate o) =>
-        new(o.Id, o.Name, o.VcpuCount, o.MemoryMb, o.PricePerHour.PerUnit);
+        new(o.Id, o.Name, o.VcpuCount, o.MemoryMb, PriceListNumber.WithoutTrailingZeros(o.PricePerHour.PerUnit));
 }

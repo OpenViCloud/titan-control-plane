@@ -887,7 +887,7 @@ namespace Titan.Infrastructure.Migrations
                         {
                             Id = "standard",
                             Name = "Standard",
-                            PricePerHour = 1.8m
+                            PricePerHour = 2m
                         });
                 });
 
@@ -1340,7 +1340,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = "s",
                             MemoryMb = 2048,
                             Name = "Small",
-                            PricePerHour = 161.388m,
+                            PricePerHour = 170m,
                             VcpuCount = 1
                         },
                         new
@@ -1348,7 +1348,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = "m",
                             MemoryMb = 4096,
                             Name = "Medium",
-                            PricePerHour = 311.256m,
+                            PricePerHour = 320m,
                             VcpuCount = 2
                         },
                         new
@@ -1356,7 +1356,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = "l",
                             MemoryMb = 8192,
                             Name = "Large",
-                            PricePerHour = 634.050m,
+                            PricePerHour = 640m,
                             VcpuCount = 4
                         },
                         new
@@ -1364,7 +1364,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = "xl",
                             MemoryMb = 16384,
                             Name = "Extra Large",
-                            PricePerHour = 1268.100m,
+                            PricePerHour = 1280m,
                             VcpuCount = 8
                         });
                 });
@@ -1613,7 +1613,7 @@ namespace Titan.Infrastructure.Migrations
                         {
                             Id = "standard",
                             Name = "Standard",
-                            PricePerGbPerHour = 1.57914m
+                            PricePerGbPerHour = 2m
                         });
                 });
 

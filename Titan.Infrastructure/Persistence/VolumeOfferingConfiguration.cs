@@ -18,15 +18,13 @@ public class VolumeOfferingConfiguration : IEntityTypeConfiguration<VolumeOfferi
             .HasColumnName("price_per_gb_per_hour").HasColumnType("decimal(18,10)").IsRequired();
 
         // A single tier: every volume is a custom volume in the storage pool of its cluster, and invented
-        // tiers would advertise choices that do not exist.
-        //
-        // "Half of Vultr NVMe block storage": $0.10/GB/mo -> half $0.05 -> x1.2809 USD/SGD -> S$0.00008773/GB/h,
-        // x18000 -> 1.57914 VND/GB/h.
+        // tiers would advertise choices that do not exist. Whole đồng per GB per hour
+        // (titan-ops features/catalog/design.md#whole-vnd-prices).
         builder.HasData(new
         {
             Id = "standard",
             Name = "Standard",
-            PricePerGbPerHour = Rate.Of(1.57914m),
+            PricePerGbPerHour = Rate.Of(2m),
         });
     }
 }
