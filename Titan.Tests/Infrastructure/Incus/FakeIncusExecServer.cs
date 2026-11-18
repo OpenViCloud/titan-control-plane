@@ -15,12 +15,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// An in-process HTTPS server that answers a non-interactive exec the way Incus 7.0.1 did when measured on dev
-// (2026-10-13): POST exec answers 202 with an operation
-// carrying fds 0, 1, 2 and control; the command starts once 0, 1 and 2 are connected, control is not waited for
-// (lxc/incus v7.0.1 cmd/incusd/instance_exec.go, execWs.Connect); the end of the command is an empty message on 1 and
-// 2, then the sockets close without a close handshake, and a websocket of the ended operation is refused with a 500
-// while the operation carries no error.
+// An in-process HTTPS server that answers a non-interactive exec the way Incus 7.0.1 does. Measured on dev
+// (2026-10-13): POST exec answers 202 with an operation carrying fds 0, 1, 2 and control; the end of the command is an
+// empty message on 1 and 2, then the sockets close without a close handshake. Read in the source (lxc/incus v7.0.1):
+// the command starts once 0, 1 and 2 are connected, control is not waited for (cmd/incusd/instance_exec.go:148-158);
+// a websocket of an ended operation is a 500 "Only running operations can be connected"
+// (internal/server/operations/operations.go:456), while the operation carries no error (prd log, 2026-11-18).
 // The command here is an echo: it writes Banner, then echoes stdin to stdout until stdin closes.
 internal sealed class FakeIncusExecServer : IAsyncDisposable
 {
@@ -221,7 +221,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         }
         if (operation!.Ended)
         {
-            await WriteAsync(context, 500, """{"type":"error","error_code":500,"error":"websocket: the operation has ended"}""");
+            await WriteAsync(context, 500, """{"type":"error","error_code":500,"error":"Only running operations can be connected"}""");
             return;
         }
         bool startsCommand = fd != "control" && new[] { "0", "1", "2" }.Count(operation.Sockets.ContainsKey) == 2;
