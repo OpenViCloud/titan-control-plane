@@ -4,7 +4,7 @@ using Titan.Domain.Aggregates.Network;
 
 namespace Titan.Tests.Infrastructure;
 
-// A policy not sent takes the value of a new network, and an explicit Allow (0 on the wire, as the provider sends it)
+// A policy not sent takes the value of a new network, and an explicit Allow (0 on the wire, as the Terraform provider sends it)
 // stays Allow (titan-ops features/network/design.md#firewall-default-policy).
 public class CreateNetworkCommandJsonTests
 {

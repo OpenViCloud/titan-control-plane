@@ -11,7 +11,7 @@ using Titan.Tests.Infrastructure.Incus;
 namespace Titan.Tests.Api;
 
 /// POST /v1/tenant/networks through the host as Program.cs wires it, body binding included: a policy not sent is the
-/// value of a new network (Deny inbound, Allow outbound), and Allow sent as 0, the way the provider sends it, stays
+/// value of a new network (Deny inbound, Allow outbound), and Allow sent as 0, the way the Terraform provider sends it, stays
 /// Allow (titan-ops features/network/design.md#firewall-default-policy).
 [Trait("Category", "FullHost")]
 [Collection("Http")]
