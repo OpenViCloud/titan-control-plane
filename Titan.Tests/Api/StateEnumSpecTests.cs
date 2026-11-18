@@ -26,6 +26,7 @@ public class StateEnumSpecTests(OpenApiSpecTests.ApiFactory factory) : IClassFix
         { "VolumeQueryResult", "status", typeof(VolumeStatus), false },
         { "VolumeSnapshotQueryResult", "status", typeof(VolumeSnapshotStatus), false },
         { "VmSnapshotQueryResult", "status", typeof(VmSnapshotStatus), false },
+        { "VmKeyAdditionQueryResult", "status", typeof(VmKeyAdditionStatus), false },
         { "LoadBalancerQueryResult", "status", typeof(LoadBalancerStatus), false },
         { "TenantQueryResult", "status", typeof(TenantStatus), false },
         { "InvoiceQueryResult", "status", typeof(InvoiceDisplayStatus), false },

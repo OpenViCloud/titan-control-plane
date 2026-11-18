@@ -5,6 +5,7 @@ using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Admin.Vm;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.Vm;
+using Titan.Application.Commands.Compute.VmKeyAddition;
 using Titan.Application.Commands.Compute.VmSnapshot;
 using Titan.Application.Commands.Compute.Volume;
 using Titan.Application.Commands.Compute.VolumeSnapshot;
@@ -55,6 +56,7 @@ public class IntentRepeatDeclarationTests
         [typeof(CreateNetworkCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateFirewallRuleCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateLoadBalancerCommandHandler)] = new IdempotencyKey(),
+        [typeof(CreateVmKeyAdditionCommandHandler)] = new IdempotencyKey(),
 
         // ── VM ──
         // A repeat of a waiting VM request records nothing and sends nothing (titan-ops architecture/resource-lifecycle.md#repeat).

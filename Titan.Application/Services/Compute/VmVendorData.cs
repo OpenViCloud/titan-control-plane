@@ -6,12 +6,16 @@ using Titan.Domain.Repositories;
 
 namespace Titan.Application.Services.Compute;
 
-/// Titan's cloud-init vendor-data for a new VM: a boothook that writes the picked SSH keys to a file sshd reads for the
-/// `ubuntu` user (titan-ops features/vm/design.md#ssh-key), and leaves the console password's hash for cloud-init's
-/// final stage (titan-ops features/vm/design.md#console-password). Cloud-init runs a boothook in an early stage, before
-/// sshd starts and before the stages that wait for the image's snap seed, so key login does not wait for the seed.
-/// Vendor-data, not user-data: cloud-config keys in vendor-data are dropped when the customer's user-data sets keys
-/// too; a boothook is a part of its own and stays.
+/// Titan's cloud-init vendor-data for a new VM: a boothook that writes the config file sshd reads for the `ubuntu`
+/// user, and the picked SSH keys when there are any (titan-ops features/vm/design.md#ssh-key), and leaves the console
+/// password's hash for cloud-init's final stage (titan-ops features/vm/design.md#console-password). Cloud-init runs a
+/// boothook in an early stage, before sshd starts and before the stages that wait for the image's snap seed, so key
+/// login does not wait for the seed. Vendor-data, not user-data: cloud-config keys in vendor-data are dropped when the
+/// customer's user-data sets keys too; a boothook is a part of its own and stays.
+///
+/// The config file is written for every VM, even one with no key and no console password: a VM created without a key
+/// still gets 10-openvicloud.conf, so a key added to it later (vm-key-addition) only has to write the key file,
+/// never the config a worker already wrote would otherwise be missing.
 public static class VmVendorData
 {
     // A rebuilt key line: type, one space, base64. Nothing that could end either heredoc or reach the shell.
@@ -22,27 +26,36 @@ public static class VmVendorData
 
     private const string PasswordScript = "/var/lib/cloud/scripts/per-instance/openvicloud-console-password";
 
-    /// The vendor-data for the keys a customer picked and the console password they set: every id must be a key of the
-    /// caller's tenant, since a foreign id is indistinguishable from an unknown one
-    /// (titan-ops features/vm/design.md#ssh-key); a repeated id goes in once. The password leaves as its hash only
-    /// (titan-ops features/vm/design.md#console-password).
-    public static async Task<string?> ForAsync(ISshKeyRepository keys, Guid tenantId, List<Guid>? sshKeyIds,
-        string? consolePassword, CancellationToken ct)
+    /// The ids a customer picked, turned into key lines: every id must be a key of the caller's tenant, since a
+    /// foreign id is indistinguishable from an unknown one (titan-ops features/vm/design.md#ssh-key); a repeated id
+    /// goes in once. Shared with vm-key-addition, which validates the same way before it rebuilds its own lines.
+    public static async Task<List<string>> KeyLinesAsync(ISshKeyRepository keys, Guid tenantId, List<Guid>? sshKeyIds,
+        CancellationToken ct)
     {
         var lines = new List<string>();
-        if (sshKeyIds != null && sshKeyIds.Count > 0)
+        if (sshKeyIds == null || sshKeyIds.Count == 0)
         {
-            List<Guid> distinctIds = sshKeyIds.Distinct().ToList();
-            Dictionary<Guid, SshKey> found = (await keys.ListByIdsAsync(tenantId, distinctIds, ct)).ToDictionary(k => k.Id);
-            foreach (Guid id in distinctIds)
-            {
-                if (!found.TryGetValue(id, out SshKey? key))
-                {
-                    throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{id}' not found.");
-                }
-                lines.Add(key.PublicKey);
-            }
+            return lines;
         }
+        List<Guid> distinctIds = sshKeyIds.Distinct().ToList();
+        Dictionary<Guid, SshKey> found = (await keys.ListByIdsAsync(tenantId, distinctIds, ct)).ToDictionary(k => k.Id);
+        foreach (Guid id in distinctIds)
+        {
+            if (!found.TryGetValue(id, out SshKey? key))
+            {
+                throw new NotFoundException("SSH_KEY_NOT_FOUND", $"SSH key '{id}' not found.");
+            }
+            lines.Add(key.PublicKey);
+        }
+        return lines;
+    }
+
+    /// The vendor-data for the keys a customer picked and the console password they set (titan-ops
+    /// features/vm/design.md#console-password); never null: every VM gets the config file, with or without a key.
+    public static async Task<string> ForAsync(ISshKeyRepository keys, Guid tenantId, List<Guid>? sshKeyIds,
+        string? consolePassword, CancellationToken ct)
+    {
+        List<string> lines = await KeyLinesAsync(keys, tenantId, sshKeyIds, ct);
         string? passwordHash = null;
         if (consolePassword != null)
         {
@@ -51,14 +64,11 @@ public static class VmVendorData
         return Build(lines, passwordHash);
     }
 
-    /// Null when there is neither a key nor a password: the VM is created exactly as without these features.
-    public static string? Build(IReadOnlyList<string> keyLines, string? consolePasswordHash)
+    /// Never null (titan-ops features/vm/design.md#ssh-key): the config file that points sshd at Titan's key file
+    /// is written once per instance for every VM, with or without a key, so a key added later only has to write the
+    /// key file.
+    public static string Build(IReadOnlyList<string> keyLines, string? consolePasswordHash)
     {
-        if (keyLines.Count == 0 && consolePasswordHash == null)
-        {
-            return null;
-        }
-
         foreach (string line in keyLines)
         {
             if (!KeyLine.IsMatch(line))
@@ -74,10 +84,7 @@ public static class VmVendorData
         var script = new StringBuilder();
         script.Append("#cloud-boothook\n");
         script.Append("#!/bin/sh\n");
-        if (keyLines.Count > 0)
-        {
-            AppendKeys(script, keyLines);
-        }
+        AppendKeys(script, keyLines);
         if (consolePasswordHash != null)
         {
             AppendPassword(script, consolePasswordHash);
@@ -87,19 +94,23 @@ public static class VmVendorData
 
     // The user may not exist yet when a boothook runs, so the keys live outside its home; the customer's own
     // authorized_keys still counts. A boothook runs at every boot: the writes run once per instance, so a key the
-    // customer removes stays removed.
+    // customer removes stays removed. The config file is written whether or not there are keys: a VM with
+    // none still accepts a key added later, through the same file a vm-key-addition command writes.
     private static void AppendKeys(StringBuilder script, IReadOnlyList<string> keyLines)
     {
-        script.Append("# OpenViCloud: SSH keys picked at VM create, for sshd before the rest of cloud-init runs.\n");
+        script.Append("# OpenViCloud: the key file sshd reads and the config pointing to it, for sshd before the rest of cloud-init runs.\n");
         script.Append("cloud-init-per instance openvicloud-ssh-keys /bin/sh -s <<'ONCE'\n");
         script.Append("mkdir -p /etc/ssh/openvicloud /etc/ssh/sshd_config.d\n");
-        script.Append("cat > /etc/ssh/openvicloud/ubuntu <<'KEYS'\n");
-        foreach (string line in keyLines)
+        if (keyLines.Count > 0)
         {
-            script.Append(line).Append('\n');
+            script.Append("cat > /etc/ssh/openvicloud/ubuntu <<'KEYS'\n");
+            foreach (string line in keyLines)
+            {
+                script.Append(line).Append('\n');
+            }
+            script.Append("KEYS\n");
+            script.Append("chmod 644 /etc/ssh/openvicloud/ubuntu\n");
         }
-        script.Append("KEYS\n");
-        script.Append("chmod 644 /etc/ssh/openvicloud/ubuntu\n");
         script.Append("echo 'AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2 /etc/ssh/openvicloud/%u' > /etc/ssh/sshd_config.d/10-openvicloud.conf\n");
         script.Append("ONCE\n");
     }

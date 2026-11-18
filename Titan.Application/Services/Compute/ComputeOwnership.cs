@@ -123,6 +123,18 @@ public static class ComputeOwnership
         throw new NotFoundException("VM_SNAPSHOT_NOT_FOUND", "Snapshot not found.");
     }
 
+    public static VmKeyAddition RequireVmKeyAddition(VmAggregate vm, Guid keyAdditionId)
+    {
+        foreach (VmKeyAddition addition in vm.KeyAdditions)
+        {
+            if (addition.Id == keyAdditionId)
+            {
+                return addition;
+            }
+        }
+        throw new NotFoundException("VM_KEY_ADDITION_NOT_FOUND", "Key addition not found.");
+    }
+
     public static VolumeSnapshot RequireVolumeSnapshot(Volume volume, Guid snapshotId)
     {
         foreach (VolumeSnapshot snapshot in volume.Snapshots)

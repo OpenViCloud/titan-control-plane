@@ -494,8 +494,9 @@ public class RequestLifecycleShapeTests
     {
         AssertEveryHandlerLocks(
             [Path.Combine("Titan.Application", "Commands", "Compute", "Vm"), Path.Combine("Titan.Application", "Commands", "Admin", "Vm"),
-                Path.Combine("Titan.Application", "Commands", "Compute", "VmSnapshot")],
-            except: ["UpdateVm", "RequestVmSsh", "RequestVmConsole", "RecordVmMetrics"], atLeast: 12, "VM");
+                Path.Combine("Titan.Application", "Commands", "Compute", "VmSnapshot"),
+                Path.Combine("Titan.Application", "Commands", "Compute", "VmKeyAddition")],
+            except: ["UpdateVm", "RequestVmSsh", "RequestVmConsole", "RecordVmMetrics"], atLeast: 14, "VM");
     }
 
     // A volume's create makes a new row, so it has nothing to lock; a snapshot's create locks its volume for the cap.
@@ -563,6 +564,17 @@ public class RequestLifecycleShapeTests
         // A property named requestId, not any mention of the word.
         var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "VM command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));
+    }
+
+    [Fact]
+    public void EveryVmKeyAdditionCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        Match enqueue = Regex.Match(src, @"public Task EnqueueVmKeyAdditionCreateAsync\([\s\S]*?,\s*ct\);");
+        Assert.True(enqueue.Success, "EnqueueVmKeyAdditionCreateAsync not found: the scan is blind");
+
+        Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
+            "The key addition command payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
     }
 
     [Fact]

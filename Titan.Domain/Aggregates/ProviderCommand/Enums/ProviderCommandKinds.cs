@@ -10,6 +10,7 @@ public static class ProviderCommandKinds
     public const string VmSnapshotCreate = "vm-snapshot.create";
     public const string VmSnapshotRevert = "vm-snapshot.revert";
     public const string VmSnapshotDelete = "vm-snapshot.delete";
+    public const string VmKeyAdditionCreate = "vm-key-addition.create";
     public const string NetworkCreate = "network.create";
     public const string NetworkDelete = "network.delete";
     public const string FirewallRuleCreate = "firewall-rule.create";

@@ -45,6 +45,7 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<TopUp> TopUps => Set<TopUp>();
     public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions => Set<PaymentGatewayTransaction>();
     public DbSet<VmSnapshot> VmSnapshots => Set<VmSnapshot>();
+    public DbSet<VmKeyAddition> VmKeyAdditions => Set<VmKeyAddition>();
     public DbSet<Volume> Volumes => Set<Volume>();
     public DbSet<Domain.Aggregates.LoadBalancer.LoadBalancer> LoadBalancers =>
         Set<Domain.Aggregates.LoadBalancer.LoadBalancer>();

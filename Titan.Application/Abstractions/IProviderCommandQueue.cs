@@ -44,6 +44,11 @@ public interface IProviderCommandQueue
     Task EnqueueVmSnapshotRevertAsync(VmAggregate vm, VmSnapshot snapshot, Guid requestId, string externalSnapshotId, string projectName, CancellationToken ct = default);
     Task EnqueueVmSnapshotDeleteAsync(VmAggregate vm, VmSnapshot snapshot, Guid requestId, string externalSnapshotId, string projectName, CancellationToken ct = default);
 
+    // keyLines are rebuilt from the picked keys, as VmVendorData does for a VM's create — never the customer's input
+    // verbatim (titan-ops features/vm/design.md#ssh-key).
+    Task EnqueueVmKeyAdditionCreateAsync(VmAggregate vm, VmKeyAddition addition, Guid requestId, string externalVmId,
+        string projectName, List<string> keyLines, CancellationToken ct = default);
+
     // No offering id: the worker has no catalog, the pool comes from the cluster and the size travels here.
     Task EnqueueVolumeCreateAsync(VolumeAggregate volume, Guid requestId, string projectName, CancellationToken ct = default);
     Task EnqueueVolumeAttachAsync(VolumeAggregate volume, Guid requestId, string externalVolumeId, string externalVmId, string projectName, CancellationToken ct = default);

@@ -47,6 +47,7 @@ public class ModuleBoundaryTests
         ["ISshKeyRepository"] = "Compute",
         ["IVmRepository"] = "Compute",
         ["IVmSnapshotRepository"] = "Compute",
+        ["IVmKeyAdditionRepository"] = "Compute",
         ["IVolumeRepository"] = "Compute",
         ["IVolumeSnapshotRepository"] = "Compute",
         ["IClusterIpv6RouteRepository"] = "Networking",

@@ -11,10 +11,19 @@ public class VmVendorDataTests
     private const string Rsa = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCzyjeB";
     private const string Hash = "$6$rgprobesalt$nSxi4dKg3obBTV33X0Wnws7kIi8jT50mu.DpARo.IQtM4NQ/SAJt4uuiOqBLf8QgnyKzhezr5SvghngykEqvO0";
 
+    // Every VM gets the config file that points sshd at Titan's key file, even with no key and no
+    // console password, so a key added later only has to write the key file.
     [Fact]
-    public void NoKeysAndNoPassword_IsNoVendorData()
+    public void NoKeysAndNoPassword_StillWritesTheConfigFile_WithNoKeyFile()
     {
-        Assert.Null(VmVendorData.Build([], null));
+        string script = VmVendorData.Build([], null);
+
+        Assert.StartsWith("#cloud-boothook\n#!/bin/sh\n", script);
+        Assert.Contains(
+            "echo 'AuthorizedKeysFile .ssh/authorized_keys .ssh/authorized_keys2 /etc/ssh/openvicloud/%u' > /etc/ssh/sshd_config.d/10-openvicloud.conf",
+            script);
+        Assert.DoesNotContain("cat > /etc/ssh/openvicloud/ubuntu", script);
+        Assert.DoesNotContain("openvicloud-console-password", script);
     }
 
     // A boothook: cloud-init runs it in an early stage, before sshd starts and long before the modules that wait for
@@ -74,7 +83,10 @@ public class VmVendorDataTests
         Assert.Contains("cat > /var/lib/cloud/scripts/per-instance/openvicloud-console-password <<'SCRIPT'\n", script);
         Assert.Contains("echo 'ubuntu:" + Hash + "' | chpasswd -e\n", script);
         Assert.Contains("chmod 700 /var/lib/cloud/scripts/per-instance/openvicloud-console-password\n", script);
-        Assert.DoesNotContain("openvicloud-ssh-keys", script);
+        // The config-file part of the boothook always runs, even without a key; only the key file
+        // itself is skipped.
+        Assert.Contains("openvicloud-ssh-keys", script);
+        Assert.DoesNotContain("cat > /etc/ssh/openvicloud/ubuntu", script);
     }
 
     [Fact]

@@ -126,6 +126,16 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     internal static string VmSnapshotRevertKey(Guid snapshotId, Guid requestId) => $"vm-snapshot-revert-{snapshotId}-{requestId}";
     internal static string VmSnapshotDeleteKey(Guid snapshotId, Guid requestId) => $"vm-snapshot-delete-{snapshotId}-{requestId}";
 
+    // Key addition: one row per operation, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public Task EnqueueVmKeyAdditionCreateAsync(VmAggregate vm, VmKeyAddition addition, Guid requestId, string externalVmId,
+        string projectName, List<string> keyLines, CancellationToken ct = default) =>
+        EnqueueAsync(VmKeyAdditionCreateKey(addition.Id, requestId), ProviderCommandKinds.VmKeyAdditionCreate, vm.ClusterId, vm.TenantId,
+            new { keyAdditionId = addition.Id, requestId, vmId = vm.Id, externalVmId, projectName, keyLines }, ct);
+
+    // `vm-key-addition-create-{keyAdditionId}-{requestId}`: the stuck-request query rebuilds the key from the
+    // addition's waiting operation (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string VmKeyAdditionCreateKey(Guid keyAdditionId, Guid requestId) => $"vm-key-addition-create-{keyAdditionId}-{requestId}";
+
     // Volume and volume snapshot: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     // A restore is the new volume's create, so its row is keyed like one and the stuck-request query finds it.
     public Task EnqueueVolumeCreateAsync(VolumeAggregate volume, Guid requestId, string projectName,
