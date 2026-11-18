@@ -66,5 +66,14 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
             .OnDelete(DeleteBehavior.Restrict);
         builder.Navigation(v => v.Snapshots).UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Ignore(v => v.SnapshotQuotaUsage);
+
+        // The key additions are the VM's (titan-ops architecture/code-structure.md#child-entity): loaded and saved
+        // with it, through the backing field. Restrict, not cascade: no row of either table is ever deleted; the
+        // list keeps growing as Added/Failed rows are never pruned (reported as a deviation, not fixed here).
+        builder.HasMany(v => v.KeyAdditions)
+            .WithOne()
+            .HasForeignKey(a => a.VmId)
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.Navigation(v => v.KeyAdditions).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }

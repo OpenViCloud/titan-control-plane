@@ -22,6 +22,7 @@ public class ApiIdempotencyKeyTests(OpenApiSpecTests.ApiFactory factory)
         "POST v1/tenant/networks/{networkId:guid}/firewall-rules",
         "POST v1/tenant/volumes",
         "POST v1/tenant/vms/{vmId:guid}/snapshots",
+        "POST v1/tenant/vms/{vmId:guid}/key-additions",
         "POST v1/tenant/volumes/{volumeId:guid}/snapshots",
         "POST v1/tenant/volumes/{volumeId:guid}/snapshots/{snapshotId:guid}/restore",
         "POST v1/tenant/topups",

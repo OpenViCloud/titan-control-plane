@@ -214,7 +214,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
             It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
-            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "77", "cs-net-id", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // titan-ops features/catalog/design.md#template-borrows-sizing — the customer's chosen tier is what
@@ -240,7 +240,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == chosenTier && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
             It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == vcpu && o.MemoryMb == memoryMb),
-            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "77", "cs-net-id", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The debt ceiling gates NOTHING (titan-ops architecture/money-and-wallet.md#postpaid-no-brake): a tenant
@@ -289,7 +289,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "xl" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
             It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 8 && o.MemoryMb == 16384),
-            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "77", "cs-net-id", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Templates are a curated Titan catalog
@@ -313,7 +313,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-1" && v.DiskSizeGb == 0 && v.UserData == null),
             It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
-            "99", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "99", "cs-net-id", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Each cluster has its own image alias: the VM gets the id of ITS cluster, never another cluster's.
@@ -337,7 +337,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Name == "web-01" && v.VmOfferingId == "offering-1" && v.ClusterId == "cluster-2" && v.DiskSizeGb == 0 && v.UserData == null),
             It.IsAny<Guid>(), It.Is<VmOffering>(o => o.VcpuCount == 2 && o.MemoryMb == 4096),
-            "3", "cs-net-2", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "3", "cs-net-2", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Synced in another cluster only: in this cluster the template does not exist yet.
@@ -432,7 +432,7 @@ public class VmServiceTests
         _repo.Verify(r => r.Add(It.Is<Vm>(v => v.Id == result.VmId && v.ClusterId == "cluster-1")), Times.Once);
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.Id == result.VmId && v.ClusterId == "cluster-1"), It.IsAny<Guid>(), It.IsAny<VmOffering>(),
-            "77", "cs-net-id", TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            "77", "cs-net-id", TenantProject, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // The network's cluster has since left the configuration: nowhere to send the command, so no VM either.
@@ -1509,7 +1509,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.UserData == userData),
             It.IsAny<Guid>(), It.IsAny<VmOffering>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -1527,7 +1527,7 @@ public class VmServiceTests
         _commands.Verify(w => w.EnqueueVmCreateAsync(
             It.Is<Vm>(v => v.UserData == null),
             It.IsAny<Guid>(), It.IsAny<VmOffering>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // ── SSH keys picked at create (titan-ops features/vm/design.md#ssh-key) ──────
@@ -1594,18 +1594,25 @@ public class VmServiceTests
         Assert.Equal(hash.Groups[1].Value, Titan.Application.Services.Compute.Sha512Crypt.Hash("Console-Pass-123", salt));
     }
 
+    // Vendor-data is never null any more — every VM gets the boothook that writes the sshd config
+    // file, even with no key picked.
     [Fact]
-    public async Task Create_WithoutSshKeys_SendsNoVendorData()
+    public async Task Create_WithoutSshKeys_StillSendsVendorData_WritingOnlyTheConfigFile()
     {
         var network = ReadyToCreate();
+        string? vendorData = null;
+        _commands.Setup(w => w.EnqueueVmCreateAsync(
+                It.IsAny<Vm>(), It.IsAny<Guid>(), It.IsAny<VmOffering>(),
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Callback(new InvocationAction(i => vendorData = (string?)i.Arguments[6]))
+            .Returns(Task.CompletedTask);
 
         await CreateCreateHandler().HandleAsync(new CreateVmCommand(
             "web-01", network.Id, "offering-1", _templateId, "cluster-1", null), default);
 
-        _commands.Verify(w => w.EnqueueVmCreateAsync(
-            It.IsAny<Vm>(),
-            It.IsAny<Guid>(), It.IsAny<VmOffering>(),
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), null, It.IsAny<CancellationToken>()), Times.Once);
+        Assert.NotNull(vendorData);
+        Assert.Contains("10-openvicloud.conf", vendorData);
+        Assert.DoesNotContain("cat > /etc/ssh/openvicloud/ubuntu", vendorData);
     }
 
     [Fact]

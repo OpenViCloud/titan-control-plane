@@ -1265,6 +1265,67 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("vms", "core");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Vm.VmKeyAddition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("AskedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("pending_request_asked_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("request_failed_at");
+
+                    b.Property<string>("FailureDetail")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_detail");
+
+                    b.Property<string>("FailureReason")
+                        .HasColumnType("text")
+                        .HasColumnName("request_failure_reason");
+
+                    b.Property<Guid?>("PendingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pending_request_id");
+
+                    b.Property<bool>("RestartNeeded")
+                        .HasColumnType("boolean")
+                        .HasColumnName("restart_needed");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("VmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vm_id");
+
+                    b.PrimitiveCollection<List<Guid>>("_sshKeyIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("ssh_key_ids");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("VmId");
+
+                    b.ToTable("vm_key_additions", "core");
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Vm.VmSnapshot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2222,6 +2283,15 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Vm.VmKeyAddition", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.Vm.Vm", null)
+                        .WithMany("KeyAdditions")
+                        .HasForeignKey("VmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Vm.VmSnapshot", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Vm.Vm", null)
@@ -2465,6 +2535,8 @@ namespace Titan.Infrastructure.Migrations
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Vm.Vm", b =>
                 {
+                    b.Navigation("KeyAdditions");
+
                     b.Navigation("Snapshots");
                 });
 

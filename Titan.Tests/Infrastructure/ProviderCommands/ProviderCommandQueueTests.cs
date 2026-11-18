@@ -60,6 +60,14 @@ public class ProviderCommandQueueTests
         return (vm, vm.WithSnapshot("nightly"));
     }
 
+    private static (Vm Vm, VmKeyAddition Addition) AVmKeyAddition()
+    {
+        Vm vm = AVm();
+        vm.MarkRunning("vm-x", "10.0.0.5");
+        vm.AddKeys(Guid.NewGuid(), Guid.NewGuid(), [Guid.NewGuid()]);
+        return (vm, vm.KeyAdditions.Single());
+    }
+
     private static VmTemplate ATemplate(string? imageUrl = null)
     {
         VmTemplate template = VmTemplate.Create("Alma-9-DB", "a description", "almalinux/9", 40, "m");
@@ -78,6 +86,7 @@ public class ProviderCommandQueueTests
     {
         ProviderCommandQueue queue = Queue();
         (Vm vm, VmSnapshot vmSnapshot) = AVmSnapshot();
+        (Vm keyAdditionVm, VmKeyAddition keyAddition) = AVmKeyAddition();
         (Volume volume, VolumeSnapshot volumeSnapshot) = AVolumeSnapshot();
         (Network network, FirewallRule rule) = ARule();
         LoadBalancer lb = ALoadBalancer();
@@ -86,7 +95,9 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.VmCreate] = vm.TenantId, [ProviderCommandKinds.VmDelete] = vm.TenantId,
             [ProviderCommandKinds.VmStop] = vm.TenantId, [ProviderCommandKinds.VmStart] = vm.TenantId,
             [ProviderCommandKinds.VmSnapshotCreate] = vm.TenantId, [ProviderCommandKinds.VmSnapshotRevert] = vm.TenantId,
-            [ProviderCommandKinds.VmSnapshotDelete] = vm.TenantId, [ProviderCommandKinds.VmBackup] = vm.TenantId,
+            [ProviderCommandKinds.VmSnapshotDelete] = vm.TenantId,
+            [ProviderCommandKinds.VmKeyAdditionCreate] = keyAdditionVm.TenantId,
+            [ProviderCommandKinds.VmBackup] = vm.TenantId,
             [ProviderCommandKinds.NetworkCreate] = network.TenantId, [ProviderCommandKinds.NetworkDelete] = network.TenantId,
             [ProviderCommandKinds.FirewallRuleCreate] = network.TenantId,
             [ProviderCommandKinds.FirewallRuleDelete] = network.TenantId,
@@ -108,6 +119,7 @@ public class ProviderCommandQueueTests
         await queue.EnqueueVmSnapshotCreateAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x", "t-1");
         await queue.EnqueueVmSnapshotRevertAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
         await queue.EnqueueVmSnapshotDeleteAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
+        await queue.EnqueueVmKeyAdditionCreateAsync(keyAdditionVm, keyAddition, Guid.NewGuid(), "vm-x", "t-1", ["ssh-ed25519 AAAA"]);
         await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 11, 11));
         await queue.EnqueueNetworkCreateAsync(network, Guid.NewGuid(), "t-1", null);
         await queue.EnqueueNetworkDeleteAsync(network, Guid.NewGuid(), "net-x", "t-1");
@@ -893,6 +905,11 @@ public class ProviderCommandQueueTests
                 (Vm vm, VmSnapshot snapshot) = AVmSnapshot();
                 return queue.EnqueueVmSnapshotDeleteAsync(vm, snapshot, request, "vm-x/snap-x", project);
             }
+            case ProviderCommandKinds.VmKeyAdditionCreate:
+            {
+                (Vm vm, VmKeyAddition addition) = AVmKeyAddition();
+                return queue.EnqueueVmKeyAdditionCreateAsync(vm, addition, request, "vm-x", project, ["ssh-ed25519 AAAA"]);
+            }
             case ProviderCommandKinds.VmBackup:
                 return queue.EnqueueVmBackupAsync(AVm(), "vm-x", project, new DateOnly(2026, 10, 26));
             case ProviderCommandKinds.VolumeBackup:
@@ -952,6 +969,7 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.VmSnapshotCreate, ["externalVmId", "projectName", "requestId", "snapshotId", "vmId"] },
         { ProviderCommandKinds.VmSnapshotRevert, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "vmId"] },
         { ProviderCommandKinds.VmSnapshotDelete, ["externalSnapshotId", "projectName", "requestId", "snapshotId", "vmId"] },
+        { ProviderCommandKinds.VmKeyAdditionCreate, ["externalVmId", "keyAdditionId", "keyLines", "projectName", "requestId", "vmId"] },
         { ProviderCommandKinds.VolumeCreate, ["name", "projectName", "requestId", "sizeGb", "volumeId"] },
         { ProviderCommandKinds.VolumeAttach, ["externalVmId", "externalVolumeId", "projectName", "requestId", "volumeId"] },
         { ProviderCommandKinds.VolumeDetach, ["externalVolumeId", "projectName", "requestId", "volumeId"] },

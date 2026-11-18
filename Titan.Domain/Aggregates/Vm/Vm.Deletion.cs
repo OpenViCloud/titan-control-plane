@@ -75,6 +75,7 @@ public partial class Vm
         {
             snapshot.EndWithItsVm();
         }
+        EndKeyAdditionsWithTheVm();
         return true;
     }
 

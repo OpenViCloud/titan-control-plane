@@ -117,7 +117,7 @@ public class ChildEntityGuardTests
             .Select(t => $"I{t.Name}Repository")
             .ToHashSet(StringComparer.Ordinal);
         var childRepositories = RepositoryInterfaces().Where(r => childNames.Contains(r.Name)).ToList();
-        Assert.Equal(3, childRepositories.Count); // FirewallRule, VolumeSnapshot, VmSnapshot
+        Assert.Equal(4, childRepositories.Count); // FirewallRule, VolumeSnapshot, VmSnapshot, VmKeyAddition
 
         var offenders = childRepositories
             .SelectMany(r => r.GetMethods().Select(m => (r, m)))
@@ -193,6 +193,7 @@ public class ChildEntityGuardTests
         ["FirewallRule"] = "a child with its own routes and callback; the handlers load and save its Network",
         ["VolumeSnapshot"] = "a child with its own routes and callback; the handlers load and save its Volume",
         ["VmSnapshot"] = "a child with its own routes and callback; the handlers load and save its Vm",
+        ["VmKeyAddition"] = "a child with its own routes and callback; the handlers load and save its Vm",
         ["Request"] = "no aggregate: a read of core.pending_requests, the view over every lifecycle table's waiting request "
             + "(titan-ops architecture/resource-lifecycle.md#lost-and-stale)",
     };
