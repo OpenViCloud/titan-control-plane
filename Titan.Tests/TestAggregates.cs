@@ -14,8 +14,8 @@ internal static class TestAggregates
 {
     internal static NetworkAggregate Network(
         Tenant owner, string name, string clusterId,
-        FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
-        FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow,
+        FirewallPolicy defaultIngressPolicy = NetworkAggregate.NewNetworkIngressPolicy,
+        FirewallPolicy defaultEgressPolicy = NetworkAggregate.NewNetworkEgressPolicy,
         string? requestedCidr = null)
     {
         Ipv4Cidr? requested = null;

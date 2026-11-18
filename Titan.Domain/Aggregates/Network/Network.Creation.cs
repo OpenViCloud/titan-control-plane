@@ -6,6 +6,12 @@ namespace Titan.Domain.Aggregates.Network;
 
 public partial class Network
 {
+    /// A new network drops what comes in from outside it and lets its VMs reach out, unless the customer asks otherwise
+    /// (titan-ops features/network/design.md#firewall-default-policy). The create contract takes these as the value of a
+    /// policy not sent.
+    public const FirewallPolicy NewNetworkIngressPolicy = FirewallPolicy.Deny;
+    public const FirewallPolicy NewNetworkEgressPolicy = FirewallPolicy.Allow;
+
     /// The range the customer asked for is checked against the public IPv6 choice here, an invariant of two of the network's own
     /// attributes (titan-ops architecture/code-structure.md#logic-placement): the uplink of a network with public IPv6
     /// routes only the private ranges (titan-ops infra/incus/design.md#ipv6-address-plan). The validator answers the
@@ -13,8 +19,8 @@ public partial class Network
     public static Network Create(
         Guid tenantId, NetworkName name, string clusterId,
         Ipv4Cidr? chosenCidr, bool wantsPublicIpv6,
-        FirewallPolicy defaultIngressPolicy = FirewallPolicy.Allow,
-        FirewallPolicy defaultEgressPolicy = FirewallPolicy.Allow)
+        FirewallPolicy defaultIngressPolicy = NewNetworkIngressPolicy,
+        FirewallPolicy defaultEgressPolicy = NewNetworkEgressPolicy)
     {
         bool cidrOutsideThePrivateRanges = wantsPublicIpv6 && chosenCidr != null && !chosenCidr.IsInsideAPrivateRange;
         if (cidrOutsideThePrivateRanges)

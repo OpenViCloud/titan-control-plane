@@ -74,8 +74,8 @@ public partial class Network : IAggregateRoot
     /// An operation waits on its command: only the report carrying its id moves the status on.
     private bool IsTransitionStatus => Status == NetworkStatus.Creating || Status == NetworkStatus.Deleting;
     public DateTimeOffset CreatedAt { get; private set; }
-    public FirewallPolicy DefaultIngressPolicy { get; private set; } = FirewallPolicy.Allow;
-    public FirewallPolicy DefaultEgressPolicy { get; private set; } = FirewallPolicy.Allow;
+    public FirewallPolicy DefaultIngressPolicy { get; private set; }
+    public FirewallPolicy DefaultEgressPolicy { get; private set; }
     // The /64 of the route the network was given (titan-ops infra/incus/design.md#ipv6-address-plan); null = no public
     // IPv6. Which route it is, and when it goes back, is the route's to know (ClusterIpv6Route).
     public string? PublicIpv6Subnet { get; private set; }

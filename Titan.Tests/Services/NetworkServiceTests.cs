@@ -115,7 +115,23 @@ public class NetworkServiceTests
         _repo.Verify(r => r.Add(It.IsAny<Network>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a25 => a25.Id == added.Id && a25.Name.Value == "my-net" && a25.ClusterId == "cluster-1" && (a25.ChosenCidr == null ? null : a25.ChosenCidr.Value) == null && a25.DefaultIngressPolicy.ToString() == "Allow" && a25.DefaultEgressPolicy.ToString() == "Allow" && a25.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a25 => a25.Id == added.Id && a25.Name.Value == "my-net" && a25.ClusterId == "cluster-1" && (a25.ChosenCidr == null ? null : a25.ChosenCidr.Value) == null && a25.DefaultIngressPolicy.ToString() == "Deny" && a25.DefaultEgressPolicy.ToString() == "Allow" && a25.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Allow asked for is Allow stored: the wire contract carries no default of its own, so an explicit Allow is not
+    // mistaken for a policy not sent (titan-ops features/network/design.md#firewall-default-policy).
+    [Fact]
+    public async Task Create_WithAllowAsked_SendsAllowToTheWorker()
+    {
+        SetupCurrentUser(TenantId);
+        SetupTenant();
+        _repo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(0);
+        _repo.Setup(r => r.ExistsByNameAsync(TenantId, NetworkName.Parse("my-net"), default)).ReturnsAsync(false);
+
+        await CreateService().CreateAsync(new CreateNetworkCommand("my-net", "cluster-1", null, FirewallPolicy.Allow, FirewallPolicy.Allow), default);
+
+        _commands.Verify(w => w.EnqueueNetworkCreateAsync(
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a => a.DefaultIngressPolicy == FirewallPolicy.Allow && a.DefaultEgressPolicy == FirewallPolicy.Allow), It.IsAny<Guid>(), TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -679,7 +695,7 @@ public class NetworkServiceTests
         Assert.NotNull(added);
         Assert.Equal(Ipv4Cidr.Parse("10.0.0.0/24"), added!.ChosenCidr);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a32 => a32.Id == added.Id && a32.Name.Value == "my-net" && a32.ClusterId == "cluster-1" && (a32.ChosenCidr == null ? null : a32.ChosenCidr.Value) == "10.0.0.0/24" && a32.DefaultIngressPolicy.ToString() == "Allow" && a32.DefaultEgressPolicy.ToString() == "Allow" && a32.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a32 => a32.Id == added.Id && a32.Name.Value == "my-net" && a32.ClusterId == "cluster-1" && (a32.ChosenCidr == null ? null : a32.ChosenCidr.Value) == "10.0.0.0/24" && a32.DefaultIngressPolicy.ToString() == "Deny" && a32.DefaultEgressPolicy.ToString() == "Allow" && a32.PublicIpv6Subnet == null), added.Operation.PendingId!.Value, TenantProject, null, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // A delete that failed leaves the customer free to press Delete again — a new request, a new command.
@@ -971,7 +987,7 @@ public class NetworkServiceTests
         Assert.Equal("2001:41d0:d00:d403::/64", added!.PublicIpv6Subnet);
         Assert.Equal(added.Id, RouteRow(3).NetworkId);
         _commands.Verify(w => w.EnqueueNetworkCreateAsync(
-            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a36 => a36.Id == added.Id && a36.Name.Value == "my-net" && a36.ClusterId == "cluster-1" && (a36.ChosenCidr == null ? null : a36.ChosenCidr.Value) == null && a36.DefaultIngressPolicy.ToString() == "Allow" && a36.DefaultEgressPolicy.ToString() == "Allow" && a36.PublicIpv6Subnet == "2001:41d0:d00:d403::/64"), added.Operation.PendingId!.Value, TenantProject, "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Network.Network>(a36 => a36.Id == added.Id && a36.Name.Value == "my-net" && a36.ClusterId == "cluster-1" && (a36.ChosenCidr == null ? null : a36.ChosenCidr.Value) == null && a36.DefaultIngressPolicy.ToString() == "Deny" && a36.DefaultEgressPolicy.ToString() == "Allow" && a36.PublicIpv6Subnet == "2001:41d0:d00:d403::/64"), added.Operation.PendingId!.Value, TenantProject, "2001:41d0:d00:d400::103", It.IsAny<CancellationToken>()), Times.Once);
         _repo.Verify(r => r.SaveAsync(default), Times.Once);
     }
 
