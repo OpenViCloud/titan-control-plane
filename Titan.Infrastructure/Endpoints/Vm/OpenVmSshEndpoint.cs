@@ -64,7 +64,7 @@ public class OpenVmSshEndpoint(
                 "SSH session refused: vmId {VmId} tenantId {TenantId} operation {OperationId} nothing listening on port 22 exitCode {ExitCode}",
                 vmId, tenantId, exec.OperationId, refusedExitCode);
             throw new BusinessException("VM_SSH_NOT_READY",
-                "The VM is running but its SSH server is not listening yet; try again in a minute.");
+                "The VM is running but no SSH server is listening on port 22: it is still starting, or its SSH server is stopped; try again in a minute.");
         }
         await request.HandleAsync(new RequestVmSshCommand(vmId), ct);
 

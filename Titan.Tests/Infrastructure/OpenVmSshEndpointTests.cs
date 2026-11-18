@@ -123,7 +123,8 @@ public class OpenVmSshEndpointTests
         }
     }
 
-    // The agent is up but sshd is not listening yet (cloud-init still runs): nc ends without the server's banner. The
+    // The agent is up but sshd is not listening (cloud-init still runs, or sshd is stopped): nc ends at once without the
+    // server's banner, before a client that connects control last gets to it (FakeIncusExecServer). The
     // customer gets a code to retry on, before the upgrade; nothing is recorded and the place is given back.
     [Fact]
     public async Task AVmWithNothingListeningOnPort22_IsVmSshNotReady_RecordsNothing_AndGivesItsPlaceBack()

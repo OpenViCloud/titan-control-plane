@@ -120,8 +120,8 @@ public sealed class IncusClient : IDisposable
         return description.GetString();
     }
 
-    /// POST /1.0/instances/{name}/exec, non-interactive and waiting for its websockets: the command starts once all
-    /// four are connected. "Instance is not running" is the VM's state; any other refusal is the cluster's
+    /// POST /1.0/instances/{name}/exec, non-interactive and waiting for its websockets: the command starts once 0, 1
+    /// and 2 are connected; control is not waited for. "Instance is not running" is the VM's state; any other refusal is the cluster's
     /// (titan-ops features/vm/design.md#ssh-session).
     public async Task<IncusExecOperation> StartExecAsync(
         string project, string instance, IReadOnlyList<string> command, CancellationToken ct)

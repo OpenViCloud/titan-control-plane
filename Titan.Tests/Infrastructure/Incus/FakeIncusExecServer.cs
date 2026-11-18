@@ -15,10 +15,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Titan.Tests.Infrastructure.Incus;
 
-// An in-process HTTPS server that answers a non-interactive exec the way Incus 7.0.1 did when measured on dev
-// (2026-10-13): POST exec answers 202 with an operation
-// carrying fds 0, 1, 2 and control; the command starts once all four websockets are connected; the end of the
-// command is an empty message on 1 and 2, then the sockets close without a close handshake.
+// An in-process HTTPS server that answers a non-interactive exec the way Incus 7.0.1 does. Measured on dev
+// (2026-10-13): POST exec answers 202 with an operation carrying fds 0, 1, 2 and control; the end of the command is an
+// empty message on 1 and 2, then the sockets close without a close handshake. Read in the source (lxc/incus v7.0.1):
+// the command starts once 0, 1 and 2 are connected, control is not waited for (cmd/incusd/instance_exec.go:148-158);
+// a websocket of an ended operation is a 500 "Only running operations can be connected"
+// (internal/server/operations/operations.go:456), while the operation carries no error (prd log, 2026-11-18).
 // The command here is an echo: it writes Banner, then echoes stdin to stdout until stdin closes.
 internal sealed class FakeIncusExecServer : IAsyncDisposable
 {
@@ -67,6 +69,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         public TaskCompletionSource Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Signalled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public string Status { get; set; } = "Running";
+        public bool Ended { get; set; }
         public string Err { get; set; } = "";
         public int? ExitCode { get; set; }
     }
@@ -216,11 +219,25 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
             await WriteAsync(context, 500, """{"type":"error","error_code":500,"error":"VM agent isn't currently running"}""");
             return;
         }
+        if (operation!.Ended)
+        {
+            await WriteAsync(context, 500, """{"type":"error","error_code":500,"error":"Only running operations can be connected"}""");
+            return;
+        }
+        bool startsCommand = fd != "control" && new[] { "0", "1", "2" }.Count(operation.Sockets.ContainsKey) == 2;
+        if (startsCommand && Behaviour == Mode.EndsWithoutOutput)
+        {
+            // nc with nothing on port 22 exits at once: before a client that connects control last gets to it
+            operation.Ended = true;
+        }
         WebSocket socket = await context.WebSockets.AcceptWebSocketAsync();
-        operation!.Sockets[fd] = socket;
+        operation.Sockets[fd] = socket;
         if (operation.Sockets.Count == 4)
         {
             operation.AllConnected.TrySetResult();
+        }
+        if (startsCommand)
+        {
             _ = Task.Run(() => RunCommandAsync(operation));
         }
         if (fd == "control")
@@ -344,6 +361,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         await stdout.SendAsync(ReadOnlyMemory<byte>.Empty, WebSocketMessageType.Binary, true, CancellationToken.None);
         await stderr.SendAsync(ReadOnlyMemory<byte>.Empty, WebSocketMessageType.Binary, true, CancellationToken.None);
         operation.ExitCode = exitCode;
+        operation.Ended = true;
         operation.Status = "Success";
         operation.Done.TrySetResult();
     }

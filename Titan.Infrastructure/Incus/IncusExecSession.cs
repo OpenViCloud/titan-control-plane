@@ -108,7 +108,11 @@ public sealed class IncusShellConnector(ClusterOptions clusters, IncusClientFact
         var sockets = new Dictionary<string, WebSocket>();
         try
         {
-            foreach (string fd in new[] { "0", "1", "2", "control" })
+            // A non-interactive exec starts its command once 0, 1 and 2 are connected, without waiting for control: control
+            // first, or a command that ends at once (nc with nothing on port 22) ends the operation before control is
+            // connected, and Incus refuses it with a 500 ("Only running operations can be connected") while the operation carries
+            // no error.
+            foreach (string fd in new[] { "control", "0", "1", "2" })
             {
                 sockets[fd] = await ConnectAsync(client, operation, fd, ct);
             }

@@ -25,7 +25,7 @@ namespace Titan.Tests.Infrastructure.Incus;
 //   close message on "0" ends that direction (rwc.go:43); the end of the console is an empty text message (rwc.go:92).
 // - A closed "control" ends the console (:265-268); "window-resize" arrives on control with string args (:286).
 // - When the console cannot attach (dev arm64), the operation fails and nothing closes the sockets (:232 returns before
-//   the defer at :338-353).
+//   the defer at :339-354).
 // Here the console echoes what it is sent, after a Prompt.
 internal sealed class FakeIncusConsoleServer : IAsyncDisposable
 {

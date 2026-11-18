@@ -4,7 +4,8 @@ namespace Titan.Infrastructure.Sessions;
 
 // The first receive on an SSH session's stdout, started before the customer's upgrade
 // (titan-ops features/vm/design.md#ssh-session). An SSH server writes its banner before it reads anything, so nc that
-// ends without a byte found nothing listening on port 22: in a VM whose agent is up while cloud-init still holds sshd.
+// ends without a byte found nothing listening on port 22: in a VM whose agent is up while cloud-init still holds sshd, or
+// whose sshd is stopped.
 // The receive is never cancelled (a cancelled receive aborts the socket): the relay takes it over, and the byte it
 // brings is the first one the customer gets.
 public sealed class ShellFirstOutput
