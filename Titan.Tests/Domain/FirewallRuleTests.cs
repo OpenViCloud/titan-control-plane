@@ -46,10 +46,37 @@ public class FirewallRuleTests
 
 public class NetworkFirewallPolicyTests
 {
+    // A new network blocks what comes in from outside it and lets its VMs reach out
+    // (titan-ops features/network/design.md#firewall-default-policy).
     [Fact]
-    public void Create_DefaultPoliciesAreAllow()
+    public void Create_WithoutPolicies_DeniesInbound_AndAllowsOutbound()
     {
         var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1");
+
+        Assert.Equal(FirewallPolicy.Deny, network.DefaultIngressPolicy);
+        Assert.Equal(FirewallPolicy.Allow, network.DefaultEgressPolicy);
+    }
+
+    [Fact]
+    public void Create_WithOnePolicyGiven_TheOtherTakesItsDefault()
+    {
+        var onlyEgress = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1",
+            defaultEgressPolicy: FirewallPolicy.Deny);
+        var onlyIngress = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-2", "cluster-1",
+            defaultIngressPolicy: FirewallPolicy.Allow);
+
+        Assert.Equal(FirewallPolicy.Deny, onlyEgress.DefaultIngressPolicy);
+        Assert.Equal(FirewallPolicy.Deny, onlyEgress.DefaultEgressPolicy);
+        Assert.Equal(FirewallPolicy.Allow, onlyIngress.DefaultIngressPolicy);
+        Assert.Equal(FirewallPolicy.Allow, onlyIngress.DefaultEgressPolicy);
+    }
+
+    [Fact]
+    public void Create_WithAllowAsked_KeepsAllow()
+    {
+        var network = TestAggregates.Network(TestTenant.WithRoomToSpare(), "net-1", "cluster-1",
+            defaultIngressPolicy: FirewallPolicy.Allow,
+            defaultEgressPolicy: FirewallPolicy.Allow);
 
         Assert.Equal(FirewallPolicy.Allow, network.DefaultIngressPolicy);
         Assert.Equal(FirewallPolicy.Allow, network.DefaultEgressPolicy);

@@ -7,8 +7,8 @@ public record CreateNetworkCommand(
     string Name,
     string ClusterId,
     string? Cidr = null,
-    FirewallPolicy DefaultIngressPolicy = FirewallPolicy.Allow,
-    FirewallPolicy DefaultEgressPolicy = FirewallPolicy.Allow,
+    FirewallPolicy DefaultIngressPolicy = Domain.Aggregates.Network.Network.NewNetworkIngressPolicy,
+    FirewallPolicy DefaultEgressPolicy = Domain.Aggregates.Network.Network.NewNetworkEgressPolicy,
     // One public /64 of the cluster for the network; every VM on it gets an address in it
     // (titan-ops infra/incus/design.md#ipv6-address-plan).
     bool EnablePublicIpv6 = false);
