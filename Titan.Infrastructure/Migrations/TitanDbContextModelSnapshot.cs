@@ -823,6 +823,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("payload");
 
+                    b.Property<Guid?>("ResourceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("resource_id");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -850,6 +854,11 @@ namespace Titan.Infrastructure.Migrations
 
                     b.HasIndex("LeaseId")
                         .IsUnique();
+
+                    b.HasIndex("ResourceId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_provider_commands_resource_id_leased")
+                        .HasFilter("status = 'Leased' AND resource_id IS NOT NULL");
 
                     b.HasIndex("Status", "CreatedAt");
 

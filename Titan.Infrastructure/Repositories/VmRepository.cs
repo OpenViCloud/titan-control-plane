@@ -75,6 +75,12 @@ public class VmRepository(TitanDbContext db) : IVmRepository
             .AsNoTracking()
             .ToListAsync(ct);
 
+    public async Task<List<Guid>> ListIdsNotDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        await db.Vms
+            .Where(v => ids.Contains(v.Id) && v.Status != VmStatus.Deleted)
+            .Select(v => v.Id)
+            .ToListAsync(ct);
+
     // Vm.HasAnInstance
     public async Task<List<Vm>> ListWithAnInstanceAsync(CancellationToken ct = default) =>
         await db.Vms

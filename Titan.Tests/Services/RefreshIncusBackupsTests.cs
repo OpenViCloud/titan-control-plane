@@ -189,4 +189,37 @@ public class RefreshIncusBackupsTests
 
         Assert.Equal(new[] { "backup-status" }, _lock.Taken);
     }
+
+    // The worker's key for a cluster's config, spelled out here (titan-ops features/backup/design.md#cluster-backup).
+    private static string ConfigKey(string clusterId, DateTimeOffset at) =>
+        $"incus/{clusterId}/cluster/{at.UtcDateTime:yyyyMMdd'T'HHmmss'Z'}.yaml";
+
+    [Fact]
+    public async Task AClustersConfigObject_IsARowOfKindCluster_NamedByTheCluster_WithNoTenant()
+    {
+        Put(ConfigKey("local-mac", Now.AddHours(-1)), 300);
+
+        await RunAsync();
+
+        BackupRecord config = Assert.Single(RowsOf(BackupRecord.ClusterKind));
+        Assert.Equal("local-mac", config.ResourceName);
+        Assert.Null(config.TenantId);
+        Assert.Equal(Now.AddHours(-1), config.TakenAt);
+        Assert.Equal(300, config.SizeBytes);
+    }
+
+    [Fact]
+    public async Task AnEighthConfig_RemovesTheOldestFromTheBucket_AndItsRow()
+    {
+        for (int day = 0; day < 8; day++)
+        {
+            Put(ConfigKey("local-mac", Now.AddDays(-day)), 10);
+        }
+
+        await RunAsync();
+
+        Assert.Equal(7, RowsOf(BackupRecord.ClusterKind).Count);
+        Assert.False(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-7))));
+        Assert.True(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-6))));
+    }
 }

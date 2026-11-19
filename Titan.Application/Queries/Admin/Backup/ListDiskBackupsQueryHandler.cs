@@ -1,3 +1,4 @@
+using Titan.Application.Options;
 using Titan.Application.Services.Platform.Backup;
 using Titan.Application.Queries.Admin.Backup.Contracts;
 using Titan.Application.Queries.Platform.Backup;
@@ -10,20 +11,23 @@ using VolumeStatus = Titan.Domain.Aggregates.Volume.VolumeStatus;
 namespace Titan.Application.Queries.Admin.Backup;
 
 /// The newest backup and health of every VM and custom volume Incus holds, across tenants, from the cache the refresh keeps
-/// (titan-ops features/backup/design.md#incus-backup). Listed from the resources, not from the cache: a
+/// (titan-ops features/backup/design.md#incus-backup), and of every configured cluster's config
+/// (titan-ops features/backup/design.md#cluster-backup). Listed from the resources, not from the cache: a
 /// resource with no backup at all is the one to warn about.
 public class ListDiskBackupsQueryHandler(
     IVmRepository vms,
     IVolumeRepository volumes,
     IBackupRecordRepository records,
     IBackupObservationRepository observations,
-    TimeProvider clock)
+    TimeProvider clock,
+    ClusterOptions clusters)
 {
     public async Task<IReadOnlyList<BackupItemQueryResult>> HandleAsync(ListDiskBackupsQuery query, CancellationToken ct = default)
     {
         DateTimeOffset now = clock.GetUtcNow();
         var observation = await observations.FindAsync(BackupLayout.IncusObservationKind, BackupLayout.IncusObservationName, ct);
-        List<BackupRecord> rows = await records.ListOfKindsAsync(new[] { BackupRecord.VmKind, BackupRecord.VolumeKind }, ct);
+        List<BackupRecord> rows = await records.ListOfKindsAsync(
+            new[] { BackupRecord.VmKind, BackupRecord.VolumeKind, BackupRecord.ClusterKind }, ct);
 
         var items = new List<BackupItemQueryResult>();
         foreach (var vm in await vms.ListAllAsync(null, ct))
@@ -32,7 +36,7 @@ public class ListDiskBackupsQueryHandler(
             {
                 continue;
             }
-            items.Add(Item(BackupRecord.VmKind, vm.Id, vm.Name, vm.TenantId, observation, rows, now));
+            items.Add(Item(BackupRecord.VmKind, vm.Id.ToString(), vm.Name, vm.TenantId, observation, rows, now));
         }
         foreach (var volume in await volumes.ListBillableAsync(ct))
         {
@@ -40,16 +44,20 @@ public class ListDiskBackupsQueryHandler(
             {
                 continue;
             }
-            items.Add(Item(BackupRecord.VolumeKind, volume.Id, volume.Name, volume.TenantId, observation, rows, now));
+            items.Add(Item(BackupRecord.VolumeKind, volume.Id.ToString(), volume.Name, volume.TenantId, observation, rows, now));
+        }
+        // A configured cluster is an item whether or not it has a config yet: the one with none is the one to warn about.
+        foreach (ClusterConfig cluster in clusters.Clusters)
+        {
+            items.Add(Item(BackupRecord.ClusterKind, cluster.Id, cluster.Name, null, observation, rows, now));
         }
         return items;
     }
 
     private static BackupItemQueryResult Item(
-        string kind, Guid id, string name, Guid tenantId,
+        string kind, string resourceName, string name, Guid? tenantId,
         BackupObservation? observation, List<BackupRecord> rows, DateTimeOffset now)
     {
-        string resourceName = id.ToString();
         BackupRecord? newest = rows
             .Where(r => r.Kind == kind && r.ResourceName == resourceName)
             .OrderByDescending(r => r.TakenAt)

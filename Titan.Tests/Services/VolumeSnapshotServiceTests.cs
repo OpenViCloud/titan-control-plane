@@ -375,7 +375,7 @@ public class VolumeSnapshotServiceTests
         _volumeRepo.Verify(r => r.SaveAsync(default), Times.Once);
         // The restore is the new volume's create, so the command carries that volume's request id.
         _commands.Verify(w => w.EnqueueVolumeSnapshotRestoreAsync(
-            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a91 => a91.Id == result.NewVolumeId && a91.Name == "vol-restored-01" && a91.ClusterId == volume.ClusterId), added!.Operation.PendingId!.Value, "cs-snap-1", "t-" + _tenant.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(source => source.Id == volume.Id), It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a91 => a91.Id == result.NewVolumeId && a91.Name == "vol-restored-01" && a91.ClusterId == volume.ClusterId), added!.Operation.PendingId!.Value, "cs-snap-1", "t-" + _tenant.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     // Only the snapshot must rest on Incus: a source volume the reconciler no longer finds still restores

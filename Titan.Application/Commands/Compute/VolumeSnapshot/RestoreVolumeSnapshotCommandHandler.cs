@@ -47,7 +47,7 @@ public class RestoreVolumeSnapshotCommandHandler(
         // The restore's result is a new volume, so the request is recorded against it; its outcome is
         // the "volume.created" the volume callback records (titan-ops features/activity/design.md#outcome-source).
         activity.Stage("volume_snapshot.restore_requested", "volume", newVolume.Id, newVolume.Name); // atomic with Add
-        await commands.EnqueueVolumeSnapshotRestoreAsync(newVolume, newVolume.Operation.PendingId!.Value, externalSnapshotId,
+        await commands.EnqueueVolumeSnapshotRestoreAsync(sourceVolume, newVolume, newVolume.Operation.PendingId!.Value, externalSnapshotId,
             TenantAggregate.ProjectNameFor(newVolume.TenantId), ct);
         await volumeRepo.SaveAsync(ct);
 

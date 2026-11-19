@@ -1,3 +1,4 @@
+using Titan.Application.Options;
 using Microsoft.EntityFrameworkCore;
 using Titan.Application.Commands.Admin.Backup;
 using Titan.Application.Commands.Admin.Backup.Contracts;
@@ -37,9 +38,10 @@ public class JobPassesAtOnceDbTests(PostgresFixture pg)
 
     private static ScheduleBackupsCommandHandler SchedulerOn(TitanDbContext db)
     {
+        var commands = new ProviderCommandRepository(db);
         return new ScheduleBackupsCommandHandler(new VmRepository(db), new VolumeRepository(db),
-            new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System), new PostgresJobPassLock(db),
-            TimeProvider.System);
+            new ProviderCommandQueue(commands, TimeProvider.System), commands, new PostgresJobPassLock(db),
+            TimeProvider.System, new ClusterOptions());
     }
 
     // Every pass is released at once; each returns the exception it threw, or null.

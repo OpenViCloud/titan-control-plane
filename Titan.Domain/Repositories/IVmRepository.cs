@@ -28,6 +28,9 @@ public interface IVmRepository
     Task<List<Vm>> ListByExternalIdsAsync(Guid tenantId, IReadOnlyCollection<string> externalIds, CancellationToken ct = default);
     /// The VMs with these ids, any tenant: the storage reconciler's list names the VM a volume is attached to by its
     /// Incus instance name.
+    /// Of these ids, those of a VM that is not Deleted: the backups of the others may go
+    /// (titan-ops features/backup/design.md#backups-of-gone-resources).
+    Task<List<Guid>> ListIdsNotDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
     Task<List<Vm>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
     void Add(Vm vm);
     Task SaveAsync(CancellationToken ct = default);

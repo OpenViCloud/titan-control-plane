@@ -20,6 +20,8 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
         // not from core.vms: the worker waits what the command carries, and the VM's value may have changed since the stop
         // was recorded. A payload without it (enqueued before it was sent) or no row at all counts the worker's default.
         int defaultStopTimeoutSeconds = Vm.DefaultStopTimeoutSeconds;
+        // A command that waits while another command of its VM or volume holds the resource (a backup, most often) is not
+        // stuck: the worker has not been given it (titan-ops features/provider/design.md#tenant-lane).
         // Quoted aliases: Postgres folds a bare alias to lower case, and SqlQuery maps columns to properties by name.
         List<StuckRequestRow> rows = await db.Database.SqlQuery<StuckRequestRow>($"""
             SELECT p.resource AS "Resource", p.id AS "Id", p.tenant_id AS "TenantId", p.request_id AS "RequestId",
@@ -31,6 +33,8 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
             WHERE p.asked_at + make_interval(secs => CASE WHEN p.resource = 'vm' AND p.kind = 'Stop'
                       THEN coalesce((c.payload ->> 'stopTimeoutSeconds')::int, {defaultStopTimeoutSeconds})
                       ELSE 0 END) < {cutoff}
+              AND NOT EXISTS (SELECT 1 FROM core.provider_commands b
+                              WHERE b.status = 'Leased' AND b.resource_id = c.resource_id AND b.id <> c.id)
             ORDER BY p.asked_at
             """).ToListAsync(ct);
         return rows.Select(r => new StuckRequest(r.Resource, r.Id, r.TenantId, r.RequestId, r.Kind, r.AskedAt, r.CommandStatus)).ToList();

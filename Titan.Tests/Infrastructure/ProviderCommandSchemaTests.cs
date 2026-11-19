@@ -83,4 +83,15 @@ public class ProviderCommandSchemaTests
         Assert.Equal([nameof(ProviderCommand.Kind)], index.Properties.Select(p => p.Name));
         Assert.Equal("status = 'Leased' AND tenant_id IS NULL", index.GetFilter());
     }
+
+    [Fact]
+    public void ALeasedRowPerResource_IsUnique()
+    {
+        IIndex? index = EntityType().GetIndexes().SingleOrDefault(i =>
+            i.GetDatabaseName() == ProviderCommandConfiguration.LeasedPerResourceIndex);
+        Assert.NotNull(index);
+        Assert.True(index.IsUnique);
+        Assert.Equal([nameof(ProviderCommand.ResourceId)], index.Properties.Select(p => p.Name));
+        Assert.Equal("status = 'Leased' AND resource_id IS NOT NULL", index.GetFilter());
+    }
 }

@@ -110,6 +110,7 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerCreate] = lb.TenantId, [ProviderCommandKinds.LoadBalancerUpdate] = lb.TenantId,
             [ProviderCommandKinds.LoadBalancerDelete] = lb.TenantId,
             [ProviderCommandKinds.TemplateSync] = null,
+            [ProviderCommandKinds.ClusterBackup] = null,
         };
 
         await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
@@ -131,12 +132,13 @@ public class ProviderCommandQueueTests
         await queue.EnqueueVolumeDeleteAsync(volume, Guid.NewGuid(), "vol-x", "t-1");
         await queue.EnqueueVolumeSnapshotCreateAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x", "t-1");
         await queue.EnqueueVolumeSnapshotDeleteAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x/s-x", "t-1");
-        await queue.EnqueueVolumeSnapshotRestoreAsync(volume, Guid.NewGuid(), "vol-x/s-x", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(volume, AVolumeSnapshot().Item1, Guid.NewGuid(), "vol-x/s-x", "t-1");
         await queue.EnqueueVolumeBackupAsync(volume, "vol-x", "t-1", new DateOnly(2026, 11, 11));
         await queue.EnqueueLoadBalancerCreateAsync(lb, Guid.NewGuid(), "t-1");
         await queue.EnqueueLoadBalancerUpdateAsync(lb, Guid.NewGuid(), "t-1");
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
+        await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
 
         string[] everyKind = typeof(ProviderCommandKinds)
             .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
@@ -145,6 +147,71 @@ public class ProviderCommandQueueTests
             .ToArray();
         Assert.Equal(everyKind.Order(StringComparer.Ordinal), _repo.Rows.Select(r => r.Kind).Order(StringComparer.Ordinal));
         Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.TenantId));
+    }
+
+    // One leased command per VM or volume across both lanes (titan-ops features/provider/design.md#tenant-lane): every
+    // kind of a VM or volume names it, a restore names the volume it copies from, the rest name none. A new kind fails
+    // the lookup until it is here.
+    [Fact]
+    public async Task EveryKind_StagesTheVmOrVolumeItActsOn_AndTheOthersNone()
+    {
+        ProviderCommandQueue queue = Queue();
+        (Vm vm, VmSnapshot vmSnapshot) = AVmSnapshot();
+        (Vm keyAdditionVm, VmKeyAddition keyAddition) = AVmKeyAddition();
+        (Volume volume, VolumeSnapshot volumeSnapshot) = AVolumeSnapshot();
+        Volume restored = AVolumeSnapshot().Item1;
+        (Network network, FirewallRule rule) = ARule();
+        LoadBalancer lb = ALoadBalancer();
+        var expected = new Dictionary<string, Guid?>
+        {
+            [ProviderCommandKinds.VmCreate] = vm.Id, [ProviderCommandKinds.VmDelete] = vm.Id,
+            [ProviderCommandKinds.VmStop] = vm.Id, [ProviderCommandKinds.VmStart] = vm.Id,
+            [ProviderCommandKinds.VmSnapshotCreate] = vm.Id, [ProviderCommandKinds.VmSnapshotRevert] = vm.Id,
+            [ProviderCommandKinds.VmSnapshotDelete] = vm.Id,
+            [ProviderCommandKinds.VmKeyAdditionCreate] = keyAdditionVm.Id,
+            [ProviderCommandKinds.VmBackup] = vm.Id,
+            [ProviderCommandKinds.NetworkCreate] = null, [ProviderCommandKinds.NetworkDelete] = null,
+            [ProviderCommandKinds.FirewallRuleCreate] = null, [ProviderCommandKinds.FirewallRuleDelete] = null,
+            [ProviderCommandKinds.VolumeCreate] = volume.Id, [ProviderCommandKinds.VolumeAttach] = volume.Id,
+            [ProviderCommandKinds.VolumeDetach] = volume.Id, [ProviderCommandKinds.VolumeDelete] = volume.Id,
+            [ProviderCommandKinds.VolumeSnapshotCreate] = volume.Id,
+            [ProviderCommandKinds.VolumeSnapshotDelete] = volume.Id,
+            [ProviderCommandKinds.VolumeSnapshotRestore] = volume.Id,
+            [ProviderCommandKinds.VolumeBackup] = volume.Id,
+            [ProviderCommandKinds.LoadBalancerCreate] = null, [ProviderCommandKinds.LoadBalancerUpdate] = null,
+            [ProviderCommandKinds.LoadBalancerDelete] = null,
+            [ProviderCommandKinds.TemplateSync] = null,
+            [ProviderCommandKinds.ClusterBackup] = null,
+        };
+
+        await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
+        await queue.EnqueueVmDeleteAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmStopAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmStartAsync(vm, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmSnapshotCreateAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x", "t-1");
+        await queue.EnqueueVmSnapshotRevertAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
+        await queue.EnqueueVmSnapshotDeleteAsync(vm, vmSnapshot, Guid.NewGuid(), "vm-x/s-x", "t-1");
+        await queue.EnqueueVmKeyAdditionCreateAsync(keyAdditionVm, keyAddition, Guid.NewGuid(), "vm-x", "t-1", ["ssh-ed25519 AAAA"]);
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 11, 11));
+        await queue.EnqueueNetworkCreateAsync(network, Guid.NewGuid(), "t-1", null);
+        await queue.EnqueueNetworkDeleteAsync(network, Guid.NewGuid(), "net-x", "t-1");
+        await queue.EnqueueFirewallRuleCreateAsync(network, rule, Guid.NewGuid(), "t-1");
+        await queue.EnqueueFirewallRuleDeleteAsync(network, rule, Guid.NewGuid(), "acl-x/rule", "t-1");
+        await queue.EnqueueVolumeCreateAsync(volume, Guid.NewGuid(), "t-1");
+        await queue.EnqueueVolumeAttachAsync(volume, Guid.NewGuid(), "vol-x", "vm-x", "t-1");
+        await queue.EnqueueVolumeDetachAsync(volume, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeDeleteAsync(volume, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotCreateAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x", "t-1");
+        await queue.EnqueueVolumeSnapshotDeleteAsync(volume, volumeSnapshot, Guid.NewGuid(), "vol-x/s-x", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(volume, restored, Guid.NewGuid(), "vol-x/s-x", "t-1");
+        await queue.EnqueueVolumeBackupAsync(volume, "vol-x", "t-1", new DateOnly(2026, 11, 11));
+        await queue.EnqueueLoadBalancerCreateAsync(lb, Guid.NewGuid(), "t-1");
+        await queue.EnqueueLoadBalancerUpdateAsync(lb, Guid.NewGuid(), "t-1");
+        await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
+        await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
+        await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
+
+        Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.ResourceId));
     }
 
     [Fact]
@@ -661,8 +728,8 @@ public class ProviderCommandQueueTests
         Guid secondRequest = Guid.NewGuid();
         ProviderCommandQueue queue = Queue();
 
-        await queue.EnqueueVolumeSnapshotRestoreAsync(firstVolume, Guid.NewGuid(), "vol-src/snap-1", "t-1");
-        await queue.EnqueueVolumeSnapshotRestoreAsync(secondVolume, secondRequest, "vol-src/snap-1", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(AVolume(), firstVolume, Guid.NewGuid(), "vol-src/snap-1", "t-1");
+        await queue.EnqueueVolumeSnapshotRestoreAsync(AVolume(), secondVolume, secondRequest, "vol-src/snap-1", "t-1");
 
         Assert.Equal(2, _repo.Rows.Count);
         Assert.Equal($"volume-create-{secondVolume.Id}-{secondRequest}", _repo.Rows[1].Key);
@@ -889,7 +956,7 @@ public class ProviderCommandQueueTests
                 return queue.EnqueueVolumeSnapshotDeleteAsync(volume, snapshot, request, "vol-x/snap-x", project);
             }
             case ProviderCommandKinds.VolumeSnapshotRestore:
-                return queue.EnqueueVolumeSnapshotRestoreAsync(AVolume(), request, "vol-x/snap-x", project);
+                return queue.EnqueueVolumeSnapshotRestoreAsync(AVolume(), AVolume(), request, "vol-x/snap-x", project);
             case ProviderCommandKinds.VmSnapshotCreate:
             {
                 (Vm vm, VmSnapshot snapshot) = AVmSnapshot();

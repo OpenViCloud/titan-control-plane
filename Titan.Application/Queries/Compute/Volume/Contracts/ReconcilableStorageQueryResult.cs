@@ -2,6 +2,7 @@ using VolumeEntity = Titan.Domain.Aggregates.Volume.Volume;
 using VolumeSnapshotEntity = Titan.Domain.Aggregates.Volume.VolumeSnapshot;
 using VolumeSnapshotStatus = Titan.Domain.Aggregates.Volume.VolumeSnapshotStatus;
 using VolumeStatus = Titan.Domain.Aggregates.Volume.VolumeStatus;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Queries.Compute.Volume.Contracts;
 
@@ -15,13 +16,14 @@ public record ReconcilableStorageQueryResult(
 
 // CurrentAttachedExternalVmId is the Incus instance name of the Titan VM last seen using the volume, so the worker
 // compares names it reads in used_by without knowing which instances are Titan VMs
-// (titan-ops features/volume/design.md#attachment-from-used-by).
+// (titan-ops features/volume/design.md#attachment-from-used-by). ProjectName is where the worker looks for the volume.
 public record ReconcilableVolumeQueryResult(
     Guid Id,
     string ExternalId,
     string CurrentExistence,
     string? CurrentAttachedExternalVmId,
-    bool CurrentAttachedElsewhere)
+    bool CurrentAttachedElsewhere,
+    string ProjectName)
 {
     /// Exists when Incus was last seen holding the volume; NotFound otherwise, since every volume listed here has a
     /// provider id. A volume being deleted that Incus already lost stays NotFound, so the worker reports nothing new.
@@ -35,11 +37,12 @@ public record ReconcilableVolumeQueryResult(
     }
 }
 
-// VolumeId is the parent volume: the snapshot's callback route needs it.
-public record ReconcilableVolumeSnapshotQueryResult(Guid Id, Guid VolumeId, string ExternalId, string CurrentExistence)
+// VolumeId is the parent volume: the snapshot's callback route needs it. ProjectName is where that volume lives.
+public record ReconcilableVolumeSnapshotQueryResult(Guid Id, Guid VolumeId, string ExternalId, string CurrentExistence,
+    string ProjectName)
 {
     public static ReconcilableVolumeSnapshotQueryResult From(VolumeSnapshotEntity s) =>
-        new(s.Id, s.VolumeId, s.GetExternalId(), ExistenceName(s));
+        new(s.Id, s.VolumeId, s.GetExternalId(), ExistenceName(s), TenantAggregate.ProjectNameFor(s.TenantId));
 
     /// Exists when Incus was last seen holding the snapshot; NotFound otherwise, since every snapshot listed here has a
     /// provider id.

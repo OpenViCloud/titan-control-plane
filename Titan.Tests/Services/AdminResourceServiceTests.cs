@@ -364,6 +364,7 @@ file sealed class StubVmRepo(params Vm[] seed) : IVmRepository
     public Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByExternalIdsAsync(Guid tenantId, IReadOnlyCollection<string> externalIds, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Vm>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<List<Guid>> ListIdsNotDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) => throw new NotSupportedException();
     public void Add(Vm vm) => throw new NotSupportedException();
 }
 

@@ -57,7 +57,7 @@ public class BackupTargetEndpointTests
         var volumeRepository = new Mock<Titan.Domain.Repositories.IVolumeRepository>();
         volumeRepository.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
         return new(vmRepository.Object, volumeRepository.Object, new FakeBackupRecordRepository(),
-            new FakeBackupObservationRepository(), TimeProvider.System);
+            new FakeBackupObservationRepository(), TimeProvider.System, new Titan.Application.Options.ClusterOptions());
     }
 
     // One page for the platform: Postgres first, then every VM and volume Incus holds.

@@ -5,7 +5,7 @@ using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure;
 
-// The claim query is the SQL of ProviderCommand.IsClaimable and HoldsTheLaneOf
+// The claim query is the SQL of ProviderCommand.IsClaimable, HoldsTheLaneOf and HoldsTheResourceOf
 // (titan-ops architecture/domain-methods.md#plain-code): every shape a row or a lane can be in goes through both, so
 // the two cannot drift apart.
 //
@@ -149,6 +149,49 @@ public class ProviderCommandRepositoryStateTests
             .Where(c => CommandKinds.Contains(c.Kind) && c.IsClaimable(Now))
             .Where(c => !lanes.Any(other => CommandKinds.Contains(other.Kind) && other.HoldsTheLaneOf(c)))
             .Select(c => c.Key);
+        Assert.Equal(expected.Order(StringComparer.Ordinal), claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
+    }
+
+    // Rows of one VM in both lanes and of no resource: the resource rule reads every kind, not only the lease's.
+    private static List<ProviderCommand> EveryResource()
+    {
+        Guid tenantA = Guid.NewGuid();
+        Guid tenantB = Guid.NewGuid();
+        Guid vmX = Guid.NewGuid();
+        Guid vmY = Guid.NewGuid();
+        ProviderCommand backupX = ProviderCommand.Create("backup-x", ProviderCommandKinds.VmBackup, "mock", "{}", Now.AddMinutes(-5), tenantA, vmX);
+        backupX.Lease(Guid.NewGuid(), Now.AddSeconds(-10));
+        ProviderCommand ranOutY = ProviderCommand.Create("backup-y", ProviderCommandKinds.VmBackup, "mock", "{}", Now.AddMinutes(-5), tenantB, vmY);
+        ranOutY.Lease(Guid.NewGuid(), Now.AddMinutes(-2));
+        ProviderCommand doneX = ProviderCommand.Create("done-x", ProviderCommandKinds.VmStart, "mock", "{}", Now.AddMinutes(-6), Guid.NewGuid(), vmX);
+        doneX.Lease(Guid.NewGuid(), Now.AddMinutes(-6));
+        doneX.Complete(doneX.LeaseId!.Value);
+        return
+        [
+            backupX, ranOutY, doneX,
+            ProviderCommand.Create("waits-x", ProviderCommandKinds.VmDelete, "mock", "{}", Now.AddMinutes(-4), Guid.NewGuid(), vmX),
+            ProviderCommand.Create("waits-y", ProviderCommandKinds.VmDelete, "mock", "{}", Now.AddMinutes(-4), Guid.NewGuid(), vmY),
+            ProviderCommand.Create("free-z", ProviderCommandKinds.VmDelete, "mock", "{}", Now.AddMinutes(-4), Guid.NewGuid(), Guid.NewGuid()),
+            ProviderCommand.Create("no-resource", ProviderCommandKinds.VmDelete, "mock", "{}", Now.AddMinutes(-4), Guid.NewGuid()),
+        ];
+    }
+
+    [Fact]
+    public async Task ClaimQuery_AgreesWithHoldsTheResourceOf_AcrossBothLanes()
+    {
+        await using TitanDbContext db = NewDb();
+        List<ProviderCommand> rows = EveryResource();
+        db.ProviderCommands.AddRange(rows);
+        await db.SaveChangesAsync();
+
+        var claimable = await new ProviderCommandRepository(db).ListClaimableAsync(CommandKinds, Now, 100, default);
+
+        IEnumerable<string> expected = rows
+            .Where(c => CommandKinds.Contains(c.Kind) && c.IsClaimable(Now))
+            .Where(c => !rows.Any(other => CommandKinds.Contains(other.Kind) && other.HoldsTheLaneOf(c)))
+            .Where(c => !rows.Any(other => other.HoldsTheResourceOf(c)))
+            .Select(c => c.Key);
+        Assert.Equal(["backup-y", "free-z", "no-resource"], expected.Order(StringComparer.Ordinal));
         Assert.Equal(expected.Order(StringComparer.Ordinal), claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 }

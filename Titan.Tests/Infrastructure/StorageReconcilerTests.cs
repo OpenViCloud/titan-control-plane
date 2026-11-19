@@ -42,7 +42,8 @@ public class StorageReconcilerTests
     public async Task Endpoint_WithToken_ReturnsVolumesAndSnapshots_WithWhatWasLastSeen_AndRecordsTheHeartbeat()
     {
         using var db = NewDb();
-        var volume = Volume.Create(TestTenant.WithRoomToSpare().Id, "data", Cluster, "vo-std", 20);
+        Guid owner = TestTenant.WithRoomToSpare().Id;
+        var volume = Volume.Create(owner, "data", Cluster, "vo-std", 20);
         volume.MarkCreated("img-7");
         volume.MarkObserved(null, true);
         var snapshot = volume.WithSnapshot("snap");
@@ -60,11 +61,14 @@ public class StorageReconcilerTests
         Assert.Equal("Exists", v.CurrentExistence);
         Assert.Null(v.CurrentAttachedExternalVmId);
         Assert.True(v.CurrentAttachedElsewhere);
+        // The worker finds the volume in its tenant's project, not by name across every project.
+        Assert.Equal(Titan.Domain.Aggregates.Tenant.Tenant.ProjectNameFor(owner), v.ProjectName);
         var s = Assert.Single(ep.Response.Snapshots);
         Assert.Equal(snapshot.Id, s.Id);
         Assert.Equal(volume.Id, s.VolumeId);
         Assert.Equal("img-8", s.ExternalId);
         Assert.Equal("Exists", s.CurrentExistence);
+        Assert.Equal(Titan.Domain.Aggregates.Tenant.Tenant.ProjectNameFor(owner), s.ProjectName);
         Assert.True((await heartbeat.SnapshotAsync(CancellationToken.None)).ContainsKey($"volumes/{Cluster}"));
     }
 
