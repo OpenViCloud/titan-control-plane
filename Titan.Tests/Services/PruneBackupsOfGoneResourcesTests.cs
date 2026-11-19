@@ -48,7 +48,7 @@ public class PruneBackupsOfGoneResourcesTests
     }
 
     [Fact]
-    public async Task AGoneVm_WhoseNewestBackupIsOverSevenDaysOld_LosesEveryBackup()
+    public async Task AVmNoLongerInTitan_WhoseNewestBackupIsOverSevenDaysOld_LosesEveryBackup()
     {
         Guid gone = Guid.NewGuid();
         string newest = Put("vms", gone, Now.AddDays(-8));
