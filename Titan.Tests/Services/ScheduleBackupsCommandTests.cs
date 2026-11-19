@@ -1,6 +1,7 @@
 using Moq;
 using Titan.Application.Commands.Admin.Backup;
 using Titan.Application.Commands.Admin.Backup.Contracts;
+using Titan.Application.Options;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.ProviderCommand;
@@ -21,8 +22,9 @@ public class ScheduleBackupsCommandTests
     // 06:30 on the 27th in Asia/Saigon is still 23:30 on the 26th in UTC: the day in the key is the UTC one.
     private readonly FixedClock _clock = new(new DateTimeOffset(2026, 10, 27, 6, 30, 0, TimeSpan.FromHours(7)));
 
-    private ScheduleBackupsCommandHandler Handler() =>
-        new(_vms.Object, _volumes.Object, new ProviderCommandQueue(_rows, _clock), _lock, _clock);
+    private ScheduleBackupsCommandHandler Handler(params string[] clusters) =>
+        new(_vms.Object, _volumes.Object, new ProviderCommandQueue(_rows, _clock), _rows, _lock, _clock,
+            new ClusterOptions { Clusters = clusters.Select(id => new ClusterConfig { Id = id }).ToList() });
 
     private void Holds(List<Vm> vms, List<Volume> volumes)
     {
@@ -119,5 +121,91 @@ public class ScheduleBackupsCommandTests
         await Handler().HandleAsync(new ScheduleBackupsCommand());
 
         Assert.Equal(new[] { "backup-schedule" }, _lock.Taken);
+    }
+
+    private static Vm RunningVmIn(string clusterId, string externalId)
+    {
+        Vm vm = Vm.Create(TestTenant.WithRoomToSpare().Id, Guid.NewGuid(), "web-1", "m", "tpl-1", clusterId, 20);
+        vm.MarkRunning(externalId, "10.0.0.2");
+        return vm;
+    }
+
+    private ProviderCommand Row(string key) => _rows.Rows.Single(r => r.Key == key);
+
+    private static void Ends(ProviderCommand row, bool failed)
+    {
+        Guid lease = Guid.NewGuid();
+        row.Lease(lease, row.CreatedAt);
+        if (failed)
+        {
+            row.Fail(lease, "boom", retryable: false, row.CreatedAt);
+            return;
+        }
+        row.Complete(lease);
+    }
+
+    // The cluster's config is read after the day's disks, so it is newer than every archive of the day
+    // (titan-ops features/backup/design.md#cluster-backup).
+    [Fact]
+    public async Task AClusterWithNoDiskToBackUp_GetsTodaysConfigBackup_OfNoTenantAndNoResource()
+    {
+        Holds([], []);
+
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        ProviderCommand row = Assert.Single(_rows.Rows);
+        Assert.Equal("cluster-backup-mock-20261026", row.Key);
+        Assert.Equal(ProviderCommandKinds.ClusterBackup, row.Kind);
+        Assert.Equal("mock", row.ClusterId);
+        Assert.Null(row.TenantId);
+        Assert.Null(row.ResourceId);
+    }
+
+    [Fact]
+    public async Task TheConfigBackup_WaitsUntilEveryDiskBackupOfItsClusterEndedToday()
+    {
+        Vm vm = RunningVmIn("mock", "vm-a");
+        Volume volume = CreatedVolume("vol-a");
+        Holds([vm], [volume]);
+
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        bool askedWhileBothWait = _rows.Rows.Any(r => r.Kind == ProviderCommandKinds.ClusterBackup);
+        Ends(Row($"vm-backup-{vm.Id}-20261026"), failed: false);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        bool askedWhileOneWaits = _rows.Rows.Any(r => r.Kind == ProviderCommandKinds.ClusterBackup);
+        Ends(Row($"volume-backup-{volume.Id}-20261026"), failed: false);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.False(askedWhileBothWait);
+        Assert.False(askedWhileOneWaits);
+        Assert.Equal(ProviderCommandStatus.Pending, Row("cluster-backup-mock-20261026").Status);
+    }
+
+    // A disk backup that failed has ended for the day's config: the pass asks the config and runs the disk again, so one
+    // disk that keeps failing does not keep the cluster's config out of the bucket.
+    [Fact]
+    public async Task AFailedDiskBackup_HasEnded_SoTheConfigIsAsked_AndTheDiskRunsAgain()
+    {
+        Vm vm = RunningVmIn("mock", "vm-a");
+        Holds([vm], []);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{vm.Id}-20261026"), failed: true);
+
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Equal(ProviderCommandStatus.Pending, Row($"vm-backup-{vm.Id}-20261026").Status);
+        Assert.Equal(ProviderCommandStatus.Pending, Row("cluster-backup-mock-20261026").Status);
+    }
+
+    [Fact]
+    public async Task ADiskBackupOfAnotherCluster_DoesNotHoldThisClustersConfig()
+    {
+        Vm elsewhere = RunningVmIn("other", "vm-b");
+        Holds([elsewhere], []);
+
+        await Handler("mock", "other").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-20261026");
+        Assert.DoesNotContain(_rows.Rows, r => r.Key == "cluster-backup-other-20261026");
     }
 }

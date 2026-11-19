@@ -2,6 +2,7 @@ using Titan.Application.Queries.Compute.Volume.Contracts;
 using Titan.Domain.Repositories;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Queries.Compute.Volume;
 
@@ -37,7 +38,7 @@ public class ListReconcilableStorageQueryHandler(
             string externalId = volume.ExternalId ?? throw new InvalidOperationException($"Volume {volume.Id} has no provider id and cannot be reconciled.");
             volumeResults.Add(new ReconcilableVolumeQueryResult(
                 volume.Id, externalId, ReconcilableVolumeQueryResult.ExistenceName(volume), attachedExternalVmId,
-                volume.CurrentAttachedElsewhere));
+                volume.CurrentAttachedElsewhere, TenantAggregate.ProjectNameFor(volume.TenantId)));
         }
 
         return new ReconcilableStorageQueryResult(

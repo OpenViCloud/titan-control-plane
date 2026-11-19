@@ -58,11 +58,13 @@ public interface IProviderCommandQueue
     Task EnqueueVolumeSnapshotCreateAsync(VolumeAggregate volume, VolumeSnapshot snapshot, Guid requestId, string externalVolumeId, string projectName, CancellationToken ct = default);
     Task EnqueueVolumeSnapshotDeleteAsync(VolumeAggregate volume, VolumeSnapshot snapshot, Guid requestId, string externalSnapshotId, string projectName, CancellationToken ct = default);
     // The restore's request is the new volume's create.
-    Task EnqueueVolumeSnapshotRestoreAsync(VolumeAggregate newVolume, Guid requestId, string externalSnapshotId, string projectName, CancellationToken ct = default);
+    Task EnqueueVolumeSnapshotRestoreAsync(VolumeAggregate sourceVolume, VolumeAggregate newVolume, Guid requestId, string externalSnapshotId, string projectName, CancellationToken ct = default);
 
     // One a day per resource, the UTC day in the key (titan-ops features/backup/design.md#incus-backup).
     Task EnqueueVmBackupAsync(VmAggregate vm, string externalVmId, string projectName, DateOnly day, CancellationToken ct = default);
     Task EnqueueVolumeBackupAsync(VolumeAggregate volume, string externalVolumeId, string projectName, DateOnly day, CancellationToken ct = default);
+    // One a day per cluster, after that cluster's disks of the day (titan-ops features/backup/design.md#cluster-backup).
+    Task EnqueueClusterBackupAsync(string clusterId, DateOnly day, CancellationToken ct = default);
 
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
     // (titan-ops features/load-balancer/design.md#lb-resource-model).

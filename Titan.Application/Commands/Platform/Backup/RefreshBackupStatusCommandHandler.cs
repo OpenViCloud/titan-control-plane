@@ -109,9 +109,11 @@ public class RefreshBackupStatusCommandHandler(
     /// listing is read, keeps the worker from needing a delete of its own.
     private async Task RefreshIncusAsync(IBackupBucket bucket, BackupObservation observation, DateTimeOffset now, CancellationToken ct)
     {
-        List<BackupRecord> known = await records.ListOfKindsAsync(new[] { BackupRecord.VmKind, BackupRecord.VolumeKind }, ct);
+        List<BackupRecord> known = await records.ListOfKindsAsync(
+            new[] { BackupRecord.VmKind, BackupRecord.VolumeKind, BackupRecord.ClusterKind }, ct);
 
         var kept = new List<(IncusBackupKey Key, long Size)>();
+        var keptConfigs = new List<(ClusterConfigBackupKey Key, long Size)>();
         try
         {
             IReadOnlyList<BackupBucketObject> all = await bucket.ListObjectsAsync(BackupLayout.IncusRoot, null, ct);
@@ -128,6 +130,20 @@ public class RefreshBackupStatusCommandHandler(
                 }
                 kept.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
             }
+            // A cluster's config keeps its seven newest too (titan-ops features/backup/design.md#cluster-backup).
+            var byCluster = all
+                .Select(o => (Object: o, Key: ClusterConfigBackupKey.Parse(o.Key)))
+                .Where(b => b.Key is not null)
+                .GroupBy(b => b.Key!.ClusterId);
+            foreach (var cluster in byCluster)
+            {
+                var newestFirst = cluster.OrderByDescending(b => b.Key!.TakenAt).ToList();
+                foreach (var old in newestFirst.Skip(BackupLayout.IncusBackupsKept))
+                {
+                    await bucket.DeleteAsync(old.Object.Key, ct);
+                }
+                keptConfigs.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
+            }
         }
         catch (Exception e) when (IsUnreadable(e))
         {
@@ -137,7 +153,9 @@ public class RefreshBackupStatusCommandHandler(
 
         // A VM's or volume's archive is always complete: the bucket shows an upload only once it has finished.
         ReplaceRows(known, kept.Select(k => new SeenBackup(k.Key.Kind, k.Key.ResourceId.ToString(), k.Key.BackupKey,
-            k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, k.Key.TenantId)));
+            k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, k.Key.TenantId))
+            .Concat(keptConfigs.Select(k => new SeenBackup(BackupRecord.ClusterKind, k.Key.ClusterId, k.Key.BackupKey,
+                k.Key.TakenAt, k.Size, BackupRecordStatus.Complete, null))));
         observation.RecordRead(BackupReadOutcome.Read, null, now);
     }
 

@@ -149,9 +149,9 @@ public class ProviderCommandLeaseTests
     private static readonly Guid TenantB = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
 
     private ProviderCommand SeedFor(Guid? tenantId, string key, string kind, DateTimeOffset createdAt,
-        string clusterId = "mock")
+        string clusterId = "mock", Guid? resourceId = null)
     {
-        ProviderCommand command = ProviderCommand.Create(key, kind, clusterId, "{}", createdAt, tenantId);
+        ProviderCommand command = ProviderCommand.Create(key, kind, clusterId, "{}", createdAt, tenantId, resourceId);
         _repo.Add(command);
         return command;
     }
@@ -273,5 +273,79 @@ public class ProviderCommandLeaseTests
         await LeaseAsync(Guid.NewGuid(), TenantKinds);
 
         Assert.Equal(ProviderCommandStatus.Pending, second.Status);
+    }
+
+    private static readonly Guid VmX = Guid.Parse("11111111-0000-0000-0000-00000000000a");
+    private static readonly Guid VmY = Guid.Parse("11111111-0000-0000-0000-00000000000b");
+    private static readonly string[] BackupKinds = [ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup];
+    private static readonly string[] CommandKinds =
+        [ProviderCommandKinds.VmStop, ProviderCommandKinds.VmSnapshotCreate, ProviderCommandKinds.NetworkCreate];
+
+    // titan-ops features/provider/design.md#tenant-lane: one leased command per resource, whatever its lane.
+    [Fact]
+    public async Task Lease_OfACommand_WaitsWhileTheBackupOfItsResourceRuns_WithoutSpendingAnAttempt()
+    {
+        ProviderCommand backup = SeedFor(TenantA, "vm-backup-x", ProviderCommandKinds.VmBackup, T0.AddMinutes(-2), resourceId: VmX);
+        ProviderCommand snapshot = SeedFor(TenantA, "vm-snapshot-create-x", ProviderCommandKinds.VmSnapshotCreate, T0.AddMinutes(-1), resourceId: VmX);
+        await LeaseAsync(Guid.NewGuid(), BackupKinds);
+
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+
+        Assert.Equal(ProviderCommandStatus.Leased, backup.Status);
+        Assert.Equal(ProviderCommandStatus.Pending, snapshot.Status);
+        Assert.Equal(0, snapshot.Attempts);
+    }
+
+    [Fact]
+    public async Task Lease_OfABackup_WaitsWhileACommandOfItsResourceRuns()
+    {
+        ProviderCommand stop = SeedFor(TenantA, "vm-stop-x", ProviderCommandKinds.VmStop, T0.AddMinutes(-2), resourceId: VmX);
+        ProviderCommand backup = SeedFor(TenantA, "vm-backup-x", ProviderCommandKinds.VmBackup, T0.AddMinutes(-1), resourceId: VmX);
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+
+        await LeaseAsync(Guid.NewGuid(), BackupKinds);
+
+        Assert.Equal(ProviderCommandStatus.Leased, stop.Status);
+        Assert.Equal(ProviderCommandStatus.Pending, backup.Status);
+    }
+
+    [Fact]
+    public async Task Lease_OfAnotherResourceOfTheTenant_DoesNotWaitForTheBackup()
+    {
+        SeedFor(TenantA, "vm-backup-x", ProviderCommandKinds.VmBackup, T0.AddMinutes(-2), resourceId: VmX);
+        ProviderCommand snapshotOfY = SeedFor(TenantA, "vm-snapshot-create-y", ProviderCommandKinds.VmSnapshotCreate, T0.AddMinutes(-1), resourceId: VmY);
+        await LeaseAsync(Guid.NewGuid(), BackupKinds);
+
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+
+        Assert.Equal(ProviderCommandStatus.Leased, snapshotOfY.Status);
+    }
+
+    [Fact]
+    public async Task Lease_OnceTheBackupOfItsResourceIsDone_TakesTheCommandThatWaited()
+    {
+        ProviderCommand backup = SeedFor(TenantA, "vm-backup-x", ProviderCommandKinds.VmBackup, T0.AddMinutes(-2), resourceId: VmX);
+        ProviderCommand snapshot = SeedFor(TenantA, "vm-snapshot-create-x", ProviderCommandKinds.VmSnapshotCreate, T0.AddMinutes(-1), resourceId: VmX);
+        Guid backupLease = Guid.NewGuid();
+        await LeaseAsync(backupLease, BackupKinds);
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+        backup.Complete(backupLease);
+
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+
+        Assert.Equal(ProviderCommandStatus.Leased, snapshot.Status);
+        Assert.Equal(1, snapshot.Attempts);
+    }
+
+    [Fact]
+    public async Task Lease_OfRowsWithNoResource_IsNotHeldByAnotherRowWithNoResource()
+    {
+        SeedFor(TenantA, "network-create-1", ProviderCommandKinds.NetworkCreate, T0.AddMinutes(-2));
+        ProviderCommand backup = SeedFor(TenantA, "vm-backup-x", ProviderCommandKinds.VmBackup, T0.AddMinutes(-1));
+        await LeaseAsync(Guid.NewGuid(), CommandKinds);
+
+        await LeaseAsync(Guid.NewGuid(), BackupKinds);
+
+        Assert.Equal(ProviderCommandStatus.Leased, backup.Status);
     }
 }

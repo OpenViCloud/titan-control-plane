@@ -11,6 +11,9 @@ public class BackupRecord : IAggregateRoot
     public const string PostgresKind = "postgres";
     public const string VmKind = "vm";
     public const string VolumeKind = "volume";
+    /// A cluster's config read through the Incus API (titan-ops features/backup/design.md#cluster-backup); its
+    /// ResourceName is the cluster id.
+    public const string ClusterKind = "cluster";
     public const int MaxBackupKeyLength = 128;
 
     /// A barman backup folder name fits the column; an empty or overlong one is not a backup this cache can hold.

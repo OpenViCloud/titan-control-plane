@@ -379,6 +379,7 @@ builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackups
 builder.Services.AddScoped<Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.ScheduleBackupsCommandHandler>();
+builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.PruneBackupsOfGoneResourcesCommandHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupScheduleService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();

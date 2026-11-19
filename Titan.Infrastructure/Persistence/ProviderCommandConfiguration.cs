@@ -11,6 +11,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
     public const string LaneColumn = "Lane";
     public const string LeasedPerTenantIndex = "IX_provider_commands_tenant_id_lane_leased";
     public const string LeasedNoTenantIndex = "IX_provider_commands_kind_leased_no_tenant";
+    public const string LeasedPerResourceIndex = "IX_provider_commands_resource_id_leased";
 
     public void Configure(EntityTypeBuilder<ProviderCommand> builder)
     {
@@ -21,6 +22,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.Kind).HasColumnName("kind").HasMaxLength(64).IsRequired();
         builder.Property(c => c.ClusterId).HasColumnName("cluster_id").HasMaxLength(64).IsRequired();
         builder.Property(c => c.TenantId).HasColumnName("tenant_id");
+        builder.Property(c => c.ResourceId).HasColumnName("resource_id");
         // The side of the backup split (ProviderCommandKinds.Backup) a row is on: with the tenant, its lane
         // (titan-ops features/provider/design.md#tenant-lane).
         builder.Property<string>(LaneColumn).HasColumnName("lane").HasMaxLength(16)
@@ -52,6 +54,11 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.HasIndex(c => c.Kind).IsUnique()
             .HasFilter("status = 'Leased' AND tenant_id IS NULL")
             .HasDatabaseName(LeasedNoTenantIndex);
+        // One leased row per VM or volume across both lanes: a backup loop and a command loop that read at once and pick
+        // two rows of one resource cannot both commit (ProviderCommand.HoldsTheResourceOf).
+        builder.HasIndex(c => c.ResourceId).IsUnique()
+            .HasFilter("status = 'Leased' AND resource_id IS NOT NULL")
+            .HasDatabaseName(LeasedPerResourceIndex);
         // The lease scan: open rows of some kinds, oldest first.
         builder.HasIndex(c => new { c.Status, c.Kind, c.AvailableAt });
         // The retention pass: finished rows by age (ProviderCommand.IsFinishedAndCreatedBefore).

@@ -1,5 +1,6 @@
 using Titan.Application.Services.Platform.Backup;
 using Moq;
+using Titan.Application.Options;
 using Titan.Application.Queries.Admin.Backup;
 using Titan.Application.Queries.Admin.Backup.Contracts;
 using Titan.Application.Queries.Platform.Backup;
@@ -24,8 +25,9 @@ public class ListDiskBackupsQueryTests
     private readonly FakeBackupRecordRepository _records = new();
     private readonly FakeBackupObservationRepository _observations = new();
 
-    private Task<IReadOnlyList<BackupItemQueryResult>> RunAsync() =>
-        new ListDiskBackupsQueryHandler(_vms.Object, _volumes.Object, _records, _observations, new FixedClock(Now))
+    private Task<IReadOnlyList<BackupItemQueryResult>> RunAsync(params string[] clusters) =>
+        new ListDiskBackupsQueryHandler(_vms.Object, _volumes.Object, _records, _observations, new FixedClock(Now),
+                new ClusterOptions { Clusters = clusters.Select(id => new ClusterConfig { Id = id, Name = "Cluster " + id }).ToList() })
             .HandleAsync(new ListDiskBackupsQuery());
 
     private void Holds(List<Vm> vms, List<Volume> volumes)
@@ -152,5 +154,24 @@ public class ListDiskBackupsQueryTests
         ReadMinutesAgo(1);
 
         Assert.Empty(await RunAsync());
+    }
+
+    // Each configured cluster is an item of its own: its config is what rebuilds the networks after losing the host
+    // (titan-ops features/backup/design.md#cluster-backup).
+    [Fact]
+    public async Task EachConfiguredCluster_IsAnItem_WithItsNewestConfig_AndNoTenant()
+    {
+        Holds([], []);
+        ReadMinutesAgo(2);
+        _records.Rows.Add(BackupRecord.Create(BackupRecord.ClusterKind, "a", "k1", Now.AddHours(-2), 300, BackupRecordStatus.Complete, null));
+
+        IReadOnlyList<BackupItemQueryResult> items = await RunAsync("a", "b");
+
+        BackupItemQueryResult a = Assert.Single(items, i => i.Name == "Cluster a");
+        Assert.Equal(BackupRecord.ClusterKind, a.Kind);
+        Assert.Null(a.TenantId);
+        Assert.Equal(Now.AddHours(-2), a.TakenAt);
+        Assert.Equal(BackupHealth.Ok, a.Health);
+        Assert.Equal(BackupHealth.Missing, Assert.Single(items, i => i.Name == "Cluster b").Health);
     }
 }

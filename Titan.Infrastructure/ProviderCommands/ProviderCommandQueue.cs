@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.LoadBalancer;
@@ -27,7 +26,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // Network and firewall rule: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueNetworkCreateAsync(NetworkAggregate network, Guid requestId, string projectName,
         string? publicIpv6RouterAddress, CancellationToken ct = default) =>
-        EnqueueAsync(NetworkCreateKey(network.Id, requestId), ProviderCommandKinds.NetworkCreate, network.ClusterId, network.TenantId,
+        EnqueueAsync(NetworkCreateKey(network.Id, requestId), ProviderCommandKinds.NetworkCreate, network.ClusterId, network.TenantId, resourceId: null,
             new
             {
                 networkId = network.Id, requestId, name = network.Name.Value, projectName,
@@ -38,14 +37,14 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
 
     public Task EnqueueNetworkDeleteAsync(NetworkAggregate network, Guid requestId, string externalNetworkId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(NetworkDeleteKey(network.Id, requestId), ProviderCommandKinds.NetworkDelete, network.ClusterId, network.TenantId,
+        EnqueueAsync(NetworkDeleteKey(network.Id, requestId), ProviderCommandKinds.NetworkDelete, network.ClusterId, network.TenantId, resourceId: null,
             new { networkId = network.Id, requestId, externalNetworkId, projectName }, ct);
 
     // The worker builds the ACL entry from these (OpenViCloud/titan-incus-worker:resource/firewall/rule.go AclRule), with
     // direction and protocol in its lower-case spelling, and names the ACL from networkId (resource/firewall/create.go).
     public Task EnqueueFirewallRuleCreateAsync(NetworkAggregate network, FirewallRule rule, Guid requestId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(FirewallRuleCreateKey(rule.Id, requestId), ProviderCommandKinds.FirewallRuleCreate, network.ClusterId, network.TenantId,
+        EnqueueAsync(FirewallRuleCreateKey(rule.Id, requestId), ProviderCommandKinds.FirewallRuleCreate, network.ClusterId, network.TenantId, resourceId: null,
             new
             {
                 ruleId = rule.Id, requestId, networkId = network.Id, direction = rule.Direction.ToString().ToLowerInvariant(),
@@ -56,7 +55,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // networkId: the worker needs it for the callback URL that reports the delete (titan-ops architecture/desired-and-current.md#forget-on-provider-confirm).
     public Task EnqueueFirewallRuleDeleteAsync(NetworkAggregate network, FirewallRule rule, Guid requestId,
         string externalRuleId, string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(FirewallRuleDeleteKey(rule.Id, requestId), ProviderCommandKinds.FirewallRuleDelete, network.ClusterId, network.TenantId,
+        EnqueueAsync(FirewallRuleDeleteKey(rule.Id, requestId), ProviderCommandKinds.FirewallRuleDelete, network.ClusterId, network.TenantId, resourceId: null,
             new { ruleId = rule.Id, requestId, networkId = network.Id, externalRuleId, projectName }, ct);
 
     // `network-{kind}-{networkId}-{requestId}` and `firewall-rule-{kind}-{ruleId}-{requestId}`: the stuck-request query
@@ -71,7 +70,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // worker's report.
     public Task EnqueueVmCreateAsync(VmAggregate vm, Guid requestId, VmOfferingAggregate offering, string externalTemplateId,
         string externalNetworkId, string projectName, string? vendorData, CancellationToken ct = default) =>
-        EnqueueAsync(VmCreateKey(vm.Id, requestId), ProviderCommandKinds.VmCreate, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmCreateKey(vm.Id, requestId), ProviderCommandKinds.VmCreate, vm.ClusterId, vm.TenantId, vm.Id,
             new
             {
                 vmId = vm.Id, requestId, name = vm.Name, vcpuCount = offering.VcpuCount,
@@ -81,7 +80,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
 
     public Task EnqueueVmDeleteAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmDeleteKey(vm.Id, requestId), ProviderCommandKinds.VmDelete, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmDeleteKey(vm.Id, requestId), ProviderCommandKinds.VmDelete, vm.ClusterId, vm.TenantId, vm.Id,
             new { vmId = vm.Id, requestId, externalVmId, projectName }, ct);
 
     // The worker shuts the guest down and waits stopTimeoutSeconds before it cuts the power; the value is the VM's when the
@@ -89,12 +88,12 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // (titan-ops features/vm/design.md#vm-stop-timeout).
     public Task EnqueueVmStopAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmStopKey(vm.Id, requestId), ProviderCommandKinds.VmStop, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmStopKey(vm.Id, requestId), ProviderCommandKinds.VmStop, vm.ClusterId, vm.TenantId, vm.Id,
             new { vmId = vm.Id, requestId, externalVmId, projectName, stopTimeoutSeconds = vm.StopTimeoutSeconds }, ct);
 
     public Task EnqueueVmStartAsync(VmAggregate vm, Guid requestId, string externalVmId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VmStartKey(vm.Id, requestId), ProviderCommandKinds.VmStart, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmStartKey(vm.Id, requestId), ProviderCommandKinds.VmStart, vm.ClusterId, vm.TenantId, vm.Id,
             new { vmId = vm.Id, requestId, externalVmId, projectName }, ct);
 
     // `vm-{kind}-{vmId}-{requestId}`: the stuck-request query rebuilds the key from the VM's waiting request
@@ -107,17 +106,17 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // VM snapshot: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueVmSnapshotCreateAsync(VmAggregate vm, VmSnapshot snapshot, Guid requestId, string externalVmId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VmSnapshotCreateKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotCreate, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmSnapshotCreateKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotCreate, vm.ClusterId, vm.TenantId, vm.Id,
             new { snapshotId = snapshot.Id, requestId, vmId = vm.Id, externalVmId, projectName }, ct);
 
     public Task EnqueueVmSnapshotRevertAsync(VmAggregate vm, VmSnapshot snapshot, Guid requestId, string externalSnapshotId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VmSnapshotRevertKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotRevert, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmSnapshotRevertKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotRevert, vm.ClusterId, vm.TenantId, vm.Id,
             new { snapshotId = snapshot.Id, requestId, vmId = vm.Id, externalSnapshotId, projectName }, ct);
 
     public Task EnqueueVmSnapshotDeleteAsync(VmAggregate vm, VmSnapshot snapshot, Guid requestId, string externalSnapshotId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VmSnapshotDeleteKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotDelete, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmSnapshotDeleteKey(snapshot.Id, requestId), ProviderCommandKinds.VmSnapshotDelete, vm.ClusterId, vm.TenantId, vm.Id,
             new { snapshotId = snapshot.Id, requestId, vmId = vm.Id, externalSnapshotId, projectName }, ct);
 
     // `vm-snapshot-{kind}-{snapshotId}-{requestId}`: the stuck-request query rebuilds the key from the snapshot's waiting
@@ -129,7 +128,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // Key addition: one row per operation, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueVmKeyAdditionCreateAsync(VmAggregate vm, VmKeyAddition addition, Guid requestId, string externalVmId,
         string projectName, List<string> keyLines, CancellationToken ct = default) =>
-        EnqueueAsync(VmKeyAdditionCreateKey(addition.Id, requestId), ProviderCommandKinds.VmKeyAdditionCreate, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(VmKeyAdditionCreateKey(addition.Id, requestId), ProviderCommandKinds.VmKeyAdditionCreate, vm.ClusterId, vm.TenantId, vm.Id,
             new { keyAdditionId = addition.Id, requestId, vmId = vm.Id, externalVmId, projectName, keyLines }, ct);
 
     // `vm-key-addition-create-{keyAdditionId}-{requestId}`: the stuck-request query rebuilds the key from the
@@ -140,38 +139,40 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // A restore is the new volume's create, so its row is keyed like one and the stuck-request query finds it.
     public Task EnqueueVolumeCreateAsync(VolumeAggregate volume, Guid requestId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VolumeCreateKey(volume.Id, requestId), ProviderCommandKinds.VolumeCreate, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeCreateKey(volume.Id, requestId), ProviderCommandKinds.VolumeCreate, volume.ClusterId, volume.TenantId, volume.Id,
             new { volumeId = volume.Id, requestId, name = volume.Name, sizeGb = volume.SizeGb, projectName }, ct);
 
     public Task EnqueueVolumeAttachAsync(VolumeAggregate volume, Guid requestId, string externalVolumeId, string externalVmId,
         string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VolumeAttachKey(volume.Id, requestId), ProviderCommandKinds.VolumeAttach, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeAttachKey(volume.Id, requestId), ProviderCommandKinds.VolumeAttach, volume.ClusterId, volume.TenantId, volume.Id,
             new { volumeId = volume.Id, requestId, externalVolumeId, externalVmId, projectName }, ct);
 
     public Task EnqueueVolumeDetachAsync(VolumeAggregate volume, Guid requestId, string externalVolumeId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VolumeDetachKey(volume.Id, requestId), ProviderCommandKinds.VolumeDetach, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeDetachKey(volume.Id, requestId), ProviderCommandKinds.VolumeDetach, volume.ClusterId, volume.TenantId, volume.Id,
             new { volumeId = volume.Id, requestId, externalVolumeId, projectName }, ct);
 
     public Task EnqueueVolumeDeleteAsync(VolumeAggregate volume, Guid requestId, string externalVolumeId, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(VolumeDeleteKey(volume.Id, requestId), ProviderCommandKinds.VolumeDelete, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeDeleteKey(volume.Id, requestId), ProviderCommandKinds.VolumeDelete, volume.ClusterId, volume.TenantId, volume.Id,
             new { volumeId = volume.Id, requestId, externalVolumeId, projectName }, ct);
 
     public Task EnqueueVolumeSnapshotCreateAsync(VolumeAggregate volume, VolumeSnapshot snapshot, Guid requestId,
         string externalVolumeId, string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VolumeSnapshotCreateKey(snapshot.Id, requestId), ProviderCommandKinds.VolumeSnapshotCreate, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeSnapshotCreateKey(snapshot.Id, requestId), ProviderCommandKinds.VolumeSnapshotCreate, volume.ClusterId, volume.TenantId, volume.Id,
             new { snapshotId = snapshot.Id, requestId, volumeId = volume.Id, externalVolumeId, projectName }, ct);
 
     public Task EnqueueVolumeSnapshotDeleteAsync(VolumeAggregate volume, VolumeSnapshot snapshot, Guid requestId,
         string externalSnapshotId, string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VolumeSnapshotDeleteKey(snapshot.Id, requestId), ProviderCommandKinds.VolumeSnapshotDelete, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(VolumeSnapshotDeleteKey(snapshot.Id, requestId), ProviderCommandKinds.VolumeSnapshotDelete, volume.ClusterId, volume.TenantId, volume.Id,
             new { snapshotId = snapshot.Id, requestId, volumeId = volume.Id, externalSnapshotId, projectName }, ct);
 
     // The new volume takes the source's cluster and its own name (titan-ops features/volume/design.md#volume-snapshot).
-    public Task EnqueueVolumeSnapshotRestoreAsync(VolumeAggregate newVolume, Guid requestId, string externalSnapshotId,
-        string projectName, CancellationToken ct = default) =>
-        EnqueueAsync(VolumeCreateKey(newVolume.Id, requestId), ProviderCommandKinds.VolumeSnapshotRestore, newVolume.ClusterId, newVolume.TenantId,
+    // It reads a snapshot of the source volume, so it holds the source, not the new volume
+    // (titan-ops features/provider/design.md#tenant-lane).
+    public Task EnqueueVolumeSnapshotRestoreAsync(VolumeAggregate sourceVolume, VolumeAggregate newVolume, Guid requestId,
+        string externalSnapshotId, string projectName, CancellationToken ct = default) =>
+        EnqueueAsync(VolumeCreateKey(newVolume.Id, requestId), ProviderCommandKinds.VolumeSnapshotRestore, newVolume.ClusterId, newVolume.TenantId, sourceVolume.Id,
             new { newVolumeId = newVolume.Id, requestId, externalSnapshotId, name = newVolume.Name, projectName }, ct);
 
     // `volume-{kind}-{volumeId}-{requestId}` and `volume-snapshot-{kind}-{snapshotId}-{requestId}`: the stuck-request
@@ -186,31 +187,33 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // The schedule asks every hour under the day's key: the day's backup that ran stays done, one that failed runs again.
     public Task EnqueueVmBackupAsync(VmAggregate vm, string externalVmId, string projectName, DateOnly day,
         CancellationToken ct = default) =>
-        EnqueueAsync($"vm-backup-{vm.Id}-{BackupDay(day)}", ProviderCommandKinds.VmBackup, vm.ClusterId, vm.TenantId,
+        EnqueueAsync(BackupCommandKeys.Vm(vm.Id, day), ProviderCommandKinds.VmBackup, vm.ClusterId, vm.TenantId, vm.Id,
             new { vmId = vm.Id, externalVmId, projectName, tenantId = vm.TenantId }, ct);
 
     public Task EnqueueVolumeBackupAsync(VolumeAggregate volume, string externalVolumeId, string projectName, DateOnly day,
         CancellationToken ct = default) =>
-        EnqueueAsync($"volume-backup-{volume.Id}-{BackupDay(day)}", ProviderCommandKinds.VolumeBackup, volume.ClusterId, volume.TenantId,
+        EnqueueAsync(BackupCommandKeys.Volume(volume.Id, day), ProviderCommandKinds.VolumeBackup, volume.ClusterId, volume.TenantId, volume.Id,
             new { volumeId = volume.Id, externalVolumeId, projectName, tenantId = volume.TenantId }, ct);
 
-    // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
-    private static string BackupDay(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+    // The cluster is on the row, which the worker reads from the lease: the payload carries nothing.
+    public Task EnqueueClusterBackupAsync(string clusterId, DateOnly day, CancellationToken ct = default) =>
+        EnqueueAsync(BackupCommandKeys.Cluster(clusterId, day), ProviderCommandKinds.ClusterBackup, clusterId, tenantId: null, resourceId: null,
+            new { }, ct);
 
     // Load balancer: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>
         EnqueueAsync(LoadBalancerCreateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerCreate,
-            loadBalancer.ClusterId, loadBalancer.TenantId, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
+            loadBalancer.ClusterId, loadBalancer.TenantId, resourceId: null, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
 
     public Task EnqueueLoadBalancerUpdateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>
         EnqueueAsync(LoadBalancerUpdateKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerUpdate,
-            loadBalancer.ClusterId, loadBalancer.TenantId, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
+            loadBalancer.ClusterId, loadBalancer.TenantId, resourceId: null, LoadBalancerPayload(loadBalancer, requestId, projectName), ct);
 
     public Task EnqueueLoadBalancerDeleteAsync(LoadBalancer loadBalancer, Guid requestId, string vip, string projectName,
         CancellationToken ct = default) =>
-        EnqueueAsync(LoadBalancerDeleteKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerDelete, loadBalancer.ClusterId, loadBalancer.TenantId,
+        EnqueueAsync(LoadBalancerDeleteKey(loadBalancer.Id, requestId), ProviderCommandKinds.LoadBalancerDelete, loadBalancer.ClusterId, loadBalancer.TenantId, resourceId: null,
             new { loadBalancerId = loadBalancer.Id, requestId, externalNetworkId = loadBalancer.ExternalNetworkId, vip, projectName }, ct);
 
     // `load-balancer-{kind}-{loadBalancerId}-{requestId}`: the stuck-request query rebuilds the key from the load
@@ -243,7 +246,7 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     public Task EnqueueTemplateSyncAsync(VmTemplateAggregate template, string clusterId, Guid requestId,
         CancellationToken ct = default) =>
         EnqueueAsync(TemplateSyncKey(template.Id, clusterId, requestId), ProviderCommandKinds.TemplateSync, clusterId,
-            tenantId: null,
+            tenantId: null, resourceId: null,
             new { templateId = template.Id, requestId, name = template.Name, osImageName = template.OsImageName, imageUrl = template.ImageUrl ?? "" }, ct);
 
     // `template-sync-{templateId}-{clusterId}-{requestId}`: the stuck-request query rebuilds it from the cluster's
@@ -251,15 +254,15 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     internal static string TemplateSyncKey(Guid templateId, string clusterId, Guid requestId) =>
         $"template-sync-{templateId}-{clusterId}-{requestId}";
 
-    private async Task EnqueueAsync(string key, string kind, string clusterId, Guid? tenantId, object payload,
-        CancellationToken ct)
+    private async Task EnqueueAsync(string key, string kind, string clusterId, Guid? tenantId, Guid? resourceId,
+        object payload, CancellationToken ct)
     {
         string json = JsonSerializer.Serialize(payload, Json);
         DateTimeOffset now = clock.GetUtcNow();
         ProviderCommand? existing = await repository.FindByKeyAsync(key, ct);
         if (existing == null)
         {
-            repository.Add(ProviderCommand.Create(key, kind, clusterId, json, now, tenantId));
+            repository.Add(ProviderCommand.Create(key, kind, clusterId, json, now, tenantId, resourceId));
             return;
         }
         // Absorbed or reopened (ProviderCommand.Reopen); either way the handler's SaveAsync writes the outcome.

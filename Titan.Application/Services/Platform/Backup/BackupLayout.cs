@@ -22,6 +22,10 @@ public static class BackupLayout
     /// Backups kept per VM or volume; older ones are deleted from the bucket.
     public const int IncusBackupsKept = 7;
 
+    /// How long the backups of a VM or volume Titan no longer holds stay after its newest one
+    /// (titan-ops features/backup/design.md#backups-of-gone-resources).
+    public static readonly TimeSpan GoneResourceBackupsKeptFor = TimeSpan.FromDays(7);
+
     /// The serverName an object of postgres/ belongs to, or null for an object right under postgres/.
     public static string? ServerOf(string key)
     {

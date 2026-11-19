@@ -98,6 +98,39 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
     }
 
+    // The same race over two rows of one VM that no lane joins (two tenants, so the leased-per-tenant index cannot be the
+    // one that stops it): the leased-per-resource index lets one commit. On a schema without it both commit.
+    [Fact]
+    public async Task TwoLeasesReadingAtOnce_TwoRowsOfOneResource_OnlyOneCommits()
+    {
+        string kind = UniqueKind();
+        Guid resource = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        foreach (DateTimeOffset createdAt in new[] { now.AddSeconds(-2), now.AddSeconds(-1) })
+        {
+            await using TitanDbContext seed = pg.NewDbContext();
+            seed.ProviderCommands.Add(ProviderCommand.Create("test-" + Guid.NewGuid(), kind, "mock", "{}", createdAt,
+                Guid.NewGuid(), resource));
+            await seed.SaveChangesAsync();
+        }
+        await using TitanDbContext dbA = pg.NewDbContext();
+        await using TitanDbContext dbB = pg.NewDbContext();
+        var repoA = new ProviderCommandRepository(dbA);
+        var repoB = new ProviderCommandRepository(dbB);
+        ProviderCommand seenByA = (await repoA.ListClaimableAsync([kind], now, 2, CancellationToken.None))[0];
+        ProviderCommand seenByB = (await repoB.ListClaimableAsync([kind], now, 2, CancellationToken.None))[1];
+
+        seenByA.Lease(Guid.NewGuid(), now);
+        await repoA.SaveChangesAsync(CancellationToken.None);
+        seenByB.Lease(Guid.NewGuid(), now);
+
+        ConcurrencyConflictException ex = await Assert.ThrowsAsync<ConcurrencyConflictException>(
+            () => repoB.SaveChangesAsync(CancellationToken.None));
+        Assert.Equal("PROVIDER_COMMAND_CONFLICT", ex.Code);
+        await using TitanDbContext read = pg.NewDbContext();
+        Assert.Equal(1, await read.ProviderCommands.CountAsync(c => c.Kind == kind && c.Status == ProviderCommandStatus.Leased));
+    }
+
     // The same race over two rows of no tenant of one kind (template.sync's lane): the leased-no-tenant index lets one
     // commit.
     [Fact]

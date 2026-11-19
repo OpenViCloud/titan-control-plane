@@ -127,6 +127,37 @@ public class PendingRequestsDbTests(PostgresFixture pg)
     }
 
     // The command's value, not the VM's: a change after the stop was recorded does not reach the worker's wait.
+    // A command waits while the backup of its VM holds the VM (titan-ops features/provider/design.md#tenant-lane): that
+    // wait is not stuck. Once the backup is done, the same request past the threshold is.
+    [Fact]
+    public async Task AStopWaitingBehindTheBackupOfItsVm_IsNotStuck_UntilTheBackupIsDone()
+    {
+        Vm vm = await StoredRunningVmAsync();
+        await StopThroughTheHandlerAsync(vm.Id);
+        await AgeTheRequestAsync(vm.Id, 20);
+        ProviderCommand backup = ProviderCommand.Create($"vm-backup-{vm.Id}-20261119", ProviderCommandKinds.VmBackup,
+            "cluster-a", "{}", DateTimeOffset.UtcNow.AddMinutes(-21), Tenant, vm.Id);
+        Guid lease = Guid.NewGuid();
+        backup.Lease(lease, DateTimeOffset.UtcNow);
+        await using (TitanDbContext db = pg.NewDbContext())
+        {
+            db.ProviderCommands.Add(backup);
+            await db.SaveChangesAsync();
+        }
+
+        bool stuckDuringTheBackup = (await StuckAfterFifteenMinutesAsync()).Any(s => s.Id == vm.Id);
+        await using (TitanDbContext db = pg.NewDbContext())
+        {
+            ProviderCommand stored = await db.ProviderCommands.SingleAsync(c => c.Id == backup.Id);
+            stored.Complete(lease);
+            await db.SaveChangesAsync();
+        }
+        bool stuckAfterTheBackup = (await StuckAfterFifteenMinutesAsync()).Any(s => s.Id == vm.Id);
+
+        Assert.False(stuckDuringTheBackup);
+        Assert.True(stuckAfterTheBackup);
+    }
+
     [Fact]
     public async Task AStopTimeoutChangedAfterTheStop_DoesNotMoveTheThreshold()
     {

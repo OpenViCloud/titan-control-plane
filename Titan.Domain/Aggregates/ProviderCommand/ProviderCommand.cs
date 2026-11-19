@@ -27,6 +27,11 @@ public class ProviderCommand : IAggregateRoot
     /// commands run one at a time in each lane (titan-ops features/provider/design.md#tenant-lane).
     public Guid? TenantId { get; private set; }
 
+    /// The VM or volume the command acts on; null for a command of no such resource (network, rule, load balancer,
+    /// template). Each resource has one leased command at a time, whatever its lane, so a command waits while its
+    /// resource backs up and a backup waits for the resource's running command (titan-ops features/provider/design.md#tenant-lane).
+    public Guid? ResourceId { get; private set; }
+
     /// JSON the worker reads; its property names are the wire format.
     public string Payload { get; private set; } = default!;
 
@@ -51,7 +56,8 @@ public class ProviderCommand : IAggregateRoot
     private ProviderCommand() { }
 
     public static ProviderCommand Create(
-        string key, string kind, string clusterId, string payload, DateTimeOffset now, Guid? tenantId = null)
+        string key, string kind, string clusterId, string payload, DateTimeOffset now, Guid? tenantId = null,
+        Guid? resourceId = null)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("A provider command needs a key.", nameof(key));
@@ -65,6 +71,7 @@ public class ProviderCommand : IAggregateRoot
             Kind = kind,
             ClusterId = clusterId,
             TenantId = tenantId,
+            ResourceId = resourceId,
             Payload = payload,
             Status = ProviderCommandStatus.Pending,
             Attempts = 0,
@@ -130,6 +137,13 @@ public class ProviderCommand : IAggregateRoot
     internal bool HoldsTheLaneOf(ProviderCommand other) =>
         Status == ProviderCommandStatus.Leased && Id != other.Id && TenantId == other.TenantId
         && ProviderCommandKinds.Backup.Contains(Kind) == ProviderCommandKinds.Backup.Contains(other.Kind);
+
+    /// A Leased row holds its resource across both lanes: no other row of the same VM or volume is handed out until it
+    /// stops running, whatever kind asks (titan-ops features/provider/design.md#tenant-lane). A row of no resource holds
+    /// nothing this way. ProviderCommandRepository.ListClaimableAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    internal bool HoldsTheResourceOf(ProviderCommand other) =>
+        Status == ProviderCommandStatus.Leased && Id != other.Id && ResourceId != null && ResourceId == other.ResourceId;
 
     public void Lease(Guid leaseId, DateTimeOffset now)
     {
