@@ -19,6 +19,11 @@ public interface IProviderCommandRepository
     Task<IReadOnlyList<ProviderCommand>> ListClaimableAsync(
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct);
 
+    /// The rows of one kind of one cluster created at or after `since`, as saved: a row added in this scope and not yet
+    /// saved is not in it. The schedule reads the cluster's config rows of the day with it.
+    Task<IReadOnlyList<ProviderCommand>> ListOfKindSinceAsync(
+        string kind, string clusterId, DateTimeOffset since, CancellationToken ct);
+
     void Add(ProviderCommand command);
 
     /// Deletes at once, outside the scope's SaveChanges, the rows ProviderCommand.IsFinishedAndCreatedBefore names;

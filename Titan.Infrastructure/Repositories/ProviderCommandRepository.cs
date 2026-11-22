@@ -22,6 +22,13 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
         return await db.ProviderCommands.FirstOrDefaultAsync(c => c.Key == key, ct);
     }
 
+    public async Task<IReadOnlyList<ProviderCommand>> ListOfKindSinceAsync(
+        string kind, string clusterId, DateTimeOffset since, CancellationToken ct) =>
+        await db.ProviderCommands
+            .Where(c => c.Kind == kind && c.ClusterId == clusterId && c.CreatedAt >= since)
+            .OrderBy(c => c.CreatedAt)
+            .ToListAsync(ct);
+
     public Task<ProviderCommand?> FindByLeaseAsync(Guid leaseId, CancellationToken ct) =>
         db.ProviderCommands.FirstOrDefaultAsync(c => c.LeaseId == leaseId, ct);
 

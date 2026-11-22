@@ -66,6 +66,9 @@ public interface IProviderCommandQueue
     // One a day per cluster, after that cluster's disks of the day (titan-ops features/backup/design.md#cluster-backup).
     Task EnqueueClusterBackupAsync(string clusterId, DateOnly day, CancellationToken ct = default);
 
+    /// A config asked again later the same day, once per UTC hour at most (BackupCommandKeys.ClusterAgain).
+    Task EnqueueClusterBackupAgainAsync(string clusterId, DateOnly day, int hour, CancellationToken ct = default);
+
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
     // (titan-ops features/load-balancer/design.md#lb-resource-model).
     Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName, CancellationToken ct = default);

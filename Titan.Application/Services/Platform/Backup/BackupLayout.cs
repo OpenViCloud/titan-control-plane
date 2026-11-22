@@ -22,6 +22,9 @@ public static class BackupLayout
     /// Backups kept per VM or volume; older ones are deleted from the bucket.
     public const int IncusBackupsKept = 7;
 
+    /// UTC days of a cluster's config kept: the newest of each (titan-ops features/backup/design.md#cluster-backup).
+    public const int ConfigDaysKept = 7;
+
     /// How long the backups of a VM or volume Titan no longer holds stay after its newest one
     /// (titan-ops features/backup/design.md#backups-of-gone-resources).
     public static readonly TimeSpan GoneResourceBackupsKeptFor = TimeSpan.FromDays(7);

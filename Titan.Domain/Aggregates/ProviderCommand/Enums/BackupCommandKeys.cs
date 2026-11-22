@@ -13,6 +13,11 @@ public static class BackupCommandKeys
 
     public static string Cluster(string clusterId, DateOnly day) => $"cluster-backup-{clusterId}-{Day(day)}";
 
+    /// A config asked again later the same day, after a disk that the day's first config does not know: one key per UTC
+    /// hour, so a pass that runs twice in an hour asks it once (titan-ops features/backup/design.md#cluster-backup).
+    public static string ClusterAgain(string clusterId, DateOnly day, int hour) =>
+        $"cluster-backup-{clusterId}-{Day(day)}{hour.ToString("00", CultureInfo.InvariantCulture)}";
+
     // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
     private static string Day(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 }

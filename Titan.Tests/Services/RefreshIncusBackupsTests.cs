@@ -222,4 +222,51 @@ public class RefreshIncusBackupsTests
         Assert.False(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-7))));
         Assert.True(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-6))));
     }
+    // A config asked again the same day leaves more than one object in a day; only the newest of a day is kept, so seven
+    // days of history do not shrink to one or two (titan-ops features/backup/design.md#cluster-backup).
+    [Fact]
+    public async Task SeveralConfigsOfOneDay_KeepOnlyTheNewest_InTheBucketAndInTheRows()
+    {
+        DateTimeOffset yesterday = new(2026, 10, 25, 0, 0, 0, TimeSpan.Zero);
+        foreach (int hour in new[] { 2, 6, 10 })
+        {
+            Put(ConfigKey("local-mac", yesterday.AddHours(hour)), 10);
+        }
+
+        await RunAsync();
+
+        BackupRecord kept = Assert.Single(RowsOf(BackupRecord.ClusterKind));
+        Assert.Equal(yesterday.AddHours(10), kept.TakenAt);
+        Assert.Equal(new[] { ConfigKey("local-mac", yesterday.AddHours(10)) }, _bucket.Objects.Keys.Where(k => k.Contains("/cluster/")));
+    }
+
+    [Fact]
+    public async Task ConfigsOfEightDays_TwoEach_KeepTheNewestOfTheSevenNewestDays()
+    {
+        DateTimeOffset today = new(2026, 10, 26, 0, 0, 0, TimeSpan.Zero);
+        for (int day = 0; day < 8; day++)
+        {
+            Put(ConfigKey("local-mac", today.AddDays(-day).AddHours(1)), 10);
+            Put(ConfigKey("local-mac", today.AddDays(-day).AddHours(9)), 10);
+        }
+
+        await RunAsync();
+
+        Assert.Equal(7, RowsOf(BackupRecord.ClusterKind).Count);
+        Assert.Equal(
+            Enumerable.Range(0, 7).Select(day => ConfigKey("local-mac", today.AddDays(-day).AddHours(9))).Order(StringComparer.Ordinal),
+            _bucket.Objects.Keys.Where(k => k.Contains("/cluster/")).Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public async Task TheConfigsOfOneCluster_DoNotCountAgainstAnother()
+    {
+        DateTimeOffset day = new(2026, 10, 25, 0, 0, 0, TimeSpan.Zero);
+        Put(ConfigKey("local-mac", day.AddHours(3)), 10);
+        Put(ConfigKey("other", day.AddHours(3)), 10);
+
+        await RunAsync();
+
+        Assert.Equal(2, RowsOf(BackupRecord.ClusterKind).Count);
+    }
 }
