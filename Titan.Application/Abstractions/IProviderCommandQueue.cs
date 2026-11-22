@@ -63,7 +63,7 @@ public interface IProviderCommandQueue
     // One a day per resource, the UTC day in the key (titan-ops features/backup/design.md#incus-backup).
     Task EnqueueVmBackupAsync(VmAggregate vm, string externalVmId, string projectName, DateOnly day, CancellationToken ct = default);
     Task EnqueueVolumeBackupAsync(VolumeAggregate volume, string externalVolumeId, string projectName, DateOnly day, CancellationToken ct = default);
-    // One a day per cluster, after that cluster's disks of the day (titan-ops features/backup/design.md#cluster-backup).
+    // The day's first config of a cluster, after that cluster's disks of the day (titan-ops features/backup/design.md#cluster-backup).
     Task EnqueueClusterBackupAsync(string clusterId, DateOnly day, CancellationToken ct = default);
 
     /// A config asked again later the same day, once per UTC hour at most (BackupCommandKeys.ClusterAgain).

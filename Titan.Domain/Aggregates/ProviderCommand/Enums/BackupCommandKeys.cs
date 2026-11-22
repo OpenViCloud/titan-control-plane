@@ -4,7 +4,8 @@ namespace Titan.Domain.Aggregates.ProviderCommand;
 
 /// The keys of the daily backup commands: the UTC day is in the key, so a day's backup that ran is not asked again and one
 /// that failed is (titan-ops features/backup/design.md#incus-backup). The schedule reads them back to know when a cluster's
-/// disks are done for the day (titan-ops features/backup/design.md#cluster-backup).
+/// disks are done for the day (titan-ops features/backup/design.md#cluster-backup). A config asked again later in the
+/// day has an hour in its key instead (ClusterAgain), so the same rule applies per hour for it.
 public static class BackupCommandKeys
 {
     public static string Vm(Guid vmId, DateOnly day) => $"vm-backup-{vmId}-{Day(day)}";

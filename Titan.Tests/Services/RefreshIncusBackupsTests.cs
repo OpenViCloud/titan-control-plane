@@ -222,6 +222,7 @@ public class RefreshIncusBackupsTests
         Assert.False(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-7))));
         Assert.True(_bucket.Objects.ContainsKey(ConfigKey("local-mac", Now.AddDays(-6))));
     }
+
     // A config asked again the same day leaves more than one object in a day; only the newest of a day is kept, so seven
     // days of history do not shrink to one or two (titan-ops features/backup/design.md#cluster-backup).
     [Fact]

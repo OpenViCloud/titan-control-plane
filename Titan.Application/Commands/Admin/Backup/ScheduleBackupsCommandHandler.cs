@@ -11,7 +11,8 @@ namespace Titan.Application.Commands.Admin.Backup;
 
 /// Asks the worker for today's backup of every VM and custom volume Incus holds, across tenants
 /// (titan-ops features/backup/design.md#incus-backup), and for today's config of each cluster once that cluster's disks
-/// of the day have ended (titan-ops features/backup/design.md#cluster-backup). Runs every hour: the day is in the
+/// of the day have ended, and again later in the day when a disk's backup row came after the newest config (titan-ops
+/// features/backup/design.md#cluster-backup). Runs every hour: the day is in the
 /// command's key, so a day's backup that ran is not asked again and one that failed is. The commands are saved once, at
 /// the end.
 public class ScheduleBackupsCommandHandler(
@@ -112,7 +113,7 @@ public class ScheduleBackupsCommandHandler(
         return (true, newest);
     }
 
-    // The day's first config is asked every pass above. Another one is asked when no config of the day is still
+    // The day's first config is asked on every pass of a cluster whose disks ended. Another one is asked when no config of the day is still
     // running and a disk's row is newer than the newest config that is Done: the config does not know that disk, and
     // restoring from it would leave the disk out until tomorrow's.
     private async Task<bool> ADiskIsNewerThanTheLastConfigAsync(string clusterId, DateTimeOffset newestDisk, DateTimeOffset dayStart, CancellationToken ct)
