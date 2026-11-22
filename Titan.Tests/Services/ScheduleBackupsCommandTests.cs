@@ -208,6 +208,7 @@ public class ScheduleBackupsCommandTests
         Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-20261026");
         Assert.DoesNotContain(_rows.Rows, r => r.Key == "cluster-backup-other-20261026");
     }
+
     private void At(int day, int hour) => _clock.Now = new DateTimeOffset(2026, 10, day, hour, 0, 0, TimeSpan.Zero);
 
     private async Task ADayWithItsConfigDone(Vm first, List<Vm> held)
@@ -375,8 +376,6 @@ public class ScheduleBackupsCommandTests
         Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102609");
     }
 
-    // A row made at the very instant of the config is not later than it. The pass that makes a config makes no disk row,
-    // so only a row written by hand reaches this edge.
     // The key is the hour: a disk that ends in the hour of another config waits for the next hour's key, it does not ask a
     // second config under the same key (the Done row absorbs it).
     [Fact]
@@ -400,14 +399,16 @@ public class ScheduleBackupsCommandTests
 
         _clock.Now = _clock.Now.AddMinutes(30);
         await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
-        int configsInTheHour = _rows.Rows.Count(r => r.Kind == ProviderCommandKinds.ClusterBackup);
+        int configRowsOfTheDay = _rows.Rows.Count(r => r.Kind == ProviderCommandKinds.ClusterBackup);
         At(26, 7);
         await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
 
-        Assert.Equal(2, configsInTheHour);
+        Assert.Equal(2, configRowsOfTheDay);
         Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102607");
     }
 
+    // A row made at the very instant of the config is not later than it. The pass that makes a config makes no disk row,
+    // so only a row written by hand reaches this edge.
     [Fact]
     public async Task ADiskRowOfTheInstantOfTheConfig_IsNotNewerThanIt()
     {

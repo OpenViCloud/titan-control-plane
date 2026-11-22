@@ -11,10 +11,10 @@ namespace Titan.Application.Commands.Admin.Backup;
 
 /// Asks the worker for today's backup of every VM and custom volume Incus holds, across tenants
 /// (titan-ops features/backup/design.md#incus-backup), and for today's config of each cluster once that cluster's disks
-/// of the day have ended, and again later in the day when a disk's backup row came after the newest config (titan-ops
-/// features/backup/design.md#cluster-backup). Runs every hour: the day is in the
-/// command's key, so a day's backup that ran is not asked again and one that failed is. The commands are saved once, at
-/// the end.
+/// of the day have ended, and again later in the day when no config of the day is still running and a disk's backup row
+/// came after the newest Done config (titan-ops features/backup/design.md#cluster-backup). Runs every hour: the day is in
+/// the command's key (a config asked again has the hour after the day), so a backup that ran is not asked again within
+/// its day, or its hour, and one that failed is. The commands are saved once, at the end.
 public class ScheduleBackupsCommandHandler(
     IVmRepository vms,
     IVolumeRepository volumes,
@@ -113,9 +113,9 @@ public class ScheduleBackupsCommandHandler(
         return (true, newest);
     }
 
-    // The day's first config is asked on every pass of a cluster whose disks ended. Another one is asked when no config of the day is still
-    // running and a disk's row is newer than the newest config that is Done: the config does not know that disk, and
-    // restoring from it would leave the disk out until tomorrow's.
+    // The day's first config is asked on every pass of a cluster whose disks ended. Another one is asked when no config
+    // of the day is still running and a disk's row is newer than the newest config that is Done: the config does not know
+    // that disk, and restoring from it would leave the disk out until tomorrow's.
     private async Task<bool> ADiskIsNewerThanTheLastConfigAsync(string clusterId, DateTimeOffset newestDisk, DateTimeOffset dayStart, CancellationToken ct)
     {
         var configs = await rows.ListOfKindSinceAsync(ProviderCommandKinds.ClusterBackup, clusterId, dayStart, ct);
