@@ -130,19 +130,25 @@ public class RefreshBackupStatusCommandHandler(
                 }
                 kept.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
             }
-            // A cluster's config keeps its seven newest too (titan-ops features/backup/design.md#cluster-backup).
+            // A cluster's config keeps the newest of each of its seven newest UTC days: a config asked again the same day
+            // leaves more than one a day (titan-ops features/backup/design.md#cluster-backup).
             var byCluster = all
                 .Select(o => (Object: o, Key: ClusterConfigBackupKey.Parse(o.Key)))
                 .Where(b => b.Key is not null)
                 .GroupBy(b => b.Key!.ClusterId);
             foreach (var cluster in byCluster)
             {
-                var newestFirst = cluster.OrderByDescending(b => b.Key!.TakenAt).ToList();
-                foreach (var old in newestFirst.Skip(BackupLayout.IncusBackupsKept))
+                var newestOfEachDay = cluster
+                    .GroupBy(b => DateOnly.FromDateTime(b.Key!.TakenAt.UtcDateTime))
+                    .OrderByDescending(day => day.Key)
+                    .Take(BackupLayout.ConfigDaysKept)
+                    .Select(day => day.OrderByDescending(b => b.Key!.TakenAt).First())
+                    .ToList();
+                foreach (var old in cluster.Except(newestOfEachDay))
                 {
                     await bucket.DeleteAsync(old.Object.Key, ct);
                 }
-                keptConfigs.AddRange(newestFirst.Take(BackupLayout.IncusBackupsKept).Select(b => (b.Key!, b.Object.Size)));
+                keptConfigs.AddRange(newestOfEachDay.Select(b => (b.Key!, b.Object.Size)));
             }
         }
         catch (Exception e) when (IsUnreadable(e))

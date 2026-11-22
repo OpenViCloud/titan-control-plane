@@ -28,6 +28,16 @@ public class FakeProviderCommandRepository : IProviderCommandRepository
         return Task.FromResult(rows);
     }
 
+    public Task<IReadOnlyList<ProviderCommand>> ListOfKindSinceAsync(
+        string kind, string clusterId, DateTimeOffset since, CancellationToken ct)
+    {
+        IReadOnlyList<ProviderCommand> rows = Rows
+            .Where(c => c.Kind == kind && c.ClusterId == clusterId && c.CreatedAt >= since)
+            .OrderBy(c => c.CreatedAt)
+            .ToList();
+        return Task.FromResult(rows);
+    }
+
     public void Add(ProviderCommand command) => Rows.Add(command);
 
     public Task<int> DeleteFinishedCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct)

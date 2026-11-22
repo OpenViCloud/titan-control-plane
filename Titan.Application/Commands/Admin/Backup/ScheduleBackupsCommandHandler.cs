@@ -11,9 +11,10 @@ namespace Titan.Application.Commands.Admin.Backup;
 
 /// Asks the worker for today's backup of every VM and custom volume Incus holds, across tenants
 /// (titan-ops features/backup/design.md#incus-backup), and for today's config of each cluster once that cluster's disks
-/// of the day have ended (titan-ops features/backup/design.md#cluster-backup). Runs every hour: the day is in the
-/// command's key, so a day's backup that ran is not asked again and one that failed is. The commands are saved once, at
-/// the end.
+/// of the day have ended, and again later in the day when no config of the day is still running and a disk's backup row
+/// came after the newest Done config (titan-ops features/backup/design.md#cluster-backup). Runs every hour: the day is in
+/// the command's key (a config asked again has the hour after the day), so a backup that ran is not asked again within
+/// its day, or its hour, and one that failed is. The commands are saved once, at the end.
 public class ScheduleBackupsCommandHandler(
     IVmRepository vms,
     IVolumeRepository volumes,
@@ -30,7 +31,8 @@ public class ScheduleBackupsCommandHandler(
         // Another pod's pass of this job waits here until this one saved, then reads the commands it saved: without the
         // lock two passes insert the same keys in different orders and deadlock.
         await passLock.TakeAsync(Job, ct);
-        DateOnly today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        DateTimeOffset now = clock.GetUtcNow().ToUniversalTime();
+        DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
 
         var vmsOnIncus = await vms.ListWithAnInstanceAsync(ct);
         // Billed is what Incus holds (Volume.IsBilled): the volumes a backup can export.
@@ -50,12 +52,21 @@ public class ScheduleBackupsCommandHandler(
         var disksOfTheDay = vmsOnIncus.Select(vm => (vm.ClusterId, Key: BackupCommandKeys.Vm(vm.Id, today)))
             .Concat(volumesOnIncus.Select(v => (v.Volume.ClusterId, Key: BackupCommandKeys.Volume(v.Volume.Id, today))))
             .ToList();
+        DateTimeOffset dayStart = new(today.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var clustersDone = new List<string>();
+        var clustersAskedAgain = new List<string>();
         foreach (ClusterConfig cluster in clusters.Clusters)
         {
-            if (await DisksEndedAsync(disksOfTheDay.Where(d => d.ClusterId == cluster.Id).Select(d => d.Key), ct))
+            (bool ended, DateTimeOffset newestDisk) =
+                await DisksOfTheDayAsync(disksOfTheDay.Where(d => d.ClusterId == cluster.Id).Select(d => d.Key), ct);
+            if (!ended)
             {
-                clustersDone.Add(cluster.Id);
+                continue;
+            }
+            clustersDone.Add(cluster.Id);
+            if (await ADiskIsNewerThanTheLastConfigAsync(cluster.Id, newestDisk, dayStart, ct))
+            {
+                clustersAskedAgain.Add(cluster.Id);
             }
         }
 
@@ -71,23 +82,48 @@ public class ScheduleBackupsCommandHandler(
         {
             await commands.EnqueueClusterBackupAsync(clusterId, today, ct);
         }
+        foreach (string clusterId in clustersAskedAgain)
+        {
+            await commands.EnqueueClusterBackupAgainAsync(clusterId, today, now.Hour, ct);
+        }
 
         // One DbContext carries every repository: this saves the commands of both loops.
         await vms.SaveAsync(ct);
     }
 
-    // Every disk backup of the day has a row that is Done or Failed; a cluster with no disk has nothing to wait for.
-    private async Task<bool> DisksEndedAsync(IEnumerable<string> keys, CancellationToken ct)
+    // Every disk backup of the day has a row that is Done or Failed; a cluster with no disk has nothing to wait for. The
+    // newest creation time among the rows says whether a disk came after a config: a row is made by the first pass that
+    // sees its disk and is not made again that day, a failed one reopened by a later pass keeps it.
+    private async Task<(bool Ended, DateTimeOffset NewestCreatedAt)> DisksOfTheDayAsync(IEnumerable<string> keys, CancellationToken ct)
     {
+        DateTimeOffset newest = DateTimeOffset.MinValue;
         foreach (string key in keys)
         {
             ProviderCommandAggregate? row = await rows.FindByKeyAsync(key, ct);
             bool ended = row != null && (row.Status == ProviderCommandStatus.Done || row.Status == ProviderCommandStatus.Failed);
             if (!ended)
             {
-                return false;
+                return (false, newest);
+            }
+            if (row!.CreatedAt > newest)
+            {
+                newest = row.CreatedAt;
             }
         }
-        return true;
+        return (true, newest);
+    }
+
+    // The day's first config is asked on every pass of a cluster whose disks ended. Another one is asked when no config
+    // of the day is still running and a disk's row is newer than the newest config that is Done: the config does not know
+    // that disk, and restoring from it would leave the disk out until tomorrow's.
+    private async Task<bool> ADiskIsNewerThanTheLastConfigAsync(string clusterId, DateTimeOffset newestDisk, DateTimeOffset dayStart, CancellationToken ct)
+    {
+        var configs = await rows.ListOfKindSinceAsync(ProviderCommandKinds.ClusterBackup, clusterId, dayStart, ct);
+        if (configs.Any(c => c.Status != ProviderCommandStatus.Done && c.Status != ProviderCommandStatus.Failed))
+        {
+            return false;
+        }
+        ProviderCommandAggregate? lastDone = configs.Where(c => c.Status == ProviderCommandStatus.Done).MaxBy(c => c.CreatedAt);
+        return lastDone != null && newestDisk > lastDone.CreatedAt;
     }
 }

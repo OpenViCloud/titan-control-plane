@@ -135,10 +135,10 @@ public class ScheduleBackupsCommandTests
     private static void Ends(ProviderCommand row, bool failed)
     {
         Guid lease = Guid.NewGuid();
-        row.Lease(lease, row.CreatedAt);
+        row.Lease(lease, row.AvailableAt);
         if (failed)
         {
-            row.Fail(lease, "boom", retryable: false, row.CreatedAt);
+            row.Fail(lease, "boom", retryable: false, row.AvailableAt);
             return;
         }
         row.Complete(lease);
@@ -207,5 +207,239 @@ public class ScheduleBackupsCommandTests
 
         Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-20261026");
         Assert.DoesNotContain(_rows.Rows, r => r.Key == "cluster-backup-other-20261026");
+    }
+
+    private void At(int day, int hour) => _clock.Now = new DateTimeOffset(2026, 10, day, hour, 0, 0, TimeSpan.Zero);
+
+    private async Task ADayWithItsConfigDone(Vm first, List<Vm> held)
+    {
+        At(26, 1);
+        Holds(held, []);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{first.Id}-20261026"), failed: false);
+        At(26, 2);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row("cluster-backup-mock-20261026"), failed: false);
+    }
+
+    // A disk whose backup row came after the day's config is one the config does not know: once its backup ended, the
+    // next pass asks another config, so losing the host before tomorrow's config does not lose the disk
+    // (titan-ops features/backup/design.md#cluster-backup).
+    [Fact]
+    public async Task ADiskCreatedAfterTheDaysConfig_GetsAnotherConfig_OnceItsBackupEnded()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+
+        At(26, 5);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        bool askedWhileTheNewDiskWaits = _rows.Rows.Any(r => r.Key == "cluster-backup-mock-2026102605");
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: false);
+        At(26, 6);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.False(askedWhileTheNewDiskWaits);
+        ProviderCommand again = Row("cluster-backup-mock-2026102606");
+        Assert.Equal(ProviderCommandKinds.ClusterBackup, again.Kind);
+        Assert.Equal(ProviderCommandStatus.Pending, again.Status);
+    }
+
+    [Fact]
+    public async Task ADiskThatFailedItsFirstBackup_StillAsksAnotherConfig_AfterItEnded()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+        At(26, 5);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: true);
+
+        At(26, 6);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102606");
+    }
+
+    [Fact]
+    public async Task ADayWhoseFirstConfigStillRuns_AsksNoAnotherOne()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        At(26, 1);
+        Holds([first], []);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{first.Id}-20261026"), failed: false);
+        At(26, 2);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+        At(26, 3);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: false);
+
+        At(26, 4);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Equal(ProviderCommandStatus.Pending, Row("cluster-backup-mock-20261026").Status);
+        Assert.Single(_rows.Rows, r => r.Kind == ProviderCommandKinds.ClusterBackup);
+    }
+
+    [Fact]
+    public async Task ADiskThatWasThereBeforeTheConfig_AsksForNoAnotherOne()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+
+        At(26, 3);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        At(26, 4);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Single(_rows.Rows, r => r.Kind == ProviderCommandKinds.ClusterBackup);
+    }
+
+    [Fact]
+    public async Task ADiskBackupThatFailsAgainEveryHour_AsksForNoConfigEachTime()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        At(26, 1);
+        Holds([first], []);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{first.Id}-20261026"), failed: true);
+        At(26, 2);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row("cluster-backup-mock-20261026"), failed: false);
+        Ends(Row($"vm-backup-{first.Id}-20261026"), failed: true);
+
+        At(26, 3);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{first.Id}-20261026"), failed: true);
+        At(26, 4);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Single(_rows.Rows, r => r.Kind == ProviderCommandKinds.ClusterBackup);
+    }
+
+    [Fact]
+    public async Task TwoPassesInOneHour_AskForOneAnotherConfig()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+        At(26, 5);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: false);
+
+        At(26, 6);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        _clock.Now = _clock.Now.AddMinutes(20);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row("cluster-backup-mock-2026102606"), failed: false);
+        _clock.Now = _clock.Now.AddMinutes(10);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        At(26, 7);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        // The disk is older than the config of 06:00, which knows it: the hour after asks nothing.
+        Assert.Equal(2, _rows.Rows.Count(r => r.Kind == ProviderCommandKinds.ClusterBackup));
+    }
+
+    [Fact]
+    public async Task ADiskAfterAnotherConfig_WaitsForThatConfigToEnd_BeforeAskingAnother()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+        At(26, 5);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: false);
+        At(26, 6);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Vm later = RunningVmIn("mock", "vm-c");
+        Holds([first, late, later], []);
+        At(26, 7);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{later.Id}-20261026"), failed: false);
+
+        At(26, 8);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        bool askedWhileTheConfigOf06Runs = _rows.Rows.Any(r => r.Key == "cluster-backup-mock-2026102608");
+        Ends(Row("cluster-backup-mock-2026102606"), failed: false);
+        At(26, 9);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.False(askedWhileTheConfigOf06Runs);
+        Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102609");
+    }
+
+    // The key is the hour: a disk that ends in the hour of another config waits for the next hour's key, it does not ask a
+    // second config under the same key (the Done row absorbs it).
+    [Fact]
+    public async Task ADiskThatEndsInTheHourOfAnotherConfig_WaitsForTheNextHour()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm late = RunningVmIn("mock", "vm-b");
+        Holds([first, late], []);
+        At(26, 5);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{late.Id}-20261026"), failed: false);
+        At(26, 6);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row("cluster-backup-mock-2026102606"), failed: false);
+        Vm later = RunningVmIn("mock", "vm-c");
+        Holds([first, late, later], []);
+        _clock.Now = _clock.Now.AddMinutes(10);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{later.Id}-20261026"), failed: false);
+
+        _clock.Now = _clock.Now.AddMinutes(30);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        int configRowsOfTheDay = _rows.Rows.Count(r => r.Kind == ProviderCommandKinds.ClusterBackup);
+        At(26, 7);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Equal(2, configRowsOfTheDay);
+        Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102607");
+    }
+
+    // A row made at the very instant of the config is not later than it. The pass that makes a config makes no disk row,
+    // so only a row written by hand reaches this edge.
+    [Fact]
+    public async Task ADiskRowOfTheInstantOfTheConfig_IsNotNewerThanIt()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+        Vm same = RunningVmIn("mock", "vm-b");
+        ProviderCommand sameRow = ProviderCommand.Create(BackupCommandKeys.Vm(same.Id, new DateOnly(2026, 10, 26)),
+            ProviderCommandKinds.VmBackup, "mock", "{}", Row("cluster-backup-mock-20261026").CreatedAt);
+        _rows.Rows.Add(sameRow);
+        Ends(sameRow, failed: false);
+        Holds([first, same], []);
+
+        At(26, 4);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Single(_rows.Rows, r => r.Kind == ProviderCommandKinds.ClusterBackup);
+    }
+
+    [Fact]
+    public async Task ANewDay_StartsWithTheDaysFirstKey()
+    {
+        Vm first = RunningVmIn("mock", "vm-a");
+        await ADayWithItsConfigDone(first, [first]);
+
+        At(27, 0);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+        Ends(Row($"vm-backup-{first.Id}-20261027"), failed: false);
+        At(27, 1);
+        await Handler("mock").HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Contains(_rows.Rows, r => r.Key == "cluster-backup-mock-20261027");
+        Assert.DoesNotContain(_rows.Rows, r => r.Key == "cluster-backup-mock-2026102701");
     }
 }

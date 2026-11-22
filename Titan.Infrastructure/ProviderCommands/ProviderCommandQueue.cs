@@ -200,6 +200,10 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync(BackupCommandKeys.Cluster(clusterId, day), ProviderCommandKinds.ClusterBackup, clusterId, tenantId: null, resourceId: null,
             new { }, ct);
 
+    public Task EnqueueClusterBackupAgainAsync(string clusterId, DateOnly day, int hour, CancellationToken ct = default) =>
+        EnqueueAsync(BackupCommandKeys.ClusterAgain(clusterId, day, hour), ProviderCommandKinds.ClusterBackup, clusterId, tenantId: null,
+            resourceId: null, new { }, ct);
+
     // Load balancer: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>

@@ -884,6 +884,28 @@ public class ProviderCommandQueueTests
         Assert.Equal($"vm-backup-{vmId}-20261026", Assert.Single(_repo.Rows).Key);
     }
 
+    // The config asked again the same day has a key of its own, one per UTC hour; the day's first keeps the old form
+    // (titan-ops features/backup/design.md#cluster-backup).
+    [Fact]
+    public async Task ClusterBackupAgain_KeyHasTheDayAndTheHour_InGregorianDigits_UnderABuddhistCalendarCulture()
+    {
+        System.Globalization.CultureInfo before = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
+        try
+        {
+            await Queue().EnqueueClusterBackupAsync("mock", new DateOnly(2026, 10, 26));
+            await Queue().EnqueueClusterBackupAgainAsync("mock", new DateOnly(2026, 10, 26), 6);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = before;
+        }
+
+        Assert.Equal(new[] { "cluster-backup-mock-20261026", "cluster-backup-mock-2026102606" }, _repo.Rows.Select(r => r.Key));
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandKinds.ClusterBackup, r.Kind));
+        Assert.All(_repo.Rows, r => Assert.Null(r.ResourceId));
+    }
+
     [Fact]
     public async Task VmBackup_NextDay_IsANewRow()
     {
