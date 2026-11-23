@@ -111,6 +111,7 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerDelete] = lb.TenantId,
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
+            [ProviderCommandKinds.RestoreDrill] = null,
         };
 
         await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
@@ -139,6 +140,7 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
+        await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
 
         string[] everyKind = typeof(ProviderCommandKinds)
             .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
@@ -182,6 +184,7 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerDelete] = null,
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
+            [ProviderCommandKinds.RestoreDrill] = null,
         };
 
         await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
@@ -210,6 +213,7 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
+        await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
 
         Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.ResourceId));
     }

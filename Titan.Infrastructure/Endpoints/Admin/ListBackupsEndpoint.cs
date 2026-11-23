@@ -6,11 +6,11 @@ using Titan.Application.Queries.Platform.Backup.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Admin;
 
-// The newest backup of each protected resource and its health. Read-only: backing up and restoring happen elsewhere.
+// The newest backup of each protected resource and its health, and each cluster's latest restore drill. Read-only: backing up and restoring happen elsewhere.
 // Postgres is the platform's (module Platform); tenants' VMs and volumes are read across tenants (module Admin), and
 // Platform cannot read Compute, so the two lists meet here.
-public class ListBackupsEndpoint(ListBackupsQueryHandler postgres, ListDiskBackupsQueryHandler disks)
-    : EndpointWithoutRequest<BackupsQueryResult>
+public class ListBackupsEndpoint(ListBackupsQueryHandler postgres, ListDiskBackupsQueryHandler disks, ListRestoreDrillsQueryHandler drills)
+    : EndpointWithoutRequest<AdminBackupsResult>
 {
     public override void Configure()
     {
@@ -22,6 +22,7 @@ public class ListBackupsEndpoint(ListBackupsQueryHandler postgres, ListDiskBacku
     {
         var platform = await postgres.HandleAsync(new ListBackupsQuery(), ct);
         var tenants = await disks.HandleAsync(new ListDiskBackupsQuery(), ct);
-        await SendAsync(platform with { Items = platform.Items.Concat(tenants).ToList() }, cancellation: ct);
+        var restoreDrills = await drills.HandleAsync(new ListRestoreDrillsQuery(), ct);
+        await SendAsync(new AdminBackupsResult(platform.ReadAt, platform.Items.Concat(tenants).ToList(), restoreDrills), cancellation: ct);
     }
 }

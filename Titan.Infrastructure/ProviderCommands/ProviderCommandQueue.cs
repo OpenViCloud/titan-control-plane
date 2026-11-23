@@ -204,6 +204,12 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync(BackupCommandKeys.ClusterAgain(clusterId, day, hour), ProviderCommandKinds.ClusterBackup, clusterId, tenantId: null,
             resourceId: null, new { }, ct);
 
+    // The worker leases it on its drill loop; the tenant is in the payload only, so the row holds no tenant's lane.
+    public Task EnqueueRestoreDrillAsync(string clusterId, DateOnly day, string kind, Guid resourceId, string externalId,
+        string name, string projectName, Guid tenantId, CancellationToken ct = default) =>
+        EnqueueAsync(BackupCommandKeys.RestoreDrill(clusterId, day), ProviderCommandKinds.RestoreDrill, clusterId, tenantId: null,
+            resourceId: null, new { kind, resourceId, externalId, name, projectName, tenantId }, ct);
+
     // Load balancer: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>

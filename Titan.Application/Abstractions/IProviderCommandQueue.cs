@@ -69,6 +69,11 @@ public interface IProviderCommandQueue
     /// A config asked again later the same day, once per UTC hour at most (BackupCommandKeys.ClusterAgain).
     Task EnqueueClusterBackupAgainAsync(string clusterId, DateOnly day, int hour, CancellationToken ct = default);
 
+    // The day's restore drill of a cluster: one disk, "vm" or "volume", named so the worker finds its archive and reads
+    // its devices from Incus (titan-ops features/backup/design.md#restore-drill). The row is of no tenant and no resource.
+    Task EnqueueRestoreDrillAsync(string clusterId, DateOnly day, string kind, Guid resourceId, string externalId,
+        string name, string projectName, Guid tenantId, CancellationToken ct = default);
+
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
     // (titan-ops features/load-balancer/design.md#lb-resource-model).
     Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName, CancellationToken ct = default);
