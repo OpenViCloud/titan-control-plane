@@ -19,6 +19,10 @@ public static class BackupCommandKeys
     public static string ClusterAgain(string clusterId, DateOnly day, int hour) =>
         $"cluster-backup-{clusterId}-{Day(day)}{hour.ToString("00", CultureInfo.InvariantCulture)}";
 
+    /// One restore drill per cluster per UTC day, whatever its outcome: the schedule never reopens a Failed one
+    /// (titan-ops features/backup/design.md#restore-drill).
+    public static string RestoreDrill(string clusterId, DateOnly day) => $"restore-drill-{clusterId}-{Day(day)}";
+
     // Gregorian digits whatever the host's culture: a Buddhist-calendar culture would write another year into the key.
     private static string Day(DateOnly day) => day.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 }

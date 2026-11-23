@@ -366,6 +366,9 @@ builder.Services.AddOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOpt
     .ValidateOnStart();
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Infrastructure.Incus.ProviderClientIdentityOptions>>(
     new Titan.Infrastructure.Incus.ProviderClientIdentityValidation(clustersConfigured: clusterOptions.Clusters.Count > 0));
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection(Titan.Application.Options.RestoreDrillOptions.SectionName).Get<Titan.Application.Options.RestoreDrillOptions>()
+    ?? new Titan.Application.Options.RestoreDrillOptions());
 builder.Services.AddOptions<Titan.Application.Options.BackupTargetOptions>()
     .BindConfiguration(Titan.Application.Options.BackupTargetOptions.SectionName);
 builder.Services.AddSingleton<IBackupBucketFactory, Titan.Infrastructure.Backup.S3BackupBucketFactory>();
@@ -377,6 +380,7 @@ builder.Services.AddScoped<Titan.Domain.Repositories.IBackupObservationRepositor
 builder.Services.AddScoped<Titan.Application.Commands.Platform.Backup.RefreshBackupStatusCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.Backup.ListBackupsQueryHandler>();
 builder.Services.AddScoped<Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler>();
+builder.Services.AddScoped<Titan.Application.Queries.Admin.Backup.ListRestoreDrillsQueryHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupStatusRefreshService>();
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.ScheduleBackupsCommandHandler>();
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.PruneBackupsOfGoneResourcesCommandHandler>();
