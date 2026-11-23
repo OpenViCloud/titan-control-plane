@@ -135,6 +135,32 @@ public class ProviderCommandRepositoryStateTests
             claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 
+    // A restore drill is a row of no tenant and no resource that the worker leases on a loop of its own; while it runs
+    // (hours, on a big disk) the backup loop and a tenant's command still get their rows
+    // (titan-ops features/backup/design.md#restore-drill).
+    [Fact]
+    public async Task ALeasedRestoreDrill_HoldsBackNoBackup_NorTheClustersConfig_NorATenantsCommand()
+    {
+        await using TitanDbContext db = NewDb();
+        ProviderCommand drill = ProviderCommand.Create("drill", ProviderCommandKinds.RestoreDrill, "mock", "{}", Now.AddHours(-1));
+        drill.Lease(Guid.NewGuid(), Now);
+        Guid tenant = Guid.NewGuid();
+        db.ProviderCommands.AddRange(
+            drill,
+            ProviderCommand.Create("vm-backup", ProviderCommandKinds.VmBackup, "mock", "{}", Now.AddMinutes(-3), tenant, Guid.NewGuid()),
+            ProviderCommand.Create("config", ProviderCommandKinds.ClusterBackup, "mock", "{}", Now.AddMinutes(-2)),
+            ProviderCommand.Create("vm-stop", ProviderCommandKinds.VmStop, "mock", "{}", Now.AddMinutes(-1), tenant, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var repository = new ProviderCommandRepository(db);
+
+        var backups = await repository.ListClaimableAsync(
+            [ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup, ProviderCommandKinds.ClusterBackup], Now, 100, default);
+        var commands = await repository.ListClaimableAsync([ProviderCommandKinds.VmStop], Now, 100, default);
+
+        Assert.Equal(["config", "vm-backup"], backups.Select(c => c.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["vm-stop"], commands.Select(c => c.Key));
+    }
+
     [Fact]
     public async Task ClaimQuery_AgreesWithHoldsTheLaneOf_ForEveryLane()
     {
