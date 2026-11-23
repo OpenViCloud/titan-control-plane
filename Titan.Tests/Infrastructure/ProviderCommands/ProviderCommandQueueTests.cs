@@ -1040,6 +1040,8 @@ public class ProviderCommandQueueTests
             }
             case ProviderCommandKinds.TemplateSync:
                 return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
+            case ProviderCommandKinds.RestoreDrill:
+                return queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", project, Guid.NewGuid());
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "a kind the queue does not enqueue");
         }
@@ -1076,6 +1078,7 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.LoadBalancerUpdate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
         { ProviderCommandKinds.LoadBalancerDelete, ["externalNetworkId", "loadBalancerId", "projectName", "requestId", "vip"] },
         { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
+        { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },
     };
 
     [Theory]
