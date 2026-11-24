@@ -18,6 +18,9 @@ public interface INetworkRepository
     /// Networks of the tenant with a public /64 block, counted like CountActiveByTenantAsync (MaxPublicIpv6).
     Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default);
     Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default);
+    /// Any row, whatever its status: rows are never hard-deleted, so a deleted default network still counts
+    /// (titan-ops features/network/design.md#default-network).
+    Task<bool> HasEverHadOneAsync(Guid tenantId, CancellationToken ct = default);
     Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default);
     /// A load balancer of the network is not yet Deleted: it lives on the network on Incus.
     Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default);

@@ -1,14 +1,20 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Titan.Application.Commands.Billing.TenantActivation;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Options;
+using Titan.Application.Services.Networking.Network;
+using Titan.Application.Services.Platform.ActivityEvent;
+using Titan.Domain.Aggregates.ClusterIpv6Route;
+using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Services;
 using Titan.Infrastructure.Auth;
 using Titan.Infrastructure.Persistence;
+using Titan.Infrastructure.ProviderCommands;
 using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Infrastructure.Integration;
@@ -27,10 +33,46 @@ public class FirstSignInDbTests(PostgresFixture pg)
     {
         var tenants = new TenantRepository(db);
         var wallets = new WalletRepository(db);
+        // No cluster configured: DefaultNetwork logs a warning and gives no network, so this file's counts of
+        // tenants and wallets are not disturbed by the default network (titan-ops features/network/design.md#default-network).
+        var defaultNetwork = new DefaultNetwork(
+            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)), new ClusterOptions(),
+            new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
+            new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Guid.NewGuid())),
+            NullLogger<DefaultNetwork>.Instance);
         return new TenantResolutionMiddleware(
             tenants,
             new BootstrapTenantCommandHandler(tenants),
-            new ApproveDeclaredAccountCommandHandler(tenants, wallets, new TenantActivation(wallets)));
+            new ApproveDeclaredAccountCommandHandler(tenants, wallets, new TenantActivation(wallets), defaultNetwork));
+    }
+
+    private const string Block56 = "2001:41d0:d00:d400::/56";
+
+    private static TenantResolutionMiddleware MiddlewareWithIpv6Cluster(TitanDbContext db, string clusterId)
+    {
+        var tenants = new TenantRepository(db);
+        var wallets = new WalletRepository(db);
+        var clusters = new ClusterOptions
+        {
+            Clusters =
+            [
+                new()
+                {
+                    Id = clusterId, Name = clusterId, Endpoint = "https://localhost:8443",
+                    ServerFingerprint = new string('a', 64), OvnUplinkNetwork = "ovnup", StoragePool = "default",
+                    Ipv6Block = Block56,
+                },
+            ],
+        };
+        var defaultNetwork = new DefaultNetwork(
+            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)), clusters,
+            new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
+            new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Guid.NewGuid())),
+            NullLogger<DefaultNetwork>.Instance);
+        return new TenantResolutionMiddleware(
+            tenants,
+            new BootstrapTenantCommandHandler(tenants),
+            new ApproveDeclaredAccountCommandHandler(tenants, wallets, new TenantActivation(wallets), defaultNetwork));
     }
 
     private static DefaultHttpContext Request(string keycloakUserId, string username)
@@ -129,6 +171,45 @@ public class FirstSignInDbTests(PostgresFixture pg)
         await using TitanDbContext read = pg.NewDbContext();
         Assert.Equal(TenantStatus.Active, (await read.Tenants.SingleAsync(t => t.Id == pending.Id)).Status);
         Assert.Equal(1, await read.Wallets.CountAsync(w => w.TenantId == pending.Id));
+    }
+
+    // titan-ops features/network/design.md#default-network: the second of two first requests sees the
+    // default network the first gave the tenant (HasEverHadOneAsync, read after the tenant's row lock), so only one
+    // is ever created, even though both ask for one at once.
+    [Fact]
+    public async Task TwoFirstRequestsOfADeclaredAccount_BothSucceed_WithExactlyOneDefaultNetwork()
+    {
+        string user = "kc-" + Guid.NewGuid();
+        string name = "decl-net-" + Guid.NewGuid().ToString("N")[..12];
+        string cluster = "cluster-" + Guid.NewGuid().ToString("N")[..12];
+        Tenant pending = Tenant.CreatePending(name, user);
+        await using (TitanDbContext seed = pg.NewDbContext())
+        {
+            seed.Tenants.Add(pending);
+            await seed.SaveChangesAsync();
+            await new ClusterIpv6RouteRepository(seed).EnsureRoutesAsync(cluster);
+        }
+
+        await using TitanDbContext holder = pg.NewDbContext();
+        await using var hold = await holder.Database.BeginTransactionAsync();
+        await holder.Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM core.tenants WHERE id = {pending.Id} FOR UPDATE");
+
+        await using TitanDbContext firstContext = pg.NewDbContext();
+        await using TitanDbContext secondContext = pg.NewDbContext();
+        Task<Exception?> first = TryAsync(() => MiddlewareWithIpv6Cluster(firstContext, cluster).InvokeAsync(Request(user, name), Pass));
+        Task<Exception?> second = TryAsync(() => MiddlewareWithIpv6Cluster(secondContext, cluster).InvokeAsync(Request(user, name), Pass));
+
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        Assert.False(first.IsCompleted || second.IsCompleted, "a request did not wait on the tenant row: no race was measured");
+
+        await hold.RollbackAsync();
+        Exception?[] outcomes = await Task.WhenAll(first, second);
+
+        Assert.All(outcomes, Assert.Null);
+        await using TitanDbContext read = pg.NewDbContext();
+        List<Network> networks = await read.Networks.Where(n => n.TenantId == pending.Id).ToListAsync();
+        Network only = Assert.Single(networks);
+        Assert.Equal("default", only.Name.Value);
     }
 
     private static async Task<Exception?> TryAsync(Func<Task> act)

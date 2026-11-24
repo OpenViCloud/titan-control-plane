@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Titan.Application.Commands.Networking.Network;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Application.Options;
@@ -61,8 +62,9 @@ public class ClusterIpv6RouteConsistencyDbTests(PostgresFixture pg)
         await using TitanDbContext db = pg.NewDbContext();
         var caller = Callers.TenantMember(Guid.NewGuid());
         var handler = new EndNetworkRequestCommandHandler(
-            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)),
-            new ActivityRecorder(new ActivityEventRepository(db), caller));
+            new NetworkRepository(db), new NetworkRoutes(new ClusterIpv6RouteRepository(db)), new TenantRepository(db),
+            new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
+            new ActivityRecorder(new ActivityEventRepository(db), caller), NullLogger<EndNetworkRequestCommandHandler>.Instance);
         await handler.HandleAsync(new EndNetworkRequestCommand(networkId, requestId, outcome, externalId, null, cidr, gateway,
             reason, reason == null ? null : "raw incus error"));
     }

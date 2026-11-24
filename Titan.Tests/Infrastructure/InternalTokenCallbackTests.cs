@@ -1,5 +1,6 @@
 using FastEndpoints;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Catalog.VmTemplate;
@@ -227,6 +228,8 @@ public class InternalTokenCallbackTests
     }
 
     private static INetworkRepository StrictNetworks() => new Mock<INetworkRepository>(MockBehavior.Strict).Object;
+    private static ITenantRepository StrictTenants() => new Mock<ITenantRepository>(MockBehavior.Strict).Object;
+    private static IProviderCommandQueue StrictCommands() => new Mock<IProviderCommandQueue>(MockBehavior.Strict).Object;
 
     [Theory]
     [InlineData(null)]
@@ -234,7 +237,8 @@ public class InternalTokenCallbackTests
     public async Task EndNetworkRequest_WithoutTheToken_Returns401(string? token)
     {
         var handler = new EndNetworkRequestCommandHandler(StrictNetworks(),
-            new Titan.Domain.Services.NetworkRoutes(new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object), StrictActivity());
+            new Titan.Domain.Services.NetworkRoutes(new Mock<IClusterIpv6RouteRepository>(MockBehavior.Strict).Object),
+            StrictTenants(), StrictCommands(), StrictActivity(), NullLogger<EndNetworkRequestCommandHandler>.Instance);
         var ep = Factory.Create<EndNetworkRequestEndpoint>(
             ctx =>
             {

@@ -327,6 +327,10 @@ public class ModuleBoundaryTests
             "The three meters rate usage at the offering's price (docs/architecture/money-and-wallet.md#price-belongs-to-offering: price belongs to the offering).",
         [("Billing", "Compute")] =
             "The three meters read what is currently running (Vm, Volume, snapshots) to emit usage records.",
+        [("Billing", "Networking")] =
+            "ApproveDeclaredAccountCommandHandler and ActivateTenantCommandHandler call DefaultNetwork after activation, "
+            + "before their one save, so a tenant that never had a network gets one with its wallet in the same commit "
+            + "(docs/architecture/tenancy-and-admin.md#approval-is-activation, docs/features/network/design.md#default-network).",
         [("Billing", "Platform")] =
             "GetReceivablesQueryHandler reads tenant names and debt ceilings for the receivables view "
             + "(docs/architecture/money-and-wallet.md#postpaid-no-brake DEBT-6); SettleInvoiceFromWalletCommandHandler "
@@ -351,7 +355,10 @@ public class ModuleBoundaryTests
         [("Networking", "Platform")] =
             "CreateNetworkCommandHandler needs the tenant for quota, and the cluster for the "
             + "uplink and IPv6 block a public /64 comes from (docs/infra/incus/design.md#ipv6-address-plan); "
-            + "CreateFirewallRuleCommandHandler needs it for the per-network rule cap (docs/architecture/tenancy-and-admin.md#tenant-quota).",
+            + "CreateFirewallRuleCommandHandler needs it for the per-network rule cap (docs/architecture/tenancy-and-admin.md#tenant-quota). "
+            + "EndNetworkRequestCommandHandler needs it to gate and name the default network's own SSH rules when its create "
+            + "reports Done; BackfillDefaultNetworksCommandHandler needs it to list and lock the Active tenants it gives one to "
+            + "(docs/features/network/design.md#default-network).",
 
         // Admin reads outward into three modules and nothing reads back into Admin
         // (titan-ops architecture/code-structure.md#admin-read-model), which is why DependencyGraph_HasNoCycles can

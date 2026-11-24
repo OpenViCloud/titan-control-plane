@@ -1,10 +1,13 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.FirewallRule;
 using Titan.Application.Commands.Networking.FirewallRule.Contracts;
 using Titan.Application.Commands.Networking.Network;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Network;
+using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
@@ -26,15 +29,21 @@ public class NetworkRequestHandlerTests
     // Only the locked read is set up: a handler that read the network unlocked would find nothing and answer 404.
     private readonly Mock<INetworkRepository> _repo = new();
     private readonly Mock<IClusterIpv6RouteRepository> _routes = new();
+    private readonly Mock<ITenantRepository> _tenantRepo = new();
+    private readonly Mock<IProviderCommandQueue> _commands = new();
     private readonly List<ClusterIpv6Route> _routeRows =
         Enumerable.Range(1, 255).Select(n => ClusterIpv6Route.Create("cluster-1", n)).ToList();
     private readonly FakeActivityRecorder _activity = new();
 
-    public NetworkRequestHandlerTests() =>
+    public NetworkRequestHandlerTests()
+    {
         _routes.Setup(r => r.FindHeldByAsync(It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((Guid networkId, CancellationToken _) => _routeRows.SingleOrDefault(route => route.NetworkId == networkId));
+        _tenantRepo.Setup(t => t.FindByIdAsync(Owner.Id, It.IsAny<CancellationToken>())).ReturnsAsync(Owner);
+    }
 
-    private EndNetworkRequestCommandHandler EndHandler() => new(_repo.Object, new NetworkRoutes(_routes.Object), _activity);
+    private EndNetworkRequestCommandHandler EndHandler() => new(_repo.Object, new NetworkRoutes(_routes.Object),
+        _tenantRepo.Object, _commands.Object, _activity, NullLogger<EndNetworkRequestCommandHandler>.Instance);
     private ObserveNetworkCommandHandler ObserveHandler() => new(_repo.Object);
     private EndFirewallRuleRequestCommandHandler EndRuleHandler() => new(_repo.Object, _activity);
     private ObserveFirewallRuleCommandHandler ObserveRuleHandler() => new(_repo.Object);
@@ -107,6 +116,95 @@ public class NetworkRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext"));
 
+        Assert.Equal(["network.created"], Outcomes());
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // ---------- the default network's own SSH rules (titan-ops features/network/design.md#default-network) ----------
+
+    private static Network NewDefaultNetwork() => TestAggregates.Network(Owner, "default", "cluster-1", opensSshWhenCreated: true);
+
+    [Fact]
+    public async Task Done_OfTheDefaultNetworksCreate_WhenCreated_OpensTcp22FromAnywhere_AndSavesOnce()
+    {
+        Network network = Given(NewDefaultNetwork());
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
+            Status: "Created", Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"));
+
+        Assert.Equal(2, network.FirewallRules.Count);
+        Assert.All(network.FirewallRules, r => Assert.Equal((FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22),
+            (r.Direction, r.Protocol, r.StartPort, r.EndPort)));
+        Assert.Equal(["0.0.0.0/0", "::/0"],
+            network.FirewallRules.Select(r => r.Cidr.Value).OrderBy(c => c, StringComparer.Ordinal));
+        Assert.Equal(["firewall_rule.create_requested", "firewall_rule.create_requested", "network.created"],
+            Outcomes().OrderBy(a => a, StringComparer.Ordinal));
+        Assert.All(_activity.Events, e => Assert.Equal(Owner.Id, e.OutcomeTenantId));
+        _commands.Verify(c => c.EnqueueFirewallRuleCreateAsync(network, It.IsAny<Titan.Domain.Aggregates.Network.FirewallRule>(),
+            It.IsAny<Guid>(), Tenant.ProjectNameFor(Owner.Id), It.IsAny<CancellationToken>()), Times.Exactly(2));
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Done_OfTheDefaultNetworksCreate_Repeated_AddsNoRuleTwice()
+    {
+        Network network = Given(NewDefaultNetwork());
+        Guid create = network.Operation.PendingId!.Value;
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext", Status: "Created"));
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext", Status: "Created"));
+
+        Assert.Equal(2, network.FirewallRules.Count);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // Done with no status came back Unknown, not Created (NetworkReports.ParseStatus/CreateSucceeded): the network is
+    // not yet usable, so no rule is added even though the create itself ended.
+    [Fact]
+    public async Task Done_OfTheDefaultNetworksCreate_WithoutIncusShowingItCreated_OpensNoRule()
+    {
+        Network network = Given(NewDefaultNetwork());
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext"));
+
+        Assert.Equal(NetworkStatus.Unknown, network.Status);
+        Assert.Empty(network.FirewallRules);
+        Assert.Equal(["network.created"], Outcomes());
+    }
+
+    [Fact]
+    public async Task Done_OfAnOrdinaryNetworksCreate_OpensNoRule()
+    {
+        Network network = Given(NewNetwork());
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
+            Status: "Created"));
+
+        Assert.Empty(network.FirewallRules);
+        Assert.Equal(["network.created"], Outcomes());
+        _commands.Verify(c => c.EnqueueFirewallRuleCreateAsync(It.IsAny<Network>(), It.IsAny<Titan.Domain.Aggregates.Network.FirewallRule>(),
+            It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // The gate refuses, quietly: the network still ends up Created and saved, just without its rules.
+    [Fact]
+    public async Task Done_OfTheDefaultNetworksCreate_NoRoomForAFirewallRule_OpensNoRule_ButStillSaves()
+    {
+        Tenant noRoomOwner = TestTenant.Active("no-room-for-ssh", "kc-no-room-for-ssh");
+        noRoomOwner.UpdateQuota(TenantQuota.Create(
+            maxVms: noRoomOwner.Quota.MaxVms, maxNetworks: noRoomOwner.Quota.MaxNetworks,
+            maxVolumes: noRoomOwner.Quota.MaxVolumes, maxVmSnapshotsPerVm: noRoomOwner.Quota.MaxVmSnapshotsPerVm,
+            maxVolumeSnapshotsPerVolume: noRoomOwner.Quota.MaxVolumeSnapshotsPerVolume,
+            maxFirewallRulesPerNetwork: 0, maxPublicIpv6: noRoomOwner.Quota.MaxPublicIpv6,
+            maxSshKeys: noRoomOwner.Quota.MaxSshKeys, maxLoadBalancers: noRoomOwner.Quota.MaxLoadBalancers));
+        _tenantRepo.Setup(t => t.FindByIdAsync(noRoomOwner.Id, It.IsAny<CancellationToken>())).ReturnsAsync(noRoomOwner);
+        Network network = Given(TestAggregates.Network(noRoomOwner, "default", "cluster-1", opensSshWhenCreated: true));
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
+            Status: "Created"));
+
+        Assert.Equal(NetworkStatus.Created, network.Status);
+        Assert.Empty(network.FirewallRules);
         Assert.Equal(["network.created"], Outcomes());
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }

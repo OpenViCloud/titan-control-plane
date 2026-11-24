@@ -691,6 +691,10 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<bool>("OpensSshWhenCreated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("opens_ssh_when_created");
+
                     b.Property<string>("PublicIpv6Subnet")
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_subnet");

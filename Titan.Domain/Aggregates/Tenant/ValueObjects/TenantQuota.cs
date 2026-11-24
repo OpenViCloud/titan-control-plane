@@ -32,9 +32,10 @@ public sealed record TenantQuota : ValueObject
     private TenantQuota() { }
 
     // The migration backfilled existing tenants with exactly these
-    // (titan-ops architecture/tenancy-and-admin.md#quota-migration-backfill).
+    // (titan-ops architecture/tenancy-and-admin.md#quota-migration-backfill). Networks: the default one plus one of the
+    // tenant's own (titan-ops features/network/design.md#default-network).
     public const int DefaultMaxVms = 10;
-    public const int DefaultMaxNetworks = 1;
+    public const int DefaultMaxNetworks = 2;
     public const int DefaultMaxVolumes = 10;
     public const int DefaultMaxVmSnapshotsPerVm = 3;
     public const int DefaultMaxVolumeSnapshotsPerVolume = 3;

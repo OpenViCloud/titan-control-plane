@@ -39,7 +39,7 @@ public class Tenant : IAggregateRoot
 
     // Every signup lands here; the middleware approves one whose account has the realm role auto-approve in the same operation,
     // every other waits for an admin (titan-ops architecture/tenancy-and-admin.md#approval-is-activation).
-    public static Tenant CreatePending(string name, string ownerKeycloakId, int maxVms = 10, int maxNetworks = 1)
+    public static Tenant CreatePending(string name, string ownerKeycloakId, int maxVms = 10, int maxNetworks = TenantQuota.DefaultMaxNetworks)
     {
         var tenant = new Tenant
         {

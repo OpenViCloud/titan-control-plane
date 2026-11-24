@@ -60,6 +60,10 @@ public class NetworkRepository(TitanDbContext db) : INetworkRepository
         await db.Networks.AnyAsync(
             n => n.TenantId == tenantId && n.Name == name && n.Status != NetworkStatus.Deleted, ct);
 
+    // No status filter: INetworkRepository.HasEverHadOneAsync.
+    public async Task<bool> HasEverHadOneAsync(Guid tenantId, CancellationToken ct = default) =>
+        await db.Networks.AnyAsync(n => n.TenantId == tenantId, ct);
+
     // Vm.HasNetwork, asked of the network's VMs.
     public async Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) =>
         await db.Set<Domain.Aggregates.Vm.Vm>().AnyAsync(
