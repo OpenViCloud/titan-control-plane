@@ -16,7 +16,7 @@ namespace Titan.Tests.Infrastructure.Integration;
 [Trait("Category", "Integration")]
 public sealed class RestoredFromBackupMigrationTests : IAsyncLifetime
 {
-    private const string MigrationBefore = "20261119083333_ProviderCommandResource";
+    private const string MigrationBefore = "20261124091735_NetworkOpensSshWhenCreated";
 
     private readonly TestPostgres _container = new();
 
