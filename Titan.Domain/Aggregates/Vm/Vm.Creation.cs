@@ -15,25 +15,59 @@ public partial class Vm
         string? userData = null,
         int stopTimeoutSeconds = DefaultStopTimeoutSeconds)
     {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
         var vm = new Vm
         {
-            Id = Guid.NewGuid(),
             TenantId = tenantId,
             NetworkId = networkId,
             Name = name,
-            Status = VmStatus.Creating,
             VmOfferingId = vmOfferingId,
             TemplateId = templateId,
             ClusterId = clusterId,
             DiskSizeGb = diskSizeGb,
             UserData = userData,
             StopTimeoutSeconds = stopTimeoutSeconds,
-            CreatedAt = now,
         };
-        // The create is an operation like the others: the create command's Done ends it.
-        vm.Operation = VmOperation.None.Asked(Guid.NewGuid(), now, null);
+        StartItsCreate(vm);
         return vm;
+    }
+
+    /// A copy of source that an admin restores from one of source's backup archives
+    /// (titan-ops features/backup/design.md#restore-as-new-resource): a new VM of the same tenant, sized and placed as
+    /// source is, under its own name. The worker imports the archive as this VM's instance and reports through the
+    /// create, so it waits in Creating like a VM made by Create. Only a source the Backups page lists is restored: one
+    /// that has an instance.
+    public static Vm RestoreFromBackup(Vm source, string name)
+    {
+        if (!source.HasAnInstance)
+        {
+            throw new BusinessException("BACKUP_SOURCE_INVALID_STATE", "Only a VM that still has an instance can be restored from a backup.");
+        }
+        var vm = new Vm
+        {
+            TenantId = source.TenantId,
+            NetworkId = source.NetworkId,
+            Name = name,
+            VmOfferingId = source.VmOfferingId,
+            TemplateId = source.TemplateId,
+            ClusterId = source.ClusterId,
+            DiskSizeGb = source.DiskSizeGb,
+            UserData = source.UserData,
+            StopTimeoutSeconds = source.StopTimeoutSeconds,
+            RestoredFromBackup = true,
+        };
+        StartItsCreate(vm);
+        return vm;
+    }
+
+    /// What every new VM starts as, whichever factory builds it: its own id, and its create as the operation it waits
+    /// on, which only the create command's report ends.
+    private static void StartItsCreate(Vm vm)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        vm.Id = Guid.NewGuid();
+        vm.Status = VmStatus.Creating;
+        vm.CreatedAt = now;
+        vm.Operation = VmOperation.None.Asked(Guid.NewGuid(), now, null);
     }
 
     /// The create command's Done: Incus holds the instance under externalId. Without a status the worker did not read

@@ -378,6 +378,37 @@ public class VolumeSnapshotServiceTests
             It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(source => source.Id == volume.Id), It.Is<global::Titan.Domain.Aggregates.Volume.Volume>(a91 => a91.Id == result.NewVolumeId && a91.Name == "vol-restored-01" && a91.ClusterId == volume.ClusterId), added!.Operation.PendingId!.Value, "cs-snap-1", "t-" + _tenant.Id.ToString("N"), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // The tenant's own restore, of a snapshot, is not the admin's restore of a backup archive
+    // (titan-ops features/backup/design.md#restore-as-new-resource): it asks the quota gate with the tenant's count, and
+    // its volume counts and is billed like any other.
+    [Fact]
+    public async Task Restore_OfASnapshot_AsksTheGate_AndItsVolumeCountsAndIsBilledLikeAnyOther()
+    {
+        SetupCurrentUser(TenantId);
+        var volume = MakeVolume(VolSeed.Available, csId: "cs-vol-1");
+        SetupVolume(volume);
+        var snapshot = MakeSnapshot(volume, SnapSeed.Exists, csSnapId: "cs-snap-1");
+        _volumeRepo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(_tenant.Quota.MaxVolumes - 1);
+        Volume? added = null;
+        _volumeRepo.Setup(r => r.Add(It.IsAny<Volume>())).Callback<Volume>(v => added = v);
+
+        await CreateService().RestoreAsync(volume.Id, snapshot.Id, new RestoreVolumeSnapshotBody("vol-restored-01"), default);
+
+        _volumeRepo.Verify(r => r.CountActiveByTenantAsync(TenantId, default), Times.Once);
+        Assert.NotNull(added);
+        Volume made = added!;
+        Assert.False(made.RestoredFromBackup);
+        Assert.True(made.OccupiesQuota);
+        made.MarkCreated("cs-vol-9");
+        Assert.True(made.IsBilled);
+
+        // One more and the gate refuses: the count it was asked with is what decided.
+        _volumeRepo.Setup(r => r.CountActiveByTenantAsync(TenantId, default)).ReturnsAsync(_tenant.Quota.MaxVolumes);
+        var refused = await Assert.ThrowsAsync<BusinessException>(
+            () => CreateService().RestoreAsync(volume.Id, snapshot.Id, new RestoreVolumeSnapshotBody("vol-restored-02"), default));
+        Assert.Equal("VOLUME_QUOTA_EXCEEDED", refused.Code);
+    }
+
     // Only the snapshot must rest on Incus: a source volume the reconciler no longer finds still restores
     // (titan-ops features/volume/design.md#volume-restore-is-a-new-volume). A Deleted volume has no live snapshot to
     // restore from, since its delete took its snapshots with it.

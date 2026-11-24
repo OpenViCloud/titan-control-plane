@@ -21,6 +21,10 @@ public class InputOwnershipTests
         ["Vm.Rename"] = ["EnsureVmName"],
         ["Vm.ChangeStopTimeout"] = ["EnsureStopTimeout"],
         ["Volume.Create"] = ["EnsureVolumeName", "EnsureVolumeSize"],
+        // A restore from a backup takes a name and copies the rest from its source row
+        // (titan-ops features/backup/design.md#restore-as-new-resource).
+        ["Vm.RestoreFromBackup"] = ["EnsureVmName"],
+        ["Volume.RestoreFromBackup"] = ["EnsureVolumeName"],
         ["LoadBalancer.Create"] = ["EnsureLoadBalancerName"],
         ["LoadBalancer.Rename"] = ["EnsureLoadBalancerName"],
         ["Vm.AddSnapshot"] = ["EnsureVmSnapshotName"],

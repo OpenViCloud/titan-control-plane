@@ -10,6 +10,11 @@ using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Abstractions;
 
+/// One volume a VM restore brings along: the copy made of the source volume, and the id of that copy's own create,
+/// which its volume.restore command carries too. The worker tells by it a copy whose restore ended from one still
+/// being restored.
+public record VolumeRestoredWithItsVm(Guid SourceVolumeId, Guid NewVolumeId, Guid RequestId);
+
 /// Enqueues work for the provider worker (titan-ops architecture/provider-and-worker.md#provider-command-table). Each call
 /// stages a row in the scope's DbContext: it is written by the handler's own SaveAsync, in the same transaction as
 /// the aggregate change, so call it BEFORE saving. Nothing reaches the worker until that commit.
@@ -73,6 +78,15 @@ public interface IProviderCommandQueue
     // its devices from Incus (titan-ops features/backup/design.md#restore-drill). The row is of no tenant and no resource.
     Task EnqueueRestoreDrillAsync(string clusterId, DateOnly day, string kind, Guid resourceId, string externalId,
         string name, string projectName, Guid tenantId, CancellationToken ct = default);
+
+    // An admin's restore of one of source's backup archives as a new volume or VM
+    // (titan-ops features/backup/design.md#restore-as-new-resource). The request is the new resource's create; the row is
+    // of no tenant and holds the new resource, not the source. backupKey names the archive. A VM's volumes are the
+    // copies restored with it, each by a volume.restore of its own that is enqueued before the VM's.
+    Task EnqueueVolumeRestoreAsync(VolumeAggregate sourceVolume, VolumeAggregate newVolume, Guid requestId, string backupKey,
+        string projectName, CancellationToken ct = default);
+    Task EnqueueVmRestoreAsync(VmAggregate sourceVm, VmAggregate newVm, Guid requestId, string backupKey, string projectName,
+        IReadOnlyList<VolumeRestoredWithItsVm> volumes, CancellationToken ct = default);
 
     // The whole configuration travels each time: the worker writes it to Incus in one PUT
     // (titan-ops features/load-balancer/design.md#lb-resource-model).

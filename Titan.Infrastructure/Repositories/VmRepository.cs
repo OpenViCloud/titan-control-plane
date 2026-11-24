@@ -32,6 +32,7 @@ public class VmRepository(TitanDbContext db) : IVmRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Vms.CountAsync(
             v => v.TenantId == tenantId
+                 && !v.RestoredFromBackup
                  && v.Status != VmStatus.Deleting
                  && v.Status != VmStatus.Deleted
                  && v.Status != VmStatus.NotFound
@@ -60,10 +61,11 @@ public class VmRepository(TitanDbContext db) : IVmRepository
     // Incus status: same answer.
     public async Task<List<Vm>> ListBillableAsync(CancellationToken ct = default) =>
         await db.Vms
-            .Where(v => (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Running
-                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Ready
-                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Frozen
-                        || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Error)
+            .Where(v => !v.RestoredFromBackup
+                        && ((v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Running
+                            || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Ready
+                            || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Frozen
+                            || (v.Operation.LastSeenStatus ?? v.Status) == VmStatus.Error))
             .AsNoTracking()
             .ToListAsync(ct);
 

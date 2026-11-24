@@ -210,6 +210,42 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
         EnqueueAsync(BackupCommandKeys.RestoreDrill(clusterId, day), ProviderCommandKinds.RestoreDrill, clusterId, tenantId: null,
             resourceId: null, new { kind, resourceId, externalId, name, projectName, tenantId }, ct);
 
+    // An admin's restore of a backup archive (titan-ops features/backup/design.md#restore-as-new-resource) is the new
+    // resource's create, so its row is keyed like one and the stuck-request query finds it; the worker reports through
+    // the create's route. The worker leases it on the drill's loop, so like the drill's the row carries no tenant: with
+    // one it would sit in that tenant's command lane, which another loop leases. It holds the new resource, whose create
+    // it is; the source keeps its own commands and backups. From the source's id, tenantId and backupKey the worker
+    // rebuilds the archive's object key, so tenantId is written as the backup's payload writes it.
+    public Task EnqueueVolumeRestoreAsync(VolumeAggregate sourceVolume, VolumeAggregate newVolume, Guid requestId,
+        string backupKey, string projectName, CancellationToken ct = default) =>
+        EnqueueAsync(VolumeCreateKey(newVolume.Id, requestId), ProviderCommandKinds.VolumeRestore, sourceVolume.ClusterId, tenantId: null, newVolume.Id,
+            new
+            {
+                newVolumeId = newVolume.Id, requestId, name = newVolume.Name, sourceVolumeId = sourceVolume.Id, backupKey,
+                tenantId = sourceVolume.TenantId, projectName, sizeGb = newVolume.SizeGb
+            }, ct);
+
+    // volumes: the copies restored with the VM, each by its own volume.restore; its requestId is that copy's create, by
+    // which the worker tells a copy whose restore ended from one still being restored. None is an empty list.
+    public Task EnqueueVmRestoreAsync(VmAggregate sourceVm, VmAggregate newVm, Guid requestId, string backupKey,
+        string projectName, IReadOnlyList<VolumeRestoredWithItsVm> volumes, CancellationToken ct = default) =>
+        EnqueueAsync(VmCreateKey(newVm.Id, requestId), ProviderCommandKinds.VmRestore, sourceVm.ClusterId, tenantId: null, newVm.Id,
+            new
+            {
+                vmId = newVm.Id, requestId, name = newVm.Name, sourceVmId = sourceVm.Id, backupKey,
+                tenantId = sourceVm.TenantId, projectName, diskSizeGb = newVm.DiskSizeGb, volumes = VolumesRestoredWith(volumes)
+            }, ct);
+
+    private static List<object> VolumesRestoredWith(IReadOnlyList<VolumeRestoredWithItsVm> volumes)
+    {
+        var named = new List<object>();
+        foreach (VolumeRestoredWithItsVm volume in volumes)
+        {
+            named.Add(new { sourceVolumeId = volume.SourceVolumeId, newVolumeId = volume.NewVolumeId, requestId = volume.RequestId });
+        }
+        return named;
+    }
+
     // Load balancer: one row per request, as the VM's (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
     public Task EnqueueLoadBalancerCreateAsync(LoadBalancer loadBalancer, Guid requestId, string projectName,
         CancellationToken ct = default) =>

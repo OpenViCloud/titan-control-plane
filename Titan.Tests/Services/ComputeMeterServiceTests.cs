@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
 using Titan.Application.Options;
@@ -7,6 +8,8 @@ using Titan.Domain.Aggregates.UsageRecord;
 using Titan.Domain.Aggregates.VmOffering;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Repositories;
+using Titan.Infrastructure.Persistence;
+using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Services;
 
@@ -113,6 +116,31 @@ public class ComputeMeterServiceTests
     // Which VMs are billable (a qemu process alive: every Incus status but Stopped) is the rule Vm.IsBilled, which
     // VmRepository.ListBillableAsync writes in SQL, measured in VmRepositoryStateTests.Billable_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent;
     // this meter bills exactly what that query returns.
+
+    // A VM an admin restored from a backup runs, once the tenant starts it, and gets no usage record
+    // (titan-ops features/backup/design.md#restore-as-new-resource). The stub above answers whatever it is given, so
+    // this one runs the meter on the real query (InMemory, which runs the LINQ): it fails when the flag leaves the
+    // query. The SQL itself is pinned on Postgres by QueryRuleDbTests.VmBilling_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent.
+    [Fact]
+    public async Task RunTick_ARestoredRunningVm_GetsNoComputeRecord_WhileAnOrdinaryOneBesideItDoes()
+    {
+        _offerings.Seed(Offering());
+        using var db = new TitanDbContext(new DbContextOptionsBuilder<TitanDbContext>()
+            .UseInMemoryDatabase($"compute-meter-{Guid.NewGuid()}").Options);
+        Vm ordinary = RunningVm();
+        Vm restored = Vm.RestoreFromBackup(ordinary, "web-01-restored");
+        restored.MarkRunning("ext-2", "10.0.0.2");
+        db.Vms.AddRange(ordinary, restored);
+        await db.SaveChangesAsync();
+        var service = new ComputeMeterService(new VmRepository(db), _usageRepo, _offerings,
+            Options.Create(new BillingMeterOptions { IntervalMinutes = 10 }));
+
+        var inserted = await service.RunTickAsync(Now, default);
+
+        Assert.Equal(1, inserted);
+        Assert.Equal(ordinary.Id, Assert.Single(_usageRepo.All).ResourceId);
+        Assert.Equal(VmStatus.Running, restored.Status);
+    }
 
     // titan-ops architecture/money-and-wallet.md#price-belongs-to-offering — a VM pointing at a tier that is not
     // in the catalog is damaged data, not a zero price: the meter refuses to bill rather than write a

@@ -2758,6 +2758,9 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "restoredFromBackup": {
+            "type": "boolean"
           }
         }
       },
@@ -3089,6 +3092,9 @@
           "stopTimeoutSeconds": {
             "type": "integer",
             "format": "int32"
+          },
+          "restoredFromBackup": {
+            "type": "boolean"
           }
         }
       },

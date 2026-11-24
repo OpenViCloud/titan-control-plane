@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Titan.Application.Abstractions;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.ProviderCommand;
@@ -25,6 +26,24 @@ public class ProviderCommandQueueTests
         Vm.Create(Guid.NewGuid(), Guid.NewGuid(), "web-1", "m", "tpl-guid", clusterId, 20, userData);
 
     private static readonly VmOffering Medium = VmOffering.Create("m", "m", 2, 4096, 1m);
+
+    // A restore copies a VM or volume Incus holds (titan-ops features/backup/design.md#restore-as-new-resource): the
+    // source, and the new row the admin's handler makes of it.
+    private static (Vm Source, Vm Copy) ARestoredVm(string clusterId = "mock")
+    {
+        Vm source = AVm(clusterId);
+        source.MarkRunning("vm-x", "10.0.0.5");
+        return (source, Vm.RestoreFromBackup(source, "web-1-restored"));
+    }
+
+    private static (Volume Source, Volume Copy) ARestoredVolume(string clusterId = "mock")
+    {
+        Volume source = AVolume(clusterId);
+        source.MarkCreated("vol-x");
+        return (source, Volume.RestoreFromBackup(source, "data-1-restored"));
+    }
+
+    private const string ArchiveKey = "20261026T020709Z";
 
     // The resource of the "resource" key shape: the same VM each call, so the same key.
     private readonly Vm _vmOfTheSameKey = AVm();
@@ -90,6 +109,8 @@ public class ProviderCommandQueueTests
         (Volume volume, VolumeSnapshot volumeSnapshot) = AVolumeSnapshot();
         (Network network, FirewallRule rule) = ARule();
         LoadBalancer lb = ALoadBalancer();
+        Vm restoredVm = Vm.RestoreFromBackup(vm, "web-1-restored");
+        Volume restoredVolume = Volume.RestoreFromBackup(volume, "data-1-restored");
         var expected = new Dictionary<string, Guid?>
         {
             [ProviderCommandKinds.VmCreate] = vm.TenantId, [ProviderCommandKinds.VmDelete] = vm.TenantId,
@@ -112,6 +133,9 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
+            // Leased on the drill's loop: a row with the tenant would sit in that tenant's command lane.
+            [ProviderCommandKinds.VmRestore] = null,
+            [ProviderCommandKinds.VolumeRestore] = null,
         };
 
         await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
@@ -141,6 +165,8 @@ public class ProviderCommandQueueTests
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
+        await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
+        await queue.EnqueueVolumeRestoreAsync(volume, restoredVolume, Guid.NewGuid(), ArchiveKey, "t-1");
 
         string[] everyKind = typeof(ProviderCommandKinds)
             .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
@@ -164,6 +190,8 @@ public class ProviderCommandQueueTests
         Volume restored = AVolumeSnapshot().Item1;
         (Network network, FirewallRule rule) = ARule();
         LoadBalancer lb = ALoadBalancer();
+        Vm restoredVm = Vm.RestoreFromBackup(vm, "web-1-restored");
+        Volume restoredVolume = Volume.RestoreFromBackup(volume, "data-1-restored");
         var expected = new Dictionary<string, Guid?>
         {
             [ProviderCommandKinds.VmCreate] = vm.Id, [ProviderCommandKinds.VmDelete] = vm.Id,
@@ -185,6 +213,9 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
+            // The row holds the new VM or volume, whose create it is; the source keeps its own commands and backups.
+            [ProviderCommandKinds.VmRestore] = restoredVm.Id,
+            [ProviderCommandKinds.VolumeRestore] = restoredVolume.Id,
         };
 
         await queue.EnqueueVmCreateAsync(vm, Guid.NewGuid(), Medium, "tpl-a", "net-1", "t-1", vendorData: null);
@@ -214,7 +245,10 @@ public class ProviderCommandQueueTests
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
+        await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
+        await queue.EnqueueVolumeRestoreAsync(volume, restoredVolume, Guid.NewGuid(), ArchiveKey, "t-1");
 
+        Assert.Equal(expected.Count, _repo.Rows.Count);
         Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.ResourceId));
     }
 
@@ -740,6 +774,114 @@ public class ProviderCommandQueueTests
         Assert.Equal(ProviderCommandKinds.VolumeSnapshotRestore, _repo.Rows[1].Kind);
     }
 
+    // An admin's restore of a backup archive (titan-ops features/backup/design.md#restore-as-new-resource) is the new
+    // volume's create too: keyed like one, on the source's cluster. Its row carries no tenant, as the drill's, and holds
+    // the new volume.
+    [Fact]
+    public async Task VolumeRestoreFromABackup_IsTheNewVolumesCreate_OfNoTenant_OnTheSourcesCluster()
+    {
+        (Volume source, Volume copy) = ARestoredVolume("singapore01");
+        Guid requestId = copy.Operation.PendingId!.Value;
+
+        await Queue().EnqueueVolumeRestoreAsync(source, copy, requestId, ArchiveKey, "t-0123");
+
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Assert.Equal($"volume-create-{copy.Id}-{requestId}", row.Key);
+        Assert.Equal(ProviderCommandKinds.VolumeRestore, row.Kind);
+        Assert.Equal("singapore01", row.ClusterId);
+        Assert.Null(row.TenantId);
+        Assert.Equal(copy.Id, row.ResourceId);
+        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
+        using JsonDocument payload = JsonDocument.Parse(row.Payload);
+        JsonElement sent = payload.RootElement;
+        Assert.Equal(copy.Id, sent.GetProperty("newVolumeId").GetGuid());
+        Assert.Equal(requestId, sent.GetProperty("requestId").GetGuid());
+        Assert.Equal("data-1-restored", sent.GetProperty("name").GetString());
+        Assert.Equal(source.Id, sent.GetProperty("sourceVolumeId").GetGuid());
+        Assert.Equal(ArchiveKey, sent.GetProperty("backupKey").GetString());
+        Assert.Equal(source.TenantId.ToString(), sent.GetProperty("tenantId").GetString());
+        Assert.Equal("t-0123", sent.GetProperty("projectName").GetString());
+        Assert.Equal(50, sent.GetProperty("sizeGb").GetInt32());
+    }
+
+    [Fact]
+    public async Task VmRestoreFromABackup_IsTheNewVmsCreate_OfNoTenant_OnTheSourcesCluster()
+    {
+        (Vm source, Vm copy) = ARestoredVm("singapore01");
+        Guid requestId = copy.Operation.PendingId!.Value;
+
+        await Queue().EnqueueVmRestoreAsync(source, copy, requestId, ArchiveKey, "t-0123", []);
+
+        ProviderCommand row = Assert.Single(_repo.Rows);
+        Assert.Equal($"vm-create-{copy.Id}-{requestId}", row.Key);
+        Assert.Equal(ProviderCommandKinds.VmRestore, row.Kind);
+        Assert.Equal("singapore01", row.ClusterId);
+        Assert.Null(row.TenantId);
+        Assert.Equal(copy.Id, row.ResourceId);
+        Assert.Equal(ProviderCommandStatus.Pending, row.Status);
+        using JsonDocument payload = JsonDocument.Parse(row.Payload);
+        JsonElement sent = payload.RootElement;
+        Assert.Equal(copy.Id, sent.GetProperty("vmId").GetGuid());
+        Assert.Equal(requestId, sent.GetProperty("requestId").GetGuid());
+        Assert.Equal("web-1-restored", sent.GetProperty("name").GetString());
+        Assert.Equal(source.Id, sent.GetProperty("sourceVmId").GetGuid());
+        Assert.Equal(ArchiveKey, sent.GetProperty("backupKey").GetString());
+        Assert.Equal(source.TenantId.ToString(), sent.GetProperty("tenantId").GetString());
+        Assert.Equal("t-0123", sent.GetProperty("projectName").GetString());
+        Assert.Equal(20, sent.GetProperty("diskSizeGb").GetInt32());
+        // No volume goes with it: an empty list, not an absent field.
+        Assert.Equal(JsonValueKind.Array, sent.GetProperty("volumes").ValueKind);
+        Assert.Equal(0, sent.GetProperty("volumes").GetArrayLength());
+    }
+
+    // Each volume restored with the VM is named by its source, its copy and the id of the copy's own create, in the order
+    // given, and by nothing else.
+    [Fact]
+    public async Task VmRestoreFromABackup_NamesEachVolumeCopy_WithItsOwnRequest()
+    {
+        (Vm source, Vm copy) = ARestoredVm();
+        var first = new VolumeRestoredWithItsVm(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var second = new VolumeRestoredWithItsVm(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        Guid vmRequest = Guid.NewGuid();
+
+        await Queue().EnqueueVmRestoreAsync(source, copy, vmRequest, ArchiveKey, "t-0123", [first, second]);
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal(vmRequest, payload.RootElement.GetProperty("requestId").GetGuid());
+        List<JsonElement> volumes = payload.RootElement.GetProperty("volumes").EnumerateArray().ToList();
+        Assert.Equal(2, volumes.Count);
+        foreach ((JsonElement sent, VolumeRestoredWithItsVm expected) in volumes.Zip([first, second]))
+        {
+            Assert.Equal(["newVolumeId", "requestId", "sourceVolumeId"],
+                sent.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal).ToArray());
+            Assert.Equal(expected.SourceVolumeId, sent.GetProperty("sourceVolumeId").GetGuid());
+            Assert.Equal(expected.NewVolumeId, sent.GetProperty("newVolumeId").GetGuid());
+            Assert.Equal(expected.RequestId, sent.GetProperty("requestId").GetGuid());
+        }
+    }
+
+    // The worker rebuilds the archive's object key from the payload, tenant included, and it must be the key the backup
+    // wrote: the tenant travels in the restore exactly as it does in the backup.
+    [Fact]
+    public async Task ARestoreFromABackup_WritesTheTenant_AsTheBackupDoes()
+    {
+        (Vm vm, Vm vmCopy) = ARestoredVm();
+        (Volume volume, Volume volumeCopy) = ARestoredVolume();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueVmBackupAsync(vm, "vm-x", "t-1", new DateOnly(2026, 10, 26));
+        await queue.EnqueueVmRestoreAsync(vm, vmCopy, Guid.NewGuid(), ArchiveKey, "t-1", []);
+        await queue.EnqueueVolumeBackupAsync(volume, "vol-x", "t-1", new DateOnly(2026, 10, 26));
+        await queue.EnqueueVolumeRestoreAsync(volume, volumeCopy, Guid.NewGuid(), ArchiveKey, "t-1");
+
+        string[] tenants = _repo.Rows
+            .Select(r => { using JsonDocument payload = JsonDocument.Parse(r.Payload); return payload.RootElement.GetProperty("tenantId").GetRawText(); })
+            .ToArray();
+        Assert.Equal(4, tenants.Length);
+        Assert.Equal((tenants[0], tenants[2]), (tenants[1], tenants[3]));
+        Assert.Equal($"\"{vm.TenantId}\"", tenants[1]);
+    }
+
     // An Incus image carries no CPU/RAM: sizing travels with the VM (titan-ops features/catalog/design.md#template-is-an-image-alias).
     [Fact]
     public async Task TemplateSync_CarriesTheImageAlias_AndNoSizing()
@@ -931,6 +1073,7 @@ public class ProviderCommandQueueTests
         ProviderCommandKinds.VolumeSnapshotDelete, ProviderCommandKinds.VolumeSnapshotRestore,
         ProviderCommandKinds.VmSnapshotCreate, ProviderCommandKinds.VmSnapshotRevert, ProviderCommandKinds.VmSnapshotDelete,
         ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup,
+        ProviderCommandKinds.VmRestore, ProviderCommandKinds.VolumeRestore,
     };
 
     [Theory]
@@ -1040,8 +1183,20 @@ public class ProviderCommandQueueTests
             }
             case ProviderCommandKinds.TemplateSync:
                 return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
+            case ProviderCommandKinds.ClusterBackup:
+                return queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
             case ProviderCommandKinds.RestoreDrill:
                 return queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", project, Guid.NewGuid());
+            case ProviderCommandKinds.VmRestore:
+            {
+                (Vm source, Vm copy) = ARestoredVm();
+                return queue.EnqueueVmRestoreAsync(source, copy, request, ArchiveKey, project, []);
+            }
+            case ProviderCommandKinds.VolumeRestore:
+            {
+                (Volume source, Volume copy) = ARestoredVolume();
+                return queue.EnqueueVolumeRestoreAsync(source, copy, request, ArchiveKey, project);
+            }
             default:
                 throw new ArgumentOutOfRangeException(nameof(kind), kind, "a kind the queue does not enqueue");
         }
@@ -1078,7 +1233,10 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.LoadBalancerUpdate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
         { ProviderCommandKinds.LoadBalancerDelete, ["externalNetworkId", "loadBalancerId", "projectName", "requestId", "vip"] },
         { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
+        { ProviderCommandKinds.ClusterBackup, [] },
         { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },
+        { ProviderCommandKinds.VmRestore, ["backupKey", "diskSizeGb", "name", "projectName", "requestId", "sourceVmId", "tenantId", "vmId", "volumes"] },
+        { ProviderCommandKinds.VolumeRestore, ["backupKey", "name", "newVolumeId", "projectName", "requestId", "sizeGb", "sourceVolumeId", "tenantId"] },
     };
 
     [Theory]
@@ -1092,6 +1250,21 @@ public class ProviderCommandQueueTests
         Assert.Equal("mock", row.ClusterId);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal(fields, payload.RootElement.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal).ToArray());
+    }
+
+    // A kind with no row above would carry any payload unchecked.
+    [Fact]
+    public void FieldsTheWorkerReads_HasARowForEveryKind()
+    {
+        string[] everyKind = typeof(ProviderCommandKinds)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        string[] listed = FieldsTheWorkerReads().Select(row => (string)row[0]).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(everyKind, listed);
     }
 
     // A load balancer backend is named by its instance: the worker reads its address from Incus

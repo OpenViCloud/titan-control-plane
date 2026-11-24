@@ -85,6 +85,31 @@ public class VolumeRepositoryStateTests
         return volume;
     }
 
+    // Restored by an admin from a backup of another volume of the tenant, which is not a row here
+    // (titan-ops features/backup/design.md#restore-as-new-resource): waiting on its import.
+    private static Volume Restored(string name) => Volume.RestoreFromBackup(Available($"source-of-{name}"), name);
+
+    private static Volume RestoredAvailable(string name)
+    {
+        var volume = Restored(name);
+        volume.MarkCreated($"ext-{name}");
+        return volume;
+    }
+
+    private static Volume RestoredAttachRequested(string name, Vm vm)
+    {
+        var volume = RestoredAvailable(name);
+        volume.Attach(vm);
+        return volume;
+    }
+
+    private static Volume RestoredDeleteRequested(string name)
+    {
+        var volume = RestoredAvailable(name);
+        volume.Delete();
+        return volume;
+    }
+
     // Occupancy (titan-ops features/volume/design.md#counting-and-billing): a volume whose delete was pressed stops counting
     // at once, so the customer can create its replacement; one Incus no longer has, or never had, does not count.
     [Fact]
@@ -115,6 +140,29 @@ public class VolumeRepositoryStateTests
         var billed = (await new VolumeRepository(db).ListBillableAsync()).Select(v => v.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "attached", "attaching", "available", "deleting", "detaching" }, billed);
+    }
+
+    // A volume an admin restored from a backup is free and nothing else (titan-ops features/backup/design.md#restore-as-new-resource):
+    // never counted, never billed, whatever its situation. Incus holds it like any other, so the backup schedule and the
+    // Backups page, which read the volumes on Incus and not the billed ones, keep it.
+    [Fact]
+    public async Task ARestoredVolume_IsNeitherCountedNorBilled_ButIsOnIncusLikeAnyOther()
+    {
+        using var db = NewDb();
+        db.Volumes.AddRange(
+            Creating("creating"), Available("available"), DeleteRequested("deleting"), NotFound("lost"),
+            Restored("restored-creating"), RestoredAvailable("restored-available"),
+            RestoredAttachRequested("restored-attaching", RunningVm()), RestoredDeleteRequested("restored-deleting"));
+        await db.SaveChangesAsync();
+        var repo = new VolumeRepository(db);
+        string[] Names(IEnumerable<Volume> rows) => rows.Select(v => v.Name).OrderBy(n => n).ToArray();
+
+        Assert.Equal(2, await repo.CountActiveByTenantAsync(Tenant)); // creating, available
+        Assert.Equal(new[] { "available", "deleting" }, Names(await repo.ListBillableAsync()));
+        Assert.Equal(
+            new[] { "available", "deleting", "restored-attaching", "restored-available", "restored-deleting" },
+            Names(await repo.ListOnIncusAsync()));
+        Assert.Equal(8, (await repo.ListByTenantAsync(Tenant)).Count);
     }
 
     [Fact]
@@ -169,6 +217,25 @@ public class VolumeRepositoryStateTests
         var billed = (await new VolumeSnapshotRepository(db).ListBillableAsync()).Select(s => s.Name).OrderBy(n => n).ToList();
 
         Assert.Equal(new[] { "leaving", "ready" }, billed);
+    }
+
+    // Only the restored volume itself is free: a snapshot the tenant takes of it is billed as any other, because the
+    // snapshot meter reads snapshot rows alone (titan-ops features/backup/design.md#restore-as-new-resource).
+    [Fact]
+    public async Task ASnapshotOfARestoredVolume_IsStillBilled()
+    {
+        using var db = NewDb();
+        var restored = RestoredAvailable("restored");
+        var snapshot = SnapshotOf(restored, "before-change");
+        db.Volumes.Add(restored);
+        await db.SaveChangesAsync();
+
+        var billedSnapshots = await new VolumeSnapshotRepository(db).ListBillableAsync();
+        var billedVolumes = await new VolumeRepository(db).ListBillableAsync();
+
+        Assert.Equal(new[] { snapshot.Id }, billedSnapshots.Select(s => s.Id).ToArray());
+        Assert.True(snapshot.IsBilled);
+        Assert.Empty(billedVolumes);
     }
 
     [Fact] // a snapshot has no cluster; it lives where its volume lives
@@ -253,6 +320,8 @@ public class VolumeRepositoryStateTests
         [
             Creating("creating"), Available("available"), AttachRequested("attaching", vm), Attached("attached", vm),
             DetachRequested("detaching"), DeleteRequested("deleting"), NotFound("lost"), CreateFailed("failed"), Deleted("deleted"),
+            Restored("restored-creating"), RestoredAvailable("restored-available"),
+            RestoredAttachRequested("restored-attaching", vm), RestoredDeleteRequested("restored-deleting"),
         ];
         db.Volumes.AddRange(shapes);
         await db.SaveChangesAsync();
@@ -261,6 +330,7 @@ public class VolumeRepositoryStateTests
 
         Assert.Equal(shapes.Count(v => v.OccupiesQuota), await repo.CountActiveByTenantAsync(Tenant));
         Assert.Equal(ByName(shapes.Where(v => v.IsBilled)), ByName(await repo.ListBillableAsync()));
+        Assert.Equal(ByName(shapes.Where(v => v.IsOnIncus)), ByName(await repo.ListOnIncusAsync()));
         Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted)), ByName(await repo.ListByTenantAsync(Tenant)));
         Assert.Equal(ByName(shapes.Where(v => !v.IsDeleted && v.ExternalId != null)), ByName(await repo.ListReconcilableAsync("vn-hcm-1")));
         Assert.Equal(

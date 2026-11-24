@@ -69,6 +69,40 @@ public class VmRequestHandlerTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // A VM an admin restored from a backup ends like any create (titan-ops features/backup/design.md#restore-as-new-resource):
+    // the worker imports the archive, leaves the instance stopped and reports through the create's route. The VM rests
+    // Stopped under the instance's name, and is as free as it was while it waited.
+    [Fact]
+    public async Task Done_OfARestoredVmsCreate_SeenStopped_RestsStopped_UnderItsInstanceName()
+    {
+        Vm restored = Given(Vm.RestoreFromBackup(RunningVm(), "vm-1-restored"));
+        Guid createId = restored.Operation.PendingId!.Value;
+
+        await EndHandler().HandleAsync(new EndVmRequestCommand(restored.Id, createId, "Done", "vm-restored", Seen("Stopped")));
+
+        Assert.Null(restored.Operation.PendingId);
+        Assert.Equal((VmStatus.Stopped, "vm-restored"), (restored.Status, restored.ExternalId));
+        Assert.True(restored.HasAnInstance);
+        Assert.Equal((true, false, false), (restored.RestoredFromBackup, restored.OccupiesQuota, restored.IsBilled));
+        Assert.Equal(["vm.created"], Outcomes());
+        Assert.Equal(Owner.Id, _activity.Events.Single().OutcomeTenantId);
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // The restore gave up before Incus held an instance: Failed, like a create, for the tenant to delete.
+    [Fact]
+    public async Task Failed_OfARestoredVmsCreate_WithNoInstance_IsFailed_AndStillFree()
+    {
+        Vm restored = Given(Vm.RestoreFromBackup(RunningVm(), "vm-1-restored"));
+
+        await EndHandler().HandleAsync(new EndVmRequestCommand(restored.Id, restored.Operation.PendingId!.Value, "Failed", Reason: "The archive is gone."));
+
+        Assert.Equal((VmStatus.Failed, null), (restored.Status, restored.ExternalId));
+        Assert.Equal("The archive is gone.", restored.Operation.FailureReason);
+        Assert.Equal((false, false), (restored.OccupiesQuota, restored.IsBilled));
+        Assert.Empty(Outcomes());
+    }
+
     [Fact]
     public async Task Done_OfTheCreate_WithoutTheInstanceName_Is422_AndChangesNothing()
     {

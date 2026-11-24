@@ -43,9 +43,10 @@ public class ScheduleBackupsCommandHandler(
         DateOnly today = DateOnly.FromDateTime(now.UtcDateTime);
 
         var vmsOnIncus = await vms.ListWithAnInstanceAsync(ct);
-        // Billed is what Incus holds (Volume.IsBilled): the volumes a backup can export.
+        // What Incus holds, billed or not (Volume.IsOnIncus): the volumes a backup can export. Not the billed ones: a
+        // volume restored from a backup is free and has a disk to lose like any other.
         var volumesOnIncus = new List<(VolumeAggregate Volume, string ExternalId)>();
-        foreach (var volume in await volumes.ListBillableAsync(ct))
+        foreach (var volume in await volumes.ListOnIncusAsync(ct))
         {
             string? externalId = volume.ExternalId;
             if (externalId == null)

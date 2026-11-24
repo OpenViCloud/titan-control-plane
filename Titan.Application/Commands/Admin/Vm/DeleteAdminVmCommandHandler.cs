@@ -11,9 +11,10 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Admin.Vm;
 
-// The only cross-tenant write on a tenant resource (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write):
+// A cross-tenant write on a tenant resource (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write):
 // a platform admin deletes any tenant's VM. Bypasses tenant scope but not lifecycle rules — the same
-// status and load-balancer-backend guards as DeleteVmCommandHandler apply here (VmDeletion).
+// status and load-balancer-backend guards as DeleteVmCommandHandler apply here (VmDeletion). The other admin writes
+// on a tenant's VM or volume are the two restores of a backup archive (Commands/Admin/Backup).
 //
 // A separate admin handler, not a flag on the tenant one (titan-ops architecture/tenancy-and-admin.md#no-bypass-flag),
 // so the tenant-facing Compute handlers never grow a bypass. The boundary is worth the small duplication.

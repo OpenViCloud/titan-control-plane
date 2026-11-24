@@ -80,6 +80,26 @@ public class VolumeRequestHandlerTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    // A volume an admin restored from a backup ends like any create (titan-ops features/backup/design.md#restore-as-new-resource):
+    // the worker imports the archive and reports through the create's route, reading no attachment. The volume is
+    // Available, and the VM it was restored with is still the one it is asked onto: the VM's import attaches it.
+    [Fact]
+    public async Task Done_OfARestoredVolumesCreate_WithNothingObserved_IsAvailable_AndKeepsTheVmItGoesWith()
+    {
+        Guid restoredVm = Guid.NewGuid();
+        Volume restored = Given(Volume.RestoreFromBackup(RestingVolume(), "data-1", restoredVm));
+
+        await EndHandler().HandleAsync(new EndVolumeRequestCommand(restored.Id, Waiting(restored), "Done", "vol-restored"));
+
+        Assert.Null(restored.Operation.PendingId);
+        Assert.Equal(("vol-restored", VolumeStatus.Available), (restored.ExternalId, restored.Status));
+        Assert.Equal((restoredVm, null, false), (restored.DesiredAttachedVmId, restored.CurrentAttachedVmId, restored.CurrentAttachedElsewhere));
+        Assert.True(restored.IsOnIncus);
+        Assert.Equal((true, false, false), (restored.RestoredFromBackup, restored.OccupiesQuota, restored.IsBilled));
+        Assert.Equal(["volume.created"], Outcomes());
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public async Task Done_OfTheCreate_WithoutTheVolumeName_Is422_AndSavesNothing()
     {

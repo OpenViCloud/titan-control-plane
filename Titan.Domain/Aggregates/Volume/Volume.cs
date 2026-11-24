@@ -30,6 +30,10 @@ public partial class Volume : IAggregateRoot
     /// architecture/desired-and-current.md#desired-and-current).
     public Guid? DesiredAttachedVmId { get; private set; }
     public string? ExternalId { get; private set; }
+    /// An admin restored this volume from a backup archive of another volume of the tenant
+    /// (titan-ops features/backup/design.md#restore-as-new-resource). The tenant's own volume in every other way; it
+    /// never counts toward MaxVolumes and is never billed. Written once, by RestoreFromBackup.
+    public bool RestoredFromBackup { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// The volume's snapshots, each a copy on Incus named under the volume; rows are kept after Deleted
@@ -68,20 +72,26 @@ public partial class Volume : IAggregateRoot
         || Status == VolumeStatus.Detaching
         || Status == VolumeStatus.Deleting;
 
-    private bool IncusHoldsIt => InstanceStatus == VolumeStatus.Available;
+    /// Incus holds the volume as far as Titan last knew, a delete in flight included, whether or not it is billed: a
+    /// backup has something to export only then. VolumeRepository.ListOnIncusAsync writes the same test in SQL
+    /// (titan-ops architecture/domain-methods.md#plain-code).
+    public bool IsOnIncus => InstanceStatus == VolumeStatus.Available;
 
     /// Counts toward MaxVolumes (titan-ops features/volume/design.md#counting-and-billing): what Incus holds or is about to,
     /// unless its delete was pressed. A create that failed before Incus had it, or a volume Incus no longer has, does
-    /// not count. VolumeRepository.CountActiveByTenantAsync writes the same test in SQL
-    /// (titan-ops architecture/domain-methods.md#plain-code).
+    /// not count; nor does a volume restored from a backup, in any status
+    /// (titan-ops features/backup/design.md#restore-as-new-resource). VolumeRepository.CountActiveByTenantAsync writes
+    /// the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
     public bool OccupiesQuota =>
-        Status == VolumeStatus.Creating
-        || Status == VolumeStatus.Available
-        || ((Status == VolumeStatus.Attaching || Status == VolumeStatus.Detaching) && IncusHoldsIt);
+        !RestoredFromBackup
+        && (Status == VolumeStatus.Creating
+            || Status == VolumeStatus.Available
+            || ((Status == VolumeStatus.Attaching || Status == VolumeStatus.Detaching) && IsOnIncus));
 
-    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing).
+    /// Billed while Incus holds it, a delete in flight included (titan-ops features/volume/design.md#counting-and-billing),
+    /// unless it was restored from a backup (titan-ops features/backup/design.md#restore-as-new-resource).
     /// VolumeRepository.ListBillableAsync writes the same test in SQL.
-    public bool IsBilled => IncusHoldsIt;
+    public bool IsBilled => IsOnIncus && !RestoredFromBackup;
 
     /// Deleted absorbs every later report and observation (titan-ops architecture/intent-and-observation.md#terminal-state-absorbs).
     /// Until then the volume is still listed, still goes with its VM's delete and is still observed; the repository's

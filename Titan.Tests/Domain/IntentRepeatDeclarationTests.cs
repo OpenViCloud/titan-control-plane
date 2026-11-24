@@ -57,6 +57,9 @@ public class IntentRepeatDeclarationTests
         [typeof(CreateFirewallRuleCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateLoadBalancerCommandHandler)] = new IdempotencyKey(),
         [typeof(CreateVmKeyAdditionCommandHandler)] = new IdempotencyKey(),
+        // An admin's restore of a backup archive makes a new VM or volume each time it runs.
+        [typeof(RestoreVmFromBackupCommandHandler)] = new IdempotencyKey(),
+        [typeof(RestoreVolumeFromBackupCommandHandler)] = new IdempotencyKey(),
 
         // ── VM ──
         // A repeat of a waiting VM request records nothing and sends nothing (titan-ops architecture/resource-lifecycle.md#repeat).

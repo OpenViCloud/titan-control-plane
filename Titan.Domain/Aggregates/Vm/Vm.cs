@@ -64,6 +64,10 @@ public partial class Vm : IAggregateRoot
     /// The value a stop records in its command: changing it later does not reach a stop already asked.
     public int StopTimeoutSeconds { get; private set; }
     public string? UserData { get; private set; }
+    /// An admin restored this VM from a backup archive of another VM of the tenant
+    /// (titan-ops features/backup/design.md#restore-as-new-resource). The tenant's own VM in every other way; it never
+    /// counts toward MaxVms and is never billed. Written once, by RestoreFromBackup.
+    public bool RestoredFromBackup { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
 
     /// The VM's snapshots, each an instance snapshot on Incus named under the instance; rows are kept after Deleted
@@ -76,10 +80,12 @@ public partial class Vm : IAggregateRoot
 
     /// Counts toward MaxVms (titan-ops features/vm/design.md#counting-and-billing): the instance exists or its create
     /// waits. A create that failed before Incus had the instance, an instance not found, and a VM whose delete was asked
-    /// do not count. VmRepository.CountActiveByTenantAsync writes the same test in SQL
-    /// (titan-ops architecture/domain-methods.md#plain-code).
+    /// do not count; nor does a VM restored from a backup, in any status
+    /// (titan-ops features/backup/design.md#restore-as-new-resource). VmRepository.CountActiveByTenantAsync writes the
+    /// same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
     public bool OccupiesQuota =>
-        Status != VmStatus.Deleting
+        !RestoredFromBackup
+        && Status != VmStatus.Deleting
         && Status != VmStatus.Deleted
         && Status != VmStatus.NotFound
         && Status != VmStatus.Failed;
@@ -87,12 +93,15 @@ public partial class Vm : IAggregateRoot
     /// Billed while the instance holds CPU and RAM (titan-ops features/vm/design.md#counting-and-billing): every Incus
     /// status but Stopped keeps the qemu process alive (incus driver_qemu.go statusCode). A stop or delete in flight
     /// still bills while Incus last said so. Not found and Deleted need no test of their own: neither holds an Incus
-    /// status, and a Deleted VM ignores every later observation. VmRepository.ListBillableAsync writes the same test in SQL.
+    /// status, and a Deleted VM ignores every later observation. A VM restored from a backup is never billed
+    /// (titan-ops features/backup/design.md#restore-as-new-resource). VmRepository.ListBillableAsync writes the same
+    /// test in SQL.
     public bool IsBilled =>
-        InstanceStatus == VmStatus.Running
-        || InstanceStatus == VmStatus.Ready
-        || InstanceStatus == VmStatus.Frozen
-        || InstanceStatus == VmStatus.Error;
+        !RestoredFromBackup
+        && (InstanceStatus == VmStatus.Running
+            || InstanceStatus == VmStatus.Ready
+            || InstanceStatus == VmStatus.Frozen
+            || InstanceStatus == VmStatus.Error);
 
     /// Holds its network while the instance may be on Incus, a delete in flight included (Incus refuses to delete a
     /// network an instance still uses), or while its create waits (titan-ops features/vm/design.md#counting-and-billing).

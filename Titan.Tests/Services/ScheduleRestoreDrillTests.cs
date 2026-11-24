@@ -30,7 +30,7 @@ public class ScheduleRestoreDrillTests
     private void Holds(List<Vm> vms, List<Volume> volumes)
     {
         _vms.Setup(r => r.ListWithAnInstanceAsync(It.IsAny<CancellationToken>())).ReturnsAsync(vms.Where(v => v.HasAnInstance).ToList());
-        _volumes.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
+        _volumes.Setup(r => r.ListOnIncusAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
     }
 
     private static Vm RunningVm(string externalId, string cluster = "mock")

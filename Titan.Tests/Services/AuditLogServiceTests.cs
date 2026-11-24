@@ -38,6 +38,24 @@ public class AuditLogServiceTests
         Assert.Equal(row.OwnerTenantId, dto.OwnerTenantId);
     }
 
+    // A row about a tenant's resource can say what the action read: a restore names its source and the archive
+    // (titan-ops features/backup/design.md#restore-as-new-resource). Without a detail the field stays empty, as on every
+    // row written before.
+    [Fact]
+    public async Task ListAsync_CarriesTheDetailOfATenantResourcesRow_AndNoneWhenNoneWasGiven()
+    {
+        Guid resourceId = Guid.NewGuid();
+        Guid owner = Guid.NewGuid();
+        var withDetail = AdminAuditLog.Create("vm.restore.cross_tenant", "admin-1", "vm", resourceId, owner, "source=abc backup=20261120T010000Z");
+        _repo.Setup(r => r.ListAsync(AuditLogService.DefaultLimit, default)).ReturnsAsync([withDetail, Sample()]);
+
+        var result = await Create().ListAsync(0, default);
+
+        Assert.Equal("source=abc backup=20261120T010000Z", result[0].Detail);
+        Assert.Equal((resourceId, owner, (string?)null), (result[0].ResourceId, result[0].OwnerTenantId, result[0].ResourceKey));
+        Assert.Null(result[1].Detail);
+    }
+
     [Theory]
     [InlineData(0, AuditLogService.DefaultLimit)]   // missing → default
     [InlineData(-3, AuditLogService.DefaultLimit)]  // invalid → default

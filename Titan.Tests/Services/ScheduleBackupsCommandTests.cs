@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Moq;
 using Titan.Application.Commands.Admin.Backup;
 using Titan.Application.Commands.Admin.Backup.Contracts;
@@ -6,7 +7,9 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Domain.Repositories;
+using Titan.Infrastructure.Persistence;
 using Titan.Infrastructure.ProviderCommands;
+using Titan.Infrastructure.Repositories;
 using Titan.Tests.Fakes;
 
 namespace Titan.Tests.Services;
@@ -30,7 +33,7 @@ public class ScheduleBackupsCommandTests
     {
         // The repository's SQL is Vm.HasAnInstance (VmRepositoryStateTests pins the two to agree).
         _vms.Setup(r => r.ListWithAnInstanceAsync(It.IsAny<CancellationToken>())).ReturnsAsync(vms.Where(v => v.HasAnInstance).ToList());
-        _volumes.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
+        _volumes.Setup(r => r.ListOnIncusAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
     }
 
     private static Vm RunningVm(string externalId)
@@ -67,6 +70,33 @@ public class ScheduleBackupsCommandTests
         Assert.Contains("\"externalVmId\":\"vm-a\"", vmRow.Payload);
         Assert.Contains("\"externalVolumeId\":\"vol-a\"", _rows.Rows[1].Payload);
         _vms.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // The schedule reads the volumes Incus holds, not the billed ones: a VM or volume an admin restored from a backup is
+    // never billed and has a disk to lose like any other (titan-ops features/backup/design.md#restore-as-new-resource).
+    // On the real repositories (InMemory), since a stub answers whichever list the handler asks.
+    [Fact]
+    public async Task ARestoredVmAndVolume_GetTodaysBackup_LikeAnyOther()
+    {
+        using var db = new TitanDbContext(new DbContextOptionsBuilder<TitanDbContext>()
+            .UseInMemoryDatabase($"backup-schedule-{Guid.NewGuid()}").Options);
+        Vm restoredVm = Vm.RestoreFromBackup(RunningVm("vm-a"), "web-1-restored");
+        restoredVm.CreateSucceeded(restoredVm.Operation.PendingId!.Value, "vm-b", VmStatus.Stopped, null, null);
+        Volume restoredVolume = Volume.RestoreFromBackup(CreatedVolume("vol-a"), "data-1");
+        restoredVolume.MarkCreated("vol-b");
+        db.Vms.Add(restoredVm);
+        db.Volumes.Add(restoredVolume);
+        await db.SaveChangesAsync();
+        var handler = new ScheduleBackupsCommandHandler(new VmRepository(db), new VolumeRepository(db),
+            new ProviderCommandQueue(_rows, _clock), _rows, _lock, _clock, new ClusterOptions());
+
+        await handler.HandleAsync(new ScheduleBackupsCommand());
+
+        Assert.Equal(
+            new[] { $"vm-backup-{restoredVm.Id}-20261026", $"volume-backup-{restoredVolume.Id}-20261026" },
+            _rows.Rows.Select(r => r.Key).ToArray());
+        Assert.Contains("\"externalVolumeId\":\"vol-b\"", _rows.Rows[1].Payload);
+        Assert.Equal((false, false), (restoredVm.IsBilled, restoredVolume.IsBilled));
     }
 
     // A stopped VM still has a disk to lose.

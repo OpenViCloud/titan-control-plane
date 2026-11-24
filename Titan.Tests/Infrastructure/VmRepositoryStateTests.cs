@@ -49,13 +49,27 @@ public class VmRepositoryStateTests
         Vm deleted = Seen("deleted", VmStatus.Running);
         deleted.Delete(Guid.NewGuid());
         deleted.MarkDeleted();
+        // Restored by an admin from a backup of another VM of the tenant, which is not a row here
+        // (titan-ops features/backup/design.md#restore-as-new-resource): waiting on its import, at rest as the import
+        // leaves it (Stopped), and in each Incus status that bills any other VM once the tenant has started it.
+        Vm Restored(string name) => Vm.RestoreFromBackup(Seen($"source-of-{name}", VmStatus.Running), name);
+        Vm RestoredSeen(string name, VmStatus state)
+        {
+            Vm vm = Restored(name);
+            vm.CreateSucceeded(vm.Operation.PendingId!.Value, $"ext-{name}", VmStatus.Stopped, null, null);
+            vm.MarkObserved(state, null);
+            return vm;
+        }
 
         return new List<Vm>
         {
             creating, createdNotSeen, createFailed, createFailedWithAnInstance,
             Seen("running", VmStatus.Running), Seen("ready", VmStatus.Ready), Seen("stopped", VmStatus.Stopped),
             Seen("frozen", VmStatus.Frozen), Seen("error", VmStatus.Error),
-            notFound, deleting, deleted
+            notFound, deleting, deleted,
+            Restored("restored-creating"), RestoredSeen("restored-stopped", VmStatus.Stopped),
+            RestoredSeen("restored-running", VmStatus.Running), RestoredSeen("restored-ready", VmStatus.Ready),
+            RestoredSeen("restored-frozen", VmStatus.Frozen), RestoredSeen("restored-error", VmStatus.Error)
         };
     }
 
@@ -68,6 +82,7 @@ public class VmRepositoryStateTests
 
     // billed while the instance holds CPU and RAM. Stopped is the one Incus status without a qemu process;
     // a VM with no instance (not created, not found, deleted) holds nothing. A delete in flight still holds it.
+    // A restored VM is never billed, whichever of those statuses it is in.
     [Fact]
     public async Task Billable_IsEveryStatusWithItsQemuAlive_NeverStoppedNorAbsent()
     {
@@ -91,8 +106,50 @@ public class VmRepositoryStateTests
 
         int counted = await repo.CountActiveByTenantAsync(Tenant);
 
-        // creating, created-not-seen, create-failed-with-instance, running, ready, stopped, frozen, error
+        // creating, created-not-seen, create-failed-with-instance, running, ready, stopped, frozen, error; none of
+        // the six restored ones, in statuses that count for any other VM
         Assert.Equal(8, counted);
+    }
+
+    // A VM an admin restored from a backup is free and nothing else (titan-ops features/backup/design.md#restore-as-new-resource):
+    // the tenant sees it, its name is taken, the reconciler watches it and its disk is backed up like any other.
+    [Fact]
+    public async Task ARestoredVm_IsNeitherCountedNorBilled_ButIsListedWatchedAndBackedUp()
+    {
+        using var db = NewDb();
+        List<Vm> restored = EveryShape().Where(v => v.RestoredFromBackup).ToList();
+        db.Vms.AddRange(restored);
+        await db.SaveChangesAsync();
+        var repo = new VmRepository(db);
+        string[] Names(IEnumerable<Vm> vms) => vms.Select(v => v.Name).OrderBy(n => n).ToArray();
+
+        string[] onIncus = ["restored-error", "restored-frozen", "restored-ready", "restored-running", "restored-stopped"];
+        string[] all = ["restored-creating", .. onIncus];
+        Assert.Equal(all, Names(restored));
+        Assert.Equal(0, await repo.CountActiveByTenantAsync(Tenant));
+        Assert.Empty(await repo.ListBillableAsync());
+        Assert.Equal(Names(restored), Names(await repo.ListByTenantAsync(Tenant)));
+        Assert.True(await repo.ExistsByNameAsync(Tenant, "restored-creating"));
+        Assert.Equal(onIncus, Names(await repo.ListReconcilableAsync("cluster-a")));
+        Assert.Equal(onIncus, Names(await repo.ListWithAnInstanceAsync()));
+    }
+
+    // Only the restored VM itself is free: a snapshot the tenant takes of it is billed as any other, because the
+    // snapshot meter reads snapshot rows alone.
+    [Fact]
+    public async Task ASnapshotOfARestoredVm_IsStillBilled()
+    {
+        using var db = NewDb();
+        Vm restored = EveryShape().Single(v => v.Name == "restored-stopped");
+        VmSnapshot snapshot = restored.WithSnapshot("before-change");
+        restored.MarkSnapshotCreated(snapshot.Id, "ext-restored-stopped/before-change");
+        db.Vms.Add(restored);
+        await db.SaveChangesAsync();
+
+        List<VmSnapshot> billed = await new VmSnapshotRepository(db).ListBillableAsync();
+
+        Assert.Equal(new[] { snapshot.Id }, billed.Select(s => s.Id).ToArray());
+        Assert.True(snapshot.IsBilled);
     }
 
     [Fact] // the same condition as the unique index's filter: only a deleted VM frees its name
@@ -117,9 +174,9 @@ public class VmRepositoryStateTests
         List<Vm> tenantList = await repo.ListByTenantAsync(Tenant);
         List<Vm> adminList = await repo.ListAllAsync(null);
 
-        Assert.Equal(11, tenantList.Count);
+        Assert.Equal(17, tenantList.Count);
         Assert.DoesNotContain(tenantList, v => v.Name == "deleted");
-        Assert.Equal(11, adminList.Count);
+        Assert.Equal(17, adminList.Count);
     }
 
     // A VM holds its network while its instance exists (Incus refuses to delete a network an instance uses, a
@@ -136,6 +193,8 @@ public class VmRepositoryStateTests
     [InlineData("create-failed-with-instance", true)]
     [InlineData("not-found", false)]
     [InlineData("deleted", false)]
+    [InlineData("restored-creating", true)]
+    [InlineData("restored-stopped", true)]
     public async Task Network_IsInUse_WhileAnInstanceExistsOrIsBeingCreated(string shape, bool inUse)
     {
         using var db = NewDb();
@@ -159,7 +218,7 @@ public class VmRepositoryStateTests
 
         List<Vm> watched = await repo.ListReconcilableAsync("cluster-a");
 
-        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "running", "stopped" },
+        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "not-found", "ready", "restored-error", "restored-frozen", "restored-ready", "restored-running", "restored-stopped", "running", "stopped" },
             watched.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 
@@ -173,7 +232,7 @@ public class VmRepositoryStateTests
 
         List<Vm> held = await repo.ListWithAnInstanceAsync();
 
-        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "ready", "running", "stopped" },
+        Assert.Equal(new[] { "create-failed-with-instance", "created-not-seen", "deleting", "error", "frozen", "ready", "restored-error", "restored-frozen", "restored-ready", "restored-running", "restored-stopped", "running", "stopped" },
             held.Select(v => v.Name).OrderBy(n => n).ToArray());
     }
 

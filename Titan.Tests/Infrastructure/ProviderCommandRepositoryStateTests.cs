@@ -135,7 +135,8 @@ public class ProviderCommandRepositoryStateTests
             claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 
-    // A restore drill is a row of no tenant and no resource that the worker leases on a loop of its own; while it runs
+    // A restore drill is a row of no tenant and no resource that the worker leases on a loop apart from the command and
+    // backup loops (with the admin's restores of a backup archive); while it runs
     // (hours, on a big disk) the backup loop and a tenant's command still get their rows
     // (titan-ops features/backup/design.md#restore-drill).
     [Fact]
@@ -159,6 +160,68 @@ public class ProviderCommandRepositoryStateTests
 
         Assert.Equal(["config", "vm-backup"], backups.Select(c => c.Key).Order(StringComparer.Ordinal));
         Assert.Equal(["vm-stop"], commands.Select(c => c.Key));
+    }
+
+    // What the worker's third loop asks for: the drill, and an admin's restores of a backup archive
+    // (titan-ops features/backup/design.md#restore-as-new-resource).
+    private static readonly string[] DrillAndRestoreKinds =
+        [ProviderCommandKinds.RestoreDrill, ProviderCommandKinds.VmRestore, ProviderCommandKinds.VolumeRestore];
+
+    // A restore is a row of no tenant that names the new VM or volume, leased with the drill. While it runs (an import of
+    // a whole disk), a tenant's command, a template sync and a backup still get their rows; the drill and the other
+    // restores wait for it.
+    [Theory]
+    [InlineData(ProviderCommandKinds.VmRestore)]
+    [InlineData(ProviderCommandKinds.VolumeRestore)]
+    public async Task ALeasedRestore_HoldsBackNoBackup_NorATenantsCommand_AndTheDrillAndTheOtherRestoresWait(string restoreKind)
+    {
+        await using TitanDbContext db = NewDb();
+        ProviderCommand restore = ProviderCommand.Create("restore", restoreKind, "mock", "{}", Now.AddHours(-1), null, Guid.NewGuid());
+        restore.Lease(Guid.NewGuid(), Now);
+        Guid tenant = Guid.NewGuid();
+        db.ProviderCommands.AddRange(
+            restore,
+            ProviderCommand.Create("vm-backup", ProviderCommandKinds.VmBackup, "mock", "{}", Now.AddMinutes(-7), tenant, Guid.NewGuid()),
+            ProviderCommand.Create("config", ProviderCommandKinds.ClusterBackup, "mock", "{}", Now.AddMinutes(-6)),
+            ProviderCommand.Create("vm-stop", ProviderCommandKinds.VmStop, "mock", "{}", Now.AddMinutes(-5), tenant, Guid.NewGuid()),
+            ProviderCommand.Create("template-sync", ProviderCommandKinds.TemplateSync, "mock", "{}", Now.AddMinutes(-4)),
+            ProviderCommand.Create("drill", ProviderCommandKinds.RestoreDrill, "mock", "{}", Now.AddMinutes(-3)),
+            ProviderCommand.Create("vm-restore", ProviderCommandKinds.VmRestore, "mock", "{}", Now.AddMinutes(-2), null, Guid.NewGuid()),
+            ProviderCommand.Create("volume-restore", ProviderCommandKinds.VolumeRestore, "mock", "{}", Now.AddMinutes(-1), null, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var repository = new ProviderCommandRepository(db);
+
+        var backups = await repository.ListClaimableAsync(
+            [ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup, ProviderCommandKinds.ClusterBackup], Now, 100, default);
+        var commands = await repository.ListClaimableAsync([ProviderCommandKinds.VmStop, ProviderCommandKinds.TemplateSync], Now, 100, default);
+        var drillAndRestores = await repository.ListClaimableAsync(DrillAndRestoreKinds, Now, 100, default);
+
+        Assert.Equal(["config", "vm-backup"], backups.Select(c => c.Key).Order(StringComparer.Ordinal));
+        Assert.Equal(["template-sync", "vm-stop"], commands.Select(c => c.Key).Order(StringComparer.Ordinal));
+        Assert.Empty(drillAndRestores);
+    }
+
+    // The reverse: a drill that runs holds the restores back, and once it ended they are handed out oldest first.
+    [Fact]
+    public async Task ALeasedRestoreDrill_HoldsTheRestoresBack_UntilItEnds()
+    {
+        await using TitanDbContext db = NewDb();
+        ProviderCommand drill = ProviderCommand.Create("drill", ProviderCommandKinds.RestoreDrill, "mock", "{}", Now.AddHours(-1));
+        Guid lease = Guid.NewGuid();
+        drill.Lease(lease, Now);
+        db.ProviderCommands.AddRange(
+            drill,
+            ProviderCommand.Create("volume-restore", ProviderCommandKinds.VolumeRestore, "mock", "{}", Now.AddMinutes(-2), null, Guid.NewGuid()),
+            ProviderCommand.Create("vm-restore", ProviderCommandKinds.VmRestore, "mock", "{}", Now.AddMinutes(-1), null, Guid.NewGuid()));
+        await db.SaveChangesAsync();
+        var repository = new ProviderCommandRepository(db);
+
+        Assert.Empty(await repository.ListClaimableAsync(DrillAndRestoreKinds, Now, 100, default));
+
+        drill.Complete(lease);
+        await db.SaveChangesAsync();
+        Assert.Equal(["volume-restore", "vm-restore"],
+            (await repository.ListClaimableAsync(DrillAndRestoreKinds, Now, 100, default)).Select(c => c.Key));
     }
 
     [Fact]

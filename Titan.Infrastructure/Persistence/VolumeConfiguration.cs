@@ -42,6 +42,10 @@ public class VolumeConfiguration : IEntityTypeConfiguration<Volume>
         builder.Property(v => v.CurrentAttachedVmId).HasColumnName("current_attached_vm_id");
         builder.Property(v => v.CurrentAttachedElsewhere).HasColumnName("current_attached_elsewhere");
         builder.Property(v => v.DesiredAttachedVmId).HasColumnName("desired_attached_vm_id");
+        // False for every row that existed before the column: only an admin restore writes true
+        // (titan-ops features/backup/design.md#restore-as-new-resource).
+        builder.Property(v => v.RestoredFromBackup).HasColumnName("restored_from_backup")
+            .HasDefaultValue(false).IsRequired();
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
 
         builder.HasIndex(v => v.TenantId);

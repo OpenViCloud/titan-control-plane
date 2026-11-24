@@ -243,6 +243,74 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.DoesNotContain(backupWaiting, ids);
     }
 
+    // titan-ops features/backup/design.md#restore-as-new-resource on the SQL EF writes: an admin's restore is a row of no
+    // tenant that the worker leases with the drill. While one is leased, a tenant's command and its backup are still handed
+    // out; the drill and the other restore wait, whatever their kind (the nullable comparison of the lane, across kinds),
+    // and are handed out once it ended. The real kinds, a fresh tenant, and the claimable rows read by id, so rows of other
+    // tests in the shared database do not change the answer. Its rows are deleted at the end: a leased row of no tenant
+    // left behind would hold the lane of these kinds in every later test.
+    [Theory]
+    [InlineData(ProviderCommandKinds.VmRestore, ProviderCommandKinds.VolumeRestore)]
+    [InlineData(ProviderCommandKinds.VolumeRestore, ProviderCommandKinds.VmRestore)]
+    [InlineData(ProviderCommandKinds.VmRestore, ProviderCommandKinds.RestoreDrill)]
+    [InlineData(ProviderCommandKinds.RestoreDrill, ProviderCommandKinds.VmRestore)]
+    public async Task ALeasedRestoreOrDrill_HoldsBackNoBackup_NorATenantsCommand_AndTheOthersOfItsLoopWait(
+        string leasedKind, string otherKind)
+    {
+        string[] drillAndRestores =
+            [ProviderCommandKinds.RestoreDrill, ProviderCommandKinds.VmRestore, ProviderCommandKinds.VolumeRestore];
+        Guid tenant = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        var seeded = new List<Guid>();
+        try
+        {
+            Guid held = await SeedForAsync(leasedKind, null, now.AddSeconds(-6));
+            seeded.Add(held);
+            Guid leaseId = Guid.NewGuid();
+            await using (TitanDbContext lease = pg.NewDbContext())
+            {
+                ProviderCommand row = await lease.ProviderCommands.SingleAsync(c => c.Id == held);
+                row.Lease(leaseId, now);
+                await lease.SaveChangesAsync();
+            }
+            Guid backupWaiting = await SeedForAsync(ProviderCommandKinds.VmBackup, tenant, now.AddSeconds(-5));
+            Guid stopWaiting = await SeedForAsync(ProviderCommandKinds.VmStop, tenant, now.AddSeconds(-4));
+            Guid sameKindWaiting = await SeedForAsync(leasedKind, null, now.AddSeconds(-3));
+            Guid otherKindWaiting = await SeedForAsync(otherKind, null, now.AddSeconds(-2));
+            seeded.AddRange([backupWaiting, stopWaiting, sameKindWaiting, otherKindWaiting]);
+
+            Assert.Contains(backupWaiting, await ClaimableIdsAsync(
+                [ProviderCommandKinds.VmBackup, ProviderCommandKinds.VolumeBackup, ProviderCommandKinds.ClusterBackup], now));
+            Assert.Contains(stopWaiting, await ClaimableIdsAsync([ProviderCommandKinds.VmStop, ProviderCommandKinds.TemplateSync], now));
+            List<Guid> whileItRuns = await ClaimableIdsAsync(drillAndRestores, now);
+            Assert.DoesNotContain(sameKindWaiting, whileItRuns);
+            Assert.DoesNotContain(otherKindWaiting, whileItRuns);
+
+            await using (TitanDbContext end = pg.NewDbContext())
+            {
+                ProviderCommand row = await end.ProviderCommands.SingleAsync(c => c.Id == held);
+                row.Complete(leaseId);
+                await end.SaveChangesAsync();
+            }
+            List<Guid> onceItEnded = await ClaimableIdsAsync(drillAndRestores, now);
+            Assert.Contains(sameKindWaiting, onceItEnded);
+            Assert.Contains(otherKindWaiting, onceItEnded);
+        }
+        finally
+        {
+            await using TitanDbContext cleanup = pg.NewDbContext();
+            await cleanup.ProviderCommands.Where(c => seeded.Contains(c.Id)).ExecuteDeleteAsync();
+        }
+    }
+
+    private async Task<List<Guid>> ClaimableIdsAsync(string[] kinds, DateTimeOffset now)
+    {
+        await using TitanDbContext db = pg.NewDbContext();
+        IReadOnlyList<ProviderCommand> claimable =
+            await new ProviderCommandRepository(db).ListClaimableAsync(kinds, now, int.MaxValue, CancellationToken.None);
+        return claimable.Select(c => c.Id).ToList();
+    }
+
     // Deterministic form of the race: two workers both read the row as claimable before either commits. The second
     // commit must lose, or both would run the command believing they hold it. Drop IsConcurrencyToken() from the
     // mapping and the second SaveChanges succeeds.

@@ -59,6 +59,19 @@ public class QueryRuleDbTests(PostgresFixture pg)
         return vm;
     }
 
+    // A VM an admin restored from a backup of another VM of the tenant, waiting on its import
+    // (titan-ops features/backup/design.md#restore-as-new-resource). The source is not saved: only its fields are read.
+    private Vm RestoredVm(string offering, string name) =>
+        Vm.RestoreFromBackup(SeenVm(offering, "source", VmStatus.Running), $"{name}-{Guid.NewGuid():N}"[..20]);
+
+    // The same VM once its import ended, in the Incus status the worker reported or the tenant brought it to.
+    private Vm RestoredVm(string offering, string name, VmStatus state)
+    {
+        Vm vm = RestoredVm(offering, name);
+        vm.CreateSucceeded(vm.Operation.PendingId!.Value, $"vm{Guid.NewGuid():N}"[..20], state, null, null);
+        return vm;
+    }
+
     [Fact]
     public async Task VmQuota_CountsWhatExistsOrIsBeingCreated_NotAFailedCreate_NotFound_OrADeleteAsked()
     {
@@ -70,12 +83,17 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Vm deleting = SeenVm(offering, "deleting", VmStatus.Running);
         deleting.Delete(Guid.NewGuid());
         Vm snapshotting = SnapshottingVm(offering, "snapshotting");
+        // Restored VMs in statuses that count for any other VM: never counted.
+        Vm restoredCreating = RestoredVm(offering, "r-creating");
+        Vm restoredStopped = RestoredVm(offering, "r-stopped", VmStatus.Stopped);
+        Vm restoredRunning = RestoredVm(offering, "r-running", VmStatus.Running);
         await SaveAsync(NewVm(offering, "creating"), SeenVm(offering, "stopped", VmStatus.Stopped), snapshotting, failed, lost,
-            deleting);
+            deleting, restoredCreating, restoredStopped, restoredRunning);
 
         await using TitanDbContext db = pg.NewDbContext();
         Assert.Equal(3, await new VmRepository(db).CountActiveByTenantAsync(_tenant.Id)); // creating, stopped, snapshotting
         Assert.True(snapshotting.OccupiesQuota);
+        Assert.Equal((false, false, false), (restoredCreating.OccupiesQuota, restoredStopped.OccupiesQuota, restoredRunning.OccupiesQuota));
     }
 
     [Fact]
@@ -87,6 +105,9 @@ public class QueryRuleDbTests(PostgresFixture pg)
             SeenVm(offering, "running", VmStatus.Running), SeenVm(offering, "ready", VmStatus.Ready),
             SeenVm(offering, "frozen", VmStatus.Frozen), SeenVm(offering, "error", VmStatus.Error),
             SeenVm(offering, "stopped", VmStatus.Stopped), NewVm(offering, "creating"),
+            // Restored VMs with their qemu alive, one of each Incus status that bills any other VM: never billed.
+            RestoredVm(offering, "r-running", VmStatus.Running), RestoredVm(offering, "r-ready", VmStatus.Ready),
+            RestoredVm(offering, "r-frozen", VmStatus.Frozen), RestoredVm(offering, "r-error", VmStatus.Error),
         };
         await SaveAsync(vms.Cast<object>().ToArray());
 
@@ -94,6 +115,7 @@ public class QueryRuleDbTests(PostgresFixture pg)
         var billed = (await new VmRepository(db).ListBillableAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
 
         Assert.Equal(vms.Take(4).Select(v => v.Id).OrderBy(i => i), billed.OrderBy(i => i));
+        Assert.All(vms.Skip(6), restored => Assert.False(restored.IsBilled));
     }
 
     // Vm.HasAnInstance in SQL: a provider id, and neither NotFound nor Deleted.
@@ -156,6 +178,11 @@ public class QueryRuleDbTests(PostgresFixture pg)
         return volume;
     }
 
+    // A volume an admin restored from a backup of another volume of the tenant, waiting on its import. The source is
+    // not saved: only its fields are read.
+    private Volume RestoredVolume(string name) =>
+        Volume.RestoreFromBackup(OnIncus("source"), $"{name}-{Guid.NewGuid():N}"[..20]);
+
     // Quota counts a volume Incus holds or is about to hold; billing, a volume Incus holds, an attach, a detach or a delete
     // in flight included while it was last seen holding it (titan-ops features/volume/design.md#counting-and-billing).
     [Fact]
@@ -195,22 +222,43 @@ public class QueryRuleDbTests(PostgresFixture pg)
         Volume deleted = OnIncus("deleted");
         deleted.Delete();
         deleted.MarkDeleted();
+        // Restored by an admin from a backup (titan-ops features/backup/design.md#restore-as-new-resource), one on each
+        // side of each condition that counts or bills any other volume: never counted, never billed, and on Incus
+        // exactly when another volume in the same situation is.
+        Volume restoredCreating = RestoredVolume("r-creating");
+        Volume restoredAvailable = RestoredVolume("r-available");
+        restoredAvailable.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
+        Volume restoredAttachingHeld = RestoredVolume("r-attaching-held");
+        restoredAttachingHeld.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
+        restoredAttachingHeld.Attach(vm);
+        Volume restoredDeleting = RestoredVolume("r-deleting");
+        restoredDeleting.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
+        restoredDeleting.Delete();
+        Volume restoredLost = RestoredVolume("r-lost");
+        restoredLost.MarkCreated($"vol{Guid.NewGuid():N}"[..20]);
+        restoredLost.MarkNotFound();
         Volume[] all =
         [
             creating, creatingSeen, available, attachingHeld, attachingLost, detachingHeld, detachingLost, deleting,
             deletingLost, failed, lost, deleted,
+            restoredCreating, restoredAvailable, restoredAttachingHeld, restoredDeleting, restoredLost,
         ];
         await SaveAsync(all);
 
         Guid[] counted = [creating.Id, creatingSeen.Id, available.Id, attachingHeld.Id, detachingHeld.Id];
         Guid[] billedIds = [creatingSeen.Id, available.Id, attachingHeld.Id, detachingHeld.Id, deleting.Id];
+        Guid[] onIncusIds = [.. billedIds, restoredAvailable.Id, restoredAttachingHeld.Id, restoredDeleting.Id];
         Assert.Equal(counted.Order(), all.Where(v => v.OccupiesQuota).Select(v => v.Id).Order());
         Assert.Equal(billedIds.Order(), all.Where(v => v.IsBilled).Select(v => v.Id).Order());
+        Assert.Equal(onIncusIds.Order(), all.Where(v => v.IsOnIncus).Select(v => v.Id).Order());
         await using TitanDbContext db = pg.NewDbContext();
         var repo = new VolumeRepository(db);
         Assert.Equal(counted.Length, await repo.CountActiveByTenantAsync(_tenant.Id));
         var billed = (await repo.ListBillableAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
         Assert.Equal(billedIds.Order(), billed.Order()); // a delete in flight still bills
+        // What the backup schedule and the Backups page read: the restored volumes Incus holds are there.
+        var onIncus = (await repo.ListOnIncusAsync()).Where(v => v.TenantId == _tenant.Id).Select(v => v.Id);
+        Assert.Equal(onIncusIds.Order(), onIncus.Order());
     }
 
     // A volume snapshot on Incus, its create ended Done.
