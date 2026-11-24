@@ -51,8 +51,8 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
             .HasFilter("status = 'Leased' AND tenant_id IS NOT NULL")
             .HasDatabaseName(LeasedPerTenantIndex);
         // The same for rows of no tenant, per kind (template.sync, cluster.backup, restore.drill, vm.restore,
-        // volume.restore): two of one kind never hold a lease at once. That a drill and the two restores wait for each other comes from the
-        // claim query (ProviderCommandRepository.ListClaimableAsync), not from this index.
+        // volume.restore): two of one kind never hold a lease at once. That a drill and the two restores wait for
+        // each other comes from the claim query (ProviderCommandRepository.ListClaimableAsync), not from this index.
         builder.HasIndex(c => c.Kind).IsUnique()
             .HasFilter("status = 'Leased' AND tenant_id IS NULL")
             .HasDatabaseName(LeasedNoTenantIndex);
