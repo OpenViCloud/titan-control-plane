@@ -16,7 +16,7 @@ Control Plane (.NET)  →  core.provider_commands  →  incus-worker (Go)  →  
 
 ```bash
 dotnet build
-./test-all.sh                                                    # cả bộ test: ba process như CI (unit · FullHost · Integration); `dotnet test` trần báo 6 lỗi giả (test-all.sh giải thích); dừng `exit 1` trước mọi lệnh `dotnet` khi SDK trên PATH không đọc được `Titan.slnx` (cần SDK ≥ 9.0.200, vd `export DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH`), và trước khi mở tunnel khi cổng 15432 đã có tiến trình nghe (nêu PID)
+./test-all.sh                                                    # cả bộ test: ba process như CI (unit · FullHost · Integration); `dotnet test` trần báo 6 lỗi giả (test-all.sh giải thích); dừng `exit 1` trước build và test khi SDK trên PATH không đọc được `Titan.slnx` (`dotnet sln Titan.slnx list`) (cần SDK ≥ 9.0.200, vd `export DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH`), và trước khi mở tunnel khi cổng 15432 đã có tiến trình nghe (nêu tên và PID với tiến trình của user này)
 dotnet test --filter "FullyQualifiedName~NetworkServiceTests"   # run single test class
 dotnet run --project Titan.Host
 
@@ -264,6 +264,6 @@ Khoá lệnh = chuỗi id workflow cũ, trừ VM, volume, volume snapshot, netwo
 | `BACKUP_TARGET_NOT_FOUND` | 404 | `GET /v1/admin/backup-target` or `POST …/test` while no key pair is configured (`BackupTarget__AccessKeyId`/`__SecretAccessKey` empty; `titan-ops features/backup/design.md#backup-target`) |
 | `BACKUP_TARGET_CONFIG_INVALID` | 503 | The configured target cannot work: half a key pair, endpoint not an https origin, bucket or region malformed. The environment's error, not the target's; the message names the setting, never a value |
 | `BACKUP_NOT_FOUND` | 404 | Admin restore (`POST /v1/admin/backups/vms/{vmId}/restore`, `…/volumes/{volumeId}/restore`): the VM or volume of the route has no `Complete` archive under the `backupKey` sent; an archive of another resource or an `Incomplete` one is not one. Nothing is created (`titan-ops features/backup/design.md#restore-as-new-resource`) |
-| `BACKUP_SOURCE_INVALID_STATE` | 422 | Admin restore of a source the Backups page does not list: a VM without an instance (`!Vm.HasAnInstance`), or a volume Incus does not hold under a provider id (`!Volume.IsOnIncus`). Refused by `Vm.RestoreFromBackup` / `Volume.RestoreFromBackup` after the archive was found; nothing is created |
+| `BACKUP_SOURCE_INVALID_STATE` | 422 | Admin restore of a source the Backups page does not list: a VM without an instance (`!Vm.HasAnInstance`), or a volume Incus does not hold under a provider id (`!Volume.IsOnIncus || ExternalId == null`) — the source volume, or on the VM route a volume attached to the VM. Refused by `Vm.RestoreFromBackup` / `Volume.RestoreFromBackup` after the archive was found; nothing is created |
 | `BACKUP_OF_ATTACHED_VOLUME_NOT_FOUND` | 422 | Admin restore of a VM: a volume Incus holds attached to it has no `Complete` archive, or its closest one is more than 24 hours from the VM's archive (`RestoreArchives.ClosestTo`). The message names the volume (name and id); nothing is created, the VM included |
 

@@ -113,7 +113,7 @@ elif [ -f "$DEV_KUBECONFIG" ] && kubectl --kubeconfig "$DEV_KUBECONFIG" --reques
     fi
     if [ -n "$listener" ]; then
         echo
-        echo "==> 127.0.0.1:15432 is already taken by $listener; stop it, then run again." >&2
+        echo "==> port 15432 is already taken by $listener; stop it, then run again." >&2
         exit 1
     fi
     keep_port_forward &

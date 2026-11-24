@@ -23,7 +23,8 @@ public class ProviderCommand : IAggregateRoot
 
     public string ClusterId { get; private set; } = default!;
 
-    /// The tenant whose resource the command acts on; null for a command of no tenant (`template.sync`). A tenant's
+    /// The tenant whose resource the command acts on; null for a command of no tenant (`template.sync`, `cluster.backup`,
+    /// `restore.drill`, `vm.restore`, `volume.restore`). A tenant's
     /// commands run one at a time in each lane (titan-ops features/provider/design.md#tenant-lane).
     public Guid? TenantId { get; private set; }
 
