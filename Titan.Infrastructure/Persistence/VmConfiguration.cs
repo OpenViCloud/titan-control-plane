@@ -48,6 +48,10 @@ public class VmConfiguration : IEntityTypeConfiguration<Vm>
         builder.Property(v => v.StopTimeoutSeconds).HasColumnName("stop_timeout_seconds")
             .HasDefaultValue(Vm.DefaultStopTimeoutSeconds).IsRequired();
         builder.Property(v => v.UserData).HasColumnName("user_data").HasColumnType("text");
+        // False for every row that existed before the column: only an admin restore writes true
+        // (titan-ops features/backup/design.md#restore-as-new-resource).
+        builder.Property(v => v.RestoredFromBackup).HasColumnName("restored_from_backup")
+            .HasDefaultValue(false).IsRequired();
         builder.Property(v => v.PublicIpv6Address).HasColumnName("public_ipv6_address");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
         builder.Ignore(v => v.HasAnInstance);

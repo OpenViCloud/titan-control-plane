@@ -29,7 +29,7 @@ public class BackupTargetEndpointTests
     [Fact]
     public void ListBackups_RequiresPlatformAdminRole_AndNoAnonymousAccess()
     {
-        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler(new(), new()), DrillHandler());
+        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler(new(), new()), DrillHandler(), RestoresHandler());
 
         Assert.NotNull(ep.Definition.AllowedRoles);
         Assert.Equal(new[] { "platform-admin" }, ep.Definition.AllowedRoles);
@@ -60,13 +60,28 @@ public class BackupTargetEndpointTests
         });
     }
 
+    private static Titan.Application.Queries.Admin.Backup.ListBackupRestoresQueryHandler RestoresHandler(
+        params Titan.Domain.Aggregates.ProviderCommand.ProviderCommand[] restores)
+    {
+        var rows = new FakeProviderCommandRepository();
+        rows.Rows.AddRange(restores);
+        var vmRepository = new Mock<Titan.Domain.Repositories.IVmRepository>();
+        vmRepository.Setup(r => r.ListByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        var volumeRepository = new Mock<Titan.Domain.Repositories.IVolumeRepository>();
+        volumeRepository.Setup(r => r.ListByIdsAsync(It.IsAny<IReadOnlyCollection<Guid>>(), It.IsAny<CancellationToken>())).ReturnsAsync([]);
+        return new(rows, vmRepository.Object, volumeRepository.Object, TimeProvider.System, new Titan.Application.Options.ClusterOptions
+        {
+            Clusters = [new Titan.Application.Options.ClusterConfig { Id = "mock", Name = "Mock" }],
+        });
+    }
+
     private static Titan.Application.Queries.Admin.Backup.ListDiskBackupsQueryHandler DiskHandler(
         List<Titan.Domain.Aggregates.Vm.Vm> vms, List<Titan.Domain.Aggregates.Volume.Volume> volumes)
     {
         var vmRepository = new Mock<Titan.Domain.Repositories.IVmRepository>();
         vmRepository.Setup(r => r.ListAllAsync(null, It.IsAny<CancellationToken>())).ReturnsAsync(vms);
         var volumeRepository = new Mock<Titan.Domain.Repositories.IVolumeRepository>();
-        volumeRepository.Setup(r => r.ListBillableAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
+        volumeRepository.Setup(r => r.ListOnIncusAsync(It.IsAny<CancellationToken>())).ReturnsAsync(volumes);
         return new(vmRepository.Object, volumeRepository.Object, new FakeBackupRecordRepository(),
             new FakeBackupObservationRepository(), TimeProvider.System, new Titan.Application.Options.ClusterOptions());
     }
@@ -79,7 +94,7 @@ public class BackupTargetEndpointTests
         vm.MarkRunning("vm-a", "10.0.0.2");
         var volume = Titan.Domain.Aggregates.Volume.Volume.Create(TestTenant.WithRoomToSpare().Id, "data-1", "mock", "std", 10);
         volume.MarkCreated("vol-a");
-        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler([vm], [volume]), DrillHandler());
+        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler([vm], [volume]), DrillHandler(), RestoresHandler());
 
         await ep.HandleAsync(CancellationToken.None);
 
@@ -98,11 +113,30 @@ public class BackupTargetEndpointTests
         var lease = Guid.NewGuid();
         drill.Lease(lease, now.AddHours(-1));
         drill.Complete(lease);
-        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler(new(), new()), DrillHandler(drill));
+        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler(new(), new()), DrillHandler(drill), RestoresHandler());
 
         await ep.HandleAsync(CancellationToken.None);
 
         var line = Assert.Single(ep.Response.RestoreDrills);
         Assert.Equal(("mock", "verified", "vm", "web-1"), (line.ClusterId, line.State, line.Kind, line.Name));
+    }
+
+    // The admin's restores of a backup archive ride on the same response (titan-ops features/backup/design.md#restore-as-new-resource).
+    [Fact]
+    public async Task ListBackups_ReturnsTheRestores_BesideTheItemsAndTheDrills()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var vmId = Guid.NewGuid();
+        var restore = Titan.Domain.Aggregates.ProviderCommand.ProviderCommand.Create(
+            $"vm-create-{vmId}-{Guid.NewGuid()}", Titan.Domain.Aggregates.ProviderCommand.ProviderCommandKinds.VmRestore, "mock",
+            """{"backupKey":"20261120T010203Z"}""", now.AddHours(-1), null, vmId);
+        var ep = Factory.Create<ListBackupsEndpoint>(PostgresHandler(new FakeBackupRecordRepository()), DiskHandler(new(), new()), DrillHandler(),
+            RestoresHandler(restore));
+
+        await ep.HandleAsync(CancellationToken.None);
+
+        var line = Assert.Single(ep.Response.Restores);
+        Assert.Equal(("vm", vmId, "running"), (line.Kind, line.ResourceId, line.State));
+        Assert.Single(ep.Response.RestoreDrills);
     }
 }

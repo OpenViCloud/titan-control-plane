@@ -536,6 +536,16 @@ public class RequestLifecycleShapeTests
             except: [], atLeast: 3, "template");
     }
 
+    // An admin's restore reads its source to copy it (titan-ops features/backup/design.md#restore-as-new-resource): the
+    // VM or volume is locked, so a delete of the source and its restore take turns, and the volumes of a VM are read
+    // under their own locks, VM first. The two schedule handlers of the folder make and change no resource.
+    [Fact]
+    public void EveryRestoreFromBackupHandler_LocksItsSource()
+    {
+        AssertEveryHandlerLocks([Path.Combine("Titan.Application", "Commands", "Admin", "Backup")],
+            except: ["ScheduleBackups", "PruneBackupsOfGoneResources"], atLeast: 2, "restore from backup");
+    }
+
     private static void AssertEveryHandlerLocks(string[] folders, string[] except, int atLeast, string resource)
     {
         var handlers = folders
@@ -557,9 +567,9 @@ public class RequestLifecycleShapeTests
     public void EveryVmCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var vmEnqueues = Regex.Matches(src, @"public Task EnqueueVm(Create|Delete|Stop|Start)Async\([\s\S]*?,\s*ct\);")
+        var vmEnqueues = Regex.Matches(src, @"public Task EnqueueVm(Create|Delete|Stop|Start|Restore)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
-        Assert.Equal(4, vmEnqueues.Count);
+        Assert.Equal(5, vmEnqueues.Count);
 
         // A property named requestId, not any mention of the word.
         var without = vmEnqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVm" + m.Groups[1].Value).ToList();
@@ -581,9 +591,9 @@ public class RequestLifecycleShapeTests
     public void EveryVolumeCommandPayload_CarriesTheRequestId()
     {
         string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
-        var enqueues = Regex.Matches(src, @"public Task EnqueueVolume(Create|Attach|Detach|Delete|SnapshotCreate|SnapshotDelete|SnapshotRestore)Async\([\s\S]*?,\s*ct\);")
+        var enqueues = Regex.Matches(src, @"public Task EnqueueVolume(Create|Attach|Detach|Delete|SnapshotCreate|SnapshotDelete|SnapshotRestore|Restore)Async\([\s\S]*?,\s*ct\);")
             .Cast<Match>().ToList();
-        Assert.Equal(7, enqueues.Count);
+        Assert.Equal(8, enqueues.Count);
 
         var without = enqueues.Where(m => !Regex.IsMatch(m.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]")).Select(m => "EnqueueVolume" + m.Groups[1].Value).ToList();
         Assert.True(without.Count == 0, "Volume command payloads without requestId (titan-ops architecture/resource-lifecycle.md#callback-routes): " + string.Join(", ", without));

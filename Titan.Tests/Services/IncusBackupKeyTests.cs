@@ -31,6 +31,41 @@ public class IncusBackupKeyTests
         Assert.Equal(BackupRecord.VolumeKind, key!.Kind);
     }
 
+    // A request that names an archive is checked against the shape of the key before anything is read: the shape must
+    // be the one a parsed object key yields, and nothing wider.
+    [Theory]
+    [InlineData("20261026T020709Z", true)]
+    [InlineData("20261026T020709", false)]
+    [InlineData("20261026T020709Z\n", false)]
+    [InlineData("x20261026T020709Z", false)]
+    [InlineData("20261026T020709Z/..", false)]
+    public void TheBackupKeyPattern_IsTheShapeOfTheTimeInTheObjectKey(string backupKey, bool isOne)
+    {
+        var pattern = new System.Text.RegularExpressions.Regex(IncusBackupKey.BackupKeyPattern);
+
+        Assert.Equal(isOne, pattern.IsMatch(backupKey));
+        IncusBackupKey? parsed = IncusBackupKey.Parse($"incus/local-mac/{Tenant}/vms/{Vm}/20261026T020709Z.tar.gz");
+        Assert.Matches(pattern, parsed!.BackupKey);
+    }
+
+    // A restore's command names its archive by the key alone; the time it was taken is read back from it, as from the
+    // object key (titan-ops features/backup/design.md#restore-as-new-resource).
+    [Fact]
+    public void ABackupKey_GivesTheTimeTheArchiveWasTaken()
+    {
+        Assert.Equal(new DateTimeOffset(2026, 10, 26, 2, 7, 9, TimeSpan.Zero), IncusBackupKey.TakenAtOf("20261026T020709Z"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("20261026T020709")]
+    [InlineData("2026-10-26")]
+    [InlineData("20261326T020709Z")]
+    public void AnythingElse_GivesNoTime(string backupKey)
+    {
+        Assert.Null(IncusBackupKey.TakenAtOf(backupKey));
+    }
+
     // Anything else under incus/ is not a backup the page can name: skipped, never a failure of the whole pass.
     [Theory]
     [InlineData("incus/local-mac/0123abcd-0000-4000-8000-000000000001/vms/11111111-2222-3333-4444-555555555555/20261026T020709Z.tar")]

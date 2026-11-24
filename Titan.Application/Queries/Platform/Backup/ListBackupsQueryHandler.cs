@@ -23,7 +23,7 @@ public class ListBackupsQueryHandler(
 
         var item = new BackupItemQueryResult(
             BackupRecord.PostgresKind, BackupLayout.PostgresResourceName, null,
-            newest?.TakenAt, newest?.SizeBytes, health, reason, observation?.LastWalAt);
+            newest?.TakenAt, newest?.SizeBytes, health, reason, observation?.LastWalAt, null, []);
         return new BackupsQueryResult(observation?.LastReadAt, new[] { item });
     }
 }

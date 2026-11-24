@@ -16,11 +16,23 @@
 # money-path concurrency guards, so a run without them is not a pass.
 #
 # Usage:  ./test-all.sh [--no-build]
-# Exit:   0 every step ran and passed · 1 a step failed · 2 full-host and integration did not run, or the
-#         port-forward to the dev database died during them
+# Exit:   0 every step ran and passed · 1 a step failed, the SDK on PATH cannot read Titan.slnx, or port 15432 was
+#         already taken before the tunnel opened · 2 full-host and integration did not run, or the port-forward to
+#         the dev database died during them
 set -uo pipefail
 
 cd "$(dirname "$0")"
+
+# An SDK older than 9.0.200 cannot read the .slnx solution, which every dotnet command below reads, --no-build
+# included: stop before them, naming the SDK that was found.
+if ! dotnet sln Titan.slnx list >/dev/null 2>&1; then
+    found="$(command -v dotnet || echo 'no dotnet on PATH')"
+    version="$(dotnet --version 2>/dev/null || echo 'unknown')"
+    echo "==> the .NET SDK on PATH ($found, SDK $version) cannot read Titan.slnx: it does not know the .slnx solution format." >&2
+    echo "    Put an SDK >= 9.0.200 first on PATH, e.g. when one is installed in ~/.dotnet:" >&2
+    echo "        export DOTNET_ROOT=\$HOME/.dotnet PATH=\$HOME/.dotnet:\$PATH" >&2
+    exit 1
+fi
 
 BUILD_ARG="${1:-}"
 if [ "$BUILD_ARG" != "--no-build" ]; then
@@ -92,6 +104,18 @@ if [ -n "${TITAN_IT_POSTGRES:-}" ]; then
     integration_source="TITAN_IT_POSTGRES (already set)"
 elif [ -f "$DEV_KUBECONFIG" ] && kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-dev get svc titan-db-rw >/dev/null 2>&1; then
     server=$(kubectl --kubeconfig "$DEV_KUBECONFIG" config view --minify -o 'jsonpath={.clusters[0].cluster.server}')
+    # Something already listening on 15432 (a tunnel left by an earlier run, another database) would answer
+    # wait_for_port in place of the tunnel, and the tests would run against it; it is not a tunnel that died.
+    # ss sees every listening socket, another user's too; it names the process only for this user's.
+    listener="$(ss -Hltnp 'sport = :15432' 2>/dev/null | sed -n 's/.*users:((\"\([^"]*\)",pid=\([0-9]*\).*/\1 (PID \2)/p' | sort -u | paste -sd ',' -)"
+    if [ -z "$listener" ] && [ -n "$(ss -Hltn 'sport = :15432' 2>/dev/null)" ]; then
+        listener="a process of another user"
+    fi
+    if [ -n "$listener" ]; then
+        echo
+        echo "==> 127.0.0.1:15432 is already taken by $listener; stop it, then run again." >&2
+        exit 1
+    fi
     keep_port_forward &
     port_forward_pid=$!
     if wait_for_port; then

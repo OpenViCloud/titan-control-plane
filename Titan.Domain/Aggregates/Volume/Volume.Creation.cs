@@ -17,17 +17,51 @@ public partial class Volume
         }
         var volume = new Volume
         {
-            Id = Guid.NewGuid(),
             TenantId = tenantId,
             Name = name,
             ClusterId = clusterId,
             VolumeOfferingId = volumeOfferingId,
             SizeGb = sizeGb,
-            Status = VolumeStatus.Creating,
-            CreatedAt = DateTimeOffset.UtcNow
         };
-        volume.Operation = volume.Operation.Asked(Guid.NewGuid(), DateTimeOffset.UtcNow, null);
+        StartItsCreate(volume);
         return volume;
+    }
+
+    /// A copy of source that an admin restores from one of source's backup archives
+    /// (titan-ops features/backup/design.md#restore-as-new-resource): a new volume of the same tenant, in source's
+    /// cluster, of its offering and size. The worker imports the archive as this volume and reports through the create,
+    /// so it waits in Creating like a volume made by Create. attachedToVmId is the restored VM this copy goes with, when
+    /// its source is restored as one of a VM's volumes: the restore is what asks for that attachment. Only a source the
+    /// Backups page lists is restored: one Incus holds under a provider id.
+    public static Volume RestoreFromBackup(Volume source, string name, Guid? attachedToVmId = null)
+    {
+        if (!source.IsOnIncus || source.ExternalId == null)
+        {
+            throw new BusinessException("BACKUP_SOURCE_INVALID_STATE", "Only a volume the provider still holds can be restored from a backup.");
+        }
+        var volume = new Volume
+        {
+            TenantId = source.TenantId,
+            Name = name,
+            ClusterId = source.ClusterId,
+            VolumeOfferingId = source.VolumeOfferingId,
+            SizeGb = source.SizeGb,
+            RestoredFromBackup = true,
+            DesiredAttachedVmId = attachedToVmId,
+        };
+        StartItsCreate(volume);
+        return volume;
+    }
+
+    /// What every new volume starts as, whichever factory builds it: its own id, and its create as the operation it
+    /// waits on, which only the create command's report ends.
+    private static void StartItsCreate(Volume volume)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        volume.Id = Guid.NewGuid();
+        volume.Status = VolumeStatus.Creating;
+        volume.CreatedAt = now;
+        volume.Operation = VolumeOperation.None.Asked(Guid.NewGuid(), now, null);
     }
 
     /// The create command ended Done: records the id, and the volume is Available. A Done must leave the volume named on

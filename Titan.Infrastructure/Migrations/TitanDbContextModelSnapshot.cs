@@ -1234,6 +1234,12 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("public_ipv6_address");
 
+                    b.Property<bool>("RestoredFromBackup")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("restored_from_backup");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1589,6 +1595,12 @@ namespace Titan.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<bool>("RestoredFromBackup")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("restored_from_backup");
 
                     b.Property<int>("SizeGb")
                         .HasColumnType("integer")

@@ -45,19 +45,40 @@ public class VolumeRepository(TitanDbContext db) : IVolumeRepository
     public async Task<int> CountActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) =>
         await db.Volumes.CountAsync(
             v => v.TenantId == tenantId
+                 && !v.RestoredFromBackup
                  && (v.Status == VolumeStatus.Creating
                      || v.Status == VolumeStatus.Available
                      || ((v.Status == VolumeStatus.Attaching || v.Status == VolumeStatus.Detaching)
                          && v.Operation.LastSeenStatus == VolumeStatus.Available)), ct);
 
-    // Volume.IsBilled
+    // !Volume.IsDeleted
     public async Task<List<Guid>> ListIdsNotDeletedAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => ids.Contains(v.Id) && v.Status != VolumeStatus.Deleted)
             .Select(v => v.Id)
             .ToListAsync(ct);
 
+    public async Task<List<Volume>> ListByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        await db.Volumes
+            .Where(v => ids.Contains(v.Id))
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    // Volume.IsBilled
     public async Task<List<Volume>> ListBillableAsync(CancellationToken ct = default) =>
+        await db.Volumes
+            .Where(v => !v.RestoredFromBackup
+                        && (v.Status == VolumeStatus.Available
+                            || ((v.Status == VolumeStatus.Creating
+                                 || v.Status == VolumeStatus.Attaching
+                                 || v.Status == VolumeStatus.Detaching
+                                 || v.Status == VolumeStatus.Deleting)
+                                && v.Operation.LastSeenStatus == VolumeStatus.Available)))
+            .AsNoTracking()
+            .ToListAsync(ct);
+
+    // Volume.IsOnIncus
+    public async Task<List<Volume>> ListOnIncusAsync(CancellationToken ct = default) =>
         await db.Volumes
             .Where(v => v.Status == VolumeStatus.Available
                      || ((v.Status == VolumeStatus.Creating

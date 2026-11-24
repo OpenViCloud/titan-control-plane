@@ -251,6 +251,11 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {cur
         Guid snapshotDeletingLost = await SeedSnapshotAsync(resting, "NotFound", pendingKind: "Delete");
 
         await MigrateToAsync(ThisMigration);
+        // The model of today reads the schema of today: core.volumes gained columns after this migration.
+        await using (TitanDbContext latest = NewDbContext())
+        {
+            await latest.Database.MigrateAsync();
+        }
 
         Volume attach = await VolumeAsync(attachingHeld);
         Assert.Equal(VolumeStatus.Attaching, attach.Status);
@@ -371,7 +376,13 @@ VALUES ({id}, {volumeId}, {Guid.NewGuid()}, {"s-" + id.ToString("N")[..8]}, {cur
     public async Task VolumesAndSnapshotsWrittenNow_StoreTheirStatusAndObservedStateByName()
     {
         await MigrateToAsync(ThisMigration);
+        // The offering is seeded in the SQL of this migration's schema; the volumes are written by today's model.
         await SeedOfferingAsync();
+        // The model of today writes to the schema of today: core.volumes gained columns after this migration.
+        await using (TitanDbContext latest = NewDbContext())
+        {
+            await latest.Database.MigrateAsync();
+        }
         Guid tenantId = Guid.NewGuid();
         Volume creating = Volume.Create(tenantId, "creating", "cluster-a", "vol-mig", 10);
         Volume holder = Volume.Create(tenantId, "holder", "cluster-a", "vol-mig", 10);

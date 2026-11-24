@@ -4,7 +4,8 @@ using Titan.Application.Commands.Admin.Vm.Contracts;
 
 namespace Titan.Infrastructure.Endpoints.Admin;
 
-// The only admin write on a tenant's resources (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write).
+// An admin write on a tenant's resources (titan-ops architecture/tenancy-and-admin.md#admin-cross-tenant-write); the
+// others are the two restores of a backup archive, beside this file.
 public class DeleteAdminVmEndpoint(DeleteAdminVmCommandHandler handler) : EndpointWithoutRequest
 {
     public override void Configure()

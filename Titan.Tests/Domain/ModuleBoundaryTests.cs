@@ -362,14 +362,21 @@ public class ModuleBoundaryTests
             + "which also releases its attached volumes. A separate path on purpose: the tenant Vm handlers require a tenant "
             + "(RequireTenantId), so reusing them would mean growing a bypass flag on the tenant path. "
             + "ScheduleBackupsCommandHandler and ListDiskBackupsQueryHandler read every tenant's VMs and volumes for the platform's "
-            + "backups (docs/features/backup/design.md#incus-backup): Platform cannot, Compute already reads Platform.",
+            + "backups (docs/features/backup/design.md#incus-backup): Platform cannot, Compute already reads Platform. "
+            + "RestoreVmFromBackupCommandHandler and RestoreVolumeFromBackupCommandHandler copy a tenant's VM or volume from "
+            + "one of its backup archives (titan-ops features/backup/design.md#restore-as-new-resource): an admin's write, kept off "
+            + "the tenant's handlers for the same reason as the delete; ListBackupRestoresQueryHandler names the VMs and volumes "
+            + "they made.",
         [("Admin", "Networking")] =
             "ListAdminNetworksQueryHandler lists networks across tenants for the admin portal (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-read).",
         [("Admin", "Platform")] =
             "DeleteAdminVmCommandHandler names the owning tenant's Incus project and writes an "
             + "admin audit entry for every cross-tenant delete (docs/architecture/tenancy-and-admin.md#admin-cross-tenant-write). "
             + "ScheduleBackupsCommandHandler names each tenant's Incus project; ListDiskBackupsQueryHandler reads the backup cache "
-            + "and its health rule (docs/features/backup/design.md#incus-backup).",
+            + "and its health rule (docs/features/backup/design.md#incus-backup). The two restore handlers read the archive they "
+            + "restore from that cache and write an admin audit entry for every VM and volume they make "
+            + "(titan-ops features/backup/design.md#restore-as-new-resource). ListBackupRestoresQueryHandler lists those restores "
+            + "from their provider command rows.",
     };
 
     // titan-ops architecture/code-structure.md#guard-sees-every-module — the anti-false-green check for the prefix table itself.

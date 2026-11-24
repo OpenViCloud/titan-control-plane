@@ -1,4 +1,5 @@
 using Titan.Domain.Values;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Moq;
 using Titan.Application.Options;
@@ -9,6 +10,8 @@ using Titan.Domain.Aggregates.VolumeOffering;
 using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Repositories;
+using Titan.Infrastructure.Persistence;
+using Titan.Infrastructure.Repositories;
 
 namespace Titan.Tests.Services;
 
@@ -82,6 +85,31 @@ public class DiskMeterServiceTests
 
     // Which volumes occupy billable storage is the rule Volume.IsBilled, which IVolumeRepository.ListBillableAsync
     // writes in SQL, pinned per situation by VolumeRepositoryStateTests.Billing_IsWhatIncusHolds_ADeleteInFlightIncluded.
+
+    // A volume an admin restored from a backup is on Incus and gets no usage record
+    // (titan-ops features/backup/design.md#restore-as-new-resource). The stub above answers whatever it is given, so
+    // this one runs the meter on the real query (InMemory, which runs the LINQ): it fails when the flag leaves the
+    // query. The SQL itself is pinned on Postgres by QueryRuleDbTests.VolumeQuotaAndBilling_FollowWhatIncusHolds.
+    [Fact]
+    public async Task RunTick_ARestoredVolume_GetsNoDiskRecord_WhileAnOrdinaryOneBesideItDoes()
+    {
+        using var db = new TitanDbContext(new DbContextOptionsBuilder<TitanDbContext>()
+            .UseInMemoryDatabase($"disk-meter-{Guid.NewGuid()}").Options);
+        var ordinary = MakeVolume(40);
+        ordinary.MarkCreated("ext-vol-1");
+        var restored = Volume.RestoreFromBackup(ordinary, "data-vol");
+        restored.MarkCreated("ext-vol-2");
+        db.Volumes.AddRange(ordinary, restored);
+        await db.SaveChangesAsync();
+        var service = new DiskMeterService(new VolumeRepository(db), _usageRepo, _offerings,
+            Options.Create(new BillingMeterOptions { IntervalMinutes = 10 }));
+
+        var inserted = await service.RunTickAsync(Now, default);
+
+        Assert.Equal(1, inserted);
+        Assert.Equal(ordinary.Id, Assert.Single(_usageRepo.All).ResourceId);
+        Assert.True(restored.IsOnIncus);
+    }
 
     // Idempotent on (volumeId, bucket), same mechanism as the compute meter.
     [Fact]

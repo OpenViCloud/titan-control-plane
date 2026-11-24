@@ -41,8 +41,11 @@ public class AdminAuditLog : IAggregateRoot
             CreatedAt = DateTimeOffset.UtcNow
         };
 
+    /// detail says what the action read or changed when the resource id alone does not, e.g. the source and the archive
+    /// of a restore ("source=<id> backup=<key>"); null when the id says it all.
     public static AdminAuditLog Create(
-        string action, string? actorKeycloakUserId, string resourceType, Guid resourceId, Guid ownerTenantId) =>
+        string action, string? actorKeycloakUserId, string resourceType, Guid resourceId, Guid ownerTenantId,
+        string? detail = null) =>
         new()
         {
             Id = Guid.NewGuid(),
@@ -52,6 +55,7 @@ public class AdminAuditLog : IAggregateRoot
             ResourceType = resourceType,
             ResourceId = resourceId,
             OwnerTenantId = ownerTenantId,
+            Detail = detail,
             CreatedAt = DateTimeOffset.UtcNow
         };
 }

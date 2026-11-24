@@ -52,6 +52,10 @@ public class ListBackupsQueryTests
         Assert.Equal(Now.AddMinutes(-3), item.LastWalAt);
         Assert.Equal(BackupHealth.Ok, item.Health);
         Assert.Equal(Now.AddMinutes(-1), result.ReadAt);
+        // The platform's database is restored by its runbook, never as a new resource: no Titan id, no archive to pick.
+        Assert.Null(item.ResourceId);
+        Assert.NotNull(item.Archives);
+        Assert.Empty(item.Archives);
     }
 
     [Fact]

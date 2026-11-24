@@ -11,7 +11,8 @@ the running host and fails when it differs from that file.
 
 ## Build and test
 
-Needs the .NET SDK pinned in [`global.json`](global.json).
+Needs a .NET 9 SDK, 9.0.200 or later ([`global.json`](global.json) pins the major): an older one cannot read the
+`.slnx` solution, and `test-all.sh` stops at once, naming the SDK it found.
 
 ```sh
 dotnet build

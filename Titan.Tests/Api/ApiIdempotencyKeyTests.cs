@@ -30,6 +30,9 @@ public class ApiIdempotencyKeyTests(OpenApiSpecTests.ApiFactory factory)
         "POST v1/tenant/api-tokens",
         "POST v1/tenant/load-balancers",
         "POST v1/admin/topups/grant",
+        // An admin's restore of a backup archive makes a VM or a volume (titan-ops features/backup/design.md#restore-as-new-resource).
+        "POST v1/admin/backups/vms/{vmId:guid}/restore",
+        "POST v1/admin/backups/volumes/{volumeId:guid}/restore",
     ];
 
     [Fact]
