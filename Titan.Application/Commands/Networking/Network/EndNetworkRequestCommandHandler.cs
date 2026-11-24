@@ -69,7 +69,8 @@ public class EndNetworkRequestCommandHandler(
         await repo.SaveAsync(ct);
     }
 
-    // A refusal (the network not Created, no rule room) logs and adds nothing: the create's Done is saved either way.
+    // Both rules or neither: a refusal (the network not Created, no room for two rules) logs and adds nothing, and the
+    // create's Done is saved either way.
     private async Task OpenSshAsync(NetworkAggregate network, CancellationToken ct)
     {
         TenantAggregate? tenant = await tenants.FindByIdAsync(network.TenantId, ct);
@@ -82,6 +83,8 @@ public class EndNetworkRequestCommandHandler(
 
         try
         {
+            // Room for the second rule too, before the first is added.
+            TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage + 1);
             await AddSshRuleAsync(network, tenant, FirewallCidr.Parse("::/0"), ct);
             await AddSshRuleAsync(network, tenant, FirewallCidr.Parse("0.0.0.0/0"), ct);
         }

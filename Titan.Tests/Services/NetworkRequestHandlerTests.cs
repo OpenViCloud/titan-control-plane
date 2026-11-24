@@ -209,6 +209,28 @@ public class NetworkRequestHandlerTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task Done_OfTheDefaultNetworksCreate_RoomForOnlyOneFirewallRule_OpensNeither_ButStillSaves()
+    {
+        Tenant noRoomOwner = TestTenant.Active("room-for-one", "kc-room-for-one");
+        noRoomOwner.UpdateQuota(TenantQuota.Create(
+            maxVms: noRoomOwner.Quota.MaxVms, maxNetworks: noRoomOwner.Quota.MaxNetworks,
+            maxVolumes: noRoomOwner.Quota.MaxVolumes, maxVmSnapshotsPerVm: noRoomOwner.Quota.MaxVmSnapshotsPerVm,
+            maxVolumeSnapshotsPerVolume: noRoomOwner.Quota.MaxVolumeSnapshotsPerVolume,
+            maxFirewallRulesPerNetwork: 1, maxPublicIpv6: noRoomOwner.Quota.MaxPublicIpv6,
+            maxSshKeys: noRoomOwner.Quota.MaxSshKeys, maxLoadBalancers: noRoomOwner.Quota.MaxLoadBalancers));
+        _tenantRepo.Setup(t => t.FindByIdAsync(noRoomOwner.Id, It.IsAny<CancellationToken>())).ReturnsAsync(noRoomOwner);
+        Network network = Given(TestAggregates.Network(noRoomOwner, "default", "cluster-1", opensSshWhenCreated: true));
+
+        await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
+            Status: "Created"));
+
+        Assert.Equal(NetworkStatus.Created, network.Status);
+        Assert.Empty(network.FirewallRules);
+        Assert.Equal(["network.created"], Outcomes());
+        _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
