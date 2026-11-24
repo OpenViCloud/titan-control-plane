@@ -13,7 +13,7 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Migrations
 {
     [DbContext(typeof(TitanDbContext))]
-    [Migration("20261124024441_RestoredFromBackup")]
+    [Migration("20261124133839_RestoredFromBackup")]
     partial class RestoredFromBackup
     {
         /// <inheritdoc />
@@ -693,6 +693,10 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("name");
+
+                    b.Property<bool>("OpensSshWhenCreated")
+                        .HasColumnType("boolean")
+                        .HasColumnName("opens_ssh_when_created");
 
                     b.Property<string>("PublicIpv6Subnet")
                         .HasColumnType("text")

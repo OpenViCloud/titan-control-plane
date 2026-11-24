@@ -1,8 +1,12 @@
 using FastEndpoints;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TenantActivation;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Options;
+using Titan.Application.Services.Networking.Network;
+using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
@@ -33,12 +37,18 @@ public class UpdateTenantStatusEndpointTests
             .Returns((Guid id, CancellationToken ct) => _tenantRepo.Object.FindByIdAsync(id, ct));
     }
 
+    // No cluster configured, so it logs a warning and gives no network: this file is about the admin's Active, not
+    // about the default network (titan-ops features/network/design.md#default-network).
+    private static DefaultNetwork NoDefaultNetwork() => new(
+        Mock.Of<INetworkRepository>(), new NetworkRoutes(Mock.Of<IClusterIpv6RouteRepository>()), new ClusterOptions(),
+        Mock.Of<IProviderCommandQueue>(), Mock.Of<IActivityRecorder>(), NullLogger<DefaultNetwork>.Instance);
+
     private UpdateTenantStatusEndpoint Endpoint(Guid tenantId) =>
         Factory.Create<UpdateTenantStatusEndpoint>(
             ctx => ctx.Request.RouteValues["tenantId"] = tenantId.ToString(),
             new UpdateTenantStatusCommandHandler(_tenantRepo.Object),
             new ActivateTenantCommandHandler(_tenantRepo.Object, _walletRepo.Object,
-                new TenantActivation(_walletRepo.Object)));
+                new TenantActivation(_walletRepo.Object), NoDefaultNetwork()));
 
     private Tenant Known(Tenant tenant)
     {

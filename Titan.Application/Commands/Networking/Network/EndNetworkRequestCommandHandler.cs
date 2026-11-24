@@ -1,12 +1,18 @@
+using Microsoft.Extensions.Logging;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.Network.Contracts;
+using Titan.Application.Services.Networking.FirewallRule;
 using Titan.Application.Services.Networking.Network;
+using Titan.Application.Services.Platform.Tenant;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
 using Titan.Domain.Services;
 using Titan.Domain.Values;
 using Titan.Application.Services;
+using FirewallRuleEntity = Titan.Domain.Aggregates.Network.FirewallRule;
+using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
+using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Commands.Networking.Network;
 
@@ -18,7 +24,10 @@ namespace Titan.Application.Commands.Networking.Network;
 public class EndNetworkRequestCommandHandler(
     INetworkRepository repo,
     NetworkRoutes routes,
-    IActivityRecorder activity)
+    ITenantRepository tenants,
+    IProviderCommandQueue commands,
+    IActivityRecorder activity,
+    ILogger<EndNetworkRequestCommandHandler> logger)
 {
     public async Task HandleAsync(EndNetworkRequestCommand command, CancellationToken ct = default)
     {
@@ -30,7 +39,7 @@ public class EndNetworkRequestCommandHandler(
             status = NetworkReports.ParseStatus(command.Status);
         }
 
-        Domain.Aggregates.Network.Network network = await repo.FindByIdForUpdateAsync(command.NetworkId, ct)
+        NetworkAggregate network = await repo.FindByIdForUpdateAsync(command.NetworkId, ct)
             ?? throw new NotFoundException("NETWORK_NOT_FOUND", "Network not found.");
 
         NetworkStatus? ended;
@@ -50,6 +59,52 @@ public class EndNetworkRequestCommandHandler(
             return;
         }
 
+        // A rule needs the network on Incus (AddFirewallRule), so the default network's SSH rules wait for this report
+        // (titan-ops features/network/design.md#default-network).
+        if (ended == NetworkStatus.Creating && network.OpensSshWhenCreated)
+        {
+            await OpenSshAsync(network, ct);
+        }
+
         await repo.SaveAsync(ct);
+    }
+
+    // Both rules or neither: a refusal (the network not Created, no room for two rules) logs and adds nothing, and the
+    // create's Done is saved either way.
+    private async Task OpenSshAsync(NetworkAggregate network, CancellationToken ct)
+    {
+        TenantAggregate? tenant = await tenants.FindByIdAsync(network.TenantId, ct);
+        if (tenant == null)
+        {
+            logger.LogWarning("Default network {NetworkId}: tenant {TenantId} not found; no SSH rule added.",
+                network.Id, network.TenantId);
+            return;
+        }
+
+        try
+        {
+            // Room for the second rule too, before the first is added.
+            TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage + 1);
+            await AddSshRuleAsync(network, tenant, FirewallCidr.Parse("::/0"), ct);
+            await AddSshRuleAsync(network, tenant, FirewallCidr.Parse("0.0.0.0/0"), ct);
+        }
+        catch (BusinessException e)
+        {
+            logger.LogWarning("Default network {NetworkId}: {Code}; SSH rule not added.", network.Id, e.Code);
+        }
+    }
+
+    private async Task AddSshRuleAsync(NetworkAggregate network, TenantAggregate tenant, FirewallCidr cidr,
+        CancellationToken ct)
+    {
+        TenantQuotaGate.EnsureHasRoom(tenant, TenantQuotaKind.FirewallRule, network.FirewallRuleQuotaUsage);
+        Guid ruleId = Guid.NewGuid();
+        OperationTicket ticket = network.AddFirewallRule(ruleId, FirewallDirection.Ingress, FirewallProtocol.TCP,
+            PortRange.Of(22, 22), cidr);
+        FirewallRuleEntity rule = NetworkOwnership.RequireFirewallRule(network, ruleId);
+        activity.StageOutcome(tenant.Id, "firewall_rule.create_requested", "firewall_rule", ruleId,
+            FirewallRuleLabel.Describe(rule));
+        await commands.EnqueueFirewallRuleCreateAsync(network, rule, ticket.OperationId,
+            TenantAggregate.ProjectNameFor(tenant.Id), ct);
     }
 }

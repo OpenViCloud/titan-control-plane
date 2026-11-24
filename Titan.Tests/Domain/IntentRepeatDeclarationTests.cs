@@ -87,6 +87,8 @@ public class IntentRepeatDeclarationTests
             new RepeatCheck(typeof(VolumeSnapshotServiceTests), nameof(VolumeSnapshotServiceTests.Delete_RepeatedOrDone_IsANoOp_EnqueuesNoCommand)),
         [typeof(DeleteNetworkCommandHandler)] =
             new RepeatCheck(typeof(NetworkServiceTests), nameof(NetworkServiceTests.Delete_Repeated_IsANoOp_RecordsNoActivity_EnqueuesNoCommand)),
+        [typeof(EndNetworkRequestCommandHandler)] =
+            new RepeatCheck(typeof(NetworkRequestHandlerTests), nameof(NetworkRequestHandlerTests.Done_OfTheDefaultNetworksCreate_Repeated_AddsNoRuleTwice)),
 
         // ── firewall ──
         [typeof(DeleteFirewallRuleCommandHandler)] =

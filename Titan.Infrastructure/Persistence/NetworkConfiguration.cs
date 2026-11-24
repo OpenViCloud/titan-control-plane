@@ -51,6 +51,7 @@ public class NetworkConfiguration : IEntityTypeConfiguration<Network>
             .HasDefaultValue(FirewallPolicy.Allow);
         builder.Property(n => n.PublicIpv6Subnet).HasColumnName("public_ipv6_subnet");
         builder.Ignore(n => n.HasPublicIpv6);
+        builder.Property(n => n.OpensSshWhenCreated).HasColumnName("opens_ssh_when_created").IsRequired();
 
         // The rules are the network's (titan-ops architecture/code-structure.md#child-entity): loaded and saved with it,
         // through the backing field so EF never needs a setter on the collection. Restrict, not cascade: no row of

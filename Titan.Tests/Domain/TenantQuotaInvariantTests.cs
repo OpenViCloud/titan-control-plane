@@ -92,12 +92,15 @@ public class TenantQuotaInvariantTests
         Assert.Equal(10, tenant.Quota.MaxPublicIpv6);
     }
 
+    // Not NewTenant(): that helper pins MaxNetworks at 1 on purpose, for the "network" row of Guards() above, whose
+    // cap must stay independent of whatever TenantQuota.DefaultMaxNetworks is today. This test is about
+    // CreatePending's own implicit defaults, so it calls it with none of its optional arguments given.
     [Fact]
     public void NewTenant_GetsTheFormerServiceConstants()
     {
-        var q = NewTenant().Quota;
+        var q = TenantAggregate.CreatePending("acme", "kc-1").Quota;
         Assert.Equal(10, q.MaxVms);
-        Assert.Equal(1, q.MaxNetworks);
+        Assert.Equal(2, q.MaxNetworks);
         Assert.Equal(10, q.MaxVolumes);
         Assert.Equal(3, q.MaxVmSnapshotsPerVm);
         Assert.Equal(3, q.MaxVolumeSnapshotsPerVolume);

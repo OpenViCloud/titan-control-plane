@@ -1,5 +1,6 @@
 using Titan.Application.Commands.Billing.TenantActivation.Contracts;
 using Titan.Application.Services.Billing;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -14,7 +15,8 @@ namespace Titan.Application.Commands.Billing.TenantActivation;
 public class ActivateTenantCommandHandler(
     ITenantRepository tenants,
     IWalletRepository wallets,
-    ActivationService activation)
+    ActivationService activation,
+    DefaultNetwork defaultNetwork)
 {
     public async Task HandleAsync(ActivateTenantCommand command, CancellationToken ct = default)
     {
@@ -29,7 +31,10 @@ public class ActivateTenantCommandHandler(
         }
 
         await activation.ActivateAsync(tenant, BillingConstants.DefaultCurrency, ct);
-        // The wallet repository's save, since the wallet is the one insert here.
+        // A tenant coming back from Suspended or Rejected that ever had a network gets none
+        // (titan-ops features/network/design.md#default-network).
+        await defaultNetwork.GiveIfNeverHadOneAsync(tenant, ct);
+        // The wallet repository's save: the wallet, the network and its command share its DbContext.
         await wallets.SaveChangesAsync(ct);
     }
 }

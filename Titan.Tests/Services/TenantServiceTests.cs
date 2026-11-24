@@ -1,9 +1,13 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TenantActivation.Contracts;
 using Titan.Application.Commands.Platform.Tenant.Contracts;
 using Titan.Application.Options;
+using Titan.Application.Services.Networking.Network;
 using ActivationCmd = Titan.Application.Commands.Billing.TenantActivation;
 using TenantCmd = Titan.Application.Commands.Platform.Tenant;
+using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Exceptions;
@@ -35,6 +39,12 @@ public class TenantServiceTests
     // forwards and adds nothing.
     private TenantFacade CreateService() => new(_repo.Object, _wallets.Object);
 
+    // No cluster configured, so it logs a warning and gives no network: this file is about the tenant command
+    // handlers, not about the default network (titan-ops features/network/design.md#default-network).
+    private static DefaultNetwork NoDefaultNetwork() => new(
+        Mock.Of<INetworkRepository>(), new NetworkRoutes(Mock.Of<IClusterIpv6RouteRepository>()), new ClusterOptions(),
+        Mock.Of<IProviderCommandQueue>(), Mock.Of<IActivityRecorder>(), NullLogger<DefaultNetwork>.Instance);
+
     private sealed class TenantFacade(ITenantRepository repo, IWalletRepository wallets)
     {
         public Task BootstrapAsync(string keycloakUserId, string username, CancellationToken ct = default)
@@ -42,11 +52,11 @@ public class TenantServiceTests
                 .HandleAsync(new BootstrapTenantCommand(keycloakUserId, username), ct);
 
         public Task ApproveDeclaredAccountAsync(Guid tenantId, CancellationToken ct = default)
-            => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets))
+            => new ActivationCmd.ApproveDeclaredAccountCommandHandler(repo, wallets, new TenantActivation(wallets), NoDefaultNetwork())
                 .HandleAsync(new ApproveDeclaredAccountCommand(tenantId), ct);
 
         public Task ActivateAsync(Guid tenantId, CancellationToken ct = default)
-            => new ActivationCmd.ActivateTenantCommandHandler(repo, wallets, new TenantActivation(wallets))
+            => new ActivationCmd.ActivateTenantCommandHandler(repo, wallets, new TenantActivation(wallets), NoDefaultNetwork())
                 .HandleAsync(new ActivateTenantCommand(tenantId), ct);
 
         public Task UpdateStatusAsync(Guid tenantId, string status, CancellationToken ct = default)

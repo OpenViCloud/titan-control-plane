@@ -16,23 +16,21 @@
 # money-path concurrency guards, so a run without them is not a pass.
 #
 # Usage:  ./test-all.sh [--no-build]
-# Exit:   0 every step ran and passed · 1 a step failed, the SDK on PATH cannot read Titan.slnx, or port 15432 was
-#         already taken before the tunnel opened · 2 full-host and integration did not run, or the port-forward to
-#         the dev database died during them
+# Exit:   0 every step ran and passed · 1 a step failed · 2 full-host and integration did not run, or the
+#         port-forward to the dev database died during them
 set -uo pipefail
 
 cd "$(dirname "$0")"
 
-# An SDK older than 9.0.200 cannot read the .slnx solution, which every dotnet command below reads, --no-build
-# included: stop before them, naming the SDK that was found.
-if ! dotnet sln Titan.slnx list >/dev/null 2>&1; then
-    found="$(command -v dotnet || echo 'no dotnet on PATH')"
-    version="$(dotnet --version 2>/dev/null || echo 'unknown')"
-    echo "==> the .NET SDK on PATH ($found, SDK $version) cannot read Titan.slnx: it does not know the .slnx solution format." >&2
-    echo "    Put an SDK >= 9.0.200 first on PATH, e.g. when one is installed in ~/.dotnet:" >&2
-    echo "        export DOTNET_ROOT=\$HOME/.dotnet PATH=\$HOME/.dotnet:\$PATH" >&2
+# Titan.slnx needs SDK 9.0.200 or later; global.json says so, and a machine without one fails here with dotnet's own
+# reason instead of MSB1003 halfway through the build.
+if ! sdk_version="$(dotnet --version 2>&1)"; then
+    echo "==> no installed .NET SDK satisfies global.json (9.0.200 or later in 9.0, to read Titan.slnx):"
+    echo "$sdk_version"
+    echo "    install one (https://dotnet.microsoft.com/download/dotnet/9.0) or put its dotnet first on PATH"
     exit 1
 fi
+echo "==> .NET SDK $sdk_version"
 
 BUILD_ARG="${1:-}"
 if [ "$BUILD_ARG" != "--no-build" ]; then
@@ -44,9 +42,10 @@ failed=0
 
 run_step() {
     local label="$1" filter="$2"
+    shift 2
     echo
     echo "==> $label"
-    if ! dotnet test --no-build --filter "$filter"; then
+    if ! dotnet test --no-build --filter "$filter" "$@"; then
         failed=1
     fi
 }
@@ -99,23 +98,36 @@ for _ in range(60):
 sys.exit(1)'
 }
 
+# Something else on 15432 (a tunnel left by an earlier run) would take the tests' connections; the loop below would
+# count its own failing kubectl as a dead tunnel.
+port_15432_owner() {
+    lsof -nP -iTCP:15432 -sTCP:LISTEN 2>/dev/null
+}
+
+# What the dev database pod and the VM under it were doing when the tunnel died.
+report_dev_database() {
+    echo "==> titan-db pods:"
+    kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-dev get pods -o wide 2>&1
+    kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-dev describe pods 2>&1 \
+        | grep -E '^Name:|Restart Count|Last State|Reason|Liveness|Readiness|Unhealthy|OOMKilled'
+    if command -v limactl >/dev/null 2>&1; then
+        echo "==> titan-k3s memory:"
+        limactl shell titan-k3s -- free -m 2>&1
+    fi
+}
+
 integration_source=""
 if [ -n "${TITAN_IT_POSTGRES:-}" ]; then
     integration_source="TITAN_IT_POSTGRES (already set)"
 elif [ -f "$DEV_KUBECONFIG" ] && kubectl --kubeconfig "$DEV_KUBECONFIG" --request-timeout=10s -n titan-db-dev get svc titan-db-rw >/dev/null 2>&1; then
-    server=$(kubectl --kubeconfig "$DEV_KUBECONFIG" config view --minify -o 'jsonpath={.clusters[0].cluster.server}')
-    # Something already listening on 15432 (a tunnel left by an earlier run, another database) would answer
-    # wait_for_port in place of the tunnel, and the tests would run against it; it is not a tunnel that died.
-    # ss sees every listening socket, another user's too; it names the process only for this user's.
-    listener="$(ss -Hltnp 'sport = :15432' 2>/dev/null | sed -n 's/.*users:((\"\([^"]*\)",pid=\([0-9]*\).*/\1 (PID \2)/p' | sort -u | paste -sd ',' -)"
-    if [ -z "$listener" ] && [ -n "$(ss -Hltn 'sport = :15432' 2>/dev/null)" ]; then
-        listener="a process of another user"
-    fi
-    if [ -n "$listener" ]; then
+    owner="$(port_15432_owner)"
+    if [ -n "$owner" ]; then
         echo
-        echo "==> port 15432 is already taken by $listener; stop it, then run again." >&2
+        echo "==> 127.0.0.1:15432 is already taken; stop that process and run again:"
+        echo "$owner"
         exit 1
     fi
+    server=$(kubectl --kubeconfig "$DEV_KUBECONFIG" config view --minify -o 'jsonpath={.clusters[0].cluster.server}')
     keep_port_forward &
     port_forward_pid=$!
     if wait_for_port; then
@@ -149,6 +161,7 @@ tunnel_opens() {
 
 run_db_step() {
     local label="$1" filter="$2"
+    shift 2
     if [ -n "$tunnel_died_in" ]; then
         echo
         echo "==> $label: skipped, the port-forward died during $tunnel_died_in"
@@ -158,15 +171,17 @@ run_db_step() {
         tunnel_died_in="the gap before $label"
         echo
         echo "==> $label: skipped, the port-forward to the dev database is gone"
+        report_dev_database
         return
     fi
     local failed_before="$failed" opens_before
     opens_before="$(tunnel_opens)"
-    run_step "$label" "$filter"
+    run_step "$label" "$filter" "$@"
     if ! tunnel_alive || [ "$(tunnel_opens)" != "$opens_before" ]; then
         tunnel_died_in="$label"
         failed="$failed_before"
         echo "==> $label: the port-forward to the dev database died during this step; its failures are not counted"
+        report_dev_database
     fi
 }
 
@@ -176,7 +191,8 @@ if [ -n "$integration_source" ]; then
     echo
     echo "==> Postgres for full-host and integration: $integration_source"
     run_db_step "full-host" 'Category=FullHost'
-    run_db_step "integration" 'Category=Integration'
+    # A dead database hangs a test instead of failing it: the hang dump ends the step after 10 minutes.
+    run_db_step "integration" 'Category=Integration' --blame-hang-timeout 10m
 fi
 
 echo
