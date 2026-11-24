@@ -2,7 +2,8 @@ using Titan.Domain.Aggregates.Tenant;
 
 namespace Titan.Tests;
 
-// A tenant the way a signup and an approval make one. A handler test about a cap sets the cap it means to hit on it
+// A tenant the way a signup and an approval make one, except MaxNetworks: 1 here unless a test asks, where a signup now
+// gets TenantQuota.DefaultMaxNetworks. A handler test about a cap sets the cap it means to hit on it
 // (titan-ops architecture/code-structure.md#quota-gate).
 internal static class TestTenant
 {

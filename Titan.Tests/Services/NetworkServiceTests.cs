@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Networking.Network;
@@ -77,7 +78,8 @@ public class NetworkServiceTests
     // command ended, and the reconciler's observation.
     private Task EndAsync(Guid networkId, Guid requestId, string outcome, string? externalId = null, string? cidr = null,
         string? gateway = null, string? reason = null) =>
-        new EndNetworkRequestCommandHandler(_repo.Object, new Titan.Domain.Services.NetworkRoutes(_routes.Object), _activity)
+        new EndNetworkRequestCommandHandler(_repo.Object, new Titan.Domain.Services.NetworkRoutes(_routes.Object),
+                _tenantRepo.Object, _commands.Object, _activity, NullLogger<EndNetworkRequestCommandHandler>.Instance)
             .HandleAsync(new EndNetworkRequestCommand(networkId, requestId, outcome, externalId, null, cidr, gateway, reason,
                 reason == null ? null : "raw incus error"));
 

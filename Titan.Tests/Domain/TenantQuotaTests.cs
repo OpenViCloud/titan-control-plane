@@ -105,7 +105,7 @@ public class TenantQuotaTests
     {
         var d = TenantQuota.Default;
         Assert.Equal(10, d.MaxVms);
-        Assert.Equal(1, d.MaxNetworks);
+        Assert.Equal(2, d.MaxNetworks);
         Assert.Equal(10, d.MaxVolumes);
         Assert.Equal(3, d.MaxVmSnapshotsPerVm);
         Assert.Equal(3, d.MaxVolumeSnapshotsPerVolume);

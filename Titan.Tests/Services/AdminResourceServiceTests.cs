@@ -387,6 +387,7 @@ file sealed class StubNetworkRepo(params Network[] seed) : INetworkRepository
     public Task<int> CountPublicIpv6ActiveByTenantAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasLiveLoadBalancersAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> ExistsByNameAsync(Guid tenantId, NetworkName name, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> HasEverHadOneAsync(Guid tenantId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasActiveVmsAsync(Guid networkId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<bool> HasCidrOverlapAsync(Guid tenantId, Ipv4Cidr cidr, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<List<Network>> ListReconcilableAsync(string clusterId, CancellationToken ct = default) => throw new NotSupportedException();

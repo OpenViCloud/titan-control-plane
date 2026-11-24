@@ -2,10 +2,14 @@ using Microsoft.AspNetCore.Http.Features;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using Titan.Application.Abstractions;
 using Titan.Application.Commands.Billing.TenantActivation;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Application.Options;
+using Titan.Application.Services.Networking.Network;
+using Titan.Domain.Aggregates.ClusterIpv6Route;
 using Titan.Domain.Aggregates.Wallet;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Repositories;
@@ -27,6 +31,12 @@ public class TenantResolutionMiddlewareTests
             .Returns((Guid id, CancellationToken ct) => _repo.Object.FindByIdAsync(id, ct));
     }
 
+    // No cluster configured, so it logs a warning and gives no network: this file is about bootstrap and approval,
+    // not about the default network (titan-ops features/network/design.md#default-network).
+    private static DefaultNetwork NoDefaultNetwork() => new(
+        Mock.Of<INetworkRepository>(), new NetworkRoutes(Mock.Of<IClusterIpv6RouteRepository>()), new ClusterOptions(),
+        Mock.Of<IProviderCommandQueue>(), Mock.Of<IActivityRecorder>(), NullLogger<DefaultNetwork>.Instance);
+
     // The middleware takes the two concrete command handlers (nothing to mock), so they run for real over the
     // repository mocks. "Bootstrap ran with X" is read off the tenant it added; "the wallet was opened" off the
     // wallet it added.
@@ -34,7 +44,7 @@ public class TenantResolutionMiddlewareTests
         _repo.Object,
         new BootstrapTenantCommandHandler(_repo.Object),
         new ApproveDeclaredAccountCommandHandler(_repo.Object, _walletRepo.Object,
-            new TenantActivation(_walletRepo.Object)));
+            new TenantActivation(_walletRepo.Object), NoDefaultNetwork()));
 
     private void VerifyNoWalletOpened() =>
         _walletRepo.Verify(w => w.Add(It.IsAny<Wallet>()), Times.Never);

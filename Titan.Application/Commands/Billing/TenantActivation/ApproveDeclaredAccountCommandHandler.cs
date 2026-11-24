@@ -1,5 +1,6 @@
 using Titan.Application.Commands.Billing.TenantActivation.Contracts;
 using Titan.Application.Services.Billing;
+using Titan.Application.Services.Networking.Network;
 using Titan.Domain.Aggregates.Tenant;
 using Titan.Domain.Repositories;
 using ActivationService = Titan.Domain.Services.TenantActivation;
@@ -13,7 +14,8 @@ namespace Titan.Application.Commands.Billing.TenantActivation;
 public class ApproveDeclaredAccountCommandHandler(
     ITenantRepository tenants,
     IWalletRepository wallets,
-    ActivationService activation)
+    ActivationService activation,
+    DefaultNetwork defaultNetwork)
 {
     public async Task HandleAsync(ApproveDeclaredAccountCommand command, CancellationToken ct = default)
     {
@@ -24,10 +26,12 @@ public class ApproveDeclaredAccountCommandHandler(
         if (tenant != null && tenant.IsPendingApproval)
         {
             await activation.ApproveAsync(tenant, BillingConstants.DefaultCurrency, ct);
+            // titan-ops features/network/design.md#default-network
+            await defaultNetwork.GiveIfNeverHadOneAsync(tenant, ct);
         }
 
         // Also when nothing changed: the save ends the lock's transaction, and the request goes on past the middleware.
-        // The wallet repository's save, since the wallet is the one insert here.
+        // The wallet repository's save: the wallet, the network and its command share its DbContext.
         await wallets.SaveChangesAsync(ct);
     }
 }

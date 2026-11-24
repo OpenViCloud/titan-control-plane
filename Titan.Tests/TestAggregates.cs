@@ -16,7 +16,8 @@ internal static class TestAggregates
         Tenant owner, string name, string clusterId,
         FirewallPolicy defaultIngressPolicy = NetworkAggregate.NewNetworkIngressPolicy,
         FirewallPolicy defaultEgressPolicy = NetworkAggregate.NewNetworkEgressPolicy,
-        string? requestedCidr = null)
+        string? requestedCidr = null,
+        bool opensSshWhenCreated = false)
     {
         Ipv4Cidr? requested = null;
         if (requestedCidr != null)
@@ -24,7 +25,8 @@ internal static class TestAggregates
             requested = Ipv4Cidr.Parse(requestedCidr);
         }
         return NetworkAggregate.Create(
-            owner.Id, NetworkName.Parse(name), clusterId, requested, false, defaultIngressPolicy, defaultEgressPolicy);
+            owner.Id, NetworkName.Parse(name), clusterId, requested, false, defaultIngressPolicy, defaultEgressPolicy,
+            opensSshWhenCreated);
     }
 
     internal static VmSnapshot WithSnapshot(this Vm vm, string name)

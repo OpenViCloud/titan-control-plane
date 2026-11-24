@@ -20,7 +20,8 @@ public partial class Network
         Guid tenantId, NetworkName name, string clusterId,
         Ipv4Cidr? chosenCidr, bool wantsPublicIpv6,
         FirewallPolicy defaultIngressPolicy = NewNetworkIngressPolicy,
-        FirewallPolicy defaultEgressPolicy = NewNetworkEgressPolicy)
+        FirewallPolicy defaultEgressPolicy = NewNetworkEgressPolicy,
+        bool opensSshWhenCreated = false)
     {
         bool cidrOutsideThePrivateRanges = wantsPublicIpv6 && chosenCidr != null && !chosenCidr.IsInsideAPrivateRange;
         if (cidrOutsideThePrivateRanges)
@@ -38,6 +39,7 @@ public partial class Network
             Status = NetworkStatus.Creating,
             DefaultIngressPolicy = defaultIngressPolicy,
             DefaultEgressPolicy = defaultEgressPolicy,
+            OpensSshWhenCreated = opensSshWhenCreated,
             CreatedAt = DateTimeOffset.UtcNow
         };
         network.Operation = network.Operation.Asked(Guid.NewGuid(), DateTimeOffset.UtcNow, null);
