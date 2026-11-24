@@ -1183,6 +1183,8 @@ public class ProviderCommandQueueTests
             }
             case ProviderCommandKinds.TemplateSync:
                 return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
+            case ProviderCommandKinds.ClusterBackup:
+                return queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
             case ProviderCommandKinds.RestoreDrill:
                 return queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", project, Guid.NewGuid());
             case ProviderCommandKinds.VmRestore:
@@ -1231,6 +1233,7 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.LoadBalancerUpdate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
         { ProviderCommandKinds.LoadBalancerDelete, ["externalNetworkId", "loadBalancerId", "projectName", "requestId", "vip"] },
         { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
+        { ProviderCommandKinds.ClusterBackup, [] },
         { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },
         { ProviderCommandKinds.VmRestore, ["backupKey", "diskSizeGb", "name", "projectName", "requestId", "sourceVmId", "tenantId", "vmId", "volumes"] },
         { ProviderCommandKinds.VolumeRestore, ["backupKey", "name", "newVolumeId", "projectName", "requestId", "sizeGb", "sourceVolumeId", "tenantId"] },
@@ -1247,6 +1250,21 @@ public class ProviderCommandQueueTests
         Assert.Equal("mock", row.ClusterId);
         using JsonDocument payload = JsonDocument.Parse(row.Payload);
         Assert.Equal(fields, payload.RootElement.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal).ToArray());
+    }
+
+    // A kind with no row above would carry any payload unchecked.
+    [Fact]
+    public void FieldsTheWorkerReads_HasARowForEveryKind()
+    {
+        string[] everyKind = typeof(ProviderCommandKinds)
+            .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            .Where(f => f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f.GetRawConstantValue()!)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        string[] listed = FieldsTheWorkerReads().Select(row => (string)row[0]).Order(StringComparer.Ordinal).ToArray();
+
+        Assert.Equal(everyKind, listed);
     }
 
     // A load balancer backend is named by its instance: the worker reads its address from Incus
