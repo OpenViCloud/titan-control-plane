@@ -4,7 +4,7 @@ using Titan.Application.Commands.Networking.Network.Contracts;
 namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
-/// BackfillDefaultNetworksCommandHandler as a job; no CronJob calls it (titan-ops features/network/design.md#default-network).
+/// BackfillDefaultNetworksCommandHandler as a job; its CronJob is suspended, run by hand (titan-ops features/network/design.md#default-network).
 /// </summary>
 public class DefaultNetworkBackfillService(BackfillDefaultNetworksCommandHandler handler) : IScheduledJob
 {

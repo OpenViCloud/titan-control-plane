@@ -8,7 +8,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 namespace Titan.Application.Commands.Networking.Network;
 
 /// Every Active tenant: MaxNetworks 1 becomes 2, and DefaultNetwork gives the network it never had
-/// (titan-ops features/network/design.md#default-network). No CronJob; a second run gives nothing twice. One save per
+/// (titan-ops features/network/design.md#default-network). Its CronJob is suspended, run by hand; a second run gives nothing twice. One save per
 /// tenant: a second GiveAsync on the same DbContext before a save can pick the route the first one handed out, still
 /// tracked as free by that query, and HandTo throws.
 public class BackfillDefaultNetworksCommandHandler(
