@@ -12,7 +12,7 @@ using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 namespace Titan.Application.Services.Networking.Network;
 
 /// The Ingress TCP rules the default network opens from anywhere (titan-ops features/network/design.md#default-network):
-/// every port when its create ends, and the web ports on a default network made before it opened them.
+/// TCP 22, 80 and 443 when its create ends, and TCP 80 and 443 on a default network made before it opened them.
 public static class DefaultNetworkPorts
 {
     public static readonly IReadOnlyList<int> WhenCreated = [22, 80, 443];
@@ -20,18 +20,19 @@ public static class DefaultNetworkPorts
 
     private static readonly IReadOnlyList<string> FromAnywhere = ["::/0", "0.0.0.0/0"];
 
-    /// Adds the rules of these ports the network lacks, all or none: a refusal (the network not Created, no room for
-    /// every one of them) logs and adds nothing. Never saves; returns how many it added.
-    public static async Task<int> OpenAsync(NetworkAggregate network, TenantAggregate tenant, IReadOnlyList<int> ports,
+    /// Adds the rules of these ports the network never had, all or none: a refusal (the network not Created, no room for
+    /// every one of them) logs and adds nothing. A rule its owner deleted, or one that failed, counts as had: a later
+    /// backfill never opens again what the owner closed. Never saves.
+    public static async Task OpenAsync(NetworkAggregate network, TenantAggregate tenant, IReadOnlyList<int> ports,
         IProviderCommandQueue commands, IActivityRecorder activity, ILogger logger, CancellationToken ct)
     {
         List<(int Port, FirewallCidr Cidr)> missing = ports
             .SelectMany(port => FromAnywhere.Select(cidr => (Port: port, Cidr: FirewallCidr.Parse(cidr))))
-            .Where(wanted => !network.FirewallRules.Any(r => !r.IsDeletedOrDeleting && IsOpening(r, wanted.Port, wanted.Cidr)))
+            .Where(wanted => !network.FirewallRules.Any(r => IsOpening(r, wanted.Port, wanted.Cidr)))
             .ToList();
         if (missing.Count == 0)
         {
-            return 0;
+            return;
         }
 
         try
@@ -54,9 +55,7 @@ public static class DefaultNetworkPorts
         {
             logger.LogWarning("Default network {NetworkId}: {Code}; its {Count} rules not added.", network.Id, e.Code,
                 missing.Count);
-            return 0;
         }
-        return missing.Count;
     }
 
     private static bool IsOpening(FirewallRuleEntity rule, int port, FirewallCidr cidr) =>

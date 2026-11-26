@@ -13,10 +13,9 @@ using Titan.Application.Commands.Networking.FirewallRule;
 using Titan.Application.Commands.Networking.Network;
 using Titan.Application.Commands.Platform.Tenant;
 using Titan.Infrastructure.Auth;
+using Titan.Tests.Infrastructure.Integration;
 using Titan.Tests.Services;
 using Xunit.Sdk;
-
-using Titan.Tests.Infrastructure.Integration;
 
 namespace Titan.Tests.Domain;
 
@@ -93,7 +92,7 @@ public class IntentRepeatDeclarationTests
             new RepeatCheck(typeof(NetworkRequestHandlerTests), nameof(NetworkRequestHandlerTests.Done_OfTheDefaultNetworksCreate_Repeated_AddsNoRuleTwice)),
         [typeof(BackfillDefaultNetworksCommandHandler)] =
             new RepeatCheck(typeof(BackfillDefaultNetworksDbTests),
-                nameof(BackfillDefaultNetworksDbTests.ADefaultNetworkMadeBeforeTheWebPorts_GetsTcp80And443FromAnywhere_NotTcp22Again_AndASecondPassAddsNothing)),
+                nameof(BackfillDefaultNetworksDbTests.ADefaultNetworkMadeBeforeTheWebPorts_GetsTheWebRulesItNeverHad_NotTcp22_NorOneItsOwnerDeleted_AndASecondPassAddsNothing)),
 
         // ── firewall ──
         [typeof(DeleteFirewallRuleCommandHandler)] =
