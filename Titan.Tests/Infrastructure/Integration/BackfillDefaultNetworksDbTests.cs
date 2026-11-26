@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Titan.Domain.Aggregates.ProviderCommand;
 using Titan.Application.Commands.Networking.Network;
 using Titan.Application.Commands.Networking.Network.Contracts;
 using Titan.Application.Options;
@@ -19,7 +20,8 @@ namespace Titan.Tests.Infrastructure.Integration;
 /// The backfill job BackfillDefaultNetworksCommandHandler (titan-ops features/network/design.md#default-network):
 /// A pass gives every tenant Active and never-had-one its default network and raises a MaxNetworks still at 1
 /// to 2; a tenant with a network of its own gets no second one; a Pending tenant is untouched; a second pass changes
-/// nothing more. A tenant whose default network it once had, now Deleted, does not get another.
+/// nothing more. A tenant whose default network it once had, now Deleted, does not get another. A default network made
+/// before it opened TCP 80 and 443 gets the rules it lacks, TCP 22 never again, nothing without room for all of them.
 /// Category=Integration — its own CI step; needs real Postgres.
 [Trait("Category", "Integration")]
 [Collection(PostgresCollection.Name)]
@@ -48,7 +50,11 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
             new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System),
             new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Guid.NewGuid())),
             NullLogger<DefaultNetwork>.Instance);
-        var handler = new BackfillDefaultNetworksCommandHandler(tenants, new PostgresJobPassLock(db), defaultNetwork);
+        var networks = new NetworkRepository(db);
+        var activity = new ActivityRecorder(new ActivityEventRepository(db), Callers.TenantMember(Guid.NewGuid()));
+        var commands = new ProviderCommandQueue(new ProviderCommandRepository(db), TimeProvider.System);
+        var handler = new BackfillDefaultNetworksCommandHandler(tenants, networks, new PostgresJobPassLock(db), defaultNetwork,
+            commands, activity, NullLogger<BackfillDefaultNetworksCommandHandler>.Instance);
         await handler.HandleAsync(new BackfillDefaultNetworksCommand());
     }
 
@@ -117,5 +123,82 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
         List<Network> networks = await read.Networks.Where(n => n.TenantId == tenant.Id).ToListAsync();
         Network only = Assert.Single(networks);
         Assert.Equal(NetworkStatus.Deleted, only.Status);
+    }
+
+    // A default network made when only TCP 22 opened, one of whose two SSH rules its owner deleted.
+    private static Network CreatedDefaultNetworkWithOneSshRule(Tenant tenant, string cluster)
+    {
+        Network network = Network.Create(tenant.Id, NetworkName.Parse("default"), cluster, null, wantsPublicIpv6: false,
+            opensSshWhenCreated: true);
+        network.CreateSucceeded(network.Operation.PendingId!.Value, "net-" + Guid.NewGuid().ToString("N")[..8],
+            NetworkStatus.Created, null, null);
+        network.AddFirewallRule(Guid.NewGuid(), FirewallDirection.Ingress, FirewallProtocol.TCP, PortRange.Of(22, 22),
+            FirewallCidr.Parse("::/0"));
+        return network;
+    }
+
+    private static async Task<List<string>> RulesOfAsync(TitanDbContext db, Guid networkId) =>
+        (await db.FirewallRules.Where(r => r.NetworkId == networkId).ToListAsync())
+        .Select(r => $"{r.Direction} {r.Protocol} {r.StartPort}-{r.EndPort} {r.Cidr.Value}")
+        .OrderBy(s => s, StringComparer.Ordinal)
+        .ToList();
+
+    [Fact]
+    public async Task ADefaultNetworkMadeBeforeTheWebPorts_GetsTcp80And443FromAnywhere_NotTcp22Again_AndASecondPassAddsNothing()
+    {
+        string cluster = "cluster-" + Guid.NewGuid().ToString("N")[..12];
+        Tenant tenant = TestTenant.Active("backfill-web-" + Guid.NewGuid().ToString("N")[..8], "kc-" + Guid.NewGuid());
+        Network defaultNetwork = CreatedDefaultNetworkWithOneSshRule(tenant, cluster);
+        Network own = Network.Create(tenant.Id, NetworkName.Parse("own"), cluster, null, wantsPublicIpv6: false);
+        own.CreateSucceeded(own.Operation.PendingId!.Value, "net-own", NetworkStatus.Created, null, null);
+
+        await using (TitanDbContext seed = pg.NewDbContext())
+        {
+            seed.Tenants.Add(tenant);
+            await seed.SaveChangesAsync();
+            await new ClusterIpv6RouteRepository(seed).EnsureRoutesAsync(cluster);
+            seed.Networks.AddRange(defaultNetwork, own);
+            await seed.SaveChangesAsync();
+        }
+
+        await RunAsync(cluster);
+        await RunAsync(cluster);
+
+        await using TitanDbContext read = pg.NewDbContext();
+        Assert.Equal(
+            ["Ingress TCP 22-22 ::/0", "Ingress TCP 443-443 0.0.0.0/0", "Ingress TCP 443-443 ::/0",
+                "Ingress TCP 80-80 0.0.0.0/0", "Ingress TCP 80-80 ::/0"],
+            await RulesOfAsync(read, defaultNetwork.Id));
+        Assert.Empty(await RulesOfAsync(read, own.Id));
+        Assert.Equal(4, await read.ProviderCommands.CountAsync(c =>
+            c.TenantId == tenant.Id && c.Kind == ProviderCommandKinds.FirewallRuleCreate));
+    }
+
+    [Fact]
+    public async Task ADefaultNetworkWithoutRoomForAllFourWebRules_GetsNone()
+    {
+        string cluster = "cluster-" + Guid.NewGuid().ToString("N")[..12];
+        Tenant tenant = TestTenant.Active("backfill-full-" + Guid.NewGuid().ToString("N")[..8], "kc-" + Guid.NewGuid());
+        tenant.UpdateQuota(TenantQuota.Create(
+            maxVms: tenant.Quota.MaxVms, maxNetworks: tenant.Quota.MaxNetworks, maxVolumes: tenant.Quota.MaxVolumes,
+            maxVmSnapshotsPerVm: tenant.Quota.MaxVmSnapshotsPerVm,
+            maxVolumeSnapshotsPerVolume: tenant.Quota.MaxVolumeSnapshotsPerVolume,
+            maxFirewallRulesPerNetwork: 4, maxPublicIpv6: tenant.Quota.MaxPublicIpv6,
+            maxSshKeys: tenant.Quota.MaxSshKeys, maxLoadBalancers: tenant.Quota.MaxLoadBalancers));
+        Network defaultNetwork = CreatedDefaultNetworkWithOneSshRule(tenant, cluster);
+
+        await using (TitanDbContext seed = pg.NewDbContext())
+        {
+            seed.Tenants.Add(tenant);
+            await seed.SaveChangesAsync();
+            await new ClusterIpv6RouteRepository(seed).EnsureRoutesAsync(cluster);
+            seed.Networks.Add(defaultNetwork);
+            await seed.SaveChangesAsync();
+        }
+
+        await RunAsync(cluster);
+
+        await using TitanDbContext read = pg.NewDbContext();
+        Assert.Equal(["Ingress TCP 22-22 ::/0"], await RulesOfAsync(read, defaultNetwork.Id));
     }
 }

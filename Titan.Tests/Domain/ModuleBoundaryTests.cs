@@ -356,8 +356,9 @@ public class ModuleBoundaryTests
             "CreateNetworkCommandHandler needs the tenant for quota, and the cluster for the "
             + "uplink and IPv6 block a public /64 comes from (docs/infra/incus/design.md#ipv6-address-plan); "
             + "CreateFirewallRuleCommandHandler needs it for the per-network rule cap (docs/architecture/tenancy-and-admin.md#tenant-quota). "
-            + "EndNetworkRequestCommandHandler needs it to gate and name the default network's own SSH rules when its create "
-            + "reports Done; BackfillDefaultNetworksCommandHandler needs it to list and lock the Active tenants it gives one to "
+            + "EndNetworkRequestCommandHandler needs it to gate and name the default network's own rules when its create "
+            + "reports Done; BackfillDefaultNetworksCommandHandler needs it to list and lock the Active tenants it gives one to, "
+            + "and to gate the web rules it adds to their default networks "
             + "(titan-ops features/network/design.md#default-network).",
 
         // Admin reads outward into three modules and nothing reads back into Admin

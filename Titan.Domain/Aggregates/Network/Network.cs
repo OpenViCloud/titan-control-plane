@@ -80,7 +80,7 @@ public partial class Network : IAggregateRoot
     // IPv6. Which route it is, and when it goes back, is the route's to know (ClusterIpv6Route).
     public string? PublicIpv6Subnet { get; private set; }
 
-    /// Only the default network: its create's Done opens TCP 22 inbound (titan-ops features/network/design.md#default-network).
+    /// Only the default network: its create's Done opens TCP 22, 80 and 443 inbound (titan-ops features/network/design.md#default-network).
     public bool OpensSshWhenCreated { get; private set; }
 
     public bool HasPublicIpv6 => PublicIpv6Subnet != null;

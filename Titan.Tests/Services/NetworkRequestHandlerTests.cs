@@ -120,28 +120,28 @@ public class NetworkRequestHandlerTests
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ---------- the default network's own SSH rules (titan-ops features/network/design.md#default-network) ----------
+    // ---------- the default network's own rules: TCP 22, 80, 443 (titan-ops features/network/design.md#default-network) ----------
 
     private static Network NewDefaultNetwork() => TestAggregates.Network(Owner, "default", "cluster-1", opensSshWhenCreated: true);
 
     [Fact]
-    public async Task Done_OfTheDefaultNetworksCreate_WhenCreated_OpensTcp22FromAnywhere_AndSavesOnce()
+    public async Task Done_OfTheDefaultNetworksCreate_WhenCreated_OpensTcp22_80_443FromAnywhere_AndSavesOnce()
     {
         Network network = Given(NewDefaultNetwork());
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, network.Operation.PendingId!.Value, "Done", "net-ext",
             Status: "Created", Cidr: "10.0.0.0/24", Gateway: "10.0.0.1"));
 
-        Assert.Equal(2, network.FirewallRules.Count);
-        Assert.All(network.FirewallRules, r => Assert.Equal((FirewallDirection.Ingress, FirewallProtocol.TCP, 22, 22),
-            (r.Direction, r.Protocol, r.StartPort, r.EndPort)));
-        Assert.Equal(["0.0.0.0/0", "::/0"],
-            network.FirewallRules.Select(r => r.Cidr.Value).OrderBy(c => c, StringComparer.Ordinal));
-        Assert.Equal(["firewall_rule.create_requested", "firewall_rule.create_requested", "network.created"],
+        Assert.All(network.FirewallRules, r => Assert.Equal((FirewallDirection.Ingress, FirewallProtocol.TCP),
+            (r.Direction, r.Protocol)));
+        Assert.Equal(
+            ["22-22 0.0.0.0/0", "22-22 ::/0", "443-443 0.0.0.0/0", "443-443 ::/0", "80-80 0.0.0.0/0", "80-80 ::/0"],
+            network.FirewallRules.Select(r => $"{r.StartPort}-{r.EndPort} {r.Cidr.Value}").OrderBy(c => c, StringComparer.Ordinal));
+        Assert.Equal(Enumerable.Repeat("firewall_rule.create_requested", 6).Append("network.created"),
             Outcomes().OrderBy(a => a, StringComparer.Ordinal));
         Assert.All(_activity.Events, e => Assert.Equal(Owner.Id, e.OutcomeTenantId));
         _commands.Verify(c => c.EnqueueFirewallRuleCreateAsync(network, It.IsAny<Titan.Domain.Aggregates.Network.FirewallRule>(),
-            It.IsAny<Guid>(), Tenant.ProjectNameFor(Owner.Id), It.IsAny<CancellationToken>()), Times.Exactly(2));
+            It.IsAny<Guid>(), Tenant.ProjectNameFor(Owner.Id), It.IsAny<CancellationToken>()), Times.Exactly(6));
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -154,7 +154,7 @@ public class NetworkRequestHandlerTests
 
         await EndHandler().HandleAsync(new EndNetworkRequestCommand(network.Id, create, "Done", "net-ext", Status: "Created"));
 
-        Assert.Equal(2, network.FirewallRules.Count);
+        Assert.Equal(6, network.FirewallRules.Count);
         _repo.Verify(r => r.SaveAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -210,14 +210,14 @@ public class NetworkRequestHandlerTests
     }
 
     [Fact]
-    public async Task Done_OfTheDefaultNetworksCreate_RoomForOnlyOneFirewallRule_OpensNeither_ButStillSaves()
+    public async Task Done_OfTheDefaultNetworksCreate_RoomForFiveFirewallRules_OpensNone_ButStillSaves()
     {
-        Tenant noRoomOwner = TestTenant.Active("room-for-one", "kc-room-for-one");
+        Tenant noRoomOwner = TestTenant.Active("room-for-five", "kc-room-for-five");
         noRoomOwner.UpdateQuota(TenantQuota.Create(
             maxVms: noRoomOwner.Quota.MaxVms, maxNetworks: noRoomOwner.Quota.MaxNetworks,
             maxVolumes: noRoomOwner.Quota.MaxVolumes, maxVmSnapshotsPerVm: noRoomOwner.Quota.MaxVmSnapshotsPerVm,
             maxVolumeSnapshotsPerVolume: noRoomOwner.Quota.MaxVolumeSnapshotsPerVolume,
-            maxFirewallRulesPerNetwork: 1, maxPublicIpv6: noRoomOwner.Quota.MaxPublicIpv6,
+            maxFirewallRulesPerNetwork: 5, maxPublicIpv6: noRoomOwner.Quota.MaxPublicIpv6,
             maxSshKeys: noRoomOwner.Quota.MaxSshKeys, maxLoadBalancers: noRoomOwner.Quota.MaxLoadBalancers));
         _tenantRepo.Setup(t => t.FindByIdAsync(noRoomOwner.Id, It.IsAny<CancellationToken>())).ReturnsAsync(noRoomOwner);
         Network network = Given(TestAggregates.Network(noRoomOwner, "default", "cluster-1", opensSshWhenCreated: true));

@@ -16,6 +16,8 @@ using Titan.Infrastructure.Auth;
 using Titan.Tests.Services;
 using Xunit.Sdk;
 
+using Titan.Tests.Infrastructure.Integration;
+
 namespace Titan.Tests.Domain;
 
 // titan-ops architecture/intent-and-observation.md#new-async-intent-checklist: a new asynchronous intent states what a
@@ -89,6 +91,9 @@ public class IntentRepeatDeclarationTests
             new RepeatCheck(typeof(NetworkServiceTests), nameof(NetworkServiceTests.Delete_Repeated_IsANoOp_RecordsNoActivity_EnqueuesNoCommand)),
         [typeof(EndNetworkRequestCommandHandler)] =
             new RepeatCheck(typeof(NetworkRequestHandlerTests), nameof(NetworkRequestHandlerTests.Done_OfTheDefaultNetworksCreate_Repeated_AddsNoRuleTwice)),
+        [typeof(BackfillDefaultNetworksCommandHandler)] =
+            new RepeatCheck(typeof(BackfillDefaultNetworksDbTests),
+                nameof(BackfillDefaultNetworksDbTests.ADefaultNetworkMadeBeforeTheWebPorts_GetsTcp80And443FromAnywhere_NotTcp22Again_AndASecondPassAddsNothing)),
 
         // ── firewall ──
         [typeof(DeleteFirewallRuleCommandHandler)] =
