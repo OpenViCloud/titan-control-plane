@@ -126,8 +126,8 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
         Assert.Equal(NetworkStatus.Deleted, only.Status);
     }
 
-    // A default network made when only TCP 22 opened: one SSH rule left, and a TCP 80 rule from ::/0 its owner added and
-    // later deleted, the row kept as Deleted.
+    // A default network made when only TCP 22 opened: one SSH rule left, a TCP 80 rule from ::/0 its owner added and later
+    // deleted (the row kept as Deleted), and a TCP 443 rule from 0.0.0.0/0 its owner added whose create failed before Incus.
     private static Network CreatedDefaultNetworkWithOneSshRule_AndADeletedWebRule(Tenant tenant, string cluster)
     {
         Network network = Network.Create(tenant.Id, NetworkName.Parse("default"), cluster, null, wantsPublicIpv6: false,
@@ -142,6 +142,10 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
         network.FirewallRuleCreateSucceeded(closed, create.OperationId, "rule-80", FirewallRuleStatus.enabled);
         OperationTicket delete = network.DeleteFirewallRule(closed)!;
         network.FirewallRuleDeleteSucceeded(closed, delete.OperationId);
+        Guid failed = Guid.NewGuid();
+        OperationTicket failedCreate = network.AddFirewallRule(failed, FirewallDirection.Ingress, FirewallProtocol.TCP,
+            PortRange.Of(443, 443), FirewallCidr.Parse("0.0.0.0/0"));
+        network.FirewallRuleCreateFailed(failed, failedCreate.OperationId, null, null, "Firewall rule creation failed.", null);
         return network;
     }
 
@@ -174,11 +178,11 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
 
         await using TitanDbContext read = pg.NewDbContext();
         Assert.Equal(
-            ["Ingress TCP 22-22 ::/0 Creating", "Ingress TCP 443-443 0.0.0.0/0 Creating", "Ingress TCP 443-443 ::/0 Creating",
+            ["Ingress TCP 22-22 ::/0 Creating", "Ingress TCP 443-443 0.0.0.0/0 Failed", "Ingress TCP 443-443 ::/0 Creating",
                 "Ingress TCP 80-80 0.0.0.0/0 Creating", "Ingress TCP 80-80 ::/0 Deleted"],
             await RulesOfAsync(read, defaultNetwork.Id));
         Assert.Empty(await RulesOfAsync(read, own.Id));
-        Assert.Equal(3, await read.ProviderCommands.CountAsync(c =>
+        Assert.Equal(2, await read.ProviderCommands.CountAsync(c =>
             c.TenantId == tenant.Id && c.Kind == ProviderCommandKinds.FirewallRuleCreate));
     }
 
@@ -191,7 +195,7 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
             maxVms: tenant.Quota.MaxVms, maxNetworks: tenant.Quota.MaxNetworks, maxVolumes: tenant.Quota.MaxVolumes,
             maxVmSnapshotsPerVm: tenant.Quota.MaxVmSnapshotsPerVm,
             maxVolumeSnapshotsPerVolume: tenant.Quota.MaxVolumeSnapshotsPerVolume,
-            maxFirewallRulesPerNetwork: 3, maxPublicIpv6: tenant.Quota.MaxPublicIpv6,
+            maxFirewallRulesPerNetwork: 2, maxPublicIpv6: tenant.Quota.MaxPublicIpv6,
             maxSshKeys: tenant.Quota.MaxSshKeys, maxLoadBalancers: tenant.Quota.MaxLoadBalancers));
         Network defaultNetwork = CreatedDefaultNetworkWithOneSshRule_AndADeletedWebRule(tenant, cluster);
 
@@ -207,6 +211,7 @@ public class BackfillDefaultNetworksDbTests(PostgresFixture pg)
         await RunAsync(cluster);
 
         await using TitanDbContext read = pg.NewDbContext();
-        Assert.Equal(["Ingress TCP 22-22 ::/0 Creating", "Ingress TCP 80-80 ::/0 Deleted"], await RulesOfAsync(read, defaultNetwork.Id));
+        Assert.Equal(["Ingress TCP 22-22 ::/0 Creating", "Ingress TCP 443-443 0.0.0.0/0 Failed", "Ingress TCP 80-80 ::/0 Deleted"],
+            await RulesOfAsync(read, defaultNetwork.Id));
     }
 }
