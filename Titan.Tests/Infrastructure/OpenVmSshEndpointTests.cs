@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Vm;
@@ -61,7 +62,7 @@ public class OpenVmSshEndpointTests
         public Task<WebSocket> AcceptAsync(WebSocketAcceptContext context) => throw new NotSupportedException();
     }
 
-    private OpenVmSshEndpoint Endpoint(bool upgrade, IncusClientFactory? factory = null) =>
+    private OpenVmSshEndpoint Endpoint(bool upgrade, IncusClientFactory? factory = null, TimeProvider? clock = null) =>
         Factory.Create<OpenVmSshEndpoint>(ctx =>
             {
                 ctx.Request.RouteValues["vmId"] = _vm.Id.ToString();
@@ -75,7 +76,7 @@ public class OpenVmSshEndpointTests
             _currentUser.Object,
             _limiter,
             new IncusShellConnector(_clusters, factory ?? new IncusClientFactory(IncusTestKit.IdentityStore())),
-            TimeProvider.System,
+            clock ?? TimeProvider.System,
             NullLogger<OpenVmSshEndpoint>.Instance);
 
     [Fact]
@@ -143,6 +144,76 @@ public class OpenVmSshEndpointTests
         for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
         {
             Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
+        }
+    }
+
+    // nc that ends without a byte several seconds in, within BannerWait, is still a refusal to retry on, not a session
+    // that opens and closes empty.
+    [Fact]
+    public async Task ACommandThatEndsWithoutAByteSixSecondsIn_IsStillVmSshNotReady_RecordsNothing_AndGivesItsPlaceBack()
+    {
+        var store = IncusTestKit.IdentityStore();
+        var titan = await store.GetCertificateAsync(CancellationToken.None);
+        await using var incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
+        incus.Behaviour = FakeIncusExecServer.Mode.StallsThenEndsWithoutOutput;
+        _clusters.Clusters.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
+        var clock = new FakeTimeProvider();
+
+        Task handled = Endpoint(upgrade: true, new IncusClientFactory(store), clock).HandleAsync(CancellationToken.None);
+        await incus.CommandStarted.Task.WaitAsync(RealWait);
+        await AdvanceAsync(clock, TimeSpan.FromSeconds(6));
+        incus.EndStalledCommand();
+
+        var refused = await Assert.ThrowsAsync<BusinessException>(() => handled.WaitAsync(RealWait));
+        Assert.Equal("VM_SSH_NOT_READY", refused.Code);
+        Assert.Empty(_activity.Events);
+        for (int i = 0; i < ShellSessionLimiter.MaxSessionsPerTenant; i++)
+        {
+            Assert.NotNull(await _limiter.TryAcquireAsync(_tenantId, Guid.NewGuid(), CancellationToken.None));
+        }
+    }
+
+    // A command still silent when BannerWait is over is not refused: the session opens (here the upgrade itself, which
+    // this rig does not serve) and is recorded, at 30 s (one more step of the fake clock is tolerated).
+    [Fact]
+    public async Task ACommandSilentForTheWholeBannerWait_OpensTheSession_AfterThirtySeconds()
+    {
+        var store = IncusTestKit.IdentityStore();
+        var titan = await store.GetCertificateAsync(CancellationToken.None);
+        await using var incus = await FakeIncusExecServer.StartAsync(titan.Fingerprint);
+        incus.Behaviour = FakeIncusExecServer.Mode.Silent;
+        _clusters.Clusters.Add(IncusTestKit.Cluster("local-mac", incus.Endpoint, incus.Fingerprint));
+        var clock = new FakeTimeProvider();
+
+        Task handled = Endpoint(upgrade: true, new IncusClientFactory(store), clock).HandleAsync(CancellationToken.None);
+        await incus.CommandStarted.Task.WaitAsync(RealWait);
+        await AdvanceAsync(clock, TimeSpan.FromSeconds(29));
+        Assert.False(handled.IsCompleted);
+        Assert.Empty(_activity.Events);
+
+        int more = 0;
+        while (!handled.IsCompleted && more < 10)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            more++;
+            await Task.Delay(200);
+        }
+        await Assert.ThrowsAsync<NotSupportedException>(() => handled.WaitAsync(RealWait));
+        Assert.InRange(more, 1, 2);
+        Assert.Single(_activity.Events);
+    }
+
+    private static readonly TimeSpan RealWait = TimeSpan.FromSeconds(20);
+
+    // Moves the clock a second at a time with a real pause before and between the steps, so the endpoint's delay,
+    // which starts just after the command, is most likely running before the first step.
+    private static async Task AdvanceAsync(FakeTimeProvider clock, TimeSpan by)
+    {
+        await Task.Delay(100);
+        for (var moved = TimeSpan.Zero; moved < by; moved += TimeSpan.FromSeconds(1))
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+            await Task.Delay(20);
         }
     }
 

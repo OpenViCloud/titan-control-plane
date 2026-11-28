@@ -40,6 +40,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         AgentNotRunning,   // POST exec answers 202, the websocket upgrade 500, the operation fails
         EndsWithoutOutput, // the guest command exits 1 without writing a byte (nc with nothing listening on port 22)
         Silent,            // no banner; echoes stdin to stdout, ends at stdin EOF (a server that waits for its client)
+        StallsThenEndsWithoutOutput, // silent until the test calls EndStalledCommand, then exits 1 without a byte
     }
 
     public const string Banner = "SSH-2.0-fake\r\n";
@@ -54,6 +55,13 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
     public string Endpoint { get; }
     public string Fingerprint { get; }
     public Mode Behaviour { get; set; } = Mode.Echo;
+
+    // Set once the guest command runs; a test moving a fake clock waits on it.
+    public TaskCompletionSource CommandStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // Ends the command of StallsThenEndsWithoutOutput.
+    public void EndStalledCommand() => _stallEnds.TrySetResult();
+    private readonly TaskCompletionSource _stallEnds = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public ConcurrentQueue<string> ExecRequests { get; } = new();
     public ConcurrentQueue<string> ControlMessages { get; } = new();
     public HashSet<string> TrustedClientFingerprints { get; }
@@ -277,8 +285,15 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         WebSocket stdin = operation.Sockets["0"];
         WebSocket stdout = operation.Sockets["1"];
         WebSocket stderr = operation.Sockets["2"];
+        CommandStarted.TrySetResult();
         if (Behaviour == Mode.EndsWithoutOutput)
         {
+            await EndAsync(operation, stdout, stderr, exitCode: 1);
+            return;
+        }
+        if (Behaviour == Mode.StallsThenEndsWithoutOutput)
+        {
+            await _stallEnds.Task;
             await EndAsync(operation, stdout, stderr, exitCode: 1);
             return;
         }
