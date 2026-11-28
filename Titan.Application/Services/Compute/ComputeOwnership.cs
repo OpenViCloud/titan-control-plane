@@ -1,4 +1,5 @@
 using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
+using FunctionSecretAggregate = Titan.Domain.Aggregates.FunctionSecret.FunctionSecret;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
@@ -100,6 +101,13 @@ public static class ComputeOwnership
 
         return function;
     }
+
+    /// The tenant's secret of that name with its row locked (IFunctionSecretRepository.FindByNameForUpdateAsync); another
+    /// tenant's is as missing (titan-ops features/ovc-function/design.md#function-secrets).
+    public static async Task<FunctionSecretAggregate> RequireFunctionSecretForUpdateAsync(
+        IFunctionSecretRepository repo, Guid tenantId, string name, CancellationToken ct) =>
+        await repo.FindByNameForUpdateAsync(tenantId, name, ct)
+        ?? throw new NotFoundException("FUNCTION_SECRET_NOT_FOUND", $"Function secret '{name}' not found.");
 
     public static async Task<Volume> RequireVolumeAsync(
         IVolumeRepository volumeRepo, Guid tenantId, Guid volumeId, CancellationToken ct)

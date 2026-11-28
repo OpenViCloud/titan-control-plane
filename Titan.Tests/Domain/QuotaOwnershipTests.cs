@@ -37,6 +37,7 @@ public class QuotaOwnershipTests
         ["SshKey.Create"] = ["SshKey"],
         ["ApiToken.Create"] = ["ApiToken"],
         ["Function.Create"] = ["Function"],
+        ["FunctionSecret.Create"] = ["FunctionSecret"],
         ["Vm.AddSnapshot"] = ["VmSnapshot"],
         ["Volume.AddSnapshot"] = ["VolumeSnapshot"],
         ["Network.AddFirewallRule"] = ["FirewallRule"],
@@ -196,6 +197,10 @@ public class QuotaOwnershipTests
                     else if (name == "TenantQuotaGate.EnsureFunctionRoom")
                     {
                         asked.Add("Function");
+                    }
+                    else if (name == "TenantQuotaGate.EnsureFunctionSecretRoom")
+                    {
+                        asked.Add("FunctionSecret");
                     }
                     else if (KindsEachCreatorNeeds.TryGetValue(name, out string[]? kinds)
                              && callee.ContainingNamespace.ToDisplayString().StartsWith("Titan.Domain.Aggregates", StringComparison.Ordinal))

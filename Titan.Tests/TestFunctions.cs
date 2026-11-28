@@ -19,17 +19,23 @@ internal static class TestFunctions
 
     internal static FunctionVersionSpec Spec(FunctionAggregate function, Guid? versionId = null, string? handler = "main.handler",
         int memoryMiB = 256, int timeoutSeconds = 30, Guid? runtimeId = null, string runtimeName = RuntimeName,
-        string runtimeImage = RuntimeImage, string digest = Digest)
+        string runtimeImage = RuntimeImage, string digest = Digest, IReadOnlyDictionary<string, string>? env = null,
+        IReadOnlyList<FunctionSecretRef>? secretRefs = null, string? schedule = null)
     {
         Guid id = versionId ?? Guid.NewGuid();
         return new FunctionVersionSpec(
             id, runtimeId ?? RuntimeId, runtimeName, runtimeImage, handler, memoryMiB, timeoutSeconds,
             FunctionAggregate.CodeKeyFor(function.TenantId, function.Id, id), "sha256:" + new string('c', 64),
-            1234, 5678, 3, digest, $"localhost:5100/fn/{function.TenantId}/{function.Id}@{digest}");
+            1234, 5678, 3, digest, $"localhost:5100/fn/{function.TenantId}/{function.Id}@{digest}",
+            env ?? new Dictionary<string, string>(), secretRefs ?? [], schedule);
     }
 
     internal static FunctionVersion WithVersion(this FunctionAggregate function, string? handler = "main.handler", int memoryMiB = 256) =>
         function.AddVersion(Spec(function, handler: handler, memoryMiB: memoryMiB));
+
+    /// A version that reads the given secret versions, each under the variable named in the ref.
+    internal static FunctionVersion WithSecrets(this FunctionAggregate function, params FunctionSecretRef[] refs) =>
+        function.AddVersion(Spec(function, secretRefs: refs));
 
     /// The version runs: deployed, and the deploy's command reported Done with the Service the worker named.
     internal static FunctionVersion Running(this FunctionAggregate function, FunctionVersion? version = null)

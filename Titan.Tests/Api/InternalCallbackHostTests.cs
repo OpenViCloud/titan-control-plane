@@ -1071,6 +1071,8 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             ["FunctionCode:SecretAccessKey"] = "secret",
             ["FunctionRegistry:PushUrl"] = "http://registry.function.test:5100",
             ["FunctionRegistry:PullHost"] = "localhost:5100",
+            ["FunctionSecrets:ActiveKeyId"] = "test",
+            ["FunctionSecrets:Keys:test"] = Convert.ToBase64String(new byte[32]),
             ["ProviderClientIdentity:CertificatePem"] = identity.CertificatePem,
             ["ProviderClientIdentity:KeyPem"] = identity.KeyPem,
         };

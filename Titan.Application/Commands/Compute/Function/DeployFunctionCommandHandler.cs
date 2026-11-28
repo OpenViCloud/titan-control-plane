@@ -2,6 +2,7 @@ using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.Function.Contracts;
 using Titan.Application.Exceptions;
 using Titan.Application.Services.Compute;
+using Titan.Application.Services.Compute.FunctionSecret;
 using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
@@ -14,6 +15,7 @@ namespace Titan.Application.Commands.Compute.Function;
 // customer reads the function back.
 public class DeployFunctionCommandHandler(
     IFunctionRepository repo,
+    IFunctionSecretRepository secrets,
     IFunctionRuntimeRepository runtimes,
     IFunctionImageRegistry registry,
     ICurrentUser currentUser,
@@ -58,6 +60,10 @@ public class DeployFunctionCommandHandler(
                 $"Version {version.Number} cannot be deployed: its runtime '{version.RuntimeName}' is not on the function " +
                 "cluster, or its image is not in the registry.");
         }
+
+        // Every secret version the version pins must still be there: the worker reads their values during the deploy
+        // (titan-ops features/ovc-function/design.md#function-secrets). Nothing is sent otherwise.
+        await FunctionSecretRefs.RequireKeptAsync(secrets, function.TenantId, version.SecretRefs, ct);
 
         Guid requestId = function.Deploy(version.Id);
         await commands.EnqueueFunctionDeployAsync(function, version, requestId, ct);

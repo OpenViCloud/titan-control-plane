@@ -59,14 +59,17 @@ public sealed class InitialMigrationTests : IAsyncLifetime
             Assert.Equal(
                 [
                     "go|ghcr.io/openvicloud/titan-function-runtimes/go@sha256:f253fc8f929cefbfdf899cdf8804374c0eb78e23d650f552840ea9e334d116dd|amd64|true|none",
-                    "nodejs26|ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:3f12d5472d95dfb85ad20ba7d970eccfdbf25d4073a9ee46b71e7434d8eb1fcd|amd64|true|2029-04-30",
-                    "python3.15|ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:c2c3c3e141ea062fa0cb4c11119c8bf45184d98a22f7f384456fd4082883b8d1|amd64|true|2031-10-31",
+                    "nodejs26|ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:9f06d060020e71de5e31fa6a8bfcd6b85cca5491282df2b28abeec4b1e386c3c|amd64|true|2029-04-30",
+                    "python3.15|ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:5479dbe0d05ec82ba2ba0e6995a95619b231019639a7bf9aeb393a19d61c5a0b|amd64|true|2031-10-31",
                 ],
                 runtimes);
             Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_runtime_clusters"));
             // No function and no version until a tenant makes one (titan-ops features/ovc-function/design.md#function-lifecycle).
             Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.functions"));
             Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_versions"));
+            // No secret until a tenant gives one (titan-ops features/ovc-function/design.md#function-secrets).
+            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_secrets"));
+            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_secret_versions"));
         }
     }
 }

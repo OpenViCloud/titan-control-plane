@@ -18,6 +18,7 @@ public class DomainBaseClassTests
         ["LoadBalancerListenerSpec"] = "input of LoadBalancer.Create, Update and HasDesiredSpec; the listener it becomes is the child entity",
         ["VolumeAttachProviderIds"] = "result of Volume.Attach: the operation id and the provider ids the attach command carries",
         ["FunctionVersionSpec"] = "input of Function.AddVersion: what one upload made of a zip; the version it becomes is the child entity",
+        ["FunctionSecretValue"] = "input of FunctionSecret.Create and AddVersion: what the cipher made of one value; the version it becomes is the child entity",
     };
 
     [Fact]

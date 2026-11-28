@@ -6,7 +6,9 @@ using Titan.Application.Services.Compute.Function;
 using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Exceptions;
 using Titan.Domain.Repositories;
+using Titan.Domain.Aggregates.FunctionSecret;
 using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
+using FunctionSecretAggregate = Titan.Domain.Aggregates.FunctionSecret.FunctionSecret;
 using FunctionRuntimeAggregate = Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime;
 
 namespace Titan.Application.Commands.Compute.Function;
@@ -18,6 +20,7 @@ namespace Titan.Application.Commands.Compute.Function;
 // objects no row names (a risk accepted, titan-ops features/ovc-function/design.md#debts).
 public class UploadFunctionVersionCommandHandler(
     IFunctionRepository repo,
+    IFunctionSecretRepository secrets,
     IFunctionRuntimeRepository runtimes,
     IFunctionCodeInspector inspector,
     IFunctionCodeStore codeStore,
@@ -56,6 +59,10 @@ public class UploadFunctionVersionCommandHandler(
             handler = command.Handler;
         }
 
+        // Every secret is resolved before the code is packed, stored or pushed: a version names only secret versions that
+        // exist.
+        List<FunctionSecretRef> secretRefs = await ResolveSecretsAsync(tenantId, command, ct);
+
         Guid versionId = Guid.NewGuid();
         string codeKey = FunctionAggregate.CodeKeyFor(tenantId, function.Id, versionId);
         FunctionCodeLayer layer = await inspector.PackAsync(command.ZipPath, language.Value, handler, command.WorkDir, ct);
@@ -77,8 +84,38 @@ public class UploadFunctionVersionCommandHandler(
         FunctionAggregate locked = await ComputeOwnership.RequireFunctionForUpdateAsync(repo, tenantId, function.Id, ct);
         FunctionVersion version = locked.AddVersion(new FunctionVersionSpec(
             versionId, runtime.Id, runtime.Name, runtime.Image, handler, command.MemoryMiB, command.TimeoutSeconds,
-            codeKey, layer.ZipSha256, layer.ZipBytes, layer.UnpackedBytes, layer.FileCount, digest, image));
+            codeKey, layer.ZipSha256, layer.ZipBytes, layer.UnpackedBytes, layer.FileCount, digest, image,
+            command.Env, secretRefs, command.Schedule));
         await repo.SaveAsync(ct);
         return new UploadFunctionVersionCommandResult(version.Id);
+    }
+
+    // Each secret by name in the tenant, "latest" pinned to the newest number now (titan-ops features/ovc-function/design.md#function-secrets).
+    // A name the tenant has no secret of, or a number no longer kept, is 422 FUNCTION_SECRET_NOT_FOUND; the variables
+    // and secrets together over the limit, counted with each secret version's length, is 400.
+    private async Task<List<FunctionSecretRef>> ResolveSecretsAsync(Guid tenantId, UploadFunctionVersionCommand command, CancellationToken ct)
+    {
+        var refs = new List<FunctionSecretRef>();
+        var weights = new List<(string EnvName, int ValueBytes)>();
+        foreach ((string envName, UploadFunctionSecretRef asked) in command.Secrets.OrderBy(s => s.Key, StringComparer.Ordinal))
+        {
+            FunctionSecretAggregate? secret = await secrets.FindByNameAsync(tenantId, asked.Secret, ct);
+            int number = asked.Version ?? secret?.LatestVersionNumber ?? 0;
+            FunctionSecretVersion? secretVersion = secret?.FindVersion(number);
+            if (secret == null || secretVersion == null)
+            {
+                string which = asked.Version == null ? "" : $" version {asked.Version}";
+                throw new BusinessException("FUNCTION_SECRET_NOT_FOUND",
+                    $"Function secret '{asked.Secret}'{which}, which {envName} reads, does not exist.");
+            }
+            refs.Add(FunctionSecretRef.Of(envName, secret.Id, secret.Name, secretVersion.Number));
+            weights.Add((envName, secretVersion.ValueBytes));
+        }
+        if (!FunctionAggregate.IsAConfigSize(FunctionAggregate.ConfigBytes(command.Env, weights)))
+        {
+            throw new BadRequestException("VALIDATION_ERROR",
+                $"The variables and secrets of a version are at most {FunctionAggregate.MaxConfigBytes} bytes together.");
+        }
+        return refs;
     }
 }

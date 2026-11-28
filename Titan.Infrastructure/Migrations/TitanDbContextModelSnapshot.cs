@@ -415,6 +415,13 @@ namespace Titan.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("discarded_at");
 
+                    b.Property<string>("Env")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("env")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
                     b.Property<int>("FileCount")
                         .HasColumnType("integer")
                         .HasColumnName("file_count");
@@ -458,6 +465,17 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("runtime_name");
+
+                    b.Property<string>("Schedule")
+                        .HasColumnType("text")
+                        .HasColumnName("schedule");
+
+                    b.Property<string>("SecretRefs")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("secret_refs")
+                        .HasDefaultValueSql("'[]'::jsonb");
 
                     b.Property<int>("TimeoutSeconds")
                         .HasColumnType("integer")
@@ -523,7 +541,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = new Guid("f0de0000-0000-4000-8000-000000000001"),
                             Architecture = "amd64",
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 28, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Image = "ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:c2c3c3e141ea062fa0cb4c11119c8bf45184d98a22f7f384456fd4082883b8d1",
+                            Image = "ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:5479dbe0d05ec82ba2ba0e6995a95619b231019639a7bf9aeb393a19d61c5a0b",
                             IsListed = true,
                             Name = "python3.15",
                             SupportEndsOn = new DateOnly(2031, 10, 31)
@@ -533,7 +551,7 @@ namespace Titan.Infrastructure.Migrations
                             Id = new Guid("f0de0000-0000-4000-8000-000000000002"),
                             Architecture = "amd64",
                             CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 28, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
-                            Image = "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:3f12d5472d95dfb85ad20ba7d970eccfdbf25d4073a9ee46b71e7434d8eb1fcd",
+                            Image = "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:9f06d060020e71de5e31fa6a8bfcd6b85cca5491282df2b28abeec4b1e386c3c",
                             IsListed = true,
                             Name = "nodejs26",
                             SupportEndsOn = new DateOnly(2029, 4, 30)
@@ -567,6 +585,78 @@ namespace Titan.Infrastructure.Migrations
                     b.HasKey("RuntimeId", "ClusterId");
 
                     b.ToTable("function_runtime_clusters", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionSecret.FunctionSecret", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("function_secrets", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionSecret.FunctionSecretVersion", b =>
+                {
+                    b.Property<Guid>("SecretId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("secret_id");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<byte[]>("Ciphertext")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("ciphertext");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("KeyId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("key_id");
+
+                    b.Property<byte[]>("Nonce")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("nonce");
+
+                    b.Property<int>("ValueBytes")
+                        .HasColumnType("integer")
+                        .HasColumnName("value_bytes");
+
+                    b.HasKey("SecretId", "Number");
+
+                    b.ToTable("function_secret_versions", "core");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
@@ -2421,6 +2511,15 @@ namespace Titan.Infrastructure.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionSecret.FunctionSecretVersion", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.FunctionSecret.FunctionSecret", null)
+                        .WithMany("Versions")
+                        .HasForeignKey("SecretId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)
@@ -2880,6 +2979,11 @@ namespace Titan.Infrastructure.Migrations
             modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", b =>
                 {
                     b.Navigation("Clusters");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionSecret.FunctionSecret", b =>
+                {
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>

@@ -80,6 +80,23 @@ public class ClusterConfigGuardHostTests
         Assert.Contains("FunctionClusters:1:Id", ex.ToString());
     }
 
+    // The function secrets' key is a setting of the host (titan-ops features/ovc-function/design.md#function-secrets):
+    // without it a function cluster could not store a secret, so the control plane does not start.
+    [Fact]
+    public async Task AFunctionClusterWithoutTheFunctionSecretsKey_DoesNotStart()
+    {
+        var settings = AValidCluster();
+        settings["FunctionClusters:0:Id"] = "fn-dev";
+        WithFunctionArtifacts(settings);
+        settings.Remove("FunctionSecrets:Keys:test");
+        await using var factory = new ProductionFactory(settings);
+        await factory.InitializeAsync();
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains("FunctionSecrets__Keys__", ex.ToString());
+    }
+
     [Fact]
     public async Task AFunctionClusterOfItsOwnId_Starts()
     {
@@ -94,9 +111,11 @@ public class ClusterConfigGuardHostTests
         Assert.NotEqual(System.Net.HttpStatusCode.NotFound, response.StatusCode);
     }
 
-    // A function cluster makes the function code bucket and the registry required at start.
+    // A function cluster makes the function code bucket, the registry and the function secrets' key required at start.
     private static void WithFunctionArtifacts(Dictionary<string, string> settings)
     {
+        settings["FunctionSecrets:ActiveKeyId"] = "test";
+        settings["FunctionSecrets:Keys:test"] = Convert.ToBase64String(new byte[32]);
         settings["FunctionCode:Endpoint"] = "https://s3.function.test";
         settings["FunctionCode:Region"] = "auto";
         settings["FunctionCode:Bucket"] = "titan-function-test";

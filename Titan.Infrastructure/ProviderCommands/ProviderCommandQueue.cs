@@ -353,6 +353,11 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
                     defaultCpu = Millicores(FunctionAggregate.DefaultCpuMillicores),
                     maxCpu = Millicores(FunctionAggregate.MaxCpuMillicores),
                 },
+                // The version's configuration (titan-ops features/ovc-function/design.md#function-config): variables
+                // verbatim, each secret by id and pinned number, never a value; the worker reads the values itself.
+                env = version.Env,
+                secrets = version.SecretRefs.Select(r => new { envName = r.EnvName, secretId = r.SecretId, version = r.Version }),
+                schedule = version.Schedule ?? "",
             }, ct);
 
     public Task EnqueueFunctionDeleteAsync(FunctionAggregate function, Guid requestId, CancellationToken ct = default) =>

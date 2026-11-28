@@ -1081,6 +1081,47 @@ public class ProviderCommandQueueTests
         Assert.Equal("", payload.RootElement.GetProperty("handler").GetString());
     }
 
+    // The version's configuration (titan-ops features/ovc-function/design.md#function-config): variables verbatim, names as
+    // given, each secret by id and pinned number, never a value or the secret's name, and the schedule.
+    [Fact]
+    public async Task FunctionDeploy_CarriesTheVariables_TheSecretsByIdAndNumber_AndTheSchedule()
+    {
+        Function function = TestFunctions.AFunction(clusterId: "fn-dev");
+        Guid secretId = Guid.NewGuid();
+        FunctionVersion version = function.AddVersion(TestFunctions.Spec(function,
+            env: new Dictionary<string, string> { ["LOG_LEVEL"] = "info", ["apiBase"] = "https://x.test" },
+            secretRefs: [FunctionSecretRef.Of("DB_PASSWORD", secretId, "db-secret-name", 4)],
+            schedule: "*/5 * * * *"));
+
+        await Queue().EnqueueFunctionDeployAsync(function, version, Guid.NewGuid());
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        JsonElement root = payload.RootElement;
+        Assert.Equal(["LOG_LEVEL", "apiBase"], root.GetProperty("env").EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("info", root.GetProperty("env").GetProperty("LOG_LEVEL").GetString());
+        JsonElement secret = Assert.Single(root.GetProperty("secrets").EnumerateArray());
+        Assert.Equal(["envName", "secretId", "version"], secret.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(("DB_PASSWORD", secretId, 4), (secret.GetProperty("envName").GetString(), secret.GetProperty("secretId").GetGuid(),
+            secret.GetProperty("version").GetInt32()));
+        Assert.Equal("*/5 * * * *", root.GetProperty("schedule").GetString());
+        Assert.DoesNotContain("db-secret-name", Assert.Single(_repo.Rows).Payload);
+    }
+
+    // A version without configuration still carries the three fields, empty: the worker reads absent and empty alike.
+    [Fact]
+    public async Task FunctionDeploy_OfAVersionWithoutConfiguration_CarriesEmptyFields()
+    {
+        (Function function, FunctionVersion version) = AFunctionVersion();
+
+        await Queue().EnqueueFunctionDeployAsync(function, version, Guid.NewGuid());
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal(JsonValueKind.Object, payload.RootElement.GetProperty("env").ValueKind);
+        Assert.Empty(payload.RootElement.GetProperty("env").EnumerateObject());
+        Assert.Equal(0, payload.RootElement.GetProperty("secrets").GetArrayLength());
+        Assert.Equal("", payload.RootElement.GetProperty("schedule").GetString());
+    }
+
     [Fact]
     public async Task FunctionDelete_CarriesTheFunction_TheRequest_AndTheTenant()
     {
@@ -1404,7 +1445,7 @@ public class ProviderCommandQueueTests
         // OpenViCloud/titan-function-worker:resource/runtime/sync.go syncPayload.
         { ProviderCommandKinds.FunctionRuntimeSync, ["image", "name", "requestId", "runtimeId"] },
         // OpenViCloud/titan-function-worker:resource/function/deploy.go and delete.go.
-        { ProviderCommandKinds.FunctionDeploy, ["concurrency", "containerLimits", "cpu", "functionId", "handler", "image", "maxInstances", "memoryMiB", "requestId", "tenantId", "tenantQuota", "timeoutSeconds", "versionId"] },
+        { ProviderCommandKinds.FunctionDeploy, ["concurrency", "containerLimits", "cpu", "env", "functionId", "handler", "image", "maxInstances", "memoryMiB", "requestId", "schedule", "secrets", "tenantId", "tenantQuota", "timeoutSeconds", "versionId"] },
         { ProviderCommandKinds.FunctionDelete, ["functionId", "requestId", "tenantId"] },
         { ProviderCommandKinds.ClusterBackup, [] },
         { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },

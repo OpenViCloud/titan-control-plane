@@ -27,7 +27,7 @@ public class UploadFunctionVersionEndpoint(UploadFunctionVersionCommandHandler h
     /// The whole body: the zip, the config part and the multipart framing.
     public const long MaxBodyBytes = 51L * 1024 * 1024;
     public const string TooLargeCode = "FUNCTION_CODE_TOO_LARGE";
-    // The config is a few fields; a larger part is not one.
+    // The config is a few fields and at most 8 KiB of environment (Function.MaxConfigBytes); a larger part is not one.
     private const int MaxConfigBytes = 64 * 1024;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -56,7 +56,13 @@ public class UploadFunctionVersionEndpoint(UploadFunctionVersionCommandHandler h
                 config.MemoryMiB ?? FunctionAggregate.DefaultMemoryMiB,
                 config.TimeoutSeconds ?? FunctionAggregate.DefaultTimeoutSeconds,
                 zipPath,
-                workDir), ct);
+                workDir,
+                (config.Env ?? []).ToDictionary(p => p.Key, p => p.Value!, StringComparer.Ordinal),
+                (config.Secrets ?? []).ToDictionary(
+                    p => p.Key,
+                    p => new UploadFunctionSecretRef(p.Value!.Secret!, UploadFunctionVersionSecretConfig.VersionOf(p.Value.Version).Number),
+                    StringComparer.Ordinal),
+                config.Schedule), ct);
             await SendAsync(result, 201, ct);
         }
         finally
@@ -192,5 +198,35 @@ public class UploadFunctionVersionEndpoint(UploadFunctionVersionCommandHandler h
 }
 
 // The config part of the form (titan-ops features/ovc-function/design.md#function-limits). Memory and timeout absent ⇒
-// the defaults of Function; handler absent for Go.
-public record UploadFunctionVersionConfig(string? Runtime, string? Handler, int? MemoryMiB, int? TimeoutSeconds);
+// the defaults of Function; handler absent for Go. Env, secrets and schedule absent ⇒ none
+// (titan-ops features/ovc-function/design.md#function-config).
+public record UploadFunctionVersionConfig(
+    string? Runtime,
+    string? Handler,
+    int? MemoryMiB,
+    int? TimeoutSeconds,
+    Dictionary<string, string?>? Env = null,
+    Dictionary<string, UploadFunctionVersionSecretConfig?>? Secrets = null,
+    string? Schedule = null);
+
+// One secret of the config part: the tenant's secret by name, and "latest" or a version number.
+public record UploadFunctionVersionSecretConfig(string? Secret, JsonElement? Version)
+{
+    /// Valid with Number null for "latest", or the number; not valid for anything else.
+    public static (bool IsValid, int? Number) VersionOf(JsonElement? version)
+    {
+        if (version is not { } element)
+        {
+            return (false, null);
+        }
+        if (element.ValueKind == JsonValueKind.String && element.GetString() == "latest")
+        {
+            return (true, null);
+        }
+        if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out int number) && number >= 1)
+        {
+            return (true, number);
+        }
+        return (false, null);
+    }
+}
