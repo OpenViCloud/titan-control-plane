@@ -23,6 +23,12 @@ public sealed class ReconcilerHeartbeat(TitanDbContext db)
     public static readonly IReadOnlyList<string> Kinds =
         [VmKind, NetworkKind, VolumeKind, FirewallKind, VmSnapshotKind, TemplateKind, LoadBalancerKind];
 
+    /// The function worker's reconciler, one per function cluster it runs in (titan-ops features/ovc-function/design.md#runtimes).
+    public const string FunctionRuntimeKind = "function-runtimes";
+
+    /// What a function cluster polls; Kinds is what an Incus cluster polls.
+    public static readonly IReadOnlyList<string> FunctionKinds = [FunctionRuntimeKind];
+
     public async Task RecordPollAsync(string key, DateTimeOffset at, CancellationToken ct)
     {
         ReconcilerPoll? poll = await db.ReconcilerPolls.FirstOrDefaultAsync(p => p.Key == key, ct);

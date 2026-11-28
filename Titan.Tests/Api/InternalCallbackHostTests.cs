@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
@@ -908,8 +909,147 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
         Assert.NotNull(stored.Operation.PendingId);
     }
 
-    // What the control plane's environment sets on dev and prd, and one cluster for the template routes, which refuse a
-    // cluster the configuration does not name. A cluster needs Titan's TLS identity to start.
+    // ---------- a function runtime in one function cluster (titan-ops features/ovc-function/design.md#runtimes) ----------
+
+    private const string FunctionCluster = "fn-callback";
+
+    private async Task<FunctionRuntime> StoredRuntimeWaitingOnASyncAsync()
+    {
+        FunctionRuntime runtime = FunctionRuntime.Create($"rt-{Guid.NewGuid():N}"[..14],
+            $"ghcr.io/openvicloud/titan-function-runtimes/go@sha256:{new string('c', 64)}", "amd64", null);
+        runtime.SyncIn(FunctionCluster);
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        db.FunctionRuntimes.Add(runtime);
+        await db.SaveChangesAsync();
+        return runtime;
+    }
+
+    private async Task<FunctionRuntimeCluster> ReloadRuntimeClusterAsync(Guid runtimeId)
+    {
+        using IServiceScope scope = factory.Services.CreateScope();
+        TitanDbContext db = scope.ServiceProvider.GetRequiredService<TitanDbContext>();
+        FunctionRuntime runtime = await db.FunctionRuntimes.AsNoTracking().Include(r => r.Clusters).SingleAsync(r => r.Id == runtimeId);
+        return runtime.Clusters.Single(c => c.ClusterId == FunctionCluster);
+    }
+
+    private static string RuntimeRoute(FunctionRuntime runtime, string route, string clusterId = FunctionCluster) =>
+        $"/internal/function-runtimes/{runtime.Id}/clusters/{clusterId}/"
+        + string.Format(route, runtime.Clusters.Single().Operation.PendingId!.Value);
+
+    // The body the function worker sends (OpenViCloud/titan-function-worker:resource/runtime/report.go): no externalId.
+    [Fact]
+    public async Task ARuntimeSyncDone_InTheWorkersJson_IsAvailable_AndAnswers204()
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, "requests/{0}"), """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(FunctionRuntimeClusterStatus.Available, (await ReloadRuntimeClusterAsync(runtime.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ARuntimeSyncFailed_InTheWorkersJson_RecordsTheReason_AndAnswers204()
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, "requests/{0}"),
+            """{"outcome":"Failed","reason":"The runtime image could not be pulled onto every node of the cluster.","detail":"kube: timeout"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        FunctionRuntimeCluster stored = await ReloadRuntimeClusterAsync(runtime.Id);
+        Assert.Equal(FunctionRuntimeClusterStatus.Failed, stored.Status);
+        Assert.Equal("kube: timeout", stored.Operation.FailureDetail);
+    }
+
+    [Fact]
+    public async Task ARuntimeReport_NamingAnotherRequest_Is204_AndChangesNothing()
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/function-runtimes/{runtime.Id}/clusters/{FunctionCluster}/requests/{Guid.NewGuid()}", """{"outcome":"Done"}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(FunctionRuntimeClusterStatus.Syncing, (await ReloadRuntimeClusterAsync(runtime.Id)).Status);
+    }
+
+    [Fact]
+    public async Task ARuntimeObservation_InTheWorkersJson_IsSeenOnTheSync_AndLeavesItWaiting()
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, "observation"), """{"exists":true}""");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        FunctionRuntimeCluster stored = await ReloadRuntimeClusterAsync(runtime.Id);
+        Assert.Equal((FunctionRuntimeClusterStatus.Syncing, true), (stored.Status, stored.IsAvailable));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Maybe"}""")]
+    [InlineData("requests/{0}", """{"reason":"no outcome"}""")]
+    [InlineData("observation", """{}""")]
+    [InlineData("observation", """{"exists":"yes"}""")]
+    public async Task ARuntimeReportTheControlPlaneCannotRead_Is400_AndChangesNothing(string route, string json)
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, route), json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        FunctionRuntimeCluster stored = await ReloadRuntimeClusterAsync(runtime.Id);
+        Assert.Equal((FunctionRuntimeClusterStatus.Syncing, false), (stored.Status, stored.IsAvailable));
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task ARuntimeReport_ForNoRuntime_Is404_WithItsCode(string route, string json)
+    {
+        HttpResponseMessage response = await PatchAsync(
+            $"/internal/function-runtimes/{Guid.NewGuid()}/clusters/{FunctionCluster}/{string.Format(route, Guid.NewGuid())}", json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("FUNCTION_RUNTIME_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
+    }
+
+    // An Incus cluster holds no runtime: only a configured function cluster passes.
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""", TemplateCluster)]
+    [InlineData("observation", """{"exists":false}""", TemplateCluster)]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""", "fn-unknown")]
+    [InlineData("observation", """{"exists":false}""", "fn-unknown")]
+    public async Task ARuntimeReport_ForAClusterThatIsNoFunctionCluster_Is404_AndChangesNothing(string route, string json, string clusterId)
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, route, clusterId), json);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        using JsonDocument envelope = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("CLUSTER_NOT_FOUND", envelope.RootElement.GetProperty("code").GetString());
+        Assert.Equal(FunctionRuntimeClusterStatus.Syncing, (await ReloadRuntimeClusterAsync(runtime.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData("requests/{0}", """{"outcome":"Done"}""")]
+    [InlineData("observation", """{"exists":false}""")]
+    public async Task EveryRuntimeRoute_WithoutTheToken_Is401_AndChangesNothing(string route, string json)
+    {
+        FunctionRuntime runtime = await StoredRuntimeWaitingOnASyncAsync();
+
+        HttpResponseMessage response = await PatchAsync(RuntimeRoute(runtime, route), json, token: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(FunctionRuntimeClusterStatus.Syncing, (await ReloadRuntimeClusterAsync(runtime.Id)).Status);
+    }
+
+    // What the control plane's environment sets on dev and prd, one cluster for the template routes, which refuse a
+    // cluster the configuration does not name, and one function cluster for the runtime routes. A cluster needs Titan's
+    // TLS identity to start.
     public sealed class CallbackHostFactory() : RealHostFactory(
         new Dictionary<string, string?> { ["Internal:Token"] = InternalToken }, OneCluster());
 
@@ -922,6 +1062,7 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             ["Clusters:0:Name"] = "Cluster A",
             ["Clusters:0:Endpoint"] = "https://localhost:8443",
             ["Clusters:0:ServerFingerprint"] = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f",
+            ["FunctionClusters:0:Id"] = FunctionCluster,
             ["ProviderClientIdentity:CertificatePem"] = identity.CertificatePem,
             ["ProviderClientIdentity:KeyPem"] = identity.KeyPem,
         };

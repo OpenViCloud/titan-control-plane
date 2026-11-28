@@ -63,6 +63,35 @@ public class ClusterConfigGuardHostTests
         Assert.Contains("ProviderClientIdentity", ex.ToString());
     }
 
+    // A function cluster is a list of its own (titan-ops features/ovc-function/design.md#function-cluster-ops): one with
+    // the id of an Incus cluster would make a command's cluster name two workers.
+    [Fact]
+    public async Task AFunctionClusterWithTheIdOfAnIncusCluster_DoesNotStart()
+    {
+        var settings = AValidCluster();
+        settings["FunctionClusters:0:Id"] = "fn-dev";
+        settings["FunctionClusters:1:Id"] = "singapore01";
+        await using var factory = new ProductionFactory(settings);
+        await factory.InitializeAsync();
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains("FunctionClusters:1:Id", ex.ToString());
+    }
+
+    [Fact]
+    public async Task AFunctionClusterOfItsOwnId_Starts()
+    {
+        var settings = AValidCluster();
+        settings["FunctionClusters:0:Id"] = "fn-dev";
+        await using var factory = new ProductionFactory(settings);
+        await factory.InitializeAsync();
+
+        var response = await factory.CreateClient().GetAsync("/healthz");
+
+        Assert.NotEqual(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     private sealed class ProductionFactory(Dictionary<string, string> settings) : RealHostFactory(
         new Dictionary<string, string?> { ["Keycloak:Authority"] = "http://keycloak.test/realms/titan" },
         settings)

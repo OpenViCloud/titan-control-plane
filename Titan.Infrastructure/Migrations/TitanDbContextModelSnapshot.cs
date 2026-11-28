@@ -337,6 +337,100 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("cluster_ipv6_routes", "core");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Architecture")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("architecture");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Image")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("image");
+
+                    b.Property<bool>("IsListed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_listed");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateOnly?>("SupportEndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("support_ends_on");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("UX_function_runtimes_name");
+
+                    b.ToTable("function_runtimes", "core");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("f0de0000-0000-4000-8000-000000000001"),
+                            Architecture = "amd64",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 28, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Image = "ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:c2c3c3e141ea062fa0cb4c11119c8bf45184d98a22f7f384456fd4082883b8d1",
+                            IsListed = true,
+                            Name = "python3.15",
+                            SupportEndsOn = new DateOnly(2031, 10, 31)
+                        },
+                        new
+                        {
+                            Id = new Guid("f0de0000-0000-4000-8000-000000000002"),
+                            Architecture = "amd64",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 28, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Image = "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:3f12d5472d95dfb85ad20ba7d970eccfdbf25d4073a9ee46b71e7434d8eb1fcd",
+                            IsListed = true,
+                            Name = "nodejs26",
+                            SupportEndsOn = new DateOnly(2029, 4, 30)
+                        },
+                        new
+                        {
+                            Id = new Guid("f0de0000-0000-4000-8000-000000000003"),
+                            Architecture = "amd64",
+                            CreatedAt = new DateTimeOffset(new DateTime(2026, 11, 28, 0, 0, 0, 0, DateTimeKind.Unspecified), new TimeSpan(0, 0, 0, 0, 0)),
+                            Image = "ghcr.io/openvicloud/titan-function-runtimes/go@sha256:f253fc8f929cefbfdf899cdf8804374c0eb78e23d650f552840ea9e334d116dd",
+                            IsListed = true,
+                            Name = "go"
+                        });
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntimeCluster", b =>
+                {
+                    b.Property<Guid>("RuntimeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("runtime_id");
+
+                    b.Property<string>("ClusterId")
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.HasKey("RuntimeId", "ClusterId");
+
+                    b.ToTable("function_runtime_clusters", "core");
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2085,6 +2179,58 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("wallet_sweeps", "core");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntimeCluster", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", null)
+                        .WithMany("Clusters")
+                        .HasForeignKey("RuntimeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.OwnsOne("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntimeOperation", "Operation", b1 =>
+                        {
+                            b1.Property<Guid>("FunctionRuntimeClusterRuntimeId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<string>("FunctionRuntimeClusterClusterId")
+                                .HasColumnType("text");
+
+                            b1.Property<DateTimeOffset?>("AskedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("pending_request_asked_at");
+
+                            b1.Property<DateTimeOffset?>("FailedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("request_failed_at");
+
+                            b1.Property<string>("FailureDetail")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_detail");
+
+                            b1.Property<string>("FailureReason")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_reason");
+
+                            b1.Property<string>("LastSeenStatus")
+                                .HasColumnType("text")
+                                .HasColumnName("observed_state");
+
+                            b1.Property<Guid?>("PendingId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("pending_request_id");
+
+                            b1.HasKey("FunctionRuntimeClusterRuntimeId", "FunctionRuntimeClusterClusterId");
+
+                            b1.ToTable("function_runtime_clusters", "core");
+
+                            b1.WithOwner()
+                                .HasForeignKey("FunctionRuntimeClusterRuntimeId", "FunctionRuntimeClusterClusterId");
+                        });
+
+                    b.Navigation("Operation")
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.InvoiceItem", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.Invoice.Invoice", null)
@@ -2534,6 +2680,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasForeignKey("VmId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", b =>
+                {
+                    b.Navigation("Clusters");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.Invoice.Invoice", b =>

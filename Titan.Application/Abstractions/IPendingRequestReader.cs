@@ -11,7 +11,7 @@ public interface IPendingRequestReader
     Task<IReadOnlyList<StuckRequest>> ListStuckAsync(TimeSpan olderThan, CancellationToken ct = default);
 }
 
-/// One stuck request. TenantId is null for a template's sync: a template belongs to no tenant. CommandStatus is the
+/// One stuck request. TenantId is null for the sync of a template or a function runtime: a catalog belongs to no tenant. CommandStatus is the
 /// command row's status word, null when no row carries the request's key.
 public record StuckRequest(
     string Resource,

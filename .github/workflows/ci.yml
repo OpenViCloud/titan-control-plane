@@ -1,8 +1,8 @@
 name: CI
 
 # Tests in three processes (unit, full host, integration), the Incus lab recordings matching the incus-worker commit
-# they name (Titan.Tests/Infrastructure/Incus/testdata/SOURCE, synced by scripts/sync-incus-testdata.sh), the worker
-# routing every command kind this commit enqueues, and the image, pushed only from main.
+# they name (Titan.Tests/Infrastructure/Incus/testdata/SOURCE, synced by scripts/sync-incus-testdata.sh), each command
+# kind this commit enqueues routed by the worker it belongs to, and the image, pushed only from main.
 on:
   push:
     branches: [main]
@@ -90,10 +90,12 @@ jobs:
         if: ${{ !cancelled() }}
         run: dotnet test --no-build --configuration Release --verbosity normal --filter "Category=Integration"
 
-  # The control plane enqueues only kinds the worker on main already routes: the worker ships a new kind first
-  # (titan-ops architecture/provider-and-worker.md#contract-changes).
+  # The control plane enqueues only kinds a worker on main already routes: the worker ships a new kind first
+  # (titan-ops architecture/provider-and-worker.md#contract-changes). Two workers share the kinds: the function worker
+  # routes those of OVC Function (function.* and function-runtime.*), the Incus worker every other
+  # (titan-ops architecture/provider-commands.md#provider-command-table); each guard is fed this commit's kinds.
   worker-kinds:
-    name: Worker routes every kind
+    name: Workers route every kind
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,20 +108,38 @@ jobs:
           ref: main
           path: incus-worker
 
+      - uses: actions/checkout@v4
+        with:
+          repository: OpenViCloud/titan-function-worker
+          ref: main
+          path: function-worker
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
-          cache-dependency-path: incus-worker/go.sum
+          cache-dependency-path: |
+            incus-worker/go.sum
+            function-worker/go.sum
 
-      # The worker's routing test, fed this commit's kinds. The PASS line is required: a renamed test would
+      # Each worker's routing test, fed this commit's kinds. The PASS line is required: a renamed test would
       # otherwise run nothing and exit 0.
-      - name: Worker's routes against this commit's kinds
+      - name: Incus worker's routes against this commit's kinds
         working-directory: incus-worker
         run: |
           set -o pipefail
           cp ../control-plane/Titan.Domain/Aggregates/ProviderCommand/Enums/ProviderCommandKinds.cs contract/
           go test -count=1 -run '^TestRoutes_CoverTheControlPlanesKinds$' -v . | tee ../routes.log
           grep -q '^--- PASS: TestRoutes_CoverTheControlPlanesKinds' ../routes.log
+
+      - name: Function worker's routes against this commit's kinds
+        # As the Incus worker's step: a red step before it does not hide this one.
+        if: ${{ !cancelled() }}
+        working-directory: function-worker
+        run: |
+          set -o pipefail
+          cp ../control-plane/Titan.Domain/Aggregates/ProviderCommand/Enums/ProviderCommandKinds.cs contract/
+          go test -count=1 -run '^TestRoutes_CoverTheFunctionKinds$' -v . | tee ../function-routes.log
+          grep -q '^--- PASS: TestRoutes_CoverTheFunctionKinds' ../function-routes.log
 
   # Built on every run beside the tests, its layers kept in the Actions cache. Pushed only from main, once the tests
   # passed, by the push job reading those layers back, tagged with the commit's first 7 characters. The source label

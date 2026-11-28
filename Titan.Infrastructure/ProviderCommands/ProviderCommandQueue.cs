@@ -9,6 +9,7 @@ using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
+using FunctionRuntimeAggregate = Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using Titan.Domain.Repositories;
 
@@ -299,6 +300,20 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // waiting sync (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
     internal static string TemplateSyncKey(Guid templateId, string clusterId, Guid requestId) =>
         $"template-sync-{templateId}-{clusterId}-{requestId}";
+
+    // As a template's, on the function cluster; no tenant, no resource: the catalog is global
+    // (titan-ops features/ovc-function/design.md#runtimes). The worker reads these four
+    // (OpenViCloud/titan-function-worker:resource/runtime/sync.go).
+    public Task EnqueueFunctionRuntimeSyncAsync(FunctionRuntimeAggregate runtime, string clusterId, Guid requestId,
+        CancellationToken ct = default) =>
+        EnqueueAsync(FunctionRuntimeSyncKey(runtime.Id, clusterId, requestId), ProviderCommandKinds.FunctionRuntimeSync, clusterId,
+            tenantId: null, resourceId: null,
+            new { runtimeId = runtime.Id, requestId, name = runtime.Name, image = runtime.Image }, ct);
+
+    // `function-runtime-sync-{runtimeId}-{clusterId}-{requestId}`: the stuck-request query rebuilds it from the cluster's
+    // waiting sync, as TemplateSyncKey (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string FunctionRuntimeSyncKey(Guid runtimeId, string clusterId, Guid requestId) =>
+        $"function-runtime-sync-{runtimeId}-{clusterId}-{requestId}";
 
     private async Task EnqueueAsync(string key, string kind, string clusterId, Guid? tenantId, Guid? resourceId,
         object payload, CancellationToken ct)
