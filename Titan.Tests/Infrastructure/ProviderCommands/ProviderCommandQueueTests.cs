@@ -198,8 +198,8 @@ public class ProviderCommandQueueTests
     }
 
     // One leased command per resource across every lane (titan-ops features/provider/design.md#tenant-lane): every kind
-    // of a VM, volume or function names it, a restore names the volume it copies from, the rest name none. A new kind
-    // fails the lookup until it is here.
+    // of a VM, volume or function names it, a snapshot restore names the volume it copies from, a backup restore the new
+    // VM or volume, the rest name none. A new kind fails the lookup until it is here.
     [Fact]
     public async Task EveryKind_StagesTheResourceItActsOn_AndTheOthersNone()
     {
