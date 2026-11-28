@@ -6,10 +6,11 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Infrastructure.Repositories;
 
 /// Reads core.pending_requests, the view over every lifecycle table's waiting request (vms, volumes, volume_snapshots,
-/// networks, firewall_rules, vm_snapshots, load_balancers, vm_template_clusters), and joins the command row whose key the
-/// request names: `{resource}-{kind}-{id}-{requestId}` (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key,
-/// FirewallRule*Key, VmSnapshot*Key, LoadBalancer*Key), with the cluster before the request id for a template's sync
-/// (TemplateSyncKey), the one row of the view that carries a cluster.
+/// networks, firewall_rules, vm_snapshots, load_balancers, vm_template_clusters, vm_key_additions,
+/// function_runtime_clusters), and joins the command row whose key the request names: `{resource}-{kind}-{id}-{requestId}`
+/// (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key, FirewallRule*Key, VmSnapshot*Key, LoadBalancer*Key), with the
+/// cluster before the request id for the sync of a template or a function runtime (TemplateSyncKey,
+/// FunctionRuntimeSyncKey), the two rows of the view that carry a cluster.
 public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
 {
     public async Task<IReadOnlyList<StuckRequest>> ListStuckAsync(TimeSpan olderThan, CancellationToken ct = default)

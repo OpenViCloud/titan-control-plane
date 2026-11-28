@@ -45,9 +45,10 @@ public class ReconcilerHeartbeatTests
         Assert.Equal(1, await read.ReconcilerPolls.CountAsync());
     }
 
-    // The health check counts only ReconcilerHeartbeat.Kinds: a kind constant left off that list would go unmeasured.
+    // The health check counts only ReconcilerHeartbeat.Kinds (the Incus worker's, per Incus cluster); FunctionKinds (the
+    // function worker's) are recorded but not counted yet. A kind constant left off both lists would go unnoticed.
     [Fact]
-    public void Kinds_ListsEveryKindConstant()
+    public void Kinds_AndFunctionKinds_ListEveryKindConstant_EachOnce()
     {
         string[] constants = typeof(ReconcilerHeartbeat).GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(f => f.IsLiteral && f.Name.EndsWith("Kind"))
@@ -55,7 +56,8 @@ public class ReconcilerHeartbeatTests
             .Order()
             .ToArray();
 
-        Assert.Equal(7, constants.Length);
-        Assert.Equal(constants, ReconcilerHeartbeat.Kinds.Order().ToArray());
+        Assert.Equal(8, constants.Length);
+        Assert.Equal(constants, ReconcilerHeartbeat.Kinds.Concat(ReconcilerHeartbeat.FunctionKinds).Order().ToArray());
+        Assert.Equal([ReconcilerHeartbeat.FunctionRuntimeKind], ReconcilerHeartbeat.FunctionKinds);
     }
 }

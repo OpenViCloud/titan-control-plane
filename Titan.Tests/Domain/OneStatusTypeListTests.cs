@@ -14,6 +14,7 @@ public class OneStatusTypeListTests
     private static readonly string[] Types =
     [
         "Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer",
+        "FunctionRuntimeCluster",
     ];
 
     private const int ListStartsAt = 5;

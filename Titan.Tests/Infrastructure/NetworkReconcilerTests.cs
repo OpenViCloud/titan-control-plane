@@ -162,4 +162,22 @@ public class NetworkReconcilerTests
         Assert.Equal(["networks/vn-hcm-1"], expected.Keys);
         Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30).Status);
     }
+
+    // The function worker's reconciler records its polls, but the health check does not count them yet: the dev
+    // function cluster is stopped at boot, and a stale poll would turn /healthz/reconcilers Unhealthy
+    // (titan-ops features/ovc-function/design.md#runtimes).
+    [Fact]
+    public void Liveness_DoesNotCountTheRuntimeReconcilerOfAFunctionCluster()
+    {
+        var polls = new Dictionary<string, DateTimeOffset>
+        {
+            ["function-runtimes/fn-dev"] = Now.AddDays(-1),
+            ["templates/vn-hcm-1"] = Now.AddMinutes(-1),
+        };
+
+        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"]);
+
+        Assert.Equal(["templates/vn-hcm-1"], expected.Keys);
+        Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30).Status);
+    }
 }

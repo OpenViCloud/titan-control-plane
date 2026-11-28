@@ -3,6 +3,7 @@ using System.Reflection;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Admin.Vm;
+using Titan.Application.Commands.Catalog.FunctionRuntime;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.VmKeyAddition;
@@ -107,6 +108,8 @@ public class IntentRepeatDeclarationTests
         // ── catalog ──
         [typeof(SyncTemplatesCommandHandler)] =
             new RepeatCheck(typeof(TemplateServiceTests), nameof(TemplateServiceTests.SyncAll_Repeated_KeepsTheSameRequest_AndSendsNothingMore)),
+        [typeof(SyncFunctionRuntimesCommandHandler)] =
+            new RepeatCheck(typeof(FunctionRuntimeServiceTests), nameof(FunctionRuntimeServiceTests.SyncAll_Repeated_KeepsTheSameRequest_AndSendsNothingMore)),
 
         // ── backup ──
         [typeof(ScheduleBackupsCommandHandler)] =

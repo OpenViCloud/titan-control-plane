@@ -55,6 +55,8 @@ using PlatApiTokenQry = Titan.Application.Queries.Platform.ApiToken;
 using NetNetworkQry = Titan.Application.Queries.Networking.Network;
 using NetFirewallQry = Titan.Application.Queries.Networking.FirewallRule;
 using CatTemplateCmd = Titan.Application.Commands.Catalog.VmTemplate;
+using CatFunctionRuntimeCmd = Titan.Application.Commands.Catalog.FunctionRuntime;
+using CatFunctionRuntimeQry = Titan.Application.Queries.Catalog.FunctionRuntime;
 using CatOfferingCmd = Titan.Application.Commands.Catalog.VmOffering;
 using CatTemplateQry = Titan.Application.Queries.Catalog.VmTemplate;
 using CatOfferingQry = Titan.Application.Queries.Catalog.VmOffering;
@@ -154,6 +156,7 @@ builder.Services.AddScoped<IVolumeRepository, VolumeRepository>();
 builder.Services.AddScoped<ILoadBalancerRepository, LoadBalancerRepository>();
 builder.Services.AddScoped<IVolumeSnapshotRepository, VolumeSnapshotRepository>();
 builder.Services.AddScoped<IVmTemplateRepository, VmTemplateRepository>();
+builder.Services.AddScoped<IFunctionRuntimeRepository, FunctionRuntimeRepository>();
 builder.Services.AddScoped<IVmOfferingRepository, VmOfferingRepository>();
 builder.Services.AddScoped<IVolumeOfferingRepository, VolumeOfferingRepository>();
 builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
@@ -244,6 +247,11 @@ builder.Services.AddScoped<PlatAuditQry.ListAdminAuditLogQueryHandler>();
 var clusterOptions = ClusterOptions.FromConfiguration(
     builder.Configuration.GetSection(ClusterOptions.SectionName).Get<List<ClusterConfig>>());
 builder.Services.AddSingleton(clusterOptions);
+// Function clusters are a list of their own; an id blank, twice, of an Incus cluster, or a second function cluster
+// stops the host the same way
+// (titan-ops features/ovc-function/design.md#function-cluster-ops).
+builder.Services.AddSingleton(FunctionClusterOptions.FromConfiguration(
+    builder.Configuration.GetSection(FunctionClusterOptions.SectionName).Get<List<FunctionClusterConfig>>(), clusterOptions));
 
 var creditOptions = builder.Configuration.GetSection(CreditOptions.SectionName).Get<CreditOptions>() ?? new CreditOptions();
 builder.Services.AddSingleton(creditOptions);
@@ -342,6 +350,11 @@ builder.Services.AddScoped<CatOfferingCmd.UpdateVmOfferingPriceCommandHandler>()
 builder.Services.AddScoped<CatTemplateQry.ListTemplatesQueryHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListAdminTemplatesQueryHandler>();
 builder.Services.AddScoped<CatTemplateQry.ListReconcilableTemplatesQueryHandler>();
+builder.Services.AddScoped<CatFunctionRuntimeCmd.SyncFunctionRuntimesCommandHandler>();
+builder.Services.AddScoped<CatFunctionRuntimeCmd.EndFunctionRuntimeSyncRequestCommandHandler>();
+builder.Services.AddScoped<CatFunctionRuntimeCmd.ObserveFunctionRuntimeCommandHandler>();
+builder.Services.AddScoped<CatFunctionRuntimeQry.ListAdminFunctionRuntimesQueryHandler>();
+builder.Services.AddScoped<CatFunctionRuntimeQry.ListReconcilableFunctionRuntimesQueryHandler>();
 builder.Services.AddScoped<CatOfferingQry.ListVmOfferingsQueryHandler>();
 builder.Services.AddScoped<CatVolumeOfferingQry.ListVolumeOfferingsQueryHandler>();
 builder.Services.AddScoped<CatClusterQry.ListClustersQueryHandler>();

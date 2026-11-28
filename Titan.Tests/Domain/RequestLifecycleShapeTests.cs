@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.Vm;
@@ -18,12 +19,13 @@ namespace Titan.Tests.Domain;
 // What this is SILENT about: a lock taken by another name, a lock on another row (create locks its network), a payload built outside ProviderCommandQueue, and the
 // semantics of the report methods beyond "a foreign id is ignored" (VmStatusTests, VmRequestLifecycleTests, VolumeRequestLifecycleTests,
 // NetworkRequestLifecycleTests, VmSnapshotRequestLifecycleTests, LoadBalancerRequestLifecycleTests and
-// VmTemplateSyncRequestLifecycleTests hold those). A child entity (VolumeSnapshot, FirewallRule, VmSnapshot,
-// VmTemplateCluster) is on the shape with internal methods, reached through its root. Every type on the shape keeps its
+// VmTemplateSyncRequestLifecycleTests and FunctionRuntimeClusterStateMachineTests hold those). A child entity (VolumeSnapshot,
+// FirewallRule, VmSnapshot, and the cluster row of a template or of a function runtime) is on the shape with internal
+// methods, reached through its root. Every type on the shape keeps its
 // one status, which says what the waiting operation asks, and only that operation's id, in an Operation of its own
 // (titan-ops features/vm/design.md#vm-status, features/network/design.md#network-operation, features/vm/design.md#vm-snapshot,
 // features/volume/design.md#volume-state-is-existence, features/load-balancer/design.md#lb-lifecycle,
-// features/catalog/design.md#template-state-is-existence): no type keeps a Pending property, and a scan for a type with
+// features/catalog/design.md#template-state-is-existence, features/ovc-function/design.md#runtimes): no type keeps a Pending property, and a scan for a type with
 // such an Operation finds the same list as the one named here.
 public class RequestLifecycleShapeTests
 {
@@ -32,7 +34,7 @@ public class RequestLifecycleShapeTests
     // Every type on the shape, each kept by name.
     private static readonly Type[] OnTheShape =
         [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot),
-            typeof(VmTemplateCluster), typeof(LoadBalancer)];
+            typeof(VmTemplateCluster), typeof(LoadBalancer), typeof(FunctionRuntimeCluster)];
 
     // Types that keep a waiting operation's id in an Operation (titan-ops architecture/resource-lifecycle.md#shape).
     private static List<Type> WithAnOperation() =>
@@ -86,6 +88,12 @@ public class RequestLifecycleShapeTests
             VmTemplate template = VmTemplate.Create("shape", null, "ubuntu/22.04", 10, "m");
             template.SyncIn("cluster-a");
             return template.Clusters.Single();
+        },
+        [typeof(FunctionRuntimeCluster)] = () =>
+        {
+            FunctionRuntime runtime = FunctionRuntime.Create("shape", $"ghcr.io/openvicloud/shape@sha256:{new string('0', 64)}", "amd64", null);
+            runtime.SyncIn("fn-a");
+            return runtime.Clusters.Single();
         },
     };
 
@@ -174,6 +182,9 @@ public class RequestLifecycleShapeTests
     // A template in a cluster ends its one operation, a sync, by the status it waits in (titan-ops features/catalog/design.md#template-reports).
     private static readonly string[] VmTemplateReportMoves = ["SyncSucceeded", "SyncFailed"];
 
+    // So does a function runtime in a function cluster (titan-ops features/ovc-function/design.md#runtimes).
+    private static readonly string[] FunctionRuntimeReportMoves = ["SyncSucceeded", "SyncFailed"];
+
     // A load balancer ends its create, update or delete by the status it waits in (titan-ops features/load-balancer/design.md#lb-lifecycle).
     private static readonly string[] LoadBalancerReportMoves =
     [
@@ -209,6 +220,10 @@ public class RequestLifecycleShapeTests
         if (type == typeof(LoadBalancer))
         {
             return [.. LoadBalancerReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(FunctionRuntimeCluster))
+        {
+            return [.. FunctionRuntimeReportMoves, "MarkObserved", "MarkNotFound"];
         }
         throw new InvalidOperationException($"no report moves for {type.Name}: add them with the type");
     }
@@ -339,6 +354,24 @@ public class RequestLifecycleShapeTests
         {
             VmTemplateCluster cluster = (VmTemplateCluster)WaitingOnARequest[typeof(VmTemplateCluster)]();
             MethodInfo ending = typeof(VmTemplateCluster).GetMethod(move, BindingFlags.NonPublic | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(cluster);
+
+            object? result = ending.Invoke(cluster, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(cluster));
+        }
+    }
+
+    // The same for a function runtime in a function cluster.
+    [Fact]
+    public void EveryFunctionRuntimeClusterMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in FunctionRuntimeReportMoves)
+        {
+            FunctionRuntimeCluster cluster = (FunctionRuntimeCluster)WaitingOnARequest[typeof(FunctionRuntimeCluster)]();
+            MethodInfo ending = typeof(FunctionRuntimeCluster).GetMethod(move, BindingFlags.NonPublic | BindingFlags.Instance)!;
             object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
             Dictionary<string, object?> before = PublicProperties(cluster);
 
@@ -536,6 +569,14 @@ public class RequestLifecycleShapeTests
             except: [], atLeast: 3, "template");
     }
 
+    // As the template's: sync-all locks each runtime it asks a sync of, the two callbacks lock the runtime they report on.
+    [Fact]
+    public void EveryFunctionRuntimeLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks([Path.Combine("Titan.Application", "Commands", "Catalog", "FunctionRuntime")],
+            except: [], atLeast: 3, "function runtime");
+    }
+
     // An admin's restore reads its source to copy it (titan-ops features/backup/design.md#restore-as-new-resource): the
     // VM or volume is locked, so a delete of the source and its restore take turns, and the volumes of a VM are read
     // under their own locks, VM first. The two schedule handlers of the folder make and change no resource.
@@ -648,6 +689,17 @@ public class RequestLifecycleShapeTests
 
         Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
             "The template sync payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
+    }
+
+    [Fact]
+    public void EveryFunctionRuntimeCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        Match enqueue = Regex.Match(src, @"public Task EnqueueFunctionRuntimeSyncAsync\([\s\S]*?,\s*ct\);");
+        Assert.True(enqueue.Success, "EnqueueFunctionRuntimeSyncAsync not found: the scan is blind");
+
+        Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
+            "The function runtime sync payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
     }
 
     [Fact]

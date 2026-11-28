@@ -6,6 +6,7 @@ using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
+using FunctionRuntimeAggregate = Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Abstractions;
@@ -96,4 +97,8 @@ public interface IProviderCommandQueue
 
     // One command per sync request of one cluster.
     Task EnqueueTemplateSyncAsync(VmTemplateAggregate template, string clusterId, Guid requestId, CancellationToken ct = default);
+
+    // One command per sync request of one function cluster; clusterId is the function cluster, whose worker leases it
+    // (titan-ops features/ovc-function/design.md#function-lifecycle).
+    Task EnqueueFunctionRuntimeSyncAsync(FunctionRuntimeAggregate runtime, string clusterId, Guid requestId, CancellationToken ct = default);
 }

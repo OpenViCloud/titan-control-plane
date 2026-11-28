@@ -39,6 +39,7 @@ public class ModuleBoundaryTests
         ["IWalletMutationRepository"] = "Billing",
         ["IWalletRepository"] = "Billing",
         ["IWalletTransactionRepository"] = "Billing",
+        ["IFunctionRuntimeRepository"] = "Catalog",
         ["ISnapshotOfferingRepository"] = "Catalog",
         ["IVmOfferingRepository"] = "Catalog",
         ["IVmTemplateRepository"] = "Catalog",

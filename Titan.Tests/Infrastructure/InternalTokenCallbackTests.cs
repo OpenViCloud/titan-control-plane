@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Titan.Application.Abstractions;
+using Titan.Application.Commands.Catalog.FunctionRuntime;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Compute.Vm;
@@ -64,6 +65,50 @@ public class InternalTokenCallbackTests
             new EndTemplateSyncRequestCommandHandler(StrictTemplates(), OneCluster), ConfigWithToken());
 
         await ep.HandleAsync(new EndTemplateSyncRequestBody("Done", ExternalId: "tpl-1"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    private static IFunctionRuntimeRepository StrictRuntimes() => new Mock<IFunctionRuntimeRepository>(MockBehavior.Strict).Object;
+
+    private static readonly FunctionClusterOptions OneFunctionCluster =
+        new() { Clusters = [new FunctionClusterConfig { Id = "fn-dev", Name = "Function dev" }] };
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task EndFunctionRuntimeSyncRequest_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<EndFunctionRuntimeSyncRequestEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["runtimeId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["clusterId"] = "fn-dev";
+                ctx.Request.RouteValues["requestId"] = Guid.NewGuid().ToString();
+                SetToken(ctx, token);
+            },
+            new EndFunctionRuntimeSyncRequestCommandHandler(StrictRuntimes(), OneFunctionCluster), ConfigWithToken());
+
+        await ep.HandleAsync(new EndFunctionRuntimeSyncRequestBody("Done"), CancellationToken.None);
+
+        Assert.Equal(401, ep.HttpContext.Response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("wrong")]
+    public async Task ObserveFunctionRuntime_WithoutTheToken_Returns401(string? token)
+    {
+        var ep = Factory.Create<ObserveFunctionRuntimeEndpoint>(
+            ctx =>
+            {
+                ctx.Request.RouteValues["runtimeId"] = Guid.NewGuid().ToString();
+                ctx.Request.RouteValues["clusterId"] = "fn-dev";
+                SetToken(ctx, token);
+            },
+            new ObserveFunctionRuntimeCommandHandler(StrictRuntimes(), OneFunctionCluster), ConfigWithToken());
+
+        await ep.HandleAsync(new ObserveFunctionRuntimeBody(true), CancellationToken.None);
 
         Assert.Equal(401, ep.HttpContext.Response.StatusCode);
     }

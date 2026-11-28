@@ -72,6 +72,8 @@ public class StateTransitionOwnershipTests
             + "mutated again — there is no observation path into this aggregate",
         ["Entities/VmTemplateCluster"] = "no terminal state exists: a template is never removed from a cluster, so " +
             "NotFound and Failed both take a new sync (titan-ops features/catalog/design.md#template-state-is-existence)",
+        ["Entities/FunctionRuntimeCluster"] = "no terminal state exists: a function runtime is never removed from a cluster, " +
+            "so NotFound and Failed both take a new sync (titan-ops features/ovc-function/design.md#runtimes)",
     };
 
     // ── a caller may not assert a provider id the aggregate owns (titan-ops architecture/intent-and-observation.md#aggregate-hands-out-provider-id) ──
@@ -272,6 +274,12 @@ public class StateTransitionOwnershipTests
     {
         ["VmTemplateCluster.MarkNotFound"] = "an observation, not an intent: there is no invariant to refuse. NotFound is " +
             "reachable from every status but Failed (no alias to lose), which the method ignores with an early return " +
+            "the scan does not read as validation. Declared, not enforced.",
+        ["FunctionRuntimeCluster.MarkObserved"] = "an observation, not an intent: there is no invariant to refuse. Unlike a " +
+            "template's, a runtime needs no provider id to have been seen (its image digest is its id on the cluster), so " +
+            "every status may be observed Available.",
+        ["FunctionRuntimeCluster.MarkNotFound"] = "an observation, not an intent: there is no invariant to refuse. NotFound " +
+            "is reachable from every status but Failed (never there to lose), which the method ignores with an early return " +
             "the scan does not read as validation. Declared, not enforced.",
         ["ProviderCommand.Reopen"] = "no state refuses a repeat of a key: an open or Done row absorbs it " +
             "(returns false); a Failed row runs again. A throw would turn a resent request into an error every " +

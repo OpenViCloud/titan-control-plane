@@ -26,6 +26,9 @@ public static class ProviderCommandKinds
     public const string LoadBalancerUpdate = "load-balancer.update";
     public const string LoadBalancerDelete = "load-balancer.delete";
     public const string TemplateSync = "template.sync";
+    /// Pulls a function runtime's image onto every Ready node of a function cluster. Leased by the function worker, which
+    /// runs inside that cluster, never by the Incus worker (titan-ops architecture/provider-commands.md#provider-command-table).
+    public const string FunctionRuntimeSync = "function-runtime.sync";
     public const string VmBackup = "vm.backup";
     public const string VolumeBackup = "volume.backup";
     /// The day's config of one cluster, of no tenant and no resource; the worker's backup loop leases it with the two

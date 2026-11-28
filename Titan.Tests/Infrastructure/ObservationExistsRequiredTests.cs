@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
+using Titan.Application.Commands.Catalog.FunctionRuntime;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Compute.Vm;
@@ -28,13 +29,14 @@ public class ObservationExistsRequiredTests
     private const string Secret = "secret";
 
     public static readonly TheoryData<string> Routes =
-        ["Vm", "Volume", "VolumeSnapshot", "VmSnapshot", "Network", "FirewallRule", "LoadBalancer", "Template"];
+        ["Vm", "Volume", "VolumeSnapshot", "VmSnapshot", "Network", "FirewallRule", "LoadBalancer", "Template", "FunctionRuntime"];
 
     private readonly Mock<IVmRepository> _vms = new();
     private readonly Mock<IVolumeRepository> _volumes = new();
     private readonly Mock<INetworkRepository> _networks = new();
     private readonly Mock<ILoadBalancerRepository> _loadBalancers = new();
     private readonly Mock<IVmTemplateRepository> _templates = new();
+    private readonly Mock<IFunctionRuntimeRepository> _runtimes = new();
 
     private static IConfiguration Config() =>
         new ConfigurationBuilder()
@@ -105,6 +107,14 @@ public class ObservationExistsRequiredTests
                 await ep.HandleAsync(new ObserveLoadBalancerBody(exists), default);
                 return ep.HttpContext.Response.StatusCode;
             }
+            case "FunctionRuntime":
+            {
+                FunctionClusterOptions clusters = new() { Clusters = [new FunctionClusterConfig { Id = "mock", Name = "Mock" }] };
+                var ep = Factory.Create<ObserveFunctionRuntimeEndpoint>(Route("runtimeId", "clusterId"),
+                    new ObserveFunctionRuntimeCommandHandler(_runtimes.Object, clusters), Config());
+                await ep.HandleAsync(new ObserveFunctionRuntimeBody(exists), default);
+                return ep.HttpContext.Response.StatusCode;
+            }
             default:
             {
                 ClusterOptions clusters = new() { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
@@ -123,6 +133,7 @@ public class ObservationExistsRequiredTests
         _networks.VerifyNoOtherCalls();
         _loadBalancers.VerifyNoOtherCalls();
         _templates.VerifyNoOtherCalls();
+        _runtimes.VerifyNoOtherCalls();
     }
 
     [Theory]

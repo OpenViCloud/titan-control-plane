@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the control plane provisions to the
 // provider keeps one status and an Operation of its own, and no Domain type keeps a desired existence, a current existence
 // or a desired and a current state beside it. That holds for Vm, Network, FirewallRule, VmSnapshot, Volume, VolumeSnapshot,
-// VmTemplateCluster and LoadBalancer (OneStatus below). Their status moves only
+// VmTemplateCluster, LoadBalancer and FunctionRuntimeCluster (OneStatus below). Their status moves only
 // through their own table of moves, which StateTransitionOwnershipTests and RequestLifecycleShapeTests read; this file
 // keeps the other two ways back to the old shape closed.
 //
@@ -18,10 +18,12 @@ public class DesiredCurrentOwnershipTests
     // The provisioned aggregates, by name: the VM (titan-ops features/vm/design.md#vm-status), the network and the firewall
     // rule (titan-ops features/network/design.md#network-lifecycle), the VM snapshot (titan-ops features/vm/design.md#vm-snapshot),
     // the volume and its snapshot (titan-ops features/volume/design.md#volume-state-is-existence), the template in a cluster
-    // (titan-ops features/catalog/design.md#template-state-is-existence) and the load balancer
-    // (titan-ops features/load-balancer/design.md#lb-lifecycle).
+    // (titan-ops features/catalog/design.md#template-state-is-existence), the load balancer
+    // (titan-ops features/load-balancer/design.md#lb-lifecycle) and the function runtime in a function cluster
+    // (titan-ops features/ovc-function/design.md#runtimes).
     private static readonly string[] OneStatus =
-        ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer"];
+        ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer",
+            "FunctionRuntimeCluster"];
 
     // The old axes: an existence pair, or a desired and a current state. `?` in the type: a nullable one would otherwise
     // slip past the pattern.
@@ -38,7 +40,9 @@ public class DesiredCurrentOwnershipTests
             var type = Path.GetFileNameWithoutExtension(file);
             bool isTheAggregateRoot = Regex.IsMatch(src, $@"public (?:partial )?class {type}\b");
             bool carriesAProviderId = Regex.IsMatch(src, @"public string\? External\w*Id \{");
-            if (!isTheAggregateRoot || !carriesAProviderId)
+            // A function runtime has no provider id (its image digest is its id on the cluster), but keeps an Operation.
+            bool keepsAnOperation = Regex.IsMatch(src, @"public \w+Operation Operation \{");
+            if (!isTheAggregateRoot || (!carriesAProviderId && !keepsAnOperation))
             {
                 continue;
             }
@@ -49,9 +53,9 @@ public class DesiredCurrentOwnershipTests
             }
         }
 
-        // 8 = the resources the control plane provisions to the provider (the tenant has no provider account:
+        // 9 = the resources the control plane provisions to a provider (the tenant has no provider account:
         // titan-ops architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
-        Assert.Equal(8, provisioned.Count);
+        Assert.Equal(9, provisioned.Count);
 
         // No allowlist: a new provisioned aggregate is born with one status of its own, or this fails.
         Assert.Equal(OneStatus.OrderBy(t => t, StringComparer.Ordinal), provisioned.OrderBy(t => t, StringComparer.Ordinal));

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Titan.Application.Abstractions;
+using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
 using Titan.Domain.Aggregates.ProviderCommand;
@@ -97,6 +98,11 @@ public class ProviderCommandQueueTests
         return template;
     }
 
+    private const string RuntimeImage =
+        "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:3f12d5472d95dfb85ad20ba7d970eccfdbf25d4073a9ee46b71e7434d8eb1fcd";
+
+    private static FunctionRuntime ARuntime() => FunctionRuntime.Create("nodejs26", RuntimeImage, "amd64", new DateOnly(2029, 4, 30));
+
     // Every kind stages the tenant whose resource it acts on, and template.sync none: a tenant's commands run one at a
     // time in each lane (titan-ops features/provider/design.md#tenant-lane). A new kind fails the first assertion until
     // it is here.
@@ -131,6 +137,7 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerCreate] = lb.TenantId, [ProviderCommandKinds.LoadBalancerUpdate] = lb.TenantId,
             [ProviderCommandKinds.LoadBalancerDelete] = lb.TenantId,
             [ProviderCommandKinds.TemplateSync] = null,
+            [ProviderCommandKinds.FunctionRuntimeSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
             // Leased on the drill's loop: a row with the tenant would sit in that tenant's command lane.
@@ -163,6 +170,7 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerUpdateAsync(lb, Guid.NewGuid(), "t-1");
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
+        await queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "fn-dev", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
         await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
@@ -211,6 +219,7 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerCreate] = null, [ProviderCommandKinds.LoadBalancerUpdate] = null,
             [ProviderCommandKinds.LoadBalancerDelete] = null,
             [ProviderCommandKinds.TemplateSync] = null,
+            [ProviderCommandKinds.FunctionRuntimeSync] = null,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
             // The row holds the new VM or volume, whose create it is; the source keeps its own commands and backups.
@@ -243,6 +252,7 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerUpdateAsync(lb, Guid.NewGuid(), "t-1");
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
+        await queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "fn-dev", Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
         await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
@@ -936,6 +946,47 @@ public class ProviderCommandQueueTests
             _repo.Rows.Select(r => r.Key).ToArray());
     }
 
+    // One row per sync request of one function cluster, as a template's (titan-ops features/ovc-function/design.md#function-lifecycle):
+    // the row carries the function cluster, which only its worker leases, and no tenant: the catalog is global.
+    [Fact]
+    public async Task FunctionRuntimeSync_IsKeyedPerRuntimePerClusterPerRequest_OnTheFunctionCluster()
+    {
+        FunctionRuntime runtime = ARuntime();
+        Guid first = Guid.NewGuid(), again = Guid.NewGuid(), elsewhere = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueFunctionRuntimeSyncAsync(runtime, "fn-dev", first);
+        await queue.EnqueueFunctionRuntimeSyncAsync(runtime, "fn-dev", again);
+        await queue.EnqueueFunctionRuntimeSyncAsync(runtime, "fn-two", elsewhere);
+
+        Assert.Equal(
+            new[]
+            {
+                $"function-runtime-sync-{runtime.Id}-fn-dev-{first}", $"function-runtime-sync-{runtime.Id}-fn-dev-{again}",
+                $"function-runtime-sync-{runtime.Id}-fn-two-{elsewhere}",
+            },
+            _repo.Rows.Select(r => r.Key).ToArray());
+        Assert.Equal(["fn-dev", "fn-dev", "fn-two"], _repo.Rows.Select(r => r.ClusterId));
+        Assert.All(_repo.Rows, r => Assert.Equal(ProviderCommandKinds.FunctionRuntimeSync, r.Kind));
+        Assert.All(_repo.Rows, r => Assert.Null(r.TenantId));
+        Assert.All(_repo.Rows, r => Assert.Null(r.ResourceId));
+    }
+
+    [Fact]
+    public async Task FunctionRuntimeSync_CarriesTheRuntime_ItsImagePinnedByDigest_AndTheRequest()
+    {
+        FunctionRuntime runtime = ARuntime();
+        Guid requestId = Guid.NewGuid();
+
+        await Queue().EnqueueFunctionRuntimeSyncAsync(runtime, "fn-dev", requestId);
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal(runtime.Id, payload.RootElement.GetProperty("runtimeId").GetGuid());
+        Assert.Equal(requestId, payload.RootElement.GetProperty("requestId").GetGuid());
+        Assert.Equal("nodejs26", payload.RootElement.GetProperty("name").GetString());
+        Assert.Equal(RuntimeImage, payload.RootElement.GetProperty("image").GetString());
+    }
+
     // One backup a day per resource (titan-ops features/backup/design.md#incus-backup):
     // the UTC day is in the key, and the payload carries what the worker needs to name the object in the bucket.
     [Fact]
@@ -1183,6 +1234,8 @@ public class ProviderCommandQueueTests
             }
             case ProviderCommandKinds.TemplateSync:
                 return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
+            case ProviderCommandKinds.FunctionRuntimeSync:
+                return queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "mock", request);
             case ProviderCommandKinds.ClusterBackup:
                 return queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
             case ProviderCommandKinds.RestoreDrill:
@@ -1233,6 +1286,8 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.LoadBalancerUpdate, ["backends", "externalNetworkId", "listeners", "loadBalancerId", "projectName", "publicIpv6Subnet", "requestId", "vip"] },
         { ProviderCommandKinds.LoadBalancerDelete, ["externalNetworkId", "loadBalancerId", "projectName", "requestId", "vip"] },
         { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
+        // OpenViCloud/titan-function-worker:resource/runtime/sync.go syncPayload.
+        { ProviderCommandKinds.FunctionRuntimeSync, ["image", "name", "requestId", "runtimeId"] },
         { ProviderCommandKinds.ClusterBackup, [] },
         { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },
         { ProviderCommandKinds.VmRestore, ["backupKey", "diskSizeGb", "name", "projectName", "requestId", "sourceVmId", "tenantId", "vmId", "volumes"] },
