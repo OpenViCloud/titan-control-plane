@@ -28,6 +28,7 @@ public record ErrorStatus(int Status, string Code)
         BusinessException e            => new ErrorStatus(422, e.Code),
         ForbiddenException e           => new ErrorStatus(403, e.Code),
         BadRequestException e          => new ErrorStatus(400, e.Code),
+        PayloadTooLargeException e     => new ErrorStatus(413, e.Code),
         ServiceUnavailableException e  => new ErrorStatus(503, e.Code),
         DbUpdateConcurrencyException e when TouchesAProviderCommand(e) => new ErrorStatus(409, RequestInProgressCode),
         DbUpdateException e when IsProviderCommandKeyClash(e) => new ErrorStatus(409, RequestInProgressCode),

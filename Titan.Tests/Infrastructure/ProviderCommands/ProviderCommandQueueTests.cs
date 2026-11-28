@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Titan.Application.Abstractions;
+using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
@@ -103,6 +104,12 @@ public class ProviderCommandQueueTests
 
     private static FunctionRuntime ARuntime() => FunctionRuntime.Create("nodejs26", RuntimeImage, "amd64", new DateOnly(2029, 4, 30));
 
+    private static (Function Function, FunctionVersion Version) AFunctionVersion(string clusterId = "fn-dev", string? handler = "main.handler")
+    {
+        Function function = TestFunctions.AFunction(clusterId: clusterId);
+        return (function, function.WithVersion(handler));
+    }
+
     // Every kind stages the tenant whose resource it acts on, and template.sync none: a tenant's commands run one at a
     // time in each lane (titan-ops features/provider/design.md#tenant-lane). A new kind fails the first assertion until
     // it is here.
@@ -115,6 +122,7 @@ public class ProviderCommandQueueTests
         (Volume volume, VolumeSnapshot volumeSnapshot) = AVolumeSnapshot();
         (Network network, FirewallRule rule) = ARule();
         LoadBalancer lb = ALoadBalancer();
+        (Function function, FunctionVersion version) = AFunctionVersion();
         Vm restoredVm = Vm.RestoreFromBackup(vm, "web-1-restored");
         Volume restoredVolume = Volume.RestoreFromBackup(volume, "data-1-restored");
         var expected = new Dictionary<string, Guid?>
@@ -138,6 +146,8 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerDelete] = lb.TenantId,
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.FunctionRuntimeSync] = null,
+            // In the tenant's function lane (ProviderCommandKinds.Function).
+            [ProviderCommandKinds.FunctionDeploy] = function.TenantId, [ProviderCommandKinds.FunctionDelete] = function.TenantId,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
             // Leased on the drill's loop: a row with the tenant would sit in that tenant's command lane.
@@ -171,6 +181,8 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "fn-dev", Guid.NewGuid());
+        await queue.EnqueueFunctionDeployAsync(function, version, Guid.NewGuid());
+        await queue.EnqueueFunctionDeleteAsync(function, Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
         await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
@@ -198,6 +210,7 @@ public class ProviderCommandQueueTests
         Volume restored = AVolumeSnapshot().Item1;
         (Network network, FirewallRule rule) = ARule();
         LoadBalancer lb = ALoadBalancer();
+        (Function function, FunctionVersion version) = AFunctionVersion();
         Vm restoredVm = Vm.RestoreFromBackup(vm, "web-1-restored");
         Volume restoredVolume = Volume.RestoreFromBackup(volume, "data-1-restored");
         var expected = new Dictionary<string, Guid?>
@@ -220,6 +233,8 @@ public class ProviderCommandQueueTests
             [ProviderCommandKinds.LoadBalancerDelete] = null,
             [ProviderCommandKinds.TemplateSync] = null,
             [ProviderCommandKinds.FunctionRuntimeSync] = null,
+            // A deploy and a delete of one function never run at once.
+            [ProviderCommandKinds.FunctionDeploy] = function.Id, [ProviderCommandKinds.FunctionDelete] = function.Id,
             [ProviderCommandKinds.ClusterBackup] = null,
             [ProviderCommandKinds.RestoreDrill] = null,
             // The row holds the new VM or volume, whose create it is; the source keeps its own commands and backups.
@@ -253,6 +268,8 @@ public class ProviderCommandQueueTests
         await queue.EnqueueLoadBalancerDeleteAsync(lb, Guid.NewGuid(), lb.Vip, "t-1");
         await queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", Guid.NewGuid());
         await queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "fn-dev", Guid.NewGuid());
+        await queue.EnqueueFunctionDeployAsync(function, version, Guid.NewGuid());
+        await queue.EnqueueFunctionDeleteAsync(function, Guid.NewGuid());
         await queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
         await queue.EnqueueRestoreDrillAsync("mock", new DateOnly(2026, 11, 11), "vm", Guid.NewGuid(), "vm-x", "web-1", "t-1", Guid.NewGuid());
         await queue.EnqueueVmRestoreAsync(vm, restoredVm, Guid.NewGuid(), ArchiveKey, "t-1", []);
@@ -987,6 +1004,97 @@ public class ProviderCommandQueueTests
         Assert.Equal(RuntimeImage, payload.RootElement.GetProperty("image").GetString());
     }
 
+    // One row per deploy or delete request of a function, on its function cluster, in its tenant's lane, holding the
+    // function (titan-ops features/ovc-function/design.md#function-lifecycle).
+    [Fact]
+    public async Task FunctionDeployAndDelete_AreKeyedPerFunctionPerRequest_OnItsCluster_ForItsTenant()
+    {
+        (Function function, FunctionVersion version) = AFunctionVersion();
+        Guid deploy = Guid.NewGuid(), again = Guid.NewGuid(), delete = Guid.NewGuid();
+        ProviderCommandQueue queue = Queue();
+
+        await queue.EnqueueFunctionDeployAsync(function, version, deploy);
+        await queue.EnqueueFunctionDeployAsync(function, version, again);
+        await queue.EnqueueFunctionDeleteAsync(function, delete);
+
+        Assert.Equal(
+            new[]
+            {
+                $"function-deploy-{function.Id}-{deploy}", $"function-deploy-{function.Id}-{again}",
+                $"function-delete-{function.Id}-{delete}",
+            },
+            _repo.Rows.Select(r => r.Key).ToArray());
+        Assert.Equal([ProviderCommandKinds.FunctionDeploy, ProviderCommandKinds.FunctionDeploy, ProviderCommandKinds.FunctionDelete],
+            _repo.Rows.Select(r => r.Kind));
+        Assert.All(_repo.Rows, r => Assert.Equal("fn-dev", r.ClusterId));
+        Assert.All(_repo.Rows, r => Assert.Equal(function.TenantId, r.TenantId));
+        Assert.All(_repo.Rows, r => Assert.Equal(function.Id, r.ResourceId));
+    }
+
+    // Every value the worker applies (titan-ops features/ovc-function/design.md#function-limits): the version's image,
+    // handler and size, CPU in proportion to memory, and the tenant namespace's quota and limits.
+    [Fact]
+    public async Task FunctionDeploy_CarriesTheVersion_ItsSize_AndTheNamespaceLimits()
+    {
+        (Function function, FunctionVersion version) = AFunctionVersion();
+        Guid requestId = Guid.NewGuid();
+
+        await Queue().EnqueueFunctionDeployAsync(function, version, requestId);
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        JsonElement root = payload.RootElement;
+        Assert.Equal(function.Id, root.GetProperty("functionId").GetGuid());
+        Assert.Equal(requestId, root.GetProperty("requestId").GetGuid());
+        Assert.Equal(function.TenantId, root.GetProperty("tenantId").GetGuid());
+        Assert.Equal(version.Id, root.GetProperty("versionId").GetGuid());
+        Assert.Equal($"localhost:5100/fn/{function.TenantId}/{function.Id}@{TestFunctions.Digest}", root.GetProperty("image").GetString());
+        Assert.Equal("main.handler", root.GetProperty("handler").GetString());
+        Assert.Equal(256, root.GetProperty("memoryMiB").GetInt32());
+        Assert.Equal("250m", root.GetProperty("cpu").GetString());
+        Assert.Equal(30, root.GetProperty("timeoutSeconds").GetInt32());
+        Assert.Equal(10, root.GetProperty("maxInstances").GetInt32());
+        Assert.Equal(1, root.GetProperty("concurrency").GetInt32());
+        JsonElement quota = root.GetProperty("tenantQuota");
+        Assert.Equal(["cronJobs", "memoryMiB", "pods", "services"], quota.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(43520, quota.GetProperty("memoryMiB").GetInt32());
+        Assert.Equal(20, quota.GetProperty("pods").GetInt32());
+        Assert.Equal(20, quota.GetProperty("services").GetInt32());
+        Assert.Equal(20, quota.GetProperty("cronJobs").GetInt32());
+        JsonElement limits = root.GetProperty("containerLimits");
+        Assert.Equal(["defaultCpu", "defaultMemoryMiB", "maxCpu", "maxMemoryMiB"],
+            limits.EnumerateObject().Select(f => f.Name).Order(StringComparer.Ordinal));
+        Assert.Equal(128, limits.GetProperty("defaultMemoryMiB").GetInt32());
+        Assert.Equal(2048, limits.GetProperty("maxMemoryMiB").GetInt32());
+        Assert.Equal("125m", limits.GetProperty("defaultCpu").GetString());
+        Assert.Equal("2000m", limits.GetProperty("maxCpu").GetString());
+    }
+
+    // Go's bootstrap registers its own handler: the field is there, empty.
+    [Fact]
+    public async Task FunctionDeploy_OfAGoVersion_CarriesAnEmptyHandler()
+    {
+        (Function function, FunctionVersion version) = AFunctionVersion(handler: null);
+
+        await Queue().EnqueueFunctionDeployAsync(function, version, Guid.NewGuid());
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal("", payload.RootElement.GetProperty("handler").GetString());
+    }
+
+    [Fact]
+    public async Task FunctionDelete_CarriesTheFunction_TheRequest_AndTheTenant()
+    {
+        Function function = AFunctionVersion().Function;
+        Guid requestId = Guid.NewGuid();
+
+        await Queue().EnqueueFunctionDeleteAsync(function, requestId);
+
+        using JsonDocument payload = JsonDocument.Parse(Assert.Single(_repo.Rows).Payload);
+        Assert.Equal(function.Id, payload.RootElement.GetProperty("functionId").GetGuid());
+        Assert.Equal(requestId, payload.RootElement.GetProperty("requestId").GetGuid());
+        Assert.Equal(function.TenantId, payload.RootElement.GetProperty("tenantId").GetGuid());
+    }
+
     // One backup a day per resource (titan-ops features/backup/design.md#incus-backup):
     // the UTC day is in the key, and the payload carries what the worker needs to name the object in the bucket.
     [Fact]
@@ -1236,6 +1344,13 @@ public class ProviderCommandQueueTests
                 return queue.EnqueueTemplateSyncAsync(ATemplate(), "mock", request);
             case ProviderCommandKinds.FunctionRuntimeSync:
                 return queue.EnqueueFunctionRuntimeSyncAsync(ARuntime(), "mock", request);
+            case ProviderCommandKinds.FunctionDeploy:
+            {
+                (Function function, FunctionVersion version) = AFunctionVersion("mock");
+                return queue.EnqueueFunctionDeployAsync(function, version, request);
+            }
+            case ProviderCommandKinds.FunctionDelete:
+                return queue.EnqueueFunctionDeleteAsync(AFunctionVersion("mock").Function, request);
             case ProviderCommandKinds.ClusterBackup:
                 return queue.EnqueueClusterBackupAsync("mock", new DateOnly(2026, 11, 11));
             case ProviderCommandKinds.RestoreDrill:
@@ -1288,6 +1403,9 @@ public class ProviderCommandQueueTests
         { ProviderCommandKinds.TemplateSync, ["imageUrl", "name", "osImageName", "requestId", "templateId"] },
         // OpenViCloud/titan-function-worker:resource/runtime/sync.go syncPayload.
         { ProviderCommandKinds.FunctionRuntimeSync, ["image", "name", "requestId", "runtimeId"] },
+        // OpenViCloud/titan-function-worker:resource/function/deploy.go and delete.go.
+        { ProviderCommandKinds.FunctionDeploy, ["concurrency", "containerLimits", "cpu", "functionId", "handler", "image", "maxInstances", "memoryMiB", "requestId", "tenantId", "tenantQuota", "timeoutSeconds", "versionId"] },
+        { ProviderCommandKinds.FunctionDelete, ["functionId", "requestId", "tenantId"] },
         { ProviderCommandKinds.ClusterBackup, [] },
         { ProviderCommandKinds.RestoreDrill, ["externalId", "kind", "name", "projectName", "resourceId", "tenantId"] },
         { ProviderCommandKinds.VmRestore, ["backupKey", "diskSizeGb", "name", "projectName", "requestId", "sourceVmId", "tenantId", "vmId", "volumes"] },

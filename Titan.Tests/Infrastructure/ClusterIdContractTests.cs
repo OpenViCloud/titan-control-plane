@@ -85,7 +85,7 @@ public class ClusterIdContractTests
             .ToList();
 
         Assert.Empty(readersBypassingClusterQuery);
-        Assert.Equal(8, readersOfClusterQuery.Count);
+        Assert.Equal(9, readersOfClusterQuery.Count);
     }
 
     [Fact]

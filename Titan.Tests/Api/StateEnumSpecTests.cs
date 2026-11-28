@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Aggregates.Invoice;
 using Titan.Domain.Aggregates.TopUp;
 using Titan.Domain.Aggregates.LoadBalancer;
@@ -28,6 +29,7 @@ public class StateEnumSpecTests(OpenApiSpecTests.ApiFactory factory) : IClassFix
         { "VmSnapshotQueryResult", "status", typeof(VmSnapshotStatus), false },
         { "VmKeyAdditionQueryResult", "status", typeof(VmKeyAdditionStatus), false },
         { "LoadBalancerQueryResult", "status", typeof(LoadBalancerStatus), false },
+        { "FunctionQueryResult", "status", typeof(FunctionStatus), false },
         { "TenantQueryResult", "status", typeof(TenantStatus), false },
         { "InvoiceQueryResult", "status", typeof(InvoiceDisplayStatus), false },
         { "InvoiceDetailQueryResult", "status", typeof(InvoiceDisplayStatus), false },

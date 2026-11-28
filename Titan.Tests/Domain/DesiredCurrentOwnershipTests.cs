@@ -6,7 +6,7 @@ namespace Titan.Tests.Domain;
 // titan-ops architecture/desired-and-current.md#desired-and-current: every resource the control plane provisions to the
 // provider keeps one status and an Operation of its own, and no Domain type keeps a desired existence, a current existence
 // or a desired and a current state beside it. That holds for Vm, Network, FirewallRule, VmSnapshot, Volume, VolumeSnapshot,
-// VmTemplateCluster, LoadBalancer and FunctionRuntimeCluster (OneStatus below). Their status moves only
+// VmTemplateCluster, LoadBalancer, FunctionRuntimeCluster and Function (OneStatus below). Their status moves only
 // through their own table of moves, which StateTransitionOwnershipTests and RequestLifecycleShapeTests read; this file
 // keeps the other two ways back to the old shape closed.
 //
@@ -23,7 +23,7 @@ public class DesiredCurrentOwnershipTests
     // (titan-ops features/ovc-function/design.md#runtimes).
     private static readonly string[] OneStatus =
         ["Vm", "Network", "FirewallRule", "VmSnapshot", "Volume", "VolumeSnapshot", "VmTemplateCluster", "LoadBalancer",
-            "FunctionRuntimeCluster"];
+            "FunctionRuntimeCluster", "Function"];
 
     // The old axes: an existence pair, or a desired and a current state. `?` in the type: a nullable one would otherwise
     // slip past the pattern.
@@ -53,9 +53,9 @@ public class DesiredCurrentOwnershipTests
             }
         }
 
-        // 9 = the resources the control plane provisions to a provider (the tenant has no provider account:
+        // 10 = the resources the control plane provisions to a provider (the tenant has no provider account:
         // titan-ops architecture/tenancy-and-admin.md#approval-is-activation). A scan that finds fewer is blind, not green.
-        Assert.Equal(9, provisioned.Count);
+        Assert.Equal(10, provisioned.Count);
 
         // No allowlist: a new provisioned aggregate is born with one status of its own, or this fails.
         Assert.Equal(OneStatus.OrderBy(t => t, StringComparer.Ordinal), provisioned.OrderBy(t => t, StringComparer.Ordinal));

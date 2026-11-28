@@ -6,7 +6,9 @@ using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
+using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
 using FunctionRuntimeAggregate = Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime;
+using FunctionVersion = Titan.Domain.Aggregates.Function.FunctionVersion;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 
 namespace Titan.Application.Abstractions;
@@ -101,4 +103,9 @@ public interface IProviderCommandQueue
     // One command per sync request of one function cluster; clusterId is the function cluster, whose worker leases it
     // (titan-ops features/ovc-function/design.md#function-lifecycle).
     Task EnqueueFunctionRuntimeSyncAsync(FunctionRuntimeAggregate runtime, string clusterId, Guid requestId, CancellationToken ct = default);
+
+    // One command per deploy or delete request of a function, on its function cluster
+    // (titan-ops features/ovc-function/design.md#function-lifecycle).
+    Task EnqueueFunctionDeployAsync(FunctionAggregate function, FunctionVersion version, Guid requestId, CancellationToken ct = default);
+    Task EnqueueFunctionDeleteAsync(FunctionAggregate function, Guid requestId, CancellationToken ct = default);
 }

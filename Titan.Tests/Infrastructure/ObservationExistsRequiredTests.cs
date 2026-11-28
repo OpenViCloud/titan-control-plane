@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Moq;
 using Titan.Application.Abstractions;
 using Titan.Application.Commands.Catalog.FunctionRuntime;
+using Titan.Application.Commands.Compute.Function;
 using Titan.Application.Commands.Catalog.VmTemplate;
 using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Compute.Vm;
@@ -29,7 +30,7 @@ public class ObservationExistsRequiredTests
     private const string Secret = "secret";
 
     public static readonly TheoryData<string> Routes =
-        ["Vm", "Volume", "VolumeSnapshot", "VmSnapshot", "Network", "FirewallRule", "LoadBalancer", "Template", "FunctionRuntime"];
+        ["Vm", "Volume", "VolumeSnapshot", "VmSnapshot", "Network", "FirewallRule", "LoadBalancer", "Template", "FunctionRuntime", "Function"];
 
     private readonly Mock<IVmRepository> _vms = new();
     private readonly Mock<IVolumeRepository> _volumes = new();
@@ -37,6 +38,7 @@ public class ObservationExistsRequiredTests
     private readonly Mock<ILoadBalancerRepository> _loadBalancers = new();
     private readonly Mock<IVmTemplateRepository> _templates = new();
     private readonly Mock<IFunctionRuntimeRepository> _runtimes = new();
+    private readonly Mock<IFunctionRepository> _functions = new();
 
     private static IConfiguration Config() =>
         new ConfigurationBuilder()
@@ -115,6 +117,13 @@ public class ObservationExistsRequiredTests
                 await ep.HandleAsync(new ObserveFunctionRuntimeBody(exists), default);
                 return ep.HttpContext.Response.StatusCode;
             }
+            case "Function":
+            {
+                var ep = Factory.Create<ObserveFunctionEndpoint>(Route("functionId"),
+                    new ObserveFunctionCommandHandler(_functions.Object), Config());
+                await ep.HandleAsync(new ObserveFunctionBody(exists), default);
+                return ep.HttpContext.Response.StatusCode;
+            }
             default:
             {
                 ClusterOptions clusters = new() { Clusters = [new ClusterConfig { Id = "mock", Name = "Mock" }] };
@@ -134,6 +143,7 @@ public class ObservationExistsRequiredTests
         _loadBalancers.VerifyNoOtherCalls();
         _templates.VerifyNoOtherCalls();
         _runtimes.VerifyNoOtherCalls();
+        _functions.VerifyNoOtherCalls();
     }
 
     [Theory]

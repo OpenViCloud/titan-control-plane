@@ -131,13 +131,14 @@ public class ProviderCommand : IAggregateRoot
         return pendingAndDue || leaseRanOut;
     }
 
-    /// A Leased row holds its lane, the same tenant (or no tenant) and the same side of the backup split: no other row of
-    /// that lane is handed out until it stops running, while the row itself is taken again once its lease ran out
-    /// (titan-ops features/provider/design.md#tenant-lane). ProviderCommandRepository.ListClaimableAsync
+    /// A Leased row holds its lane, the same tenant (or no tenant) and the same side of the backup and the function
+    /// splits: no other row of that lane is handed out until it stops running, while the row itself is taken again once
+    /// its lease ran out (titan-ops features/provider/design.md#tenant-lane). ProviderCommandRepository.ListClaimableAsync
     /// writes the same test in SQL (titan-ops architecture/domain-methods.md#plain-code).
     internal bool HoldsTheLaneOf(ProviderCommand other) =>
         Status == ProviderCommandStatus.Leased && Id != other.Id && TenantId == other.TenantId
-        && ProviderCommandKinds.Backup.Contains(Kind) == ProviderCommandKinds.Backup.Contains(other.Kind);
+        && ProviderCommandKinds.Backup.Contains(Kind) == ProviderCommandKinds.Backup.Contains(other.Kind)
+        && ProviderCommandKinds.Function.Contains(Kind) == ProviderCommandKinds.Function.Contains(other.Kind);
 
     /// A Leased row holds its resource across both lanes: no other row of the same VM or volume is handed out until it
     /// stops running, whatever kind asks (titan-ops features/provider/design.md#tenant-lane). A row of no resource holds

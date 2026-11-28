@@ -13,6 +13,11 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
     public const string LeasedNoTenantIndex = "IX_provider_commands_kind_leased_no_tenant";
     public const string LeasedPerResourceIndex = "IX_provider_commands_resource_id_leased";
 
+    public static readonly string LaneSql =
+        $"CASE WHEN kind IN ({string.Join(", ", ProviderCommandKinds.Backup.Select(k => $"'{k}'"))}) THEN 'backup' " +
+        $"WHEN kind IN ({string.Join(", ", ProviderCommandKinds.Function.Select(k => $"'{k}'"))}) THEN 'function' " +
+        "ELSE 'command' END";
+
     public void Configure(EntityTypeBuilder<ProviderCommand> builder)
     {
         builder.ToTable("provider_commands");
@@ -23,12 +28,10 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.Property(c => c.ClusterId).HasColumnName("cluster_id").HasMaxLength(64).IsRequired();
         builder.Property(c => c.TenantId).HasColumnName("tenant_id");
         builder.Property(c => c.ResourceId).HasColumnName("resource_id");
-        // The side of the backup split (ProviderCommandKinds.Backup) a row is on: with the tenant, its lane
-        // (titan-ops features/provider/design.md#tenant-lane).
+        // The side of the backup and the function splits (ProviderCommandKinds.Backup, ProviderCommandKinds.Function) a
+        // row is on: with the tenant, its lane (titan-ops features/provider/design.md#tenant-lane).
         builder.Property<string>(LaneColumn).HasColumnName("lane").HasMaxLength(16)
-            .HasComputedColumnSql(
-                $"CASE WHEN kind IN ({string.Join(", ", ProviderCommandKinds.Backup.Select(k => $"'{k}'"))}) " +
-                "THEN 'backup' ELSE 'command' END", stored: true);
+            .HasComputedColumnSql(LaneSql, stored: true);
         builder.Property(c => c.Payload).HasColumnName("payload").HasColumnType("jsonb").IsRequired();
         // titan-ops architecture/code-structure.md#enum-storage
         builder.Property(c => c.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(16).IsRequired();

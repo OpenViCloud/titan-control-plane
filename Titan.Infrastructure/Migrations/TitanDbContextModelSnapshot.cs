@@ -337,6 +337,144 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("cluster_ipv6_routes", "core");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Function.Function", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("ClusterId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("cluster_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("DeployingVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deploying_version_id");
+
+                    b.Property<string>("ExternalId")
+                        .HasColumnType("text")
+                        .HasColumnName("external_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("RunningVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("running_version_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("functions", "core");
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Function.FunctionVersion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<long>("CodeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("code_bytes");
+
+                    b.Property<string>("CodeKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code_key");
+
+                    b.Property<string>("CodeSha256")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code_sha256");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DiscardedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("discarded_at");
+
+                    b.Property<int>("FileCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("file_count");
+
+                    b.Property<Guid>("FunctionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("function_id");
+
+                    b.Property<string>("Handler")
+                        .HasColumnType("text")
+                        .HasColumnName("handler");
+
+                    b.Property<string>("Image")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("image");
+
+                    b.Property<string>("ImageDigest")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("image_digest");
+
+                    b.Property<int>("MemoryMiB")
+                        .HasColumnType("integer")
+                        .HasColumnName("memory_mib");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("integer")
+                        .HasColumnName("number");
+
+                    b.Property<Guid>("RuntimeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("runtime_id");
+
+                    b.Property<string>("RuntimeImage")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("runtime_image");
+
+                    b.Property<string>("RuntimeName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("runtime_name");
+
+                    b.Property<int>("TimeoutSeconds")
+                        .HasColumnType("integer")
+                        .HasColumnName("timeout_seconds");
+
+                    b.Property<long>("UnpackedBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("unpacked_bytes");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FunctionId", "Number")
+                        .IsUnique();
+
+                    b.ToTable("function_versions", "core");
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", b =>
                 {
                     b.Property<Guid>("Id")
@@ -902,7 +1040,7 @@ namespace Titan.Infrastructure.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("lane")
-                        .HasComputedColumnSql("CASE WHEN kind IN ('vm.backup', 'volume.backup') THEN 'backup' ELSE 'command' END", true);
+                        .HasComputedColumnSql("CASE WHEN kind IN ('vm.backup', 'volume.backup') THEN 'backup' WHEN kind IN ('function.deploy', 'function.delete') THEN 'function' ELSE 'command' END", true);
 
                     b.Property<string>("LastError")
                         .HasColumnType("text")
@@ -2179,6 +2317,58 @@ namespace Titan.Infrastructure.Migrations
                     b.ToTable("wallet_sweeps", "core");
                 });
 
+            modelBuilder.Entity("Titan.Domain.Aggregates.Function.Function", b =>
+                {
+                    b.OwnsOne("Titan.Domain.Aggregates.Function.FunctionOperation", "Operation", b1 =>
+                        {
+                            b1.Property<Guid>("FunctionId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<DateTimeOffset?>("AskedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("pending_request_asked_at");
+
+                            b1.Property<DateTimeOffset?>("FailedAt")
+                                .HasColumnType("timestamp with time zone")
+                                .HasColumnName("request_failed_at");
+
+                            b1.Property<string>("FailureDetail")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_detail");
+
+                            b1.Property<string>("FailureReason")
+                                .HasColumnType("text")
+                                .HasColumnName("request_failure_reason");
+
+                            b1.Property<string>("LastSeenStatus")
+                                .HasColumnType("text")
+                                .HasColumnName("observed_state");
+
+                            b1.Property<Guid?>("PendingId")
+                                .HasColumnType("uuid")
+                                .HasColumnName("pending_request_id");
+
+                            b1.HasKey("FunctionId");
+
+                            b1.ToTable("functions", "core");
+
+                            b1.WithOwner()
+                                .HasForeignKey("FunctionId");
+                        });
+
+                    b.Navigation("Operation")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Function.FunctionVersion", b =>
+                {
+                    b.HasOne("Titan.Domain.Aggregates.Function.Function", null)
+                        .WithMany("Versions")
+                        .HasForeignKey("FunctionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntimeCluster", b =>
                 {
                     b.HasOne("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", null)
@@ -2680,6 +2870,11 @@ namespace Titan.Infrastructure.Migrations
                         .HasForeignKey("VmId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Titan.Domain.Aggregates.Function.Function", b =>
+                {
+                    b.Navigation("Versions");
                 });
 
             modelBuilder.Entity("Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime", b =>

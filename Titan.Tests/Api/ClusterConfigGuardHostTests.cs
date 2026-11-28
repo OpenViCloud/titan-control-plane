@@ -70,6 +70,7 @@ public class ClusterConfigGuardHostTests
     {
         var settings = AValidCluster();
         settings["FunctionClusters:0:Id"] = "fn-dev";
+        WithFunctionArtifacts(settings);
         settings["FunctionClusters:1:Id"] = "singapore01";
         await using var factory = new ProductionFactory(settings);
         await factory.InitializeAsync();
@@ -84,12 +85,25 @@ public class ClusterConfigGuardHostTests
     {
         var settings = AValidCluster();
         settings["FunctionClusters:0:Id"] = "fn-dev";
+        WithFunctionArtifacts(settings);
         await using var factory = new ProductionFactory(settings);
         await factory.InitializeAsync();
 
         var response = await factory.CreateClient().GetAsync("/healthz");
 
         Assert.NotEqual(System.Net.HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // A function cluster makes the function code bucket and the registry required at start.
+    private static void WithFunctionArtifacts(Dictionary<string, string> settings)
+    {
+        settings["FunctionCode:Endpoint"] = "https://s3.function.test";
+        settings["FunctionCode:Region"] = "auto";
+        settings["FunctionCode:Bucket"] = "titan-function-test";
+        settings["FunctionCode:AccessKeyId"] = "key-id";
+        settings["FunctionCode:SecretAccessKey"] = "secret";
+        settings["FunctionRegistry:PushUrl"] = "http://registry.function.test:5100";
+        settings["FunctionRegistry:PullHost"] = "localhost:5100";
     }
 
     private sealed class ProductionFactory(Dictionary<string, string> settings) : RealHostFactory(

@@ -1,3 +1,4 @@
+using System.Buffers;
 using FastEndpoints;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http;
@@ -127,17 +128,29 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency, IOptions<Ide
         await buffer.CopyToAsync(originalBody, context.RequestAborted);
     }
 
-    // An HMAC under the server key, not a plain SHA-256 (IdempotencyHashOptions).
-    private static async Task<string> ComputeRequestHashAsync(HttpRequest request, byte[] key)
+    // An HMAC under the server key, not a plain SHA-256 (IdempotencyHashOptions). Hashed as it streams: a function upload
+    // is up to 50 MiB, and the buffered body spills to a temp file rather than to memory.
+    internal static async Task<string> ComputeRequestHashAsync(HttpRequest request, byte[] key)
     {
         request.EnableBuffering();
         request.Body.Seek(0, SeekOrigin.Begin);
 
-        using var ms = new MemoryStream();
-        await request.Body.CopyToAsync(ms);
+        using var hmac = IncrementalHash.CreateHMAC(HashAlgorithmName.SHA256, key);
+        byte[] chunk = ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            int read;
+            while ((read = await request.Body.ReadAsync(chunk.AsMemory(), request.HttpContext.RequestAborted)) > 0)
+            {
+                hmac.AppendData(chunk, 0, read);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(chunk);
+        }
         request.Body.Seek(0, SeekOrigin.Begin); // rewind so the endpoint can read the body
 
-        var hash = HMACSHA256.HashData(key, ms.ToArray());
-        return Convert.ToHexString(hash);
+        return Convert.ToHexString(hmac.GetHashAndReset());
     }
 }

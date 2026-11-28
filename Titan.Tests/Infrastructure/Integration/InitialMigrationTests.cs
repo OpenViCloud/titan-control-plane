@@ -64,6 +64,9 @@ public sealed class InitialMigrationTests : IAsyncLifetime
                 ],
                 runtimes);
             Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_runtime_clusters"));
+            // No function and no version until a tenant makes one (titan-ops features/ovc-function/design.md#function-lifecycle).
+            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.functions"));
+            Assert.Equal(0, await CountAsync(db, "SELECT count(*)::int AS \"Value\" FROM core.function_versions"));
         }
     }
 }

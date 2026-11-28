@@ -9,7 +9,9 @@ using NetworkAggregate = Titan.Domain.Aggregates.Network.Network;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmOfferingAggregate = Titan.Domain.Aggregates.VmOffering.VmOffering;
 using VmTemplateAggregate = Titan.Domain.Aggregates.VmTemplate.VmTemplate;
+using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
 using FunctionRuntimeAggregate = Titan.Domain.Aggregates.FunctionRuntime.FunctionRuntime;
+using FunctionVersion = Titan.Domain.Aggregates.Function.FunctionVersion;
 using VolumeAggregate = Titan.Domain.Aggregates.Volume.Volume;
 using Titan.Domain.Repositories;
 
@@ -314,6 +316,57 @@ public class ProviderCommandQueue(IProviderCommandRepository repository, TimePro
     // waiting sync, as TemplateSyncKey (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
     internal static string FunctionRuntimeSyncKey(Guid runtimeId, string clusterId, Guid requestId) =>
         $"function-runtime-sync-{runtimeId}-{clusterId}-{requestId}";
+
+    // On the function's own cluster, in its tenant's function lane, held by the function: everything the worker applies
+    // comes in the payload, the version's image pinned by digest, its size, and the namespace's quota and limits
+    // (titan-ops features/ovc-function/design.md#function-lifecycle). The worker reads these and no other
+    // (OpenViCloud/titan-function-worker:resource/function/deploy.go).
+    public Task EnqueueFunctionDeployAsync(FunctionAggregate function, FunctionVersion version, Guid requestId,
+        CancellationToken ct = default) =>
+        EnqueueAsync(FunctionDeployKey(function.Id, requestId), ProviderCommandKinds.FunctionDeploy, function.ClusterId,
+            function.TenantId, resourceId: function.Id,
+            new
+            {
+                functionId = function.Id,
+                requestId,
+                tenantId = function.TenantId,
+                versionId = version.Id,
+                image = version.Image,
+                // Go's bootstrap registers its own handler; the worker reads an empty one as none.
+                handler = version.Handler ?? "",
+                memoryMiB = version.MemoryMiB,
+                cpu = Millicores(version.CpuMillicores),
+                timeoutSeconds = version.TimeoutSeconds,
+                maxInstances = FunctionAggregate.MaxInstances,
+                concurrency = FunctionAggregate.ConcurrencyPerInstance,
+                tenantQuota = new
+                {
+                    memoryMiB = FunctionAggregate.TenantQuotaMemoryMiB,
+                    pods = FunctionAggregate.TenantQuotaPods,
+                    services = FunctionAggregate.TenantQuotaServices,
+                    cronJobs = FunctionAggregate.TenantQuotaCronJobs,
+                },
+                containerLimits = new
+                {
+                    defaultMemoryMiB = FunctionAggregate.DefaultMemoryMiB,
+                    maxMemoryMiB = FunctionAggregate.MaxMemoryMiB,
+                    defaultCpu = Millicores(FunctionAggregate.DefaultCpuMillicores),
+                    maxCpu = Millicores(FunctionAggregate.MaxCpuMillicores),
+                },
+            }, ct);
+
+    public Task EnqueueFunctionDeleteAsync(FunctionAggregate function, Guid requestId, CancellationToken ct = default) =>
+        EnqueueAsync(FunctionDeleteKey(function.Id, requestId), ProviderCommandKinds.FunctionDelete, function.ClusterId,
+            function.TenantId, resourceId: function.Id,
+            new { functionId = function.Id, requestId, tenantId = function.TenantId }, ct);
+
+    // `function-{deploy,delete}-{functionId}-{requestId}`: the stuck-request query rebuilds them from the function's waiting
+    // request (titan-ops architecture/resource-lifecycle.md#lost-and-stale).
+    internal static string FunctionDeployKey(Guid functionId, Guid requestId) => $"function-deploy-{functionId}-{requestId}";
+    internal static string FunctionDeleteKey(Guid functionId, Guid requestId) => $"function-delete-{functionId}-{requestId}";
+
+    // Kubernetes quantity of CPU in millicores.
+    private static string Millicores(int millicores) => $"{millicores}m";
 
     private async Task EnqueueAsync(string key, string kind, string clusterId, Guid? tenantId, Guid? resourceId,
         object payload, CancellationToken ct)

@@ -1,4 +1,5 @@
 using Titan.Domain.Exceptions;
+using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
@@ -83,6 +84,15 @@ public static class ComputeInput
         {
             throw new BusinessException("INVALID_SNAPSHOT_NAME",
                 $"A snapshot name is 1 to {VolumeSnapshotEntity.NameMaxLength} characters, not blank.");
+        }
+    }
+
+    public static void EnsureFunctionName(string? name)
+    {
+        if (!FunctionAggregate.IsAName(name))
+        {
+            throw new BusinessException("INVALID_FUNCTION_NAME",
+                $"A function name is 1 to {FunctionAggregate.NameMaxLength} letters, digits, hyphens or underscores, starting with a letter or digit.");
         }
     }
 }

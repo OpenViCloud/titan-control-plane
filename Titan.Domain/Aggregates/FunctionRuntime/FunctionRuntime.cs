@@ -83,6 +83,25 @@ public class FunctionRuntime : IAggregateRoot
         return cluster != null && cluster.IsAvailable;
     }
 
+    /// What a new version may be packed on: listed, and the language still supports it on that day
+    /// (titan-ops features/ovc-function/design.md#runtimes).
+    public bool TakesNewVersionsOn(DateOnly today)
+    {
+        if (!IsListed)
+        {
+            return false;
+        }
+        return SupportEndsOn == null || today <= SupportEndsOn.Value;
+    }
+
+    /// Every Ready node of that cluster holds the image as far as Titan last knew: what a deploy needs, whatever the day.
+    /// A version packed before the support date may be deployed again after it (titan-ops features/ovc-function/design.md#runtimes).
+    public bool IsAvailableIn(string clusterId)
+    {
+        FunctionRuntimeCluster? cluster = FindCluster(clusterId);
+        return cluster != null && cluster.IsAvailable;
+    }
+
     /// Refused when that cluster holds the image or a sync waits. Returns the sync's id for the command's key and
     /// payload.
     public Guid SyncIn(string clusterId)

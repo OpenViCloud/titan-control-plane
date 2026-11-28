@@ -17,7 +17,8 @@ namespace Titan.Tests.Api;
 public class SuccessCodeSpecTests(OpenApiSpecTests.ApiFactory factory) : IClassFixture<OpenApiSpecTests.ApiFactory>
 {
     // Pinned to the operation count of api/openapi-v1.json, so an empty or shrunken scan fails instead of passing.
-    private const int PublicOperations = 65;
+    // +7: v1/tenant/functions (POST, GET), …/{functionId} (GET, DELETE), …/versions (POST, GET), …/deploy (POST).
+    private const int PublicOperations = 72;
 
     private static readonly string EndpointsDir =
         Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "Endpoints");

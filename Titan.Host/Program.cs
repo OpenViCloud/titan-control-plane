@@ -25,6 +25,8 @@ using VolumeCmd = Titan.Application.Commands.Compute.Volume;
 using VolumeQry = Titan.Application.Queries.Compute.Volume;
 using LoadBalancerCmd = Titan.Application.Commands.Compute.LoadBalancer;
 using LoadBalancerQry = Titan.Application.Queries.Compute.LoadBalancer;
+using FunctionCmd = Titan.Application.Commands.Compute.Function;
+using FunctionQry = Titan.Application.Queries.Compute.Function;
 using VmSnapCmd = Titan.Application.Commands.Compute.VmSnapshot;
 using VmSnapQry = Titan.Application.Queries.Compute.VmSnapshot;
 using VmKeyAdditionCmd = Titan.Application.Commands.Compute.VmKeyAddition;
@@ -157,6 +159,7 @@ builder.Services.AddScoped<ILoadBalancerRepository, LoadBalancerRepository>();
 builder.Services.AddScoped<IVolumeSnapshotRepository, VolumeSnapshotRepository>();
 builder.Services.AddScoped<IVmTemplateRepository, VmTemplateRepository>();
 builder.Services.AddScoped<IFunctionRuntimeRepository, FunctionRuntimeRepository>();
+builder.Services.AddScoped<IFunctionRepository, FunctionRepository>();
 builder.Services.AddScoped<IVmOfferingRepository, VmOfferingRepository>();
 builder.Services.AddScoped<IVolumeOfferingRepository, VolumeOfferingRepository>();
 builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
@@ -252,6 +255,9 @@ builder.Services.AddSingleton(clusterOptions);
 // (titan-ops features/ovc-function/design.md#function-cluster-ops).
 builder.Services.AddSingleton(FunctionClusterOptions.FromConfiguration(
     builder.Configuration.GetSection(FunctionClusterOptions.SectionName).Get<List<FunctionClusterConfig>>(), clusterOptions));
+// Where a function answers (titan-ops features/ovc-function/design.md#function-url).
+builder.Services.AddSingleton(
+    builder.Configuration.GetSection(FunctionUrlOptions.SectionName).Get<FunctionUrlOptions>() ?? new FunctionUrlOptions());
 
 var creditOptions = builder.Configuration.GetSection(CreditOptions.SectionName).Get<CreditOptions>() ?? new CreditOptions();
 builder.Services.AddSingleton(creditOptions);
@@ -293,6 +299,18 @@ builder.Services.AddScoped<LoadBalancerCmd.ObserveLoadBalancerCommandHandler>();
 builder.Services.AddScoped<LoadBalancerQry.ListLoadBalancersQueryHandler>();
 builder.Services.AddScoped<LoadBalancerQry.GetLoadBalancerQueryHandler>();
 builder.Services.AddScoped<LoadBalancerQry.ListReconcilableLoadBalancersQueryHandler>();
+builder.Services.AddScoped<FunctionCmd.CreateFunctionCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.UploadFunctionVersionCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.DeployFunctionCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.DeleteFunctionCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.EndFunctionRequestCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.ObserveFunctionCommandHandler>();
+builder.Services.AddScoped<FunctionCmd.CleanFunctionCodeCommandHandler>();
+builder.Services.AddScoped<FunctionQry.ListFunctionsQueryHandler>();
+builder.Services.AddScoped<FunctionQry.GetFunctionQueryHandler>();
+builder.Services.AddScoped<FunctionQry.ListFunctionVersionsQueryHandler>();
+builder.Services.AddScoped<FunctionQry.ListReconcilableFunctionsQueryHandler>();
+builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.FunctionCodeCleanupService>();
 builder.Services.AddScoped<VmSnapCmd.CreateVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.RevertVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.DeleteVmSnapshotCommandHandler>();
@@ -406,6 +424,28 @@ builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.RestoreVmFrom
 builder.Services.AddScoped<Titan.Application.Commands.Admin.Backup.RestoreVolumeFromBackupCommandHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.BackupScheduleService>();
 builder.Services.AddScoped<Titan.Application.Queries.Platform.BackupTarget.GetBackupTargetQueryHandler>();
+// Function code: the zip bucket and the code registry (titan-ops features/ovc-function/design.md#code-storage). Both are
+// required, and checked at start, only while a function cluster is configured; without one the sections are not read.
+builder.Services.AddOptions<Titan.Application.Options.FunctionCodeOptions>()
+    .BindConfiguration(Titan.Application.Options.FunctionCodeOptions.SectionName)
+    .ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Application.Options.FunctionCodeOptions>,
+    Titan.Application.Options.FunctionCodeValidation>();
+builder.Services.AddOptions<Titan.Application.Options.FunctionRegistryOptions>()
+    .BindConfiguration(Titan.Application.Options.FunctionRegistryOptions.SectionName)
+    .ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Application.Options.FunctionRegistryOptions>,
+    Titan.Application.Options.FunctionRegistryValidation>();
+builder.Services.AddSingleton<IFunctionCodeInspector, Titan.Infrastructure.FunctionCode.ZipFunctionCodeInspector>();
+builder.Services.AddSingleton<IFunctionCodeStore, Titan.Infrastructure.FunctionCode.S3FunctionCodeStore>();
+builder.Services.AddSingleton<IFunctionImageRegistry, Titan.Infrastructure.FunctionCode.RegistryFunctionImageRegistry>();
+// A runtime copy moves every layer of an image: minutes, not the default 100 s. The GHCR client follows no redirect, so
+// its token never reaches the storage host a blob redirects to (RegistryFunctionImageRegistry).
+builder.Services.AddHttpClient(Titan.Infrastructure.FunctionCode.RegistryFunctionImageRegistry.CodeRegistryClient,
+    client => client.Timeout = TimeSpan.FromMinutes(10));
+builder.Services.AddHttpClient(Titan.Infrastructure.FunctionCode.RegistryFunctionImageRegistry.GhcrClient,
+        client => client.Timeout = TimeSpan.FromMinutes(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
 builder.Services.AddSingleton<Titan.Infrastructure.Incus.ProviderClientIdentityStore>();
 builder.Services.AddSingleton<IProviderClientIdentityStore>(sp =>
     sp.GetRequiredService<Titan.Infrastructure.Incus.ProviderClientIdentityStore>());
@@ -535,6 +575,8 @@ app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromSecond
 app.UseAuthentication();
 app.UseMiddleware<TenantResolutionMiddleware>();
 app.UseAuthorization();
+// A route's own body limit, before the first reader of the body (titan-ops features/ovc-function/design.md#code-storage).
+app.UseMiddleware<Titan.Infrastructure.Endpoints.RequestBodyLimitMiddleware>();
 app.UseMiddleware<IdempotencyMiddleware>();
 
 app.UseFastEndpoints(c =>
