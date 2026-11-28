@@ -40,7 +40,7 @@ internal sealed class FakeIncusExecServer : IAsyncDisposable
         AgentNotRunning,   // POST exec answers 202, the websocket upgrade 500, the operation fails
         EndsWithoutOutput, // the guest command exits 1 without writing a byte (nc with nothing listening on port 22)
         Silent,            // no banner; echoes stdin to stdout, ends at stdin EOF (a server that waits for its client)
-        StallsThenEndsWithoutOutput, // silent until the test calls EndStalledCommand, then ends without a byte (an overloaded guest's agent)
+        StallsThenEndsWithoutOutput, // silent until the test calls EndStalledCommand, then exits 1 without a byte
     }
 
     public const string Banner = "SSH-2.0-fake\r\n";

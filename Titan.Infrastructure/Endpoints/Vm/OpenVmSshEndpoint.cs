@@ -29,8 +29,8 @@ public class OpenVmSshEndpoint(
     TimeProvider clock,
     ILogger<OpenVmSshEndpoint> logger) : EndpointWithoutRequest
 {
-    // How long an SSH server has to send its banner before the session opens anyway. Long enough for a guest still
-    // overloaded after boot, whose agent can hold nc silent for several seconds and then end it without a byte.
+    // How long an SSH server has to send its banner before the session opens anyway; long enough for a guest still
+    // overloaded after boot (titan-ops features/vm/design.md#ssh-session).
     public static readonly TimeSpan BannerWait = TimeSpan.FromSeconds(30);
 
     public override void Configure()
