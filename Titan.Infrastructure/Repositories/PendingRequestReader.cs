@@ -22,7 +22,7 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
         // not from core.vms: the worker waits what the command carries, and the VM's value may have changed since the stop
         // was recorded. A payload without it (enqueued before it was sent) or no row at all counts the worker's default.
         int defaultStopTimeoutSeconds = Vm.DefaultStopTimeoutSeconds;
-        // A command that waits while another command of its VM or volume holds the resource (a backup, most often) is not
+        // A command that waits while another command of its resource holds it (a backup, most often) is not
         // stuck: the worker has not been given it (titan-ops features/provider/design.md#tenant-lane).
         // Quoted aliases: Postgres folds a bare alias to lower case, and SqlQuery maps columns to properties by name.
         List<StuckRequestRow> rows = await db.Database.SqlQuery<StuckRequestRow>($"""

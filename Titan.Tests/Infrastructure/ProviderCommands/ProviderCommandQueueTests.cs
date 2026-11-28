@@ -197,11 +197,11 @@ public class ProviderCommandQueueTests
         Assert.All(_repo.Rows, row => Assert.Equal(expected[row.Kind], row.TenantId));
     }
 
-    // One leased command per VM or volume across both lanes (titan-ops features/provider/design.md#tenant-lane): every
-    // kind of a VM or volume names it, a restore names the volume it copies from, the rest name none. A new kind fails
-    // the lookup until it is here.
+    // One leased command per resource across every lane (titan-ops features/provider/design.md#tenant-lane): every kind
+    // of a VM, volume or function names it, a restore names the volume it copies from, the rest name none. A new kind
+    // fails the lookup until it is here.
     [Fact]
-    public async Task EveryKind_StagesTheVmOrVolumeItActsOn_AndTheOthersNone()
+    public async Task EveryKind_StagesTheResourceItActsOn_AndTheOthersNone()
     {
         ProviderCommandQueue queue = Queue();
         (Vm vm, VmSnapshot vmSnapshot) = AVmSnapshot();
