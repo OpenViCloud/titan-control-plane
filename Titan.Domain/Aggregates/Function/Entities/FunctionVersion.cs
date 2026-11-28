@@ -30,6 +30,12 @@ public class FunctionVersion : IEntity
     public string ImageDigest { get; private set; } = default!;
     /// What the function cluster's kubelets pull, pinned by ImageDigest.
     public string Image { get; private set; } = default!;
+    /// The environment variables, verbatim (titan-ops features/ovc-function/design.md#function-env).
+    public IReadOnlyDictionary<string, string> Env { get; private set; } = new Dictionary<string, string>();
+    /// The secret versions the version reads, each pinned to a number (titan-ops features/ovc-function/design.md#function-secrets).
+    public IReadOnlyList<FunctionSecretRef> SecretRefs { get; private set; } = [];
+    /// Five cron fields in UTC, or null for a function only called over HTTP.
+    public string? Schedule { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     /// Set when the version falls out of the kept versions; the cleanup job then removes its zip, its image and the row.
     public DateTimeOffset? DiscardedAt { get; private set; }
@@ -59,6 +65,9 @@ public class FunctionVersion : IEntity
         FileCount = spec.FileCount,
         ImageDigest = spec.ImageDigest,
         Image = spec.Image,
+        Env = new Dictionary<string, string>(spec.Env, StringComparer.Ordinal),
+        SecretRefs = [.. spec.SecretRefs],
+        Schedule = spec.Schedule,
         CreatedAt = at,
     };
 

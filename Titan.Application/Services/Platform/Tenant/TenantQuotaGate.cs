@@ -1,6 +1,7 @@
 using Titan.Domain.Exceptions;
 using ApiTokenAggregate = Titan.Domain.Aggregates.ApiToken.ApiToken;
 using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
+using FunctionSecretAggregate = Titan.Domain.Aggregates.FunctionSecret.FunctionSecret;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Services.Platform.Tenant;
@@ -54,6 +55,17 @@ public static class TenantQuotaGate
         if (functionCount >= FunctionAggregate.MaxPerTenant)
         {
             throw new BusinessException("FUNCTION_QUOTA_EXCEEDED", $"Function limit reached (max {FunctionAggregate.MaxPerTenant}).");
+        }
+    }
+
+    /// The function secret cap is one number for every tenant, as the function cap
+    /// (titan-ops features/ovc-function/design.md#function-secrets).
+    public static void EnsureFunctionSecretRoom(int secretCount)
+    {
+        if (secretCount >= FunctionSecretAggregate.MaxPerTenant)
+        {
+            throw new BusinessException("FUNCTION_SECRET_QUOTA_EXCEEDED",
+                $"Function secret limit reached (max {FunctionSecretAggregate.MaxPerTenant}).");
         }
     }
 }

@@ -45,6 +45,7 @@ public class ModuleBoundaryTests
         ["IVmTemplateRepository"] = "Catalog",
         ["IVolumeOfferingRepository"] = "Catalog",
         ["IFunctionRepository"] = "Compute",
+        ["IFunctionSecretRepository"] = "Compute",
         ["ILoadBalancerRepository"] = "Compute",
         ["ISshKeyRepository"] = "Compute",
         ["IVmRepository"] = "Compute",

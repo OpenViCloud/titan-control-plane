@@ -9,6 +9,7 @@ using Titan.Application.Queries.Compute.Function;
 using Titan.Application.Queries.Compute.Function.Contracts;
 using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Aggregates.FunctionRuntime;
+using Titan.Domain.Aggregates.FunctionSecret;
 using Titan.Domain.Exceptions;
 using Titan.Tests.Fakes;
 
@@ -30,6 +31,7 @@ public class FunctionServiceTests
     private readonly FakeFunctionImageRegistry _registry = new();
     private readonly FixedClock _clock = new(Today);
     private FakeFunctionRepository _repo = new();
+    private readonly FakeFunctionSecretRepository _secrets = new();
     private FakeFunctionRuntimeRepository _runtimes;
     private readonly FunctionRuntime _python;
 
@@ -62,11 +64,11 @@ public class FunctionServiceTests
     }
 
     // A version whose image is in the registry, packed on the python runtime of the catalog.
-    private FunctionVersion VersionOn(Function function, FunctionRuntime? runtime = null)
+    private FunctionVersion VersionOn(Function function, FunctionRuntime? runtime = null, params FunctionSecretRef[] secretRefs)
     {
         runtime ??= _python;
         FunctionVersion version = function.AddVersion(TestFunctions.Spec(function, runtimeId: runtime.Id, runtimeName: runtime.Name,
-            runtimeImage: runtime.Image, digest: _registry.NextDigest));
+            runtimeImage: runtime.Image, digest: _registry.NextDigest, secretRefs: secretRefs));
         _registry.Images.Add(version.ImageDigest);
         return version;
     }
@@ -74,9 +76,9 @@ public class FunctionServiceTests
     private CreateFunctionCommandHandler Create() => new(_repo, Clusters, _currentUser.Object);
 
     private UploadFunctionVersionCommandHandler Upload() =>
-        new(_repo, _runtimes, _inspector, _store, _registry, _currentUser.Object, _clock);
+        new(_repo, _secrets, _runtimes, _inspector, _store, _registry, _currentUser.Object, _clock);
 
-    private DeployFunctionCommandHandler Deploy() => new(_repo, _runtimes, _registry, _currentUser.Object, _commands.Object);
+    private DeployFunctionCommandHandler Deploy() => new(_repo, _secrets, _runtimes, _registry, _currentUser.Object, _commands.Object);
 
     private DeleteFunctionCommandHandler Delete() => new(_repo, _currentUser.Object, _commands.Object);
 
@@ -85,7 +87,40 @@ public class FunctionServiceTests
     private CleanFunctionCodeCommandHandler Cleanup() => new(_repo, _store, _registry, NullLogger<CleanFunctionCodeCommandHandler>.Instance);
 
     private UploadFunctionVersionCommand UploadOf(Function function, string runtime = "python3.15", string? handler = "main.handler") =>
-        new(function.Id, runtime, handler, 256, 30, "/tmp/upload/code.zip", "/tmp/upload");
+        new(function.Id, runtime, handler, 256, 30, "/tmp/upload/code.zip", "/tmp/upload",
+            new Dictionary<string, string>(), new Dictionary<string, UploadFunctionSecretRef>(), null);
+
+    // A secret of the tenant with versions 1..versions, each value valueBytes long; the ciphertext is never read here.
+    private FunctionSecret SecretOfTheTenant(string name = "DB_PASSWORD", int versions = 1, int valueBytes = 10)
+    {
+        static FunctionSecretValue Numbered(int number, int bytes) =>
+            new(number, "k1", new byte[FunctionSecret.NonceBytes], new byte[bytes + FunctionSecret.TagBytes], bytes);
+        FunctionSecret secret = FunctionSecret.Create(_tenantId, name, Numbered(1, valueBytes), "kc-member");
+        for (int number = 2; number <= versions; number++)
+        {
+            secret.AddVersion(Numbered(number, valueBytes), "kc-member", []);
+        }
+        _secrets.Saved.Add(secret);
+        return secret;
+    }
+
+    private UploadFunctionVersionCommand UploadWith(Function function, Dictionary<string, string>? env = null,
+        Dictionary<string, UploadFunctionSecretRef>? secrets = null, string? schedule = null) =>
+        UploadOf(function) with
+        {
+            Env = env ?? new Dictionary<string, string>(),
+            Secrets = secrets ?? new Dictionary<string, UploadFunctionSecretRef>(),
+            Schedule = schedule,
+        };
+
+    private void AssertNothingWritten(Function function)
+    {
+        Assert.Empty(_inspector.Packed);
+        Assert.Empty(_store.Put);
+        Assert.Empty(_registry.RuntimeCopies);
+        Assert.Empty(function.Versions);
+        Assert.Equal(0, _repo.Saves);
+    }
 
     private void VerifyDeploys(Times times) =>
         _commands.Verify(q => q.EnqueueFunctionDeployAsync(It.IsAny<Function>(), It.IsAny<FunctionVersion>(), It.IsAny<Guid>(),
@@ -302,6 +337,81 @@ public class FunctionServiceTests
         Assert.Empty(_store.Put);
     }
 
+    // ── upload: variables, secrets, schedule (titan-ops features/ovc-function/design.md#function-config) ──
+
+    [Fact]
+    public async Task Upload_KeepsTheVariablesAndTheSchedule_AndPinsLatest_ToTheNewestNumber()
+    {
+        Function function = Seed();
+        FunctionSecret db = SecretOfTheTenant(versions: 3);
+
+        await Upload().HandleAsync(UploadWith(function,
+            env: new() { ["LOG_LEVEL"] = "info" },
+            secrets: new() { ["DB"] = new UploadFunctionSecretRef("DB_PASSWORD", null) },
+            schedule: "*/5 * * * *"));
+
+        FunctionVersion version = Assert.Single(function.Versions);
+        Assert.Equal(new Dictionary<string, string> { ["LOG_LEVEL"] = "info" }, version.Env);
+        Assert.Equal([FunctionSecretRef.Of("DB", db.Id, "DB_PASSWORD", 3)], version.SecretRefs);
+        Assert.Equal("*/5 * * * *", version.Schedule);
+
+        // A later value does not move the pinned number.
+        db.AddVersion(new FunctionSecretValue(4, "k1", new byte[12], new byte[26], 10), "kc-member", []);
+        Assert.Equal(3, Assert.Single(version.SecretRefs).Version);
+    }
+
+    [Fact]
+    public async Task Upload_ANumberedVersion_IsPinnedAsAsked()
+    {
+        Function function = Seed();
+        FunctionSecret db = SecretOfTheTenant(versions: 3);
+
+        await Upload().HandleAsync(UploadWith(function, secrets: new() { ["DB"] = new UploadFunctionSecretRef("DB_PASSWORD", 2) }));
+
+        Assert.Equal(FunctionSecretRef.Of("DB", db.Id, "DB_PASSWORD", 2), Assert.Single(Assert.Single(function.Versions).SecretRefs));
+    }
+
+    public static TheoryData<string, int?> SecretsNotThere => new()
+    {
+        { "NOPE", null },
+        { "DB_PASSWORD", 4 },
+        { "THEIRS", null },
+    };
+
+    [Theory]
+    [MemberData(nameof(SecretsNotThere))]
+    public async Task Upload_ASecretTheTenantHasNot_OrAVersionItDoesNotKeep_Is422_AndWritesNothing(string name, int? number)
+    {
+        Function function = Seed();
+        SecretOfTheTenant(versions: 3);
+        _secrets.Saved.Add(FunctionSecret.Create(Guid.NewGuid(), "THEIRS",
+            new FunctionSecretValue(1, "k1", new byte[12], new byte[26], 10), "kc-other"));
+
+        var e = await Assert.ThrowsAsync<BusinessException>(() =>
+            Upload().HandleAsync(UploadWith(function, secrets: new() { ["DB"] = new UploadFunctionSecretRef(name, number) })));
+
+        Assert.Equal("FUNCTION_SECRET_NOT_FOUND", e.Code);
+        AssertNothingWritten(function);
+    }
+
+    // 8 KiB of names and values, a secret counted by its variable's name and its value's length.
+    [Fact]
+    public async Task Upload_OverTheConfigLimit_CountingTheSecretsLength_Is400_AndWritesNothing()
+    {
+        Function function = Seed();
+        SecretOfTheTenant(valueBytes: 4000);
+        string fill = new('x', Function.MaxConfigBytes - 4000 - "DB".Length - "E".Length);
+        var fits = UploadWith(function, env: new() { ["E"] = fill }, secrets: new() { ["DB"] = new UploadFunctionSecretRef("DB_PASSWORD", null) });
+        var over = UploadWith(function, env: new() { ["E"] = fill + "x" }, secrets: new() { ["DB"] = new UploadFunctionSecretRef("DB_PASSWORD", null) });
+
+        var e = await Assert.ThrowsAsync<BadRequestException>(() => Upload().HandleAsync(over));
+
+        Assert.Equal("VALIDATION_ERROR", e.Code);
+        AssertNothingWritten(function);
+        await Upload().HandleAsync(fits);
+        Assert.Single(function.Versions);
+    }
+
     // ── deploy ──
 
     [Fact]
@@ -416,6 +526,37 @@ public class FunctionServiceTests
 
         Assert.Equal("FUNCTION_VERSION_NOT_FOUND", e.Code);
         VerifyDeploys(Times.Never());
+    }
+
+    // The worker reads every pinned secret version during the deploy (titan-ops features/ovc-function/design.md#function-secrets).
+    [Fact]
+    public async Task Deploy_AVersionWhoseSecretVersionIsGone_Is422_AndSendsNothing()
+    {
+        Function function = Seed();
+        FunctionSecret db = SecretOfTheTenant();
+        FunctionVersion stale = VersionOn(function, null, FunctionSecretRef.Of("DB", db.Id, db.Name, 2));
+        FunctionVersion deleted = VersionOn(function, null, FunctionSecretRef.Of("DB", Guid.NewGuid(), "GONE", 1));
+
+        var e1 = await Assert.ThrowsAsync<BusinessException>(() => Deploy().HandleAsync(new DeployFunctionCommand(function.Id, stale.Id)));
+        var e2 = await Assert.ThrowsAsync<BusinessException>(() => Deploy().HandleAsync(new DeployFunctionCommand(function.Id, deleted.Id)));
+
+        Assert.Equal(("FUNCTION_SECRET_NOT_FOUND", "FUNCTION_SECRET_NOT_FOUND"), (e1.Code, e2.Code));
+        Assert.Equal(FunctionStatus.Inactive, function.Status);
+        VerifyDeploys(Times.Never());
+        Assert.Equal(0, _repo.Saves);
+    }
+
+    [Fact]
+    public async Task Deploy_AVersionWhoseSecretsAreThere_IsSent()
+    {
+        Function function = Seed();
+        FunctionSecret db = SecretOfTheTenant();
+        FunctionVersion version = VersionOn(function, null, FunctionSecretRef.Of("DB", db.Id, db.Name, 1));
+
+        await Deploy().HandleAsync(new DeployFunctionCommand(function.Id, version.Id));
+
+        Assert.Equal(FunctionStatus.Deploying, function.Status);
+        VerifyDeploys(Times.Once());
     }
 
     // ── delete ──

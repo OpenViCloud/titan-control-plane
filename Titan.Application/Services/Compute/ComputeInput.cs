@@ -1,5 +1,8 @@
+using System.Text;
+using Titan.Application.Exceptions;
 using Titan.Domain.Exceptions;
 using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
+using FunctionSecretAggregate = Titan.Domain.Aggregates.FunctionSecret.FunctionSecret;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
 using VmSnapshotEntity = Titan.Domain.Aggregates.Vm.VmSnapshot;
@@ -93,6 +96,26 @@ public static class ComputeInput
         {
             throw new BusinessException("INVALID_FUNCTION_NAME",
                 $"A function name is 1 to {FunctionAggregate.NameMaxLength} letters, digits, hyphens or underscores, starting with a letter or digit.");
+        }
+    }
+
+    // A secret's name and value are the validator's 400 (titan-ops features/ovc-function/design.md#function-secrets);
+    // checked again here with the same answer, as the other names are.
+    public static void EnsureFunctionSecretName(string? name)
+    {
+        if (!FunctionSecretAggregate.IsAName(name))
+        {
+            throw new BadRequestException("VALIDATION_ERROR",
+                $"A secret name is 1 to {FunctionSecretAggregate.NameMaxLength} letters, digits or underscores, not starting with a digit.");
+        }
+    }
+
+    public static void EnsureFunctionSecretValue(string? value)
+    {
+        if (value == null || !FunctionSecretAggregate.IsAValueSize(Encoding.UTF8.GetByteCount(value)))
+        {
+            throw new BadRequestException("VALIDATION_ERROR",
+                $"A secret value is 1 to {FunctionSecretAggregate.MaxValueBytes} bytes of UTF-8.");
         }
     }
 }

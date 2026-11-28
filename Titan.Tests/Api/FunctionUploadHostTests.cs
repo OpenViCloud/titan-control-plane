@@ -25,8 +25,9 @@ public class FunctionUploadHostTests(FunctionUploadHostTests.FunctionHostFactory
 
     public sealed class FunctionHostFactory() : RealHostFactory(new Dictionary<string, string?>(), Settings());
 
-    // Read while Program.cs builds the host. A function cluster makes the bucket and the registry required; these point
-    // at hosts no rejected upload reaches. A valid upload, which writes both, is measured on dev.
+    // Read while Program.cs builds the host. A function cluster makes the bucket, the registry and the secrets' master key
+    // required; the first two point at hosts no rejected upload reaches. A valid upload, which writes both, is measured on
+    // dev. The key is 32 zero bytes: a test value, it encrypts nothing here.
     private static Dictionary<string, string> Settings() => new()
     {
         ["FunctionClusters:0:Id"] = FunctionCluster,
@@ -37,6 +38,8 @@ public class FunctionUploadHostTests(FunctionUploadHostTests.FunctionHostFactory
         ["FunctionCode:SecretAccessKey"] = "secret",
         ["FunctionRegistry:PushUrl"] = "http://registry.function.test:5100",
         ["FunctionRegistry:PullHost"] = "localhost:5100",
+        ["FunctionSecrets:ActiveKeyId"] = "test",
+        ["FunctionSecrets:Keys:test"] = Convert.ToBase64String(new byte[32]),
     };
 
     private async Task<(HttpClient Client, Function Function)> ClientWithAFunctionAsync()

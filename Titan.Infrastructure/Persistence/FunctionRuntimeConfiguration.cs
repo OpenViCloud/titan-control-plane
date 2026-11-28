@@ -40,10 +40,10 @@ public class FunctionRuntimeConfiguration : IEntityTypeConfiguration<FunctionRun
         var ts = new DateTimeOffset(2026, 11, 28, 0, 0, 0, TimeSpan.Zero);
         builder.HasData(
             Row("f0de0000-0000-4000-8000-000000000001", "python3.15",
-                "ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:c2c3c3e141ea062fa0cb4c11119c8bf45184d98a22f7f384456fd4082883b8d1",
+                "ghcr.io/openvicloud/titan-function-runtimes/python3.15@sha256:5479dbe0d05ec82ba2ba0e6995a95619b231019639a7bf9aeb393a19d61c5a0b",
                 new DateOnly(2031, 10, 31), ts),
             Row("f0de0000-0000-4000-8000-000000000002", "nodejs26",
-                "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:3f12d5472d95dfb85ad20ba7d970eccfdbf25d4073a9ee46b71e7434d8eb1fcd",
+                "ghcr.io/openvicloud/titan-function-runtimes/nodejs26@sha256:9f06d060020e71de5e31fa6a8bfcd6b85cca5491282df2b28abeec4b1e386c3c",
                 new DateOnly(2029, 4, 30), ts),
             Row("f0de0000-0000-4000-8000-000000000003", "go",
                 "ghcr.io/openvicloud/titan-function-runtimes/go@sha256:f253fc8f929cefbfdf899cdf8804374c0eb78e23d650f552840ea9e334d116dd",

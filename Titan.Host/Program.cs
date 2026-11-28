@@ -27,6 +27,8 @@ using LoadBalancerCmd = Titan.Application.Commands.Compute.LoadBalancer;
 using LoadBalancerQry = Titan.Application.Queries.Compute.LoadBalancer;
 using FunctionCmd = Titan.Application.Commands.Compute.Function;
 using FunctionQry = Titan.Application.Queries.Compute.Function;
+using FunctionSecretCmd = Titan.Application.Commands.Compute.FunctionSecret;
+using FunctionSecretQry = Titan.Application.Queries.Compute.FunctionSecret;
 using VmSnapCmd = Titan.Application.Commands.Compute.VmSnapshot;
 using VmSnapQry = Titan.Application.Queries.Compute.VmSnapshot;
 using VmKeyAdditionCmd = Titan.Application.Commands.Compute.VmKeyAddition;
@@ -160,6 +162,7 @@ builder.Services.AddScoped<IVolumeSnapshotRepository, VolumeSnapshotRepository>(
 builder.Services.AddScoped<IVmTemplateRepository, VmTemplateRepository>();
 builder.Services.AddScoped<IFunctionRuntimeRepository, FunctionRuntimeRepository>();
 builder.Services.AddScoped<IFunctionRepository, FunctionRepository>();
+builder.Services.AddScoped<IFunctionSecretRepository, FunctionSecretRepository>();
 builder.Services.AddScoped<IVmOfferingRepository, VmOfferingRepository>();
 builder.Services.AddScoped<IVolumeOfferingRepository, VolumeOfferingRepository>();
 builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
@@ -310,6 +313,11 @@ builder.Services.AddScoped<FunctionQry.ListFunctionsQueryHandler>();
 builder.Services.AddScoped<FunctionQry.GetFunctionQueryHandler>();
 builder.Services.AddScoped<FunctionQry.ListFunctionVersionsQueryHandler>();
 builder.Services.AddScoped<FunctionQry.ListReconcilableFunctionsQueryHandler>();
+builder.Services.AddScoped<FunctionQry.GetFunctionSecretValuesQueryHandler>();
+builder.Services.AddScoped<FunctionSecretCmd.CreateFunctionSecretCommandHandler>();
+builder.Services.AddScoped<FunctionSecretCmd.AddFunctionSecretVersionCommandHandler>();
+builder.Services.AddScoped<FunctionSecretCmd.DeleteFunctionSecretCommandHandler>();
+builder.Services.AddScoped<FunctionSecretQry.ListFunctionSecretsQueryHandler>();
 builder.Services.AddScoped<IScheduledJob, Titan.Infrastructure.Hosting.FunctionCodeCleanupService>();
 builder.Services.AddScoped<VmSnapCmd.CreateVmSnapshotCommandHandler>();
 builder.Services.AddScoped<VmSnapCmd.RevertVmSnapshotCommandHandler>();
@@ -436,6 +444,14 @@ builder.Services.AddOptions<Titan.Application.Options.FunctionRegistryOptions>()
     .ValidateOnStart();
 builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Application.Options.FunctionRegistryOptions>,
     Titan.Application.Options.FunctionRegistryValidation>();
+// The master keys of function secrets (titan-ops features/ovc-function/design.md#function-secrets), required and checked
+// at start only while a function cluster is configured, as the two sections above.
+builder.Services.AddOptions<Titan.Application.Options.FunctionSecretsOptions>()
+    .BindConfiguration(Titan.Application.Options.FunctionSecretsOptions.SectionName)
+    .ValidateOnStart();
+builder.Services.AddSingleton<Microsoft.Extensions.Options.IValidateOptions<Titan.Application.Options.FunctionSecretsOptions>,
+    Titan.Application.Options.FunctionSecretsValidation>();
+builder.Services.AddSingleton<IFunctionSecretCipher, Titan.Infrastructure.FunctionSecrets.AesGcmFunctionSecretCipher>();
 builder.Services.AddSingleton<IFunctionCodeInspector, Titan.Infrastructure.FunctionCode.ZipFunctionCodeInspector>();
 builder.Services.AddSingleton<IFunctionCodeStore, Titan.Infrastructure.FunctionCode.S3FunctionCodeStore>();
 builder.Services.AddSingleton<IFunctionImageRegistry, Titan.Infrastructure.FunctionCode.RegistryFunctionImageRegistry>();

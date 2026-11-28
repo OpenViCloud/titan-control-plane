@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Titan.Domain.Aggregates.Function;
 
 namespace Titan.Infrastructure.Persistence;
@@ -67,6 +70,15 @@ public class FunctionVersionConfiguration : IEntityTypeConfiguration<FunctionVer
         builder.Property(v => v.FileCount).HasColumnName("file_count");
         builder.Property(v => v.ImageDigest).HasColumnName("image_digest").HasColumnType("text").IsRequired();
         builder.Property(v => v.Image).HasColumnName("image").HasColumnType("text").IsRequired();
+        // The configuration of titan-ops features/ovc-function/design.md#function-config, read whole with the version and
+        // never queried by its content: jsonb, an object of variables and an array of pinned secrets.
+        builder.Property(v => v.Env).HasColumnName("env").HasColumnType("jsonb").IsRequired()
+            .HasDefaultValueSql("'{}'::jsonb")
+            .HasConversion(EnvConversion.Converter, EnvConversion.Comparer);
+        builder.Property(v => v.SecretRefs).HasColumnName("secret_refs").HasColumnType("jsonb").IsRequired()
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(SecretRefsConversion.Converter, SecretRefsConversion.Comparer);
+        builder.Property(v => v.Schedule).HasColumnName("schedule").HasColumnType("text");
         builder.Property(v => v.CreatedAt).HasColumnName("created_at");
         builder.Property(v => v.DiscardedAt).HasColumnName("discarded_at");
         builder.Ignore(v => v.CpuMillicores);
@@ -75,4 +87,42 @@ public class FunctionVersionConfiguration : IEntityTypeConfiguration<FunctionVer
         // One number per function: two uploads take turns on the function's row, and this is the second net.
         builder.HasIndex(v => new { v.FunctionId, v.Number }).IsUnique();
     }
+}
+
+// A version's variables as one jsonb object, names as given.
+internal static class EnvConversion
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.General);
+
+    internal static readonly ValueConverter<IReadOnlyDictionary<string, string>, string> Converter = new(
+        env => JsonSerializer.Serialize(env, Json),
+        json => JsonSerializer.Deserialize<Dictionary<string, string>>(json, Json) ?? new Dictionary<string, string>());
+
+    internal static readonly ValueComparer<IReadOnlyDictionary<string, string>> Comparer = new(
+        (a, b) => a!.Count == b!.Count && a.All(p => b.ContainsKey(p.Key) && b[p.Key] == p.Value),
+        env => env.Aggregate(0, (hash, p) => HashCode.Combine(hash, p.Key, p.Value)),
+        env => new Dictionary<string, string>(env, StringComparer.Ordinal));
+}
+
+// A version's pinned secrets as one jsonb array of {envName, secretId, secretName, version}; FunctionSecretRef.Of reads
+// each back, so a stored version below 1 throws on read instead of being deployed.
+internal static class SecretRefsConversion
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private sealed record Row(string EnvName, Guid SecretId, string SecretName, int Version);
+
+    internal static readonly ValueConverter<IReadOnlyList<FunctionSecretRef>, string> Converter = new(
+        refs => JsonSerializer.Serialize(refs.Select(r => new Row(r.EnvName, r.SecretId, r.SecretName, r.Version)).ToList(), Json),
+        json => Read(json));
+
+    internal static readonly ValueComparer<IReadOnlyList<FunctionSecretRef>> Comparer = new(
+        (a, b) => a!.SequenceEqual(b!),
+        refs => refs.Aggregate(0, (hash, r) => HashCode.Combine(hash, r)),
+        refs => refs.ToList());
+
+    private static IReadOnlyList<FunctionSecretRef> Read(string json) =>
+        (JsonSerializer.Deserialize<List<Row>>(json, Json) ?? [])
+        .Select(r => FunctionSecretRef.Of(r.EnvName, r.SecretId, r.SecretName, r.Version))
+        .ToList();
 }
