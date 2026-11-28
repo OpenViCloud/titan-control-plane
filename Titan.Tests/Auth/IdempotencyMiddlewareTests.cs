@@ -40,6 +40,28 @@ public class IdempotencyMiddlewareTests
         Assert.NotEqual(Convert.ToHexString(SHA256.HashData(body)), seen);
     }
 
+    // Hashed as it streams, the value is the HMAC of the whole body copied into memory, as before: keys stored before the
+    // change still match their retries. Bodies around and over the read chunk, and over the 30 KB the buffering keeps in memory.
+    [Theory]
+    [InlineData(0)]
+    [InlineData(81_920)]
+    [InlineData(81_921)]
+    [InlineData(300_000)]
+    public async Task TheStreamedHash_EqualsTheHmacOfTheWholeBody_AndTheBodyIsReadableAfter(int size)
+    {
+        byte[] body = RandomNumberGenerator.GetBytes(size);
+        byte[] key = Encoding.UTF8.GetBytes(HashKey);
+        var ctx = new DefaultHttpContext();
+        ctx.Request.Body = new MemoryStream(body);
+
+        string hash = await IdempotencyMiddleware.ComputeRequestHashAsync(ctx.Request, key);
+
+        Assert.Equal(Convert.ToHexString(HMACSHA256.HashData(key, body)), hash);
+        using var again = new MemoryStream();
+        await ctx.Request.Body.CopyToAsync(again);
+        Assert.Equal(body, again.ToArray());
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("0123456789abcdef0123456789abcde")]

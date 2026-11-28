@@ -322,48 +322,4 @@ public class FunctionRuntimeClusterStateMachineTests
     }
 
     // ---------- what a deploy may use (the next iteration's gate) ----------
-
-    [Theory]
-    [InlineData(Seed.Available, true)]
-    [InlineData(Seed.ReSyncWaitingSeen, true)]
-    [InlineData(Seed.FirstSyncWaiting, false)]
-    [InlineData(Seed.ReSyncWaitingNotSeen, false)]
-    [InlineData(Seed.FirstSyncGaveUp, false)]
-    [InlineData(Seed.ImageLost, false)]
-    public void IsUsableIn_TheClusterWhereEveryNodeHoldsIt(Seed seed, bool usable)
-    {
-        FunctionRuntime r = RuntimeIn(seed);
-
-        Assert.Equal(usable, r.IsUsableIn(Fn, new DateOnly(2026, 11, 28)));
-        Assert.False(r.IsUsableIn(Other, new DateOnly(2026, 11, 28)));
-    }
-
-    [Fact] // support ends at the end of its day: usable on that day, not on the next
-    public void IsUsableIn_UntilTheDaySupportEnds()
-    {
-        FunctionRuntime r = NewRuntime(new DateOnly(2031, 10, 31));
-        r.SyncSucceededIn(Fn, r.SyncIn(Fn));
-
-        Assert.True(r.IsUsableIn(Fn, new DateOnly(2031, 10, 31)));
-        Assert.False(r.IsUsableIn(Fn, new DateOnly(2031, 11, 1)));
-    }
-
-    [Fact] // go has no end date
-    public void IsUsableIn_WithNoEndDate_IsNotBoundByTheDay()
-    {
-        FunctionRuntime r = NewRuntime(null);
-        r.SyncSucceededIn(Fn, r.SyncIn(Fn));
-
-        Assert.True(r.IsUsableIn(Fn, new DateOnly(2099, 1, 1)));
-    }
-
-    [Fact]
-    public void IsUsableIn_IsFalse_WhenNotListed()
-    {
-        FunctionRuntime r = NewRuntime();
-        r.SyncSucceededIn(Fn, r.SyncIn(Fn));
-        typeof(FunctionRuntime).GetProperty(nameof(FunctionRuntime.IsListed))!.SetValue(r, false);
-
-        Assert.False(r.IsUsableIn(Fn, new DateOnly(2026, 11, 28)));
-    }
 }

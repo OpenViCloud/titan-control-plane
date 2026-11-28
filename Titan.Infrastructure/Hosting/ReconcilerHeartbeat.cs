@@ -26,9 +26,12 @@ public sealed class ReconcilerHeartbeat(TitanDbContext db)
     /// The function worker's reconciler, one per function cluster it runs in (titan-ops features/ovc-function/design.md#runtimes).
     public const string FunctionRuntimeKind = "function-runtimes";
 
+    /// The function worker's reconciler of the functions themselves (titan-ops features/ovc-function/design.md#function-lifecycle).
+    public const string FunctionKind = "functions";
+
     /// What a function cluster polls; Kinds is what an Incus cluster polls. Recorded, not counted by the liveness check
     /// yet: the dev function cluster is stopped at boot (titan-ops features/ovc-function/design.md#runtimes).
-    public static readonly IReadOnlyList<string> FunctionKinds = [FunctionRuntimeKind];
+    public static readonly IReadOnlyList<string> FunctionKinds = [FunctionRuntimeKind, FunctionKind];
 
     public async Task RecordPollAsync(string key, DateTimeOffset at, CancellationToken ct)
     {

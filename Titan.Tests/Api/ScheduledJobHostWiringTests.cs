@@ -26,7 +26,7 @@ public class ScheduledJobHostWiringTests : IClassFixture<OpenApiSpecTests.ApiFac
     [
         "backup-schedule", "backup-status", "template-sync-never-asked", "idempotency-cleanup",
         "provider-command-retention", "vm-metric-retention", "usage-record-retention", "meter", "ipv6-route-seed",
-        "wallet-sweep", "default-network-backfill",
+        "wallet-sweep", "default-network-backfill", "function-code-cleanup",
     ];
 
     [Fact]

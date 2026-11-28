@@ -1,3 +1,4 @@
+using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
 using LoadBalancerAggregate = Titan.Domain.Aggregates.LoadBalancer.LoadBalancer;
 using SshKeyAggregate = Titan.Domain.Aggregates.SshKey.SshKey;
 using VmAggregate = Titan.Domain.Aggregates.Vm.Vm;
@@ -70,6 +71,34 @@ public static class ComputeOwnership
             throw new NotFoundException("LOAD_BALANCER_NOT_FOUND", "Load balancer not found.");
 
         return loadBalancer;
+    }
+
+    /// Untracked: for a read, or for the checks an upload makes before it writes the zip and the image; the write that
+    /// follows locks the row and reads it again.
+    public static async Task<FunctionAggregate> RequireFunctionAsync(
+        IFunctionRepository repo, Guid tenantId, Guid functionId, CancellationToken ct)
+    {
+        var function = await repo.FindByIdAsync(functionId, ct)
+            ?? throw new NotFoundException("FUNCTION_NOT_FOUND", "Function not found.");
+
+        if (function.TenantId != tenantId)
+            throw new NotFoundException("FUNCTION_NOT_FOUND", "Function not found.");
+
+        return function;
+    }
+
+    /// The same answer with the function's row locked (IFunctionRepository.FindByIdForUpdateAsync): every lifecycle
+    /// request of a function takes the lock (titan-ops architecture/resource-lifecycle.md#one-key-per-request).
+    public static async Task<FunctionAggregate> RequireFunctionForUpdateAsync(
+        IFunctionRepository repo, Guid tenantId, Guid functionId, CancellationToken ct)
+    {
+        var function = await repo.FindByIdForUpdateAsync(functionId, ct)
+            ?? throw new NotFoundException("FUNCTION_NOT_FOUND", "Function not found.");
+
+        if (function.TenantId != tenantId)
+            throw new NotFoundException("FUNCTION_NOT_FOUND", "Function not found.");
+
+        return function;
     }
 
     public static async Task<Volume> RequireVolumeAsync(

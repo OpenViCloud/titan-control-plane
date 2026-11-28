@@ -1,6 +1,7 @@
 using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
+using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.LoadBalancer;
 using Titan.Domain.Aggregates.Network;
@@ -34,7 +35,7 @@ public class RequestLifecycleShapeTests
     // Every type on the shape, each kept by name.
     private static readonly Type[] OnTheShape =
         [typeof(Vm), typeof(Network), typeof(FirewallRule), typeof(VmSnapshot), typeof(Volume), typeof(VolumeSnapshot),
-            typeof(VmTemplateCluster), typeof(LoadBalancer), typeof(FunctionRuntimeCluster)];
+            typeof(VmTemplateCluster), typeof(LoadBalancer), typeof(FunctionRuntimeCluster), typeof(Function)];
 
     // Types that keep a waiting operation's id in an Operation (titan-ops architecture/resource-lifecycle.md#shape).
     private static List<Type> WithAnOperation() =>
@@ -95,6 +96,7 @@ public class RequestLifecycleShapeTests
             runtime.SyncIn("fn-a");
             return runtime.Clusters.Single();
         },
+        [typeof(Function)] = () => FunctionWaitingFor("DeploySucceeded"),
     };
 
     private static Network ANetwork() =>
@@ -185,6 +187,9 @@ public class RequestLifecycleShapeTests
     // So does a function runtime in a function cluster (titan-ops features/ovc-function/design.md#runtimes).
     private static readonly string[] FunctionRuntimeReportMoves = ["SyncSucceeded", "SyncFailed"];
 
+    // A function ends its deploy or delete by the status it waits in (titan-ops features/ovc-function/design.md#function-lifecycle).
+    private static readonly string[] FunctionReportMoves = ["DeploySucceeded", "DeployFailed", "DeleteSucceeded", "DeleteFailed"];
+
     // A load balancer ends its create, update or delete by the status it waits in (titan-ops features/load-balancer/design.md#lb-lifecycle).
     private static readonly string[] LoadBalancerReportMoves =
     [
@@ -224,6 +229,10 @@ public class RequestLifecycleShapeTests
         if (type == typeof(FunctionRuntimeCluster))
         {
             return [.. FunctionRuntimeReportMoves, "MarkObserved", "MarkNotFound"];
+        }
+        if (type == typeof(Function))
+        {
+            return [.. FunctionReportMoves, "MarkObserved", "MarkNotFound"];
         }
         throw new InvalidOperationException($"no report moves for {type.Name}: add them with the type");
     }
@@ -380,6 +389,37 @@ public class RequestLifecycleShapeTests
             Assert.Equal(false, result);
             Assert.Equal(before, PublicProperties(cluster));
         }
+    }
+
+    // Each function move run for real on a function waiting in that move's status, so the false comes from the id alone.
+    [Fact]
+    public void EveryFunctionMove_WithAForeignId_ReturnsFalse_AndChangesNoPublicProperty()
+    {
+        foreach (string move in FunctionReportMoves)
+        {
+            Function function = FunctionWaitingFor(move);
+            MethodInfo ending = typeof(Function).GetMethod(move, BindingFlags.Public | BindingFlags.Instance)!;
+            object?[] arguments = [Guid.NewGuid(), .. ending.GetParameters().Skip(1).Select(ForeignArgument)];
+            Dictionary<string, object?> before = PublicProperties(function);
+
+            object? result = ending.Invoke(function, arguments);
+
+            Assert.Equal(false, result);
+            Assert.Equal(before, PublicProperties(function));
+        }
+    }
+
+    private static Function FunctionWaitingFor(string move)
+    {
+        Function function = TestFunctions.AFunction();
+        if (move.StartsWith("Deploy", StringComparison.Ordinal))
+        {
+            function.Deploy(function.WithVersion().Id);
+            return function;
+        }
+        function.Running();
+        function.Delete();
+        return function;
     }
 
     // Each load balancer move run for real on a load balancer waiting in that move's status, so the false comes from the id
@@ -577,6 +617,15 @@ public class RequestLifecycleShapeTests
             except: [], atLeast: 3, "function runtime");
     }
 
+    // Every function handler but the create, which makes a new row, is an operation or a report on one that exists: it
+    // locks the function. The upload locks it for its last step only, after the bucket and the registry.
+    [Fact]
+    public void EveryFunctionLifecycleHandler_LocksTheRow()
+    {
+        AssertEveryHandlerLocks([Path.Combine("Titan.Application", "Commands", "Compute", "Function")],
+            except: ["CreateFunctionCommandHandler"], atLeast: 6, "function");
+    }
+
     // An admin's restore reads its source to copy it (titan-ops features/backup/design.md#restore-as-new-resource): the
     // VM or volume is locked, so a delete of the source and its restore take turns, and the volumes of a VM are read
     // under their own locks, VM first. The two schedule handlers of the folder make and change no resource.
@@ -689,6 +738,19 @@ public class RequestLifecycleShapeTests
 
         Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
             "The template sync payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
+    }
+
+    [Fact]
+    public void EveryFunctionCommandPayload_CarriesTheRequestId()
+    {
+        string src = File.ReadAllText(Path.Combine(RepoRoot.ControlPlane, "Titan.Infrastructure", "ProviderCommands", "ProviderCommandQueue.cs"));
+        foreach (string method in new[] { "EnqueueFunctionDeployAsync", "EnqueueFunctionDeleteAsync" })
+        {
+            Match enqueue = Regex.Match(src, @"public Task " + method + @"\([\s\S]*?,\s*ct\);");
+            Assert.True(enqueue.Success, $"{method} not found: the scan is blind");
+            Assert.True(Regex.IsMatch(enqueue.Value, @"new\s*\{(?:[^}]*,)?\s*requestId\s*[,}]"),
+                $"The {method} payload carries no requestId (titan-ops architecture/resource-lifecycle.md#callback-routes)");
+        }
     }
 
     [Fact]

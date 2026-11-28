@@ -5,6 +5,7 @@ using Titan.Application.Commands.Compute.LoadBalancer;
 using Titan.Application.Commands.Admin.Vm;
 using Titan.Application.Commands.Catalog.FunctionRuntime;
 using Titan.Application.Commands.Catalog.VmTemplate;
+using Titan.Application.Commands.Compute.Function;
 using Titan.Application.Commands.Compute.Vm;
 using Titan.Application.Commands.Compute.VmKeyAddition;
 using Titan.Application.Commands.Compute.VmSnapshot;
@@ -104,6 +105,12 @@ public class IntentRepeatDeclarationTests
             new RepeatCheck(typeof(LoadBalancerServiceTests), nameof(LoadBalancerServiceTests.Update_Repeated_WhileItWaits_SendsNothingMore)),
         [typeof(DeleteLoadBalancerCommandHandler)] =
             new RepeatCheck(typeof(LoadBalancerServiceTests), nameof(LoadBalancerServiceTests.Delete_Repeated_OrOfADeletedOne_SendsNothing)),
+
+        // ── function ──
+        [typeof(DeployFunctionCommandHandler)] =
+            new RepeatCheck(typeof(FunctionServiceTests), nameof(FunctionServiceTests.Deploy_Repeated_WhileItWaits_KeepsTheSameRequest_AndSendsNothingMore)),
+        [typeof(DeleteFunctionCommandHandler)] =
+            new RepeatCheck(typeof(FunctionServiceTests), nameof(FunctionServiceTests.Delete_Repeated_OrOfADeletedOne_SendsNothing)),
 
         // ── catalog ──
         [typeof(SyncTemplatesCommandHandler)] =

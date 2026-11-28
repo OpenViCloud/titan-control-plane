@@ -41,6 +41,7 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
         IReadOnlyCollection<string> kinds, DateTimeOffset now, int limit, CancellationToken ct)
     {
         string[] backup = [.. ProviderCommandKinds.Backup];
+        string[] function = [.. ProviderCommandKinds.Function];
         List<ProviderCommand> rows = await db.ProviderCommands
             .Where(c => kinds.Contains(c.Kind))
             .Where(c => (c.Status == ProviderCommandStatus.Pending && c.AvailableAt <= now)
@@ -49,7 +50,8 @@ public class ProviderCommandRepository(TitanDbContext db) : IProviderCommandRepo
                                                           && other.Status == ProviderCommandStatus.Leased
                                                           && other.Id != c.Id
                                                           && other.TenantId == c.TenantId
-                                                          && backup.Contains(other.Kind) == backup.Contains(c.Kind)))
+                                                          && backup.Contains(other.Kind) == backup.Contains(c.Kind)
+                                                          && function.Contains(other.Kind) == function.Contains(c.Kind)))
             // The resource rule reads every lane: a backup holds its VM against the command loop's kinds and back.
             .Where(c => !db.ProviderCommands.Any(other => other.Status == ProviderCommandStatus.Leased
                                                           && other.Id != c.Id

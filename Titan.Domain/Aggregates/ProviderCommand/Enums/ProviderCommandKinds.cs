@@ -29,6 +29,10 @@ public static class ProviderCommandKinds
     /// Pulls a function runtime's image onto every Ready node of a function cluster. Leased by the function worker, which
     /// runs inside that cluster, never by the Incus worker (titan-ops architecture/provider-commands.md#provider-command-table).
     public const string FunctionRuntimeSync = "function-runtime.sync";
+    /// Makes a function version the one its Knative Service serves, and removes the function from the cluster; leased by
+    /// the function worker (titan-ops features/ovc-function/design.md#function-lifecycle).
+    public const string FunctionDeploy = "function.deploy";
+    public const string FunctionDelete = "function.delete";
     public const string VmBackup = "vm.backup";
     public const string VolumeBackup = "volume.backup";
     /// The day's config of one cluster, of no tenant and no resource; the worker's backup loop leases it with the two
@@ -48,8 +52,13 @@ public static class ProviderCommandKinds
     public const string VmRestore = "vm.restore";
     public const string VolumeRestore = "volume.restore";
 
-    /// The kinds the worker leases on a loop of their own; a tenant's backup and its other commands are two lanes
-    /// (titan-ops features/provider/design.md#tenant-lane). The two restores are not among them: the lane is the
-    /// tenant's, and their rows have none.
+    /// The kinds the worker leases on a loop of their own; a tenant's backup, its function commands and its other
+    /// commands are three lanes (titan-ops features/provider/design.md#tenant-lane). The two restores are not among them:
+    /// the lane is the tenant's, and their rows have none.
     public static readonly IReadOnlyList<string> Backup = [VmBackup, VolumeBackup];
+
+    /// A tenant's function commands are a lane of their own: the function worker leases them, and a deploy that waits
+    /// minutes for every node to pull must not hold back the tenant's commands on the Incus worker, nor they it
+    /// (titan-ops features/provider/design.md#tenant-lane).
+    public static readonly IReadOnlyList<string> Function = [FunctionDeploy, FunctionDelete];
 }

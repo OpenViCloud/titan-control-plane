@@ -7,8 +7,9 @@ namespace Titan.Infrastructure.Repositories;
 
 /// Reads core.pending_requests, the view over every lifecycle table's waiting request (vms, volumes, volume_snapshots,
 /// networks, firewall_rules, vm_snapshots, load_balancers, vm_template_clusters, vm_key_additions,
-/// function_runtime_clusters), and joins the command row whose key the request names: `{resource}-{kind}-{id}-{requestId}`
-/// (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key, FirewallRule*Key, VmSnapshot*Key, LoadBalancer*Key), with the
+/// function_runtime_clusters, functions), and joins the command row whose key the request names: `{resource}-{kind}-{id}-{requestId}`
+/// (ProviderCommandQueue.Vm*Key, Volume*Key, Network*Key, FirewallRule*Key, VmSnapshot*Key, LoadBalancer*Key,
+/// Function*Key), with the
 /// cluster before the request id for the sync of a template or a function runtime (TemplateSyncKey,
 /// FunctionRuntimeSyncKey), the two rows of the view that carry a cluster.
 public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
@@ -21,7 +22,7 @@ public class PendingRequestReader(TitanDbContext db) : IPendingRequestReader
         // not from core.vms: the worker waits what the command carries, and the VM's value may have changed since the stop
         // was recorded. A payload without it (enqueued before it was sent) or no row at all counts the worker's default.
         int defaultStopTimeoutSeconds = Vm.DefaultStopTimeoutSeconds;
-        // A command that waits while another command of its VM or volume holds the resource (a backup, most often) is not
+        // A command that waits while another command of its resource holds it (a backup, most often) is not
         // stuck: the worker has not been given it (titan-ops features/provider/design.md#tenant-lane).
         // Quoted aliases: Postgres folds a bare alias to lower case, and SqlQuery maps columns to properties by name.
         List<StuckRequestRow> rows = await db.Database.SqlQuery<StuckRequestRow>($"""

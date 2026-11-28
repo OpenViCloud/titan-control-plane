@@ -56,8 +56,8 @@ public class ReconcilerHeartbeatTests
             .Order()
             .ToArray();
 
-        Assert.Equal(8, constants.Length);
+        Assert.Equal(9, constants.Length);
         Assert.Equal(constants, ReconcilerHeartbeat.Kinds.Concat(ReconcilerHeartbeat.FunctionKinds).Order().ToArray());
-        Assert.Equal([ReconcilerHeartbeat.FunctionRuntimeKind], ReconcilerHeartbeat.FunctionKinds);
+        Assert.Equal([ReconcilerHeartbeat.FunctionRuntimeKind, ReconcilerHeartbeat.FunctionKind], ReconcilerHeartbeat.FunctionKinds);
     }
 }

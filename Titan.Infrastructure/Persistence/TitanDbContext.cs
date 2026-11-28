@@ -19,6 +19,7 @@ using Titan.Domain.Aggregates.Vm;
 using Titan.Domain.Aggregates.Volume;
 using Titan.Domain.Aggregates.SnapshotOffering;
 using Titan.Domain.Aggregates.VmOffering;
+using Titan.Domain.Aggregates.Function;
 using Titan.Domain.Aggregates.FunctionRuntime;
 using Titan.Domain.Aggregates.VmTemplate;
 using Titan.Domain.Aggregates.VolumeOffering;
@@ -60,6 +61,7 @@ public class TitanDbContext(DbContextOptions<TitanDbContext> options) : DbContex
     public DbSet<VmMetricSample> VmMetricSamples => Set<VmMetricSample>();
     public DbSet<VmTemplate> VmTemplates => Set<VmTemplate>();
     public DbSet<FunctionRuntime> FunctionRuntimes => Set<FunctionRuntime>();
+    public DbSet<Function> Functions => Set<Function>();
     public DbSet<VmOffering> VmOfferings => Set<VmOffering>();
     public DbSet<VolumeOffering> VolumeOfferings => Set<VolumeOffering>();
     public DbSet<SnapshotOffering> SnapshotOfferings => Set<SnapshotOffering>();

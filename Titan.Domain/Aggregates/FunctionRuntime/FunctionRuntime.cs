@@ -66,19 +66,21 @@ public class FunctionRuntime : IAggregateRoot
         return cluster.Status == FunctionRuntimeClusterStatus.Failed || cluster.Status == FunctionRuntimeClusterStatus.NotFound;
     }
 
-    /// What a new function version may be deployed with in that cluster: listed, every Ready node holds the image, and
-    /// the language still supports it on that day. A version already running keeps running past the day (titan-ops
-    /// features/ovc-function/design.md#runtimes).
-    public bool IsUsableIn(string clusterId, DateOnly today)
+    /// What a new version may be packed on: listed, and the language still supports it on that day
+    /// (titan-ops features/ovc-function/design.md#runtimes).
+    public bool TakesNewVersionsOn(DateOnly today)
     {
         if (!IsListed)
         {
             return false;
         }
-        if (SupportEndsOn != null && today > SupportEndsOn.Value)
-        {
-            return false;
-        }
+        return SupportEndsOn == null || today <= SupportEndsOn.Value;
+    }
+
+    /// Every Ready node of that cluster holds the image as far as Titan last knew: what a deploy needs, whatever the day.
+    /// A version packed before the support date may be deployed again after it (titan-ops features/ovc-function/design.md#runtimes).
+    public bool IsAvailableIn(string clusterId)
+    {
         FunctionRuntimeCluster? cluster = FindCluster(clusterId);
         return cluster != null && cluster.IsAvailable;
     }

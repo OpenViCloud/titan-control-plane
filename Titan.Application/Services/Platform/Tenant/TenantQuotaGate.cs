@@ -1,5 +1,6 @@
 using Titan.Domain.Exceptions;
 using ApiTokenAggregate = Titan.Domain.Aggregates.ApiToken.ApiToken;
+using FunctionAggregate = Titan.Domain.Aggregates.Function.Function;
 using TenantAggregate = Titan.Domain.Aggregates.Tenant.Tenant;
 
 namespace Titan.Application.Services.Platform.Tenant;
@@ -44,6 +45,15 @@ public static class TenantQuotaGate
         if (tokenCount >= ApiTokenAggregate.MaxPerTenant)
         {
             throw new BusinessException("API_TOKEN_QUOTA_EXCEEDED", $"API token limit reached (max {ApiTokenAggregate.MaxPerTenant}).");
+        }
+    }
+
+    /// The function cap is one number for every tenant too (titan-ops features/ovc-function/design.md#function-limits).
+    public static void EnsureFunctionRoom(int functionCount)
+    {
+        if (functionCount >= FunctionAggregate.MaxPerTenant)
+        {
+            throw new BusinessException("FUNCTION_QUOTA_EXCEEDED", $"Function limit reached (max {FunctionAggregate.MaxPerTenant}).");
         }
     }
 }

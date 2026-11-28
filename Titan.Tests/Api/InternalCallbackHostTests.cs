@@ -1063,6 +1063,14 @@ public class InternalCallbackHostTests(InternalCallbackHostTests.CallbackHostFac
             ["Clusters:0:Endpoint"] = "https://localhost:8443",
             ["Clusters:0:ServerFingerprint"] = "ffcf7803b2371e90834c2dd2a454f48bcb9c541b16dd7dc54a93a104b1aa108f",
             ["FunctionClusters:0:Id"] = FunctionCluster,
+            // A function cluster makes the function code bucket and the registry required at start.
+            ["FunctionCode:Endpoint"] = "https://s3.function.test",
+            ["FunctionCode:Region"] = "auto",
+            ["FunctionCode:Bucket"] = "titan-function-test",
+            ["FunctionCode:AccessKeyId"] = "key-id",
+            ["FunctionCode:SecretAccessKey"] = "secret",
+            ["FunctionRegistry:PushUrl"] = "http://registry.function.test:5100",
+            ["FunctionRegistry:PullHost"] = "localhost:5100",
             ["ProviderClientIdentity:CertificatePem"] = identity.CertificatePem,
             ["ProviderClientIdentity:KeyPem"] = identity.KeyPem,
         };

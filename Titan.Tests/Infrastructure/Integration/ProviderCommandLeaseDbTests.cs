@@ -243,6 +243,44 @@ public class ProviderCommandLeaseDbTests(PostgresFixture pg)
         Assert.DoesNotContain(backupWaiting, ids);
     }
 
+    // A tenant's function commands are a lane of their own (ProviderCommandKinds.Function): while a deploy is leased by
+    // the function worker, the Incus worker still leases the tenant's VM command, and both stay Leased under the
+    // leased-per-tenant index; a second function command of the tenant waits.
+    [Fact]
+    public async Task ATenantsLeasedFunctionDeploy_HoldsItsFunctionLane_NotItsCommandLane()
+    {
+        Guid tenant = Guid.NewGuid();
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        Guid deployHeld = await SeedForAsync(ProviderCommandKinds.FunctionDeploy, tenant, now.AddSeconds(-3));
+        await using (TitanDbContext lease = pg.NewDbContext())
+        {
+            ProviderCommand held = await lease.ProviderCommands.SingleAsync(c => c.Id == deployHeld);
+            held.Lease(Guid.NewGuid(), now);
+            await lease.SaveChangesAsync();
+        }
+        Guid deleteWaiting = await SeedForAsync(ProviderCommandKinds.FunctionDelete, tenant, now.AddSeconds(-2));
+        Guid vmWaiting = await SeedForAsync(ProviderCommandKinds.VmDelete, tenant, now.AddSeconds(-1));
+
+        await using (TitanDbContext db = pg.NewDbContext())
+        {
+            IReadOnlyList<ProviderCommand> functionClaimable = await new ProviderCommandRepository(db).ListClaimableAsync(
+                ProviderCommandKinds.Function, now, int.MaxValue, CancellationToken.None);
+            Assert.DoesNotContain(deleteWaiting, functionClaimable.Select(c => c.Id));
+            IReadOnlyList<ProviderCommand> incusClaimable = await new ProviderCommandRepository(db).ListClaimableAsync(
+                [ProviderCommandKinds.VmDelete], now, int.MaxValue, CancellationToken.None);
+            Assert.Contains(vmWaiting, incusClaimable.Select(c => c.Id));
+        }
+
+        await using (TitanDbContext lease = pg.NewDbContext())
+        {
+            ProviderCommand vm = await lease.ProviderCommands.SingleAsync(c => c.Id == vmWaiting);
+            vm.Lease(Guid.NewGuid(), now);
+            await lease.SaveChangesAsync();
+        }
+        await using TitanDbContext read = pg.NewDbContext();
+        Assert.Equal(2, await read.ProviderCommands.CountAsync(c => c.TenantId == tenant && c.Status == ProviderCommandStatus.Leased));
+    }
+
     // titan-ops features/backup/design.md#restore-as-new-resource on the SQL EF writes: an admin's restore is a row of no
     // tenant that the worker leases with the drill. While one is leased, a tenant's command and its backup are still handed
     // out; the drill and the other restore wait, whatever their kind (the nullable comparison of the lane, across kinds),

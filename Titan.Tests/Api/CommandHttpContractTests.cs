@@ -19,8 +19,8 @@ public class CommandHttpContractTests(OpenApiSpecTests.ApiFactory factory)
 {
     // Pinned so a PUT/PATCH that disappears from the scan (renamed verb, endpoint not registered) fails
     // loudly instead of shrinking the checked set. A new route raises it on purpose.
-    // +2: internal/function-runtimes/{runtimeId}/clusters/{clusterId}/requests/{requestId} and …/observation
-    private const int PutAndPatchRoutes = 32;
+    // +2: internal/functions/{functionId}/requests/{requestId} and …/observation
+    private const int PutAndPatchRoutes = 34;
 
     private static readonly Regex SendsABody = new(@"\bSend(Ok|)Async\(", RegexOptions.Compiled);
 

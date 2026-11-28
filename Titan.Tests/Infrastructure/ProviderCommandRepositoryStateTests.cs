@@ -241,7 +241,7 @@ public class ProviderCommandRepositoryStateTests
         Assert.Equal(expected.Order(StringComparer.Ordinal), claimable.Select(c => c.Key).Order(StringComparer.Ordinal));
     }
 
-    // Rows of one VM in both lanes and of no resource: the resource rule reads every kind, not only the lease's.
+    // Rows of one VM in two lanes and of no resource: the resource rule reads every kind, not only the lease's.
     private static List<ProviderCommand> EveryResource()
     {
         Guid tenantA = Guid.NewGuid();
@@ -266,7 +266,7 @@ public class ProviderCommandRepositoryStateTests
     }
 
     [Fact]
-    public async Task ClaimQuery_AgreesWithHoldsTheResourceOf_AcrossBothLanes()
+    public async Task ClaimQuery_AgreesWithHoldsTheResourceOf_AcrossLanes()
     {
         await using TitanDbContext db = NewDb();
         List<ProviderCommand> rows = EveryResource();
