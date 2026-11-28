@@ -3,11 +3,11 @@ using Titan.Domain.Exceptions;
 
 namespace Titan.Tests.Domain;
 
-// The moves of a function runtime in one function cluster (titan-ops features/ovc-function/design.md#runtimes): the four
-// statuses of a VM template in a cluster (titan-ops features/catalog/design.md#template-state-is-existence), with no
-// provider id: the image digest is the runtime's id on the cluster. A sync throws when it cannot be accepted, a report
-// ends only the sync it names, an observation never throws and ends nothing. The Seed enum names every situation a
-// cluster can be in.
+// The moves of a function runtime in one function cluster (titan-ops features/ovc-function/design.md#runtimes): the
+// four statuses of a VM template in a cluster (titan-ops features/catalog/design.md#template-state-is-existence), with
+// no provider id: the image digest is the runtime's id on the cluster. A sync throws when it cannot be accepted, a
+// report ends only the sync it names, an observation never throws and ends nothing. The Seed enum names every situation
+// a cluster can be in.
 public class FunctionRuntimeClusterStateMachineTests
 {
     private const string Fn = "fn-dev";
@@ -19,7 +19,7 @@ public class FunctionRuntimeClusterStateMachineTests
     public enum Seed
     {
         ObservedGone,          // no row until the reconciler found the image missing: NotFound
-        ObservedThere,         // no row until the reconciler found the image on every node: Available
+        ObservedThere,         // no row until the reconciler found the image on every Ready node: Available
         FirstSyncWaiting,      // Syncing, never on the cluster
         FirstSyncWaitingSeen,  // Syncing, never on the cluster before, the reconciler saw it
         FirstSyncGaveUp,       // Failed
@@ -189,8 +189,8 @@ public class FunctionRuntimeClusterStateMachineTests
         Assert.Null(Row(r).Operation.FailedAt);
     }
 
-    // Failed rests on what the runtime was known to be: Available when the sync saw every node hold it, NotFound when
-    // it had been on the cluster, Failed when it never was.
+    // Failed rests on what the runtime was known to be: Available when the sync saw every Ready node hold it, NotFound
+    // when it had been on the cluster, Failed when it never was.
     [Theory]
     [InlineData(Seed.FirstSyncWaiting, FunctionRuntimeClusterStatus.Failed)]
     [InlineData(Seed.FirstSyncWaitingSeen, FunctionRuntimeClusterStatus.Available)]

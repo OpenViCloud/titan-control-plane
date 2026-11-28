@@ -6,31 +6,26 @@ namespace Titan.Infrastructure.Hosting;
 
 /// <summary>
 /// A stale window per key, over the polls every replica records in core.reconciler_polls. Only the kinds the control
-/// plane lists in the clusters configured now count, each list in the clusters of its worker: ReconcilerHeartbeat.Kinds in
-/// the Incus clusters, ReconcilerHeartbeat.FunctionKinds in the function clusters. A cluster removed from config, or a
-/// kind taken off its list, leaves a row that never polls again (titan-ops architecture/desired-and-current.md#desired-and-current).
+/// plane lists (ReconcilerHeartbeat.Kinds) in the clusters configured now count: a cluster removed from config, or a
+/// kind taken off that list, leaves a row that never polls again (titan-ops architecture/desired-and-current.md#desired-and-current).
 /// </summary>
 public sealed class ReconcilerLivenessHealthCheck(
     ReconcilerHeartbeat heartbeat,
     ClusterOptions clusters,
-    FunctionClusterOptions functionClusters,
     IOptions<ReconcilerLivenessOptions> options) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken ct = default)
     {
-        IReadOnlyDictionary<string, DateTimeOffset> polls = Expected(await heartbeat.SnapshotAsync(ct),
-            clusters.Clusters.Select(c => c.Id), functionClusters.Clusters.Select(c => c.Id));
+        IReadOnlyDictionary<string, DateTimeOffset> polls = Expected(await heartbeat.SnapshotAsync(ct), clusters.Clusters.Select(c => c.Id));
         return Evaluate(DateTimeOffset.UtcNow, polls, options.Value.StaleMinutes);
     }
 
-    /// The polls of a known kind in a configured cluster of its worker.
+    /// The polls of a known kind in a configured cluster.
     public static IReadOnlyDictionary<string, DateTimeOffset> Expected(
-        IReadOnlyDictionary<string, DateTimeOffset> polls, IEnumerable<string> clusterIds, IEnumerable<string> functionClusterIds)
+        IReadOnlyDictionary<string, DateTimeOffset> polls, IEnumerable<string> clusterIds)
     {
         var expected = new HashSet<string>(
-            ReconcilerHeartbeat.Kinds.SelectMany(kind => clusterIds.Select(id => ReconcilerHeartbeat.KeyFor(kind, id)))
-                .Concat(ReconcilerHeartbeat.FunctionKinds.SelectMany(kind =>
-                    functionClusterIds.Select(id => ReconcilerHeartbeat.KeyFor(kind, id)))));
+            ReconcilerHeartbeat.Kinds.SelectMany(kind => clusterIds.Select(id => ReconcilerHeartbeat.KeyFor(kind, id))));
         return polls.Where(p => expected.Contains(p.Key)).ToDictionary(p => p.Key, p => p.Value);
     }
 

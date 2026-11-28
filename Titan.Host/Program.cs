@@ -247,7 +247,8 @@ builder.Services.AddScoped<PlatAuditQry.ListAdminAuditLogQueryHandler>();
 var clusterOptions = ClusterOptions.FromConfiguration(
     builder.Configuration.GetSection(ClusterOptions.SectionName).Get<List<ClusterConfig>>());
 builder.Services.AddSingleton(clusterOptions);
-// Function clusters are a list of their own; an id blank, twice, or of an Incus cluster stops the host the same way
+// Function clusters are a list of their own; an id blank, twice, of an Incus cluster, or a second function cluster
+// stops the host the same way
 // (titan-ops features/ovc-function/design.md#function-cluster-ops).
 builder.Services.AddSingleton(FunctionClusterOptions.FromConfiguration(
     builder.Configuration.GetSection(FunctionClusterOptions.SectionName).Get<List<FunctionClusterConfig>>(), clusterOptions));

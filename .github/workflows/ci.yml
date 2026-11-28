@@ -132,7 +132,7 @@ jobs:
           grep -q '^--- PASS: TestRoutes_CoverTheControlPlanesKinds' ../routes.log
 
       - name: Function worker's routes against this commit's kinds
-        # As the Incus worker's step: a red step before it does not hide this one.
+        # Runs even when the Incus worker's step is red, so one red guard does not hide the other.
         if: ${{ !cancelled() }}
         working-directory: function-worker
         run: |

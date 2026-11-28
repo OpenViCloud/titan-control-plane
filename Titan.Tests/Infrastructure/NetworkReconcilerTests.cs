@@ -157,31 +157,27 @@ public class NetworkReconcilerTests
             ["networks/vn-hcm-1"] = Now.AddMinutes(-1),
         };
 
-        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"], []);
+        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"]);
 
         Assert.Equal(["networks/vn-hcm-1"], expected.Keys);
         Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30).Status);
     }
 
-    // A function cluster runs only the function worker, whose one reconciler lists runtimes; an Incus cluster has no
-    // runtime reconciler (titan-ops features/ovc-function/design.md#runtimes). A row of a kind in the other worker's
-    // cluster never polls, so it does not count.
+    // The function worker's reconciler records its polls, but the health check does not count them yet: the dev
+    // function cluster is stopped at boot, and a stale poll would turn /healthz/reconcilers Unhealthy
+    // (titan-ops features/ovc-function/design.md#runtimes).
     [Fact]
-    public void Liveness_TheRuntimeReconcilerCounts_InAFunctionClusterOnly_AndTheIncusKindsInAnIncusClusterOnly()
+    public void Liveness_DoesNotCountTheRuntimeReconcilerOfAFunctionCluster()
     {
         var polls = new Dictionary<string, DateTimeOffset>
         {
             ["function-runtimes/fn-dev"] = Now.AddDays(-1),
-            ["function-runtimes/vn-hcm-1"] = Now.AddDays(-1),
-            ["templates/fn-dev"] = Now.AddDays(-1),
             ["templates/vn-hcm-1"] = Now.AddMinutes(-1),
         };
 
-        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"], ["fn-dev"]);
+        var expected = ReconcilerLivenessHealthCheck.Expected(polls, ["vn-hcm-1"]);
 
-        Assert.Equal(["function-runtimes/fn-dev", "templates/vn-hcm-1"], expected.Keys.Order(StringComparer.Ordinal));
-        var result = ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30);
-        Assert.Equal(HealthStatus.Unhealthy, result.Status);
-        Assert.Contains("function-runtimes/fn-dev", result.Description);
+        Assert.Equal(["templates/vn-hcm-1"], expected.Keys);
+        Assert.Equal(HealthStatus.Healthy, ReconcilerLivenessHealthCheck.Evaluate(Now, expected, 30).Status);
     }
 }

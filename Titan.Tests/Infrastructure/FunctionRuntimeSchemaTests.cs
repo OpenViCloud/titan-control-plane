@@ -6,8 +6,8 @@ using Titan.Infrastructure.Persistence;
 namespace Titan.Tests.Infrastructure;
 
 // "One sync state per runtime per function cluster" and "one runtime per name" are keys of the tables, not application
-// code (titan-ops features/ovc-function/design.md#runtimes). The InMemory provider does not enforce them, so this pins the
-// model metadata the migration builds the tables from, as VmTemplateClusterSchemaTests does for templates.
+// code (titan-ops features/ovc-function/design.md#runtimes). The InMemory provider does not enforce them, so this pins
+// the model metadata the migration builds the tables from, as VmTemplateClusterSchemaTests does for templates.
 public class FunctionRuntimeSchemaTests
 {
     private static IModel Model()
@@ -63,7 +63,8 @@ public class FunctionRuntimeSchemaTests
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
     }
 
-    // The columns of a template's cluster row (vm_template_clusters), so core.pending_requests reads both the same way.
+    // The key and the request columns of a template's cluster row (vm_template_clusters, no provider id), so
+    // core.pending_requests reads both the same way.
     [Theory]
     [InlineData("runtime_id")]
     [InlineData("cluster_id")]

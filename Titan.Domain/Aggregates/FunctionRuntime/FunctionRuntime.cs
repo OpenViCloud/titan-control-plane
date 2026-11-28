@@ -66,9 +66,9 @@ public class FunctionRuntime : IAggregateRoot
         return cluster.Status == FunctionRuntimeClusterStatus.Failed || cluster.Status == FunctionRuntimeClusterStatus.NotFound;
     }
 
-    /// What a new function version may be deployed with in that cluster: listed, every node holds the image, and the
-    /// language still supports it on that day. A version already running keeps running past the day
-    /// (titan-ops features/ovc-function/design.md#runtimes).
+    /// What a new function version may be deployed with in that cluster: listed, every Ready node holds the image, and
+    /// the language still supports it on that day. A version already running keeps running past the day (titan-ops
+    /// features/ovc-function/design.md#runtimes).
     public bool IsUsableIn(string clusterId, DateOnly today)
     {
         if (!IsListed)
@@ -83,7 +83,8 @@ public class FunctionRuntime : IAggregateRoot
         return cluster != null && cluster.IsAvailable;
     }
 
-    /// Refused when that cluster holds the image or a sync waits. Returns the sync's id for the command's key and payload.
+    /// Refused when that cluster holds the image or a sync waits. Returns the sync's id for the command's key and
+    /// payload.
     public Guid SyncIn(string clusterId)
     {
         if (string.IsNullOrWhiteSpace(clusterId))
@@ -98,9 +99,9 @@ public class FunctionRuntime : IAggregateRoot
         return added.Operation.PendingId!.Value;
     }
 
-    /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape): ends
-    /// that cluster's waiting sync when the report names it, else returns false and changes nothing. A cluster with no
-    /// row has nothing waiting, so no row is added for it.
+    /// The report that a sync's command in one cluster ended Done (titan-ops architecture/resource-lifecycle.md#shape):
+    /// ends that cluster's waiting sync when the report names it, else returns false and changes nothing. A cluster
+    /// with no row has nothing waiting, so no row is added for it.
     public bool SyncSucceededIn(string clusterId, Guid operationId)
     {
         FunctionRuntimeCluster? cluster = FindCluster(clusterId);
@@ -122,7 +123,8 @@ public class FunctionRuntime : IAggregateRoot
     }
 
     // Observations converge (titan-ops architecture/intent-and-observation.md#observation-converges): a report for a
-    // cluster with no row records what was observed there. Which clusters exist is the handler's check. None ends a sync.
+    // cluster with no row records what was observed there. Which clusters exist is the handler's check. None ends a
+    // sync.
 
     public void MarkObservedIn(string clusterId)
     {
