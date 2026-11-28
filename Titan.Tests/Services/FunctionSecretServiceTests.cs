@@ -76,7 +76,7 @@ public class FunctionSecretServiceTests
         CreateFunctionSecretCommandResult result = await Create().HandleAsync(new CreateFunctionSecretCommand("DB_PASSWORD", Value));
 
         FunctionSecret secret = Assert.Single(_repo.Saved);
-        Assert.Equal(("DB_PASSWORD", 1), (result.Name, result.Version));
+        Assert.Equal(1, result.Version);
         Assert.Equal((_tenantId, "DB_PASSWORD"), (secret.TenantId, secret.Name));
         FunctionSecretVersion version = Assert.Single(secret.Versions);
         Assert.Equal(("k1", Encoding.UTF8.GetByteCount(Value), "kc-member"), (version.KeyId, version.ValueBytes, version.CreatedBy));

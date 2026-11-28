@@ -27,7 +27,7 @@ public class UploadFunctionVersionEndpoint(UploadFunctionVersionCommandHandler h
     /// The whole body: the zip, the config part and the multipart framing.
     public const long MaxBodyBytes = 51L * 1024 * 1024;
     public const string TooLargeCode = "FUNCTION_CODE_TOO_LARGE";
-    // The config is a few fields; a larger part is not one.
+    // The config is a few fields and at most 8 KiB of environment (Function.MaxConfigBytes); a larger part is not one.
     private const int MaxConfigBytes = 64 * 1024;
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);

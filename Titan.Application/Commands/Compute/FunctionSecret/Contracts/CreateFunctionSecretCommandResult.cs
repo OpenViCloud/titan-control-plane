@@ -1,4 +1,5 @@
 namespace Titan.Application.Commands.Compute.FunctionSecret.Contracts;
 
-// The secret's name is its id on every route; the version is 1.
-public record CreateFunctionSecretCommandResult(string Name, int Version);
+// The one identifier the create made (titan-ops architecture/http-contract.md#create-returns-id): the version, 1. The
+// name is the caller's, and the secret's id on every route.
+public record CreateFunctionSecretCommandResult(int Version);

@@ -59,7 +59,8 @@ public class UploadFunctionVersionCommandHandler(
             handler = command.Handler;
         }
 
-        // Every secret is resolved before anything is written: a version names only secret versions that exist.
+        // Every secret is resolved before the code is packed, stored or pushed: a version names only secret versions that
+        // exist.
         List<FunctionSecretRef> secretRefs = await ResolveSecretsAsync(tenantId, command, ct);
 
         Guid versionId = Guid.NewGuid();

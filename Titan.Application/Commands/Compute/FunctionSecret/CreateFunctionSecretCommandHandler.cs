@@ -37,6 +37,6 @@ public class CreateFunctionSecretCommandHandler(
         activity.Stage("function_secret.create_requested", "function_secret", secret.Id, secret.Name);
         activity.StageOutcome(tenantId, "function_secret.created", "function_secret", secret.Id, secret.Name);
         await repo.SaveAsync(ct);
-        return new CreateFunctionSecretCommandResult(secret.Name, secret.LatestVersionNumber);
+        return new CreateFunctionSecretCommandResult(secret.LatestVersionNumber);
     }
 }

@@ -56,8 +56,9 @@ public class FunctionSecretsOptions
     }
 }
 
-/// Required only where a function cluster is configured, as FunctionRegistry; elsewhere (prd today) the section is not
-/// read at all.
+/// Required at start only where a function cluster is configured, as FunctionRegistry. Without a cluster (prd today) the
+/// host starts with no key, and a secret's create or new version then fails as a 500 naming the missing setting: no
+/// function can use a secret there.
 public sealed class FunctionSecretsValidation(FunctionClusterOptions functionClusters) : IValidateOptions<FunctionSecretsOptions>
 {
     public ValidateOptionsResult Validate(string? name, FunctionSecretsOptions options)
