@@ -5,7 +5,8 @@ namespace Titan.Domain.Aggregates.Function;
 /// cluster holds at rest.
 public enum FunctionStatus
 {
-    // Never deployed: nothing of it on the function cluster.
+    // No version runs: never deployed, or every deploy so far gave up (one that gave up after Knative made the Service
+    // leaves the Service, so ExternalId is set and the reconciler still reads it).
     Inactive,
     Deploying,
     // A version runs, and the reconciler last saw its Knative Service.

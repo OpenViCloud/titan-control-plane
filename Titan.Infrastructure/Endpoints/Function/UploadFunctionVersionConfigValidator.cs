@@ -10,9 +10,10 @@ public class UploadFunctionVersionConfigValidator : Validator<UploadFunctionVers
 {
     public const int HandlerMaxLength = 128;
 
-    // "module.function": Python's module path and Node.js's file name, then the exported function.
+    // "module.function": the path of the file (dots for directories), then the exported function; the same shape the zip
+    // inspector holds the zip to, so a handler that passes here is not refused there.
     private static readonly System.Text.RegularExpressions.Regex HandlerShape =
-        new(@"^[A-Za-z_][A-Za-z0-9_\-]*(\.[A-Za-z_][A-Za-z0-9_\-]*)+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+        new(@"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     public UploadFunctionVersionConfigValidator()
     {

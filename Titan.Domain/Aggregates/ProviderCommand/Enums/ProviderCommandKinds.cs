@@ -52,9 +52,9 @@ public static class ProviderCommandKinds
     public const string VmRestore = "vm.restore";
     public const string VolumeRestore = "volume.restore";
 
-    /// The kinds the worker leases on a loop of their own; a tenant's backup and its other commands are two lanes
-    /// (titan-ops features/provider/design.md#tenant-lane). The two restores are not among them: the lane is the
-    /// tenant's, and their rows have none.
+    /// The kinds the worker leases on a loop of their own; a tenant's backup, its function commands and its other
+    /// commands are three lanes (titan-ops features/provider/design.md#tenant-lane). The two restores are not among them:
+    /// the lane is the tenant's, and their rows have none.
     public static readonly IReadOnlyList<string> Backup = [VmBackup, VolumeBackup];
 
     /// A tenant's function commands are a lane of their own: the function worker leases them, and a deploy that waits

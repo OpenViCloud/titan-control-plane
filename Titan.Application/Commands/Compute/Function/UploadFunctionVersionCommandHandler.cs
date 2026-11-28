@@ -15,7 +15,7 @@ namespace Titan.Application.Commands.Compute.Function;
 // function bucket, and pushed as a function image before the version row exists, so a version always names code that
 // is there. The function's row is locked only for the last step: the bucket and the registry are slow, and a lock held
 // across them would hold back every report and observation of the function. A failure after the bucket write leaves
-// objects no row names (titan-ops features/ovc-function/design.md#code-storage, a risk accepted).
+// objects no row names (a risk accepted, titan-ops features/ovc-function/design.md#debts).
 public class UploadFunctionVersionCommandHandler(
     IFunctionRepository repo,
     IFunctionRuntimeRepository runtimes,

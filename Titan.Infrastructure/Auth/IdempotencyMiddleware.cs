@@ -128,8 +128,8 @@ public class IdempotencyMiddleware(IIdempotencyService idempotency, IOptions<Ide
         await buffer.CopyToAsync(originalBody, context.RequestAborted);
     }
 
-    // An HMAC under the server key, not a plain SHA-256 (IdempotencyHashOptions). Hashed as it streams: a function upload
-    // is up to 50 MiB, and the buffered body spills to a temp file rather than to memory.
+    // An HMAC under the server key, not a plain SHA-256 (IdempotencyHashOptions). Hashed as it streams: a function upload's
+    // body is up to 51 MiB, and the buffered body spills to a temp file rather than to memory.
     internal static async Task<string> ComputeRequestHashAsync(HttpRequest request, byte[] key)
     {
         request.EnableBuffering();

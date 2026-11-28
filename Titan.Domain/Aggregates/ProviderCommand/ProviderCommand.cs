@@ -28,8 +28,8 @@ public class ProviderCommand : IAggregateRoot
     /// (titan-ops features/provider/design.md#tenant-lane).
     public Guid? TenantId { get; private set; }
 
-    /// The VM or volume the command acts on; null for a command of no such resource (network, rule, load balancer,
-    /// template). Each resource has one leased command at a time, whatever its lane, so a command waits while its
+    /// The VM, volume or function the command acts on; null for a command of no such resource (network, rule, load
+    /// balancer, template, function runtime). Each resource has one leased command at a time, whatever its lane, so a command waits while its
     /// resource backs up and a backup waits for the resource's running command (titan-ops features/provider/design.md#tenant-lane).
     public Guid? ResourceId { get; private set; }
 
@@ -140,7 +140,7 @@ public class ProviderCommand : IAggregateRoot
         && ProviderCommandKinds.Backup.Contains(Kind) == ProviderCommandKinds.Backup.Contains(other.Kind)
         && ProviderCommandKinds.Function.Contains(Kind) == ProviderCommandKinds.Function.Contains(other.Kind);
 
-    /// A Leased row holds its resource across both lanes: no other row of the same VM or volume is handed out until it
+    /// A Leased row holds its resource across every lane: no other row of the same VM or volume is handed out until it
     /// stops running, whatever kind asks (titan-ops features/provider/design.md#tenant-lane). A row of no resource holds
     /// nothing this way. ProviderCommandRepository.ListClaimableAsync writes the same test in SQL
     /// (titan-ops architecture/domain-methods.md#plain-code).

@@ -7,7 +7,7 @@ namespace Titan.Domain.Aggregates.Function;
 /// one it waits on (its id, which the provider command carries and the report brings back, and when it was asked), the
 /// last one that gave up (a fixed reason, the raw detail, and when), and, while an operation waits, what the function
 /// cluster was last known to hold: Active (its Knative Service seen), NotFound (it had been there and was last seen
-/// missing), or null (nothing ever ran). What the operation is, a deploy or a delete, is the function's status. Every
+/// missing), or null (never seen while it waits). What the operation is, a deploy or a delete, is the function's status. Every
 /// move returns an immutable object and leaves the old one as it was.
 public sealed record FunctionOperation : ValueObject
 {

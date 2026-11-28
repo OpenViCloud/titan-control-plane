@@ -59,7 +59,7 @@ public class ProviderCommandConfiguration : IEntityTypeConfiguration<ProviderCom
         builder.HasIndex(c => c.Kind).IsUnique()
             .HasFilter("status = 'Leased' AND tenant_id IS NULL")
             .HasDatabaseName(LeasedNoTenantIndex);
-        // One leased row per VM or volume across both lanes: a backup loop and a command loop that read at once and pick
+        // One leased row per resource across every lane: a backup loop and a command loop that read at once and pick
         // two rows of one resource cannot both commit (ProviderCommand.HoldsTheResourceOf).
         builder.HasIndex(c => c.ResourceId).IsUnique()
             .HasFilter("status = 'Leased' AND resource_id IS NOT NULL")

@@ -191,6 +191,6 @@ public class UploadFunctionVersionEndpoint(UploadFunctionVersionCommandHandler h
     }
 }
 
-// The config part of the form (titan-ops features/ovc-function/design.md#function-config). Memory and timeout absent ⇒
+// The config part of the form (titan-ops features/ovc-function/design.md#function-limits). Memory and timeout absent ⇒
 // the defaults of Function; handler absent for Go.
 public record UploadFunctionVersionConfig(string? Runtime, string? Handler, int? MemoryMiB, int? TimeoutSeconds);
