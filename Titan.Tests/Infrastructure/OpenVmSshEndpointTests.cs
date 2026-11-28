@@ -147,8 +147,8 @@ public class OpenVmSshEndpointTests
         }
     }
 
-    // An overloaded guest's agent can end nc without a byte several seconds in: within BannerWait that is still a
-    // refusal to retry on, not a session that opens and closes empty.
+    // nc that ends without a byte several seconds in, within BannerWait, is still a refusal to retry on, not a session
+    // that opens and closes empty.
     [Fact]
     public async Task ACommandThatEndsWithoutAByteSixSecondsIn_IsStillVmSshNotReady_RecordsNothing_AndGivesItsPlaceBack()
     {
